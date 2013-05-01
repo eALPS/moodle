@@ -103,6 +103,15 @@ try {
         foreach ($branch->find_all_of_type(navigation_node::TYPE_CATEGORY) as $category) {
             $category->action = null;
         }
+        
+        // add by eALPS Developer shortname -> fullname
+        foreach ($branch->find_all_of_type(navigation_node::TYPE_COURSE) as $course) {
+            if ($course->get_title() !== '') {
+                $course->text = $course->get_title();
+            }
+        }
+        // end by eALPS Developer
+        
     }
 
     // Stop buffering errors at this point

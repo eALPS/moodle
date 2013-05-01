@@ -73,6 +73,14 @@ class block_navigation_renderer extends plugin_renderer_base {
             }
             $content = $item->get_content();
             $title = $item->get_title();
+            
+            // add by eALPS Developer shortname -> fullname
+            if ($item->type == $item::TYPE_COURSE) {
+	            if ($title !== '') {
+	                $content = $title;
+	            }
+	        }
+	        // end by eALPS Developer
 
             $isexpandable = (empty($expansionlimit) || ($item->type > navigation_node::TYPE_ACTIVITY || $item->type < $expansionlimit) || ($item->contains_active_node() && $item->children->count() > 0));
             $isbranch = $isexpandable && ($item->children->count() > 0 || ($item->has_children() && (isloggedin() || $item->type <= navigation_node::TYPE_CATEGORY)));

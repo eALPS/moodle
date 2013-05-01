@@ -36,29 +36,8 @@ define('CLI_SCRIPT', true);
 // add by eALPS Developer
 global $_SERVER;
 
-$siteEnName = 'd';
-$siteJaName = 'デフォルト';
-$siteArray = array (
-    'd'  => 'デフォルト',
-    'g' => '共通教育',
-    'l' => '人文学部',
-    'e' => '教育学部',
-    'k' => '経済学部',
-    's' => '理学部',
-    'm' => '医学部',
-    't' => '工学部',
-    'a' => '農学部',
-    'f' => '繊維学部',
-    'mv' => '医学部閲覧用',
-    'help' => 'eALPSヘルプ',
-    'fdsd' => 'eALPS教職員用',
-    'hospital' => '附属病院',
-    'facility' => '大学施設',
-    'teachingCredential' => '教員免許更新講習会',
-    'eChes' => 'eChes',
-    'photo' => 'フォト',
-    'other' => 'その他'
-);
+$siteEnName = 'hospital';
+$siteJaName = '附属病院';
 
 $fiscalYear = 0;
 if(date('n') < 3) {

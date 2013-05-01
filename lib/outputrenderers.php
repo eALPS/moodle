@@ -2678,6 +2678,15 @@ EOD;
     protected function render_navigation_node(navigation_node $item) {
         $content = $item->get_content();
         $title = $item->get_title();
+        
+        // add by eALPS Developer shortname -> fullname
+		if ($item->type == $item::TYPE_COURSE) {
+			if ($title !== '') {
+				$content = $title;
+			}
+		}
+		// end by eALPS Developer
+        
         if ($item->icon instanceof renderable && !$item->hideicon) {
             $icon = $this->render($item->icon);
             $content = $icon.$content; // use CSS for spacing of icons
