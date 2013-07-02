@@ -2509,7 +2509,8 @@ class assign {
                                                                   array('cm'=>$this->get_course_module()->id,
                                                                         'submissiondrafts'=>$this->get_instance()->submissiondrafts,
                                                                         'duedate'=>$this->get_instance()->duedate,
-                                                                        'feedbackplugins'=>$this->get_feedback_plugins()),
+                                                                        'feedbackplugins'=>$this->get_feedback_plugins(),
+                                                                        'context'=>$this->get_context()),
                                                                   'post', '',
                                                                   array('class'=>'gradingbatchoperationsform'));
 
@@ -2762,7 +2763,8 @@ class assign {
                                                               array('cm'=>$this->get_course_module()->id,
                                                                     'submissiondrafts'=>$this->get_instance()->submissiondrafts,
                                                                     'duedate'=>$this->get_instance()->duedate,
-                                                                    'feedbackplugins'=>$this->get_feedback_plugins()),
+                                                                    'feedbackplugins'=>$this->get_feedback_plugins(),
+                                                                    'context'=>$this->get_context()),
                                                               'post',
                                                               '',
                                                               array('class'=>'gradingbatchoperationsform'));
@@ -3143,7 +3145,7 @@ class assign {
             return false;
         }
         $assign = clone $this->get_instance();
-        $assign->cmidnumber = $this->get_course_module()->id;
+        $assign->cmidnumber = $this->get_course_module()->idnumber;
 
         return assign_grade_item_update($assign, $gradebookgrade);
     }
@@ -3585,10 +3587,12 @@ class assign {
             }
 
             if ($submission->status != ASSIGN_SUBMISSION_STATUS_SUBMITTED) {
-                // Give each submission plugin a chance to process the submission
+                // Give each submission plugin a chance to process the submission.
                 $plugins = $this->get_submission_plugins();
                 foreach ($plugins as $plugin) {
-                    $plugin->submit_for_grading();
+                    if ($plugin->is_enabled() && $plugin->is_visible()) {
+                        $plugin->submit_for_grading();
+                    }
                 }
 
                 $submission->status = ASSIGN_SUBMISSION_STATUS_SUBMITTED;
@@ -4013,7 +4017,7 @@ class assign {
             $allempty = true;
             $pluginerror = false;
             foreach ($this->submissionplugins as $plugin) {
-                if ($plugin->is_enabled()) {
+                if ($plugin->is_enabled() && $plugin->is_visible()) {
                     if (!$plugin->save($submission, $data)) {
                         $notices[] = $plugin->get_error();
                         $pluginerror = true;

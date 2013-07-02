@@ -899,8 +899,9 @@ class navigation_node_collection implements IteratorAggregate {
         $child = $this->get($key, $type);
         if ($child !== false) {
             foreach ($this->collection as $colkey => $node) {
-                if ($node->key == $key && $node->type == $type) {
+                if ($node->key === $key && $node->type == $type) {
                     unset($this->collection[$colkey]);
+                    $this->collection = array_values($this->collection);
                     break;
                 }
             }
@@ -3535,7 +3536,7 @@ class settings_navigation extends navigation_node {
             $coursenode->force_open();
         }
 
-        if (has_capability('moodle/course:update', $coursecontext)) {
+        if ($this->page->user_allowed_editing()) {
             // Add the turn on/off settings
 
             if ($this->page->url->compare(new moodle_url('/course/view.php'), URL_MATCH_BASE)) {
@@ -3558,8 +3559,9 @@ class settings_navigation extends navigation_node {
             $coursenode->add($editstring, $editurl, self::TYPE_SETTING, null, null, new pix_icon('i/edit', ''));
 
             // Add the module chooser toggle
-            $modchoosertoggleurl = clone($baseurl);
-            if ($this->page->user_is_editing() && course_ajax_enabled($course)) {
+            if ($this->page->user_is_editing() && has_capability('moodle/course:manageactivities', $coursecontext)
+                    && course_ajax_enabled($course)) {
+                $modchoosertoggleurl = clone($baseurl);
                 if ($usemodchooser = get_user_preferences('usemodchooser', $CFG->modchooserdefault)) {
                     $modchoosertogglestring = get_string('modchooserdisable', 'moodle');
                     $modchoosertoggleurl->param('modchooser', 'off');
@@ -3572,7 +3574,9 @@ class settings_navigation extends navigation_node {
                 $modchoosertoggle->add_class('visibleifjs');
                 user_preference_allow_ajax_update('usemodchooser', PARAM_BOOL);
             }
+        }
 
+        if (has_capability('moodle/course:update', $coursecontext)) {
             // Add the course settings link
             $url = new moodle_url('/course/edit.php', array('id'=>$course->id));
             $coursenode->add(get_string('editsettings'), $url, self::TYPE_SETTING, null, null, new pix_icon('i/settings', ''));
@@ -4244,7 +4248,7 @@ class settings_navigation extends navigation_node {
         }
         $frontpage->id = 'frontpagesettings';
 
-        if (has_capability('moodle/course:update', $coursecontext)) {
+        if ($this->page->user_allowed_editing()) {
 
             // Add the turn on/off settings
             $url = new moodle_url('/course/view.php', array('id'=>$course->id, 'sesskey'=>sesskey()));
@@ -4256,7 +4260,9 @@ class settings_navigation extends navigation_node {
                 $editstring = get_string('turneditingon');
             }
             $frontpage->add($editstring, $url, self::TYPE_SETTING, null, null, new pix_icon('i/edit', ''));
+        }
 
+        if (has_capability('moodle/course:update', $coursecontext)) {
             // Add the course settings link
             $url = new moodle_url('/admin/settings.php', array('section'=>'frontpagesettings'));
             $frontpage->add(get_string('editsettings'), $url, self::TYPE_SETTING, null, null, new pix_icon('i/settings', ''));
