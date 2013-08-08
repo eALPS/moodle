@@ -103,6 +103,9 @@ try {
         foreach ($branch->find_all_of_type(navigation_node::TYPE_CATEGORY) as $category) {
             $category->action = null;
         }
+        foreach ($branch->find_all_of_type(navigation_node::TYPE_MY_CATEGORY) as $category) {
+            $category->action = null;
+        }
         
         // add by eALPS Developer shortname -> fullname
         foreach ($branch->find_all_of_type(navigation_node::TYPE_COURSE) as $course) {
@@ -111,7 +114,6 @@ try {
             }
         }
         // end by eALPS Developer
-        
     }
 
     // Stop buffering errors at this point
