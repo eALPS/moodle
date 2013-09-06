@@ -231,7 +231,8 @@ class auth_plugin_ldap extends auth_plugin_base {
             }
         }
 
-        if (!$user_info_result = ldap_read($ldapconnection, $user_dn, '(objectClass=*)', $search_attribs)) {
+        //if (!$user_info_result = ldap_read($ldapconnection, $user_dn, '(objectClass=*)', $search_attribs)) {
+        if (!$user_info_result = ldap_read($ldapconnection, $user_dn, '(objectClass=*)')) { 
             $this->ldap_close();
             return false; // error!
         }

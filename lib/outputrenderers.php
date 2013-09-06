@@ -2683,12 +2683,12 @@ EOD;
         $title = $item->get_title();
         
         // add by eALPS Developer shortname -> fullname
-		if ($item->type == $item::TYPE_COURSE) {
-			if ($title !== '') {
-				$content = $title;
-			}
-		}
-		// end by eALPS Developer
+	    if ($item->type == $item::TYPE_COURSE) {
+	        if ($title !== '') {
+	            $content = $title;
+	        }
+	    }
+	    // end by eALPS Developer
         
         if ($item->icon instanceof renderable && !$item->hideicon) {
             $icon = $this->render($item->icon);
