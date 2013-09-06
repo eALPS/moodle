@@ -114,7 +114,7 @@ class core_files_renderer extends plugin_renderer_base {
                 array('invalidjson', 'repository'), array('popupblockeddownload', 'repository'),
                 array('unknownoriginal', 'repository'), array('confirmdeletefolder', 'repository'),
                 array('confirmdeletefilewithhref', 'repository'), array('confirmrenamefolder', 'repository'),
-                array('confirmrenamefile', 'repository')
+                array('confirmrenamefile', 'repository'), array('newfolder', 'repository'), array('edit', 'moodle')
             )
         );
         if (empty($filemanagertemplateloaded)) {
@@ -526,7 +526,7 @@ class core_files_renderer extends plugin_renderer_base {
             <li class="{!}fp-repo"><a href="#"><img class="{!}fp-repo-icon" width="16" height="16" />&nbsp;<span class="{!}fp-repo-name"></span></a></li>
         </ul>
     </div>
-    <div class="fp-repo-items">
+    <div class="fp-repo-items" tabindex="0">
         <div class="fp-navbar">
             <div>
                 <div class="{!}fp-toolbar">
