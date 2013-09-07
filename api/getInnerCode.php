@@ -1,12 +1,12 @@
 <?php
-// 2012/05/07 by e-Learning
+// 2012.05.07 by e-Learning Center
 
 define('DEFAULT_CHARSET','utf-8');
 
 ini_set('display_errors','On');
 ini_set('error_reporting', 'E_ALL');
 
-//Moodleのコンフィグファイルを拝借
+// Moodleのコンフィグファイルを拝借
 require_once(dirname(dirname(__FILE__)) . '/config.php');
 
 header('Content-Type: application/json'."\n");
@@ -17,7 +17,7 @@ $first = 1 ;
 print "{\n" ;
 foreach ($vars as $line) {
 	$var = explode('=', $line) ;
-	if ($course = get_record('course', 'shortname', addslashes($var[1]), '', '', '', '', 'id, shortname, defaultrole')) {
+	if ($course = $DB->get_record('course', array('shortname'=>$var[1]), '*', IGNORE_MISSING)) {
 		if ( !($first) ) {
 			print ",\n" ;
 		} else {
