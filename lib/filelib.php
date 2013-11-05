@@ -1478,6 +1478,7 @@ function &get_mimetypes_array() {
         'jcw'  => array ('type'=>'text/xml', 'icon'=>'markup'),
         'jmt'  => array ('type'=>'text/xml', 'icon'=>'markup'),
         'jmx'  => array ('type'=>'text/xml', 'icon'=>'markup'),
+        'jnlp' => array ('type'=>'application/x-java-jnlp-file', 'icon'=>'markup'),
         'jpe'  => array ('type'=>'image/jpeg', 'icon'=>'jpeg', 'groups'=>array('image', 'web_image'), 'string'=>'image'),
         'jpeg' => array ('type'=>'image/jpeg', 'icon'=>'jpeg', 'groups'=>array('image', 'web_image'), 'string'=>'image'),
         'jpg'  => array ('type'=>'image/jpeg', 'icon'=>'jpeg', 'groups'=>array('image', 'web_image'), 'string'=>'image'),
@@ -2042,7 +2043,7 @@ function readfile_accel($file, $mimetype, $accelerate) {
 
     if (is_object($file)) {
         header('Etag: "' . $file->get_contenthash() . '"');
-        if (isset($_SERVER['HTTP_IF_NONE_MATCH']) and $_SERVER['HTTP_IF_NONE_MATCH'] === $file->get_contenthash()) {
+        if (isset($_SERVER['HTTP_IF_NONE_MATCH']) and trim($_SERVER['HTTP_IF_NONE_MATCH'], '"') === $file->get_contenthash()) {
             header('HTTP/1.1 304 Not Modified');
             return;
         }

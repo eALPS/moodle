@@ -77,6 +77,9 @@ class assign {
     /** @var stdClass the assignment record that contains the global settings for this assign instance */
     private $instance;
 
+    /** @var stdClass the grade_item record for this assign instance's primary grade item. */
+    private $gradeitem;
+
     /** @var context the context of the course module for this assign instance (or just the course if we are
         creating a new one) */
     private $context;
@@ -618,16 +621,6 @@ class assign {
                 assign_reset_gradebook($data->courseid);
             }
         }
-        // Updating dates - shift may be negative too.
-        if ($data->timeshift) {
-            shift_course_mod_dates('assign',
-                                    array('duedate', 'allowsubmissionsfromdate','cutoffdate'),
-                                    $data->timeshift,
-                                    $data->courseid);
-            $status[] = array('component'=>$componentstr,
-                              'item'=>get_string('datechanged'),
-                              'error'=>false);
-        }
 
         return $status;
     }
@@ -951,6 +944,29 @@ class assign {
     }
 
     /**
+     * Get the primary grade item for this assign instance.
+     *
+     * @return stdClass The grade_item record
+     */
+    public function get_grade_item() {
+        if ($this->gradeitem) {
+            return $this->gradeitem;
+        }
+        $instance = $this->get_instance();
+        $params = array('itemtype' => 'mod',
+                        'itemmodule' => 'assign',
+                        'iteminstance' => $instance->id,
+                        'courseid' => $instance->course,
+                        'itemnumber' => 0);
+        $this->gradeitem = grade_item::fetch($params);
+        if (!$this->gradeitem) {
+            throw new coding_exception('Improper use of the assignment class. ' .
+                                       'Cannot load the grade item.');
+        }
+        return $this->gradeitem;
+    }
+
+    /**
      * Get the context of the current course
      * @return mixed context|null The course context
      */
@@ -1046,11 +1062,15 @@ class assign {
                 $o .= '<input type="hidden" name="grademodified_' . $userid . '" value="' . $modified . '"/>';
                 if ($grade == -1 || $grade === null) {
                     $o .= '-';
-                    return $o;
                 } else {
-                    $o .= format_float(($grade),2) .'&nbsp;/&nbsp;'. format_float($this->get_instance()->grade,2);
-                    return $o;
+                    $item = $this->get_grade_item();
+                    $o .= grade_format_gradevalue($grade, $item);
+                    if ($item->get_displaytype() == GRADE_DISPLAY_TYPE_REAL) {
+                        // If displaying the raw grade, also display the total value.
+                        $o .= '&nbsp;/&nbsp;' . format_float($this->get_instance()->grade, 2);
+                    }
                 }
+                return $o;
             }
 
         } else {
@@ -2692,11 +2712,11 @@ class assign {
     public function can_view_group_submission($groupid) {
         global $USER;
 
-        if (!is_enrolled($this->get_course_context(), $USER->id)) {
-            return false;
-        }
         if (has_capability('mod/assign:grade', $this->context)) {
             return true;
+        }
+        if (!is_enrolled($this->get_course_context(), $USER->id)) {
+            return false;
         }
         $members = $this->get_submission_group_members($groupid, true);
         foreach ($members as $member) {
@@ -2716,7 +2736,7 @@ class assign {
     public function can_view_submission($userid) {
         global $USER;
 
-        if (is_siteadmin()) {
+        if (has_capability('mod/assign:grade', $this->context)) {
             return true;
         }
         if (!is_enrolled($this->get_course_context(), $userid)) {
@@ -2725,7 +2745,7 @@ class assign {
         if ($userid == $USER->id && !has_capability('mod/assign:submit', $this->context)) {
             return false;
         }
-        if ($userid != $USER->id && !has_capability('mod/assign:grade', $this->context)) {
+        if ($userid != $USER->id) {
             return false;
         }
         return true;
@@ -3089,6 +3109,10 @@ class assign {
         // starting around line 262
         if ($grade->grade >= 0) {
             $gradebookgrade['rawgrade'] = $grade->grade;
+        }
+        // Allow "no grade" to be chosen.
+        if ($grade->grade == -1) {
+            $gradebookgrade['rawgrade'] = NULL;
         }
         $gradebookgrade['userid'] = $grade->userid;
         $gradebookgrade['usermodified'] = $grade->grader;
@@ -4223,9 +4247,9 @@ class assign {
                     $mform->addHelpButton('gradedisabled', 'gradeoutofhelp', 'assign');
                 }
             } else {
-                $grademenu = make_grades_menu($this->get_instance()->grade);
-                if (count($grademenu) > 0) {
-                    $gradingelement = $mform->addElement('select', 'grade', get_string('grade').':', $grademenu);
+                $grademenu = array(-1 => get_string("nograde")) + make_grades_menu($this->get_instance()->grade);
+                if (count($grademenu) > 1) {
+                    $gradingelement = $mform->addElement('select', 'grade', get_string('grade') . ':', $grademenu);
 
                     // The grade is already formatted with format_float so it needs to be converted back to an integer.
                     if (!empty($data->grade)) {
