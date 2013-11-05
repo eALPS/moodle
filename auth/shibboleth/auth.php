@@ -109,7 +109,7 @@ class auth_plugin_shibboleth extends auth_plugin_base {
                 continue;
             }
 
-			// delete by eALPS Developer
+            // delete by eALPS Developer
             // Make usename lowercase
             //if ($key == 'username'){
             //    $result[$key] = strtolower($this->get_first_string($_SERVER[$value]));
@@ -118,25 +118,26 @@ class auth_plugin_shibboleth extends auth_plugin_base {
             //}
             // end by eALPS Developer
             
-             // add by eALPS Developer
-		    if ($key == 'username'){
-		        $result[$key] = strtolower($this->get_first_string($_SERVER[$value]));
-		    } else if ($key == 'firstname'){
-		        if ($_SERVER['affiliation'] == 'student') {
-		            $result[$key] = $this->get_first_string($_SERVER['id']);
-		        } else {
-		            $result[$key] = $this->get_first_string($_SERVER['sn;lang-ja']);
-		        }
-		    } else if ($key == 'lastname'){
-		        if ($_SERVER['affiliation'] == 'student') {
-		            $result[$key] = $this->get_first_string($_SERVER['nameId;lang-ja']);
-		        } else {
-		            $result[$key] = $this->get_first_string($_SERVER['givenName;lang-ja']);
-		        }
-		    } else {
-		        $result[$key] = $this->get_first_string($_SERVER[$value]);
-		    }
-		    // end by eALPS Developer
+            // add by eALPS Developer
+            
+            if ($key == 'username'){
+                $result[$key] = strtolower($this->get_first_string($_SERVER[$value]));
+            } else if ($key == 'firstname'){
+                if ($_SERVER['affiliation'] == 'student') {
+                    $result[$key] = $this->get_first_string($_SERVER['givenName;lang-ja']).' '.$this->get_first_string($_SERVER['sn;lang-ja']);
+                } else {
+                    $result[$key] = $this->get_first_string($_SERVER['sn;lang-ja']);
+                }
+            } else if ($key == 'lastname'){
+		    	if ($_SERVER['affiliation'] == 'student') {
+                    $result[$key] = $this->get_first_string($_SERVER['id']);
+                } else {
+                    $result[$key] = $this->get_first_string($_SERVER['givenName;lang-ja']);
+                }
+            } else {
+                $result[$key] = $this->get_first_string($_SERVER[$value]);
+            }
+            // end by eALPS Developer
             
         }
 
