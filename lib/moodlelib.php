@@ -4624,6 +4624,7 @@ function remove_course_contents($courseid, $showfeedback = true, array $options 
     require_once($CFG->dirroot.'/tag/coursetagslib.php');
     require_once($CFG->dirroot.'/comment/lib.php');
     require_once($CFG->dirroot.'/rating/lib.php');
+    require_once($CFG->dirroot.'/notes/lib.php');
 
     // NOTE: these concatenated strings are suboptimal, but it is just extra info...
     $strdeleted = get_string('deleted').' - ';
@@ -4782,6 +4783,9 @@ function remove_course_contents($courseid, $showfeedback = true, array $options 
 
     // filters be gone!
     filter_delete_all_for_context($coursecontext->id);
+
+    // Notes, you shall not pass!
+    note_delete_all($course->id);
 
     // die comments!
     comment::delete_comments($coursecontext->id);
@@ -8602,6 +8606,9 @@ function check_php_version($version='5.2.4') {
           $version = round($version, 1);
           // See: http://www.useragentstring.com/pages/Internet%20Explorer/
           if (preg_match("/MSIE ([0-9\.]+)/", $agent, $match)) {
+              $browser = $match[1];
+          // See: http://msdn.microsoft.com/en-us/library/ie/bg182625%28v=vs.85%29.aspx for IE11+ useragent details.
+          } else if (preg_match("/Trident\/[0-9\.]+/", $agent) && preg_match("/rv:([0-9\.]+)/", $agent, $match)) {
               $browser = $match[1];
           } else {
               return false;
