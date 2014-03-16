@@ -36,14 +36,22 @@ define('CLI_SCRIPT', true);
 // add by eALPS Developer
 global $_SERVER;
 
-$siteEnName = 'fdsd';
-$siteJaName = 'eALPS教職員用';
+$siteEnName = 'st';
+$siteJaName = '総合工学研究科';
 
-echo("年度更新しないサイト：".$siteJaName."の同期スタート\n");
+$fiscalYear = 0;
+if(date('n') < 3) {
+	$fiscalYear = date('Y') - 1;
+} else {
+	$fiscalYear = date('Y');
+}
+echo("fiscalYear：$fiscalYear\n\n");
+
+echo($siteJaName."の同期スタート\n");
 
 $startTime = microtime(true);
 
-$_SERVER['REQUEST_URI'] = '/'.$siteEnName.'/';
+$_SERVER['REQUEST_URI'] = '/'.$fiscalYear.'/'.$siteEnName.'/';
 echo('SERVER[REQUEST_URI]：'.$_SERVER['REQUEST_URI']."\n");
 // end by eALPS Developer
 	

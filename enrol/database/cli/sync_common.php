@@ -36,8 +36,8 @@ define('CLI_SCRIPT', true);
 // add by eALPS Developer
 global $_SERVER;
 
-$siteEnName = 'fdsd';
-$siteJaName = 'eALPS教職員用';
+$siteEnName = 'common';
+$siteJaName = '学部・研究科共通';
 
 echo("年度更新しないサイト：".$siteJaName."の同期スタート\n");
 
