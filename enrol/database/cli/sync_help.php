@@ -39,19 +39,11 @@ global $_SERVER;
 $siteEnName = 'help';
 $siteJaName = 'eALPSヘルプ';
 
-$fiscalYear = 0;
-if(date('n') < 3) {
-	$fiscalYear = date('Y') - 1;
-} else {
-	$fiscalYear = date('Y');
-}
-echo("fiscalYear：$fiscalYear\n\n");
-
-echo($siteJaName."の同期スタート\n");
+echo("年度更新しないサイト：".$siteJaName."の同期スタート\n");
 
 $startTime = microtime(true);
 
-$_SERVER['REQUEST_URI'] = '/'.$fiscalYear.'/'.$siteEnName.'/';
+$_SERVER['REQUEST_URI'] = '/'.$siteEnName.'/';
 echo('SERVER[REQUEST_URI]：'.$_SERVER['REQUEST_URI']."\n");
 // end by eALPS Developer
 	
