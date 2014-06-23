@@ -45,7 +45,7 @@ class core_external extends external_api {
      *
      * @param array $stringparams
      * @return object|string
-     * @since 2.4
+     * @since Moodle 2.4
      */
     public static function format_string_parameters($stringparams) {
         // Check if there are some string params.
@@ -236,7 +236,10 @@ class core_external extends external_api {
         $wsstrings = array();
         $componentstrings = $stringmanager->load_component_strings($params['component'], $params['lang']);
         foreach($componentstrings as $stringid => $string) {
-            $wsstrings[$stringid] = $string;
+            $wsstring = array();
+            $wsstring['stringid'] = $stringid;
+            $wsstring['string'] = $string;
+            $wsstrings[] = $wsstring;
         }
 
         return $wsstrings;
@@ -252,7 +255,7 @@ class core_external extends external_api {
         return new external_multiple_structure(
             new external_single_structure(array(
                 'stringid' => new external_value(PARAM_STRINGID, 'string id'),
-                'string' => new external_value(PARAM_TEXT, 'translated string'))
+                'string' => new external_value(PARAM_RAW, 'translated string'))
             ));
     }
 }

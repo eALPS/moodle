@@ -18,7 +18,7 @@
 /**
  * lib.php - Contains Plagiarism base class used by plugins.
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    moodlecore
  * @subpackage plagiarism
  * @copyright  2010 Dan Marsden http://danmarsden.com
@@ -31,6 +31,16 @@ if (!defined('MOODLE_INTERNAL')) {
 
 //dummy class - all plugins should be based off this.
 class plagiarism_plugin {
+
+    /**
+     * Return the list of form element names.
+     *
+     * @return array contains the form element names.
+     */
+    public function get_configs() {
+        return array();
+    }
+
     /**
      * hook to allow plagiarism specific information to be displayed beside a submission 
      * @param array  $linkarraycontains all relevant information for the plugin to generate a link

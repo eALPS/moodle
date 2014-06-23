@@ -56,7 +56,7 @@ if (!$manager) {
 $strcohorts = get_string('cohorts', 'cohort');
 
 if ($category) {
-    $PAGE->set_pagelayout('report');
+    $PAGE->set_pagelayout('admin');
     $PAGE->set_context($context);
     $PAGE->set_url('/cohort/index.php', array('contextid'=>$context->id));
     $PAGE->set_title($strcohorts);
@@ -86,6 +86,7 @@ $search .= html_writer::start_tag('div');
 $search .= html_writer::label(get_string('searchcohort', 'cohort'), 'cohort_search_q'); // No : in form labels!
 $search .= html_writer::empty_tag('input', array('id'=>'cohort_search_q', 'type'=>'text', 'name'=>'search', 'value'=>$searchquery));
 $search .= html_writer::empty_tag('input', array('type'=>'submit', 'value'=>get_string('search', 'cohort')));
+$search .= html_writer::empty_tag('input', array('type'=>'hidden', 'name'=>'contextid', 'value'=>$contextid));
 $search .= html_writer::end_tag('div');
 $search .= html_writer::end_tag('form');
 echo $search;
@@ -134,9 +135,9 @@ foreach($cohorts['cohorts'] as $cohort) {
 $table = new html_table();
 $table->head  = array(get_string('name', 'cohort'), get_string('idnumber', 'cohort'), get_string('description', 'cohort'),
                       get_string('memberscount', 'cohort'), get_string('component', 'cohort'), get_string('edit'));
-$table->size  = array('20%', '10%', '40%', '10%', '10%', '10%');
-$table->align = array('left', 'left', 'left', 'left','center', 'center');
-$table->width = '80%';
+$table->colclasses = array('leftalign name', 'leftalign id', 'leftalign description', 'leftalign size','centeralign source', 'centeralign action');
+$table->id = 'cohorts';
+$table->attributes['class'] = 'admintable generaltable';
 $table->data  = $data;
 echo html_writer::table($table);
 echo $OUTPUT->paging_bar($cohorts['totalcohorts'], $page, 25, $baseurl);

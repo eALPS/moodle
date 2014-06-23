@@ -84,6 +84,9 @@ class mod_quiz_overdue_attempt_updater {
                 mtrace("Error while processing attempt {$attempt->id} at {$attempt->quiz} quiz:");
                 mtrace($e->getMessage());
                 mtrace($e->getTraceAsString());
+                // Close down any currently open transactions, otherwise one error
+                // will stop following DB changes from being committed.
+                $DB->force_transaction_rollback();
             }
         }
 
@@ -100,7 +103,8 @@ class mod_quiz_overdue_attempt_updater {
 
 
         // SQL to compute timeclose and timelimit for each attempt:
-        $quizausersql = quiz_get_attempt_usertime_sql();
+        $quizausersql = quiz_get_attempt_usertime_sql(
+                "iquiza.state IN ('inprogress', 'overdue') AND iquiza.timecheckstate <= :iprocessto");
 
         // This query should have all the quiz_attempts columns.
         return $DB->get_recordset_sql("
@@ -116,6 +120,6 @@ class mod_quiz_overdue_attempt_updater {
             AND quiza.timecheckstate <= :processto
        ORDER BY quiz.course, quiza.quiz",
 
-                array('processto' => $processto));
+                array('processto' => $processto, 'iprocessto' => $processto));
     }
 }

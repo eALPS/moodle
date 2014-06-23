@@ -112,7 +112,7 @@ class assignfeedback_file_zip_importer {
         if (!$sg) {
             return true;
         }
-        foreach ($plugin->get_files($sg) as $pluginfilename => $file) {
+        foreach ($plugin->get_files($sg, $user) as $pluginfilename => $file) {
             if ($pluginfilename == $filename) {
                 // Extract the file and compare hashes.
                 $contenthash = '';
@@ -144,7 +144,7 @@ class assignfeedback_file_zip_importer {
         $fs = get_file_storage();
 
         return $fs->delete_area_files($contextid,
-                                      'assignfeedback_files',
+                                      'assignfeedback_file',
                                       ASSIGNFEEDBACK_FILE_IMPORT_FILEAREA,
                                       $USER->id);
     }
@@ -167,7 +167,7 @@ class assignfeedback_file_zip_importer {
         raise_memory_limit(MEMORY_EXTRA);
 
         $packer = get_file_packer('application/zip');
-        @set_time_limit(ASSIGNFEEDBACK_FILE_MAXFILEUNZIPTIME);
+        core_php_time_limit::raise(ASSIGNFEEDBACK_FILE_MAXFILEUNZIPTIME);
 
         return $packer->extract_to_storage($zipfile,
                                     $contextid,
@@ -194,6 +194,17 @@ class assignfeedback_file_zip_importer {
                                           $USER->id,
                                           '/import/');
 
+        $keys = array_keys($files);
+        if (count($files) == 1 && $files[$keys[0]]->is_directory()) {
+            // An entire folder was zipped, rather than its contents.
+            // We need to return the contents of the folder instead, so the import can continue.
+            $files = $fs->get_directory_files($contextid,
+                                              'assignfeedback_file',
+                                              ASSIGNFEEDBACK_FILE_IMPORT_FILEAREA,
+                                              $USER->id,
+                                              $files[$keys[0]]->get_filepath());
+        }
+
         return $files;
     }
 
@@ -205,9 +216,9 @@ class assignfeedback_file_zip_importer {
      * @return string - The html response
      */
     public function import_zip_files($assignment, $fileplugin) {
-        global $USER, $CFG, $PAGE, $DB;
+        global $CFG, $PAGE, $DB;
 
-        @set_time_limit(ASSIGNFEEDBACK_FILE_MAXFILEUNZIPTIME);
+        core_php_time_limit::raise(ASSIGNFEEDBACK_FILE_MAXFILEUNZIPTIME);
         $packer = get_file_packer('application/zip');
 
         $feedbackfilesupdated = 0;
@@ -216,11 +227,7 @@ class assignfeedback_file_zip_importer {
         $contextid = $assignment->get_context()->id;
 
         $fs = get_file_storage();
-        $files = $fs->get_directory_files($contextid,
-                                          'assignfeedback_file',
-                                          ASSIGNFEEDBACK_FILE_IMPORT_FILEAREA,
-                                          $USER->id,
-                                          '/import/');
+        $files = $this->get_import_files($contextid);
 
         $currentgroup = groups_get_activity_group($assignment->get_course_module(), true);
         $allusers = $assignment->list_participants($currentgroup, false);
@@ -246,7 +253,7 @@ class assignfeedback_file_zip_importer {
                                                  '/',
                                                  $filename)) {
                         // Update existing feedback file.
-                        $oldfile->replace_content_with($unzippedfile);
+                        $oldfile->replace_file_with($unzippedfile);
                         $feedbackfilesupdated++;
                     } else {
                         // Create a new feedback file.
@@ -266,7 +273,7 @@ class assignfeedback_file_zip_importer {
                     $fileplugin->update_file_count($grade);
 
                     // Update the last modified time on the grade which will trigger student notifications.
-                    $assignment->update_grade($grade);
+                    $assignment->notify_grade_modified($grade);
                 }
             }
         }

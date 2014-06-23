@@ -26,9 +26,9 @@
  * to perform all the necessary actions to upgrade
  * your older installation to the current version.
  *
- * @package mod-wiki-2.0
- * @copyrigth 2009 Marc Alier, Jordi Piguillem marc.alier@upc.edu
- * @copyrigth 2009 Universitat Politecnica de Catalunya http://www.upc.edu
+ * @package mod_wiki
+ * @copyright 2009 Marc Alier, Jordi Piguillem marc.alier@upc.edu
+ * @copyright 2009 Universitat Politecnica de Catalunya http://www.upc.edu
  *
  * @author Jordi Piguillem
  *
@@ -69,6 +69,20 @@ function xmldb_wiki_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2012061701, 'mod', 'wiki');
     }
 
+
+    // Moodle v2.4.0 release upgrade line
+    // Put any upgrade step following this
+
+
+    // Moodle v2.5.0 release upgrade line.
+    // Put any upgrade step following this.
+
+
+    // Moodle v2.6.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Moodle v2.7.0 release upgrade line.
+    // Put any upgrade step following this.
 
     return true;
 }

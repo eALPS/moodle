@@ -20,7 +20,7 @@
  *
  * @copyright 2005 Martin Dougiamas  http://dougiamas.com
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @package mod-data
+ * @package mod_data
  */
 
 require_once('../../config.php');
@@ -121,9 +121,6 @@ switch ($mode) {
             /// Update some templates
                 data_append_new_field_to_templates($data, $fieldinput->name);
 
-                add_to_log($course->id, 'data', 'fields add',
-                           "field.php?d=$data->id&amp;mode=display&amp;fid=$fid", $fid, $cm->id);
-
                 $displaynoticegood = get_string('fieldadded','data');
             }
         }
@@ -163,9 +160,6 @@ switch ($mode) {
             /// Update the templates.
                 data_replace_field_in_templates($data, $oldfieldname, $field->field->name);
 
-                add_to_log($course->id, 'data', 'fields update',
-                           "field.php?d=$data->id&amp;mode=display&amp;fid=$fid", $fid, $cm->id);
-
                 $displaynoticegood = get_string('fieldupdated','data');
             }
         }
@@ -193,9 +187,6 @@ switch ($mode) {
                         $rec->defaultsortdir = 0;
                         $DB->update_record('data', $rec);
                     }
-
-                    add_to_log($course->id, 'data', 'fields delete',
-                               "field.php?d=$data->id", $field->field->name, $cm->id);
 
                     $displaynoticegood = get_string('fielddeleted', 'data');
                 }
@@ -240,11 +231,11 @@ switch ($mode) {
 /// Print the browsing interface
 
 ///get the list of possible fields (plugins)
-$directories = get_list_of_plugins('mod/data/field/');
+$plugins = core_component::get_plugin_list('datafield');
 $menufield = array();
 
-foreach ($directories as $directory){
-    $menufield[$directory] = get_string($directory,'data');    //get from language files
+foreach ($plugins as $plugin=>$fulldir){
+    $menufield[$plugin] = get_string('pluginname', 'datafield_'.$plugin);    //get from language files
 }
 asort($menufield);    //sort in alphabetical order
 $PAGE->set_title(get_string('course') . ': ' . $course->fullname);

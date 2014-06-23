@@ -61,12 +61,6 @@ if ($userid) {
 
 /// require login to access notes
 require_login($course);
-add_to_log($courseid, 'notes', 'view', 'index.php?course='.$courseid.'&amp;user='.$userid, 'view notes');
-
-if (empty($CFG->enablenotes)) {
-    print_error('notesdisabled', 'notes');
-}
-
 /// output HTML
 if ($course->id == SITEID) {
     $coursecontext = context_system::instance();   // SYSTEM context
@@ -74,6 +68,17 @@ if ($course->id == SITEID) {
     $coursecontext = context_course::instance($course->id);   // Course context
 }
 $systemcontext = context_system::instance();   // SYSTEM context
+
+// Trigger event.
+$event = \core\event\notes_viewed::create(array(
+    'relateduserid' => $userid,
+    'context' => $coursecontext
+));
+$event->trigger();
+
+if (empty($CFG->enablenotes)) {
+    print_error('notesdisabled', 'notes');
+}
 
 $strnotes = get_string('notes', 'notes');
 if ($userid) {

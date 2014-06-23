@@ -21,8 +21,7 @@
  *
  * Included by import.ph
  *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  **/
@@ -283,8 +282,9 @@ function lesson_save_question_options($question, $lesson) {
 class qformat_default {
 
     var $displayerrors = true;
-    var $category = NULL;
+    var $category = null;
     var $questionids = array();
+    protected $importcontext = null;
     var $qtypeconvert = array('numerical'   => LESSON_PAGE_NUMERICAL,
                                'multichoice' => LESSON_PAGE_MULTICHOICE,
                                'truefalse'   => LESSON_PAGE_TRUEFALSE,
@@ -295,6 +295,30 @@ class qformat_default {
     // Importing functions
     function provide_import() {
         return false;
+    }
+
+    function set_importcontext($context) {
+        $this->importcontext = $context;
+    }
+
+    /**
+     * Handle parsing error
+     *
+     * @param string $message information about error
+     * @param string $text imported text that triggered the error
+     * @param string $questionname imported question name
+     */
+    protected function error($message, $text='', $questionname='') {
+        $importerrorquestion = get_string('importerrorquestion', 'question');
+
+        echo "<div class=\"importerror\">\n";
+        echo "<strong>$importerrorquestion $questionname</strong>";
+        if (!empty($text)) {
+            $text = s($text);
+            echo "<blockquote>$text</blockquote>\n";
+        }
+        echo "<strong>$message</strong>\n";
+        echo "</div>";
     }
 
     function importpreprocess() {
@@ -323,6 +347,13 @@ class qformat_default {
                 $this->count_questions($questions)), 'notifysuccess');
 
         $count = 0;
+        $addquestionontop = false;
+        if ($pageid == 0) {
+            $addquestionontop = true;
+            $updatelessonpage = $DB->get_record('lesson_pages', array('lessonid' => $lesson->id, 'prevpageid' => 0));
+        } else {
+            $updatelessonpage = $DB->get_record('lesson_pages', array('lessonid' => $lesson->id, 'id' => $pageid));
+        }
 
         $unsupportedquestions = 0;
 
@@ -366,14 +397,6 @@ class qformat_default {
                     $newpage->contents = $question->questiontext;
                     $newpage->contentsformat = isset($question->questionformat) ? $question->questionformat : FORMAT_HTML;
 
-                    // Sometimes, questiontext is not a simple text, but one array
-                    // containing both text and format, so we need to support here
-                    // that case with the following dirty patch. MDL-35147
-                    if (is_array($question->questiontext)) {
-                        $newpage->contents = isset($question->questiontext['text']) ? $question->questiontext['text'] : '';
-                        $newpage->contentsformat = isset($question->questiontext['format']) ? $question->questiontext['format'] : FORMAT_HTML;
-                    }
-
                     // set up page links
                     if ($pageid) {
                         // the new page follows on from this page
@@ -386,7 +409,6 @@ class qformat_default {
                         $newpageid = $DB->insert_record("lesson_pages", $newpage);
                         // update the linked list
                         $DB->set_field("lesson_pages", "nextpageid", $newpageid, array("id" => $pageid));
-
                     } else {
                         // new page is the first page
                         // get the existing (first) page (if any)
@@ -405,11 +427,21 @@ class qformat_default {
                             $DB->set_field("lesson_pages", "prevpageid", $newpageid, array("id" => $page->id));
                         }
                     }
+
                     // reset $pageid and put the page ID in $question, used in save_question_option()
                     $pageid = $newpageid;
                     $question->id = $newpageid;
 
                     $this->questionids[] = $question->id;
+
+                    // Import images in question text.
+                    if (isset($question->questiontextitemid)) {
+                        $questiontext = file_save_draft_area_files($question->questiontextitemid,
+                                $this->importcontext->id, 'mod_lesson', 'page_contents', $newpageid,
+                                null , $question->questiontext);
+                        // Update content with recoded urls.
+                        $DB->set_field("lesson_pages", "contents", $questiontext, array("id" => $newpageid));
+                    }
 
                     // Now to save all the answers and type-specific options
 
@@ -432,7 +464,14 @@ class qformat_default {
                     $unsupportedquestions++;
                     break;
             }
-
+        }
+        // Update the prev links if there were existing pages.
+        if (!empty($updatelessonpage)) {
+            if ($addquestionontop) {
+                $DB->set_field("lesson_pages", "prevpageid", $pageid, array("id" => $updatelessonpage->id));
+            } else {
+                $DB->set_field("lesson_pages", "prevpageid", $pageid, array("id" => $updatelessonpage->nextpageid));
+            }
         }
         if ($unsupportedquestions) {
             echo $OUTPUT->notification(get_string('unknownqtypesnotimported', 'lesson', $unsupportedquestions));
@@ -511,14 +550,14 @@ class qformat_default {
     }
 
 
-    function readquestion($lines) {
+    protected function readquestion($lines) {
     /// Given an array of lines known to define a question in
     /// this format, this function converts it into a question
     /// object suitable for processing and insertion into Moodle.
 
         echo "<p>This flash question format has not yet been completed!</p>";
 
-        return NULL;
+        return null;
     }
 
     /**
@@ -545,7 +584,7 @@ class qformat_default {
         $name = clean_param($name, PARAM_TEXT); // Matches what the question editing form does.
         $name = trim($name);
         $trimlength = 251;
-        while (textlib::strlen($name) > 255 && $trimlength > 0) {
+        while (core_text::strlen($name) > 255 && $trimlength > 0) {
             $name = shorten_text($name, $trimlength);
             $trimlength -= 10;
         }
@@ -597,7 +636,12 @@ class qformat_default {
     protected function format_question_text($question) {
         $formatoptions = new stdClass();
         $formatoptions->noclean = true;
-        return html_to_text(format_text($question->questiontext,
+        // The html_to_text call strips out all URLs, but format_text complains
+        // if it finds @@PLUGINFILE@@ tokens. So, we need to replace
+        // @@PLUGINFILE@@ with a real URL, but it doesn't matter what.
+        // We use http://example.com/.
+        $text = str_replace('@@PLUGINFILE@@/', 'http://example.com/', $question->questiontext);
+        return html_to_text(format_text($text,
                 $question->questiontextformat, $formatoptions), 0, false);
     }
 
@@ -634,8 +678,8 @@ class qformat_based_on_xml extends qformat_default {
             "&#8212;" => "-",
         );
         $str = strtr($str, $html_code_list);
-        // Use textlib entities_to_utf8 function to convert only numerical entities.
-        $str = textlib::entities_to_utf8($str, false);
+        // Use core_text entities_to_utf8 function to convert only numerical entities.
+        $str = core_text::entities_to_utf8($str, false);
         return $str;
     }
 

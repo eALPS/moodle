@@ -14,6 +14,13 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+/**
+ * Tags block.
+ *
+ * @package   block_tags
+ * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 
 class block_tags extends block_base {
     public function init() {
@@ -81,6 +88,7 @@ class block_tags extends block_base {
         }
 
         $this->content = new stdClass;
+        $this->content->text = '';
         $this->content->footer = '';
 
         // Get a list of tags.
@@ -110,12 +118,12 @@ class block_tags extends block_base {
             $content = '';
             $moretags = new moodle_url('/tag/coursetags_more.php', array('show'=>$tagtype));
             if ($tagtype == 'all') {
-                $tags = coursetag_get_tags(0, 0, $this->config->tagtype, $this->config->numberoftags, 'name');
+                $tags = coursetag_get_tags(0, 0, $this->config->tagtype, $this->config->numberoftags);
             } else if ($tagtype == 'course') {
-                $tags = coursetag_get_tags($this->page->course->id, 0, $this->config->tagtype, $this->config->numberoftags, 'name');
+                $tags = coursetag_get_tags($this->page->course->id, 0, $this->config->tagtype, $this->config->numberoftags);
                 $moretags->param('courseid', $this->page->course->id);
             } else if ($tagtype == 'my') {
-                $tags = coursetag_get_tags(0, $USER->id, $this->config->tagtype, $this->config->numberoftags, 'name');
+                $tags = coursetag_get_tags(0, $USER->id, $this->config->tagtype, $this->config->numberoftags);
             }
             $tagcloud = tag_print_cloud($tags, 150, true);
             if (!$tagcloud) {

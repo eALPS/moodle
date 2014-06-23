@@ -18,7 +18,7 @@
 /**
  * This plugin is used to access files by providing an url
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    repository_url
  * @copyright  2010 Dongsheng Cai {@link http://dongsheng.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -30,7 +30,7 @@ require_once(dirname(__FILE__).'/locallib.php');
  * repository_url class
  * A subclass of repository, which is used to download a file from a specific url
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    repository_url
  * @copyright  2009 Dongsheng Cai {@link http://dongsheng.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -46,7 +46,7 @@ class repository_url extends repository {
     public function __construct($repositoryid, $context = SYSCONTEXTID, $options = array()){
         global $CFG;
         parent::__construct($repositoryid, $context, $options);
-        $this->file_url = optional_param('file', '', PARAM_RAW);
+        $this->file_url = optional_param('file', '', PARAM_URL);
     }
 
     public function check_login() {
@@ -168,6 +168,8 @@ EOD;
             } else if (strstr($info['content_type'], 'image/')) {
                 // download this file
                 $this->add_image_to_list($info['url'], $info['url'], $list);
+            } else {
+                $list['error'] = get_string('validfiletype', 'repository_url');
             }
 
             // parse all found css styles
@@ -236,5 +238,14 @@ EOD;
      */
     public function supported_filetypes() {
         return array('web_image');
+    }
+
+    /**
+     * Is this repository accessing private data?
+     *
+     * @return bool
+     */
+    public function contains_private_data() {
+        return false;
     }
 }

@@ -14,6 +14,14 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+/**
+ * functions used by AICC packages.
+ *
+ * @package    mod_scorm
+ * @copyright 1999 onwards Roberto Pinna
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
 function scorm_add_time($a, $b) {
     $aes = explode(':', $a);
     $bes = explode(':', $b);
@@ -106,8 +114,14 @@ function scorm_forge_cols_regexp($columns, $remodule='(".*")?,') {
     return $regexp;
 }
 
+/**
+ * Sets up AICC packages
+ * Called whenever package changes
+ * @param object $scorm instance - fields are updated and changes saved into database
 
-function scorm_parse_aicc($scorm) {
+ * @return bool
+ */
+function scorm_parse_aicc(&$scorm) {
     global $DB;
 
     if ($scorm->scormtype == SCORM_TYPE_AICCURL) {
@@ -134,11 +148,17 @@ function scorm_parse_aicc($scorm) {
         $extension = strtolower(substr($ext, 1));
         if (in_array($extension, $extaiccfiles)) {
             $id = strtolower(basename($filename, $ext));
+            if (!isset($ids[$id])) {
+                $ids[$id] = new stdClass();
+            }
             $ids[$id]->$extension = $file;
         }
     }
 
     foreach ($ids as $courseid => $id) {
+        if (!isset($courses[$courseid])) {
+            $courses[$courseid] = new stdClass();
+        }
         if (isset($id->crs)) {
             $contents = $id->crs->get_content();
             $rows = explode("\r\n", $contents);
@@ -169,6 +189,9 @@ function scorm_parse_aicc($scorm) {
                 if (preg_match($regexp, $rows[$i], $matches)) {
                     for ($j=0; $j<count($columns->columns); $j++) {
                         $column = $columns->columns[$j];
+                        if (!isset($courses[$courseid]->elements[substr(trim($matches[$columns->mastercol+1]), 1 , -1)])) {
+                            $courses[$courseid]->elements[substr(trim($matches[$columns->mastercol+1]), 1 , -1)] = new stdClass();
+                        }
                         $courses[$courseid]->elements[substr(trim($matches[$columns->mastercol+1]), 1 , -1)]->$column = substr(trim($matches[$j+1]), 1, -1);
                     }
                 }
@@ -239,10 +262,11 @@ function scorm_parse_aicc($scorm) {
     }
 
     $oldscoes = $DB->get_records('scorm_scoes', array('scorm'=>$scorm->id));
-
+    $sortorder = 0;
     $launch = 0;
     if (isset($courses)) {
         foreach ($courses as $course) {
+            $sortorder++;
             $sco = new stdClass();
             $sco->identifier = $course->id;
             $sco->scorm = $scorm->id;
@@ -251,12 +275,13 @@ function scorm_parse_aicc($scorm) {
             $sco->parent = '/';
             $sco->launch = '';
             $sco->scormtype = '';
+            $sco->sortorder = $sortorder;
 
             if ($ss = $DB->get_record('scorm_scoes', array('scorm'=>$scorm->id,
                                                            'identifier'=>$sco->identifier))) {
                 $id = $ss->id;
                 $sco->id = $id;
-                $DB->update_record('scorm_scoes',$sco);
+                $DB->update_record('scorm_scoes', $sco);
                 unset($oldscoes[$id]);
             } else {
                 $id = $DB->insert_record('scorm_scoes', $sco);
@@ -268,13 +293,16 @@ function scorm_parse_aicc($scorm) {
             if (isset($course->elements)) {
                 foreach ($course->elements as $element) {
                     unset($sco);
+                    $sco = new stdClass();
                     $sco->identifier = $element->system_id;
                     $sco->scorm = $scorm->id;
                     $sco->organization = $course->id;
                     $sco->title = $element->title;
 
-                    if (!isset($element->parent) || strtolower($element->parent) == 'root') {
+                    if (!isset($element->parent)) {
                         $sco->parent = '/';
+                    } else if (strtolower($element->parent) == 'root') {
+                        $sco->parent = $course->id;
                     } else {
                         $sco->parent = $element->parent;
                     }
@@ -345,9 +373,18 @@ function scorm_parse_aicc($scorm) {
         }
     }
 
-    $scorm->version = 'AICC';
+    // Find first launchable object.
+    $sqlselect = 'scorm = ? AND '.$DB->sql_isnotempty('scorm_scoes', 'launch', false, true);
+    // We use get_records here as we need to pass a limit in the query that works cross db.
+    $scoes = $DB->get_records_select('scorm_scoes', $sqlselect, array($scorm->id), 'sortorder', 'id', 0, 1);
+    if (!empty($scoes)) {
+        $sco = reset($scoes); // We only care about the first record - the above query only returns one.
+        $scorm->launch = $sco->id;
+    } else {
+        $scorm->launch = $launch;
+    }
 
-    $scorm->launch = $launch;
+    $scorm->version = 'AICC';
 
     return true;
 }
@@ -409,17 +446,17 @@ function scorm_aicc_confirm_hacp_session($hacpsession) {
  */
 function scorm_aicc_generate_simple_sco($scorm) {
     global $DB;
-    // find the old one
-    $scos = $DB->get_records('scorm_scoes', array('scorm'=>$scorm->id));
+    // Find the oldest one.
+    $scos = $DB->get_records('scorm_scoes', array('scorm' => $scorm->id), 'id');
     if (!empty($scos)) {
         $sco = array_shift($scos);
     } else {
-        $sco = new object();
+        $sco = new stdClass();
     }
-    // get rid of old ones
-    foreach($scos as $oldsco) {
-        $DB->delete_records('scorm_scoes', array('id'=>$oldsco->id));
-        $DB->delete_records('scorm_scoes_track', array('scoid'=>$oldsco->id));
+    // Get rid of old ones.
+    foreach ($scos as $oldsco) {
+        $DB->delete_records('scorm_scoes', array('id' => $oldsco->id));
+        $DB->delete_records('scorm_scoes_track', array('scoid' => $oldsco->id));
     }
 
     $sco->identifier = 'A1';
@@ -427,11 +464,10 @@ function scorm_aicc_generate_simple_sco($scorm) {
     $sco->organization = '';
     $sco->title = $scorm->name;
     $sco->parent = '/';
-    // add the HACP signal to the activity launcher
+    // Add the HACP signal to the activity launcher.
     if (preg_match('/\?/', $scorm->reference)) {
         $sco->launch = $scorm->reference.'&CMI=HACP';
-    }
-    else {
+    } else {
         $sco->launch = $scorm->reference.'?CMI=HACP';
     }
     $sco->scormtype = 'sco';

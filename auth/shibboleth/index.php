@@ -4,10 +4,15 @@
 
     require('../../config.php');
 
+    $context = context_system::instance();
     $PAGE->set_url('/auth/shibboleth/index.php');
+    $PAGE->set_context($context);
 
     // Support for WAYFless URLs.
-    $SESSION->wantsurl = optional_param('target', $SESSION->wantsurl, PARAM_LOCALURL);
+    $target = optional_param('target', '', PARAM_LOCALURL);
+    if (!empty($target)) {
+        $SESSION->wantsurl = $target;
+    }
 
     if (isloggedin() && !isguestuser()) {      // Nothing to do
         if (isset($SESSION->wantsurl) and (strpos($SESSION->wantsurl, $CFG->wwwroot) === 0)) {
@@ -43,23 +48,7 @@
 
         if ($shibbolethauth->user_login($frm->username, $frm->password)
                 && $user = authenticate_user_login($frm->username, $frm->password)) {
-
-            enrol_check_plugins($user);
-            session_set_user($user);
-
-            $USER->loggedin = true;
-            $USER->site     = $CFG->wwwroot; // for added security, store the site in the
-
-            update_user_login_times();
-
-            // Don't show previous shibboleth username on login page
-
-            set_login_session_preferences();
-
-            unset($SESSION->lang);
-            $SESSION->justloggedin = true;
-
-            add_to_log(SITEID, 'user', 'login', "view.php?id=$USER->id&course=".SITEID, $USER->id, 0, $USER->id);
+            complete_user_login($user);
 
             if (user_not_fully_set_up($USER)) {
                 $urltogo = $CFG->wwwroot.'/user/edit.php?id='.$USER->id.'&amp;course='.SITEID;

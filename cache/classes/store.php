@@ -87,7 +87,7 @@ interface cache_store_interface {
  * All cache store plugins must extend this base class.
  * It lays down the foundation for what is required of a cache store plugin.
  *
- * @since 2.4
+ * @since Moodle 2.4
  * @package    core
  * @category   cache
  * @copyright  2012 Sam Hemelryk
@@ -110,6 +110,11 @@ abstract class cache_store implements cache_store_interface {
      */
     const SUPPORTS_NATIVE_TTL = 4;
 
+    /**
+     * The cache is searchable by key.
+     */
+    const IS_SEARCHABLE = 8;
+
     // Constants for the modes of a cache store
 
     /**
@@ -128,7 +133,16 @@ abstract class cache_store implements cache_store_interface {
     /**
      * Constructs an instance of the cache store.
      *
-     * This method should not create connections or perform and processing, it should be used
+     * The constructor should be responsible for creating anything needed by the store that is not
+     * specific to a definition.
+     * Tasks such as opening a connection to check it is available are best done here.
+     * Tasks that are definition specific such as creating a storage area for the definition data
+     * or creating key tables and indexs are best done within the initialise method.
+     *
+     * Once a store has been constructed the cache API will check it is ready to be intialised with
+     * a definition by called $this->is_ready().
+     * If the setup of the store failed (connection could not be established for example) then
+     * that method should return false so that the store instance is not selected for use.
      *
      * @param string $name The name of the cache store
      * @param array $configuration The configuration for this store instance.
@@ -144,7 +158,12 @@ abstract class cache_store implements cache_store_interface {
     /**
      * Initialises a new instance of the cache store given the definition the instance is to be used for.
      *
-     * This function should prepare any given connections etc.
+     * This function should be used to run any definition specific setup the store instance requires.
+     * Tasks such as creating storage areas, or creating indexes are best done here.
+     *
+     * Its important to note that the initialise method is expected to always succeed.
+     * If there are setup tasks that may fail they should be done within the __construct method
+     * and should they fail is_ready should return false.
      *
      * @param cache_definition $definition
      */
@@ -160,7 +179,9 @@ abstract class cache_store implements cache_store_interface {
      * Returns true if this cache store instance is ready to use.
      * @return bool
      */
-    abstract public function is_ready();
+    public function is_ready() {
+        return forward_static_call(array($this, 'are_requirements_met'));
+    }
 
     /**
      * Retrieves an item from the cache store given its key.
@@ -225,8 +246,37 @@ abstract class cache_store implements cache_store_interface {
 
     /**
      * Performs any necessary clean up when the store instance is being deleted.
+     *
+     * @deprecated since 2.5
      */
-    abstract public function cleanup();
+    public function cleanup() {
+        debugging('This function has been renamed to instance_deleted. Please update your calls.', DEBUG_DEVELOPER);
+    }
+
+    /**
+     * Performs any necessary operation when the store instance has been created.
+     *
+     * @since Moodle 2.5
+     */
+    public function instance_created() {
+        // By default, do nothing.
+    }
+
+    /**
+     * Performs any necessary operation when the store instance is being deleted.
+     *
+     * This method may be called before the store has been initialised.
+     *
+     * @since Moodle 2.5
+     * @see cleanup()
+     */
+    public function instance_deleted() {
+        if (method_exists($this, 'cleanup')) {
+            // There used to be a legacy function called cleanup, it was renamed to instance delete.
+            // To be removed in 2.6.
+            $this->cleanup();
+        }
+    }
 
     /**
      * Returns true if the user can add an instance of the store plugin.
@@ -262,5 +312,32 @@ abstract class cache_store implements cache_store_interface {
      */
     public function supports_native_ttl() {
         return $this::get_supported_features() & self::SUPPORTS_NATIVE_TTL;
+    }
+
+    /**
+     * Returns true if the store instance is searchable.
+     *
+     * @return bool
+     */
+    public function is_searchable() {
+        return in_array('cache_is_searchable', class_implements($this));
+    }
+
+    /**
+     * Creates a clone of this store instance ready to be initialised.
+     *
+     * This method is used so that a cache store needs only be constructed once.
+     * Future requests for an instance of the store will be given a cloned instance.
+     *
+     * If you are writing a cache store that isn't compatible with the clone operation
+     * you can override this method to handle any situations you want before cloning.
+     *
+     * @param array $details An array containing the details of the store from the cache config.
+     * @return cache_store
+     */
+    public function create_clone(array $details = array()) {
+        // By default we just run clone.
+        // Any stores that have an issue with this will need to override the create_clone method.
+        return clone($this);
     }
 }

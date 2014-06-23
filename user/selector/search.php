@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,10 +17,12 @@
 /**
  * Code to search for users in response to an ajax call from a user selector.
  *
+ * @package core_user
  * @copyright 1999 Martin Dougiamas  http://dougiamas.com
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @package user
  */
+
+define('AJAX_SCRIPT', true);
 
 require_once(dirname(__FILE__) . '/../../config.php');
 require_once($CFG->dirroot . '/user/selector/lib.php');
@@ -29,23 +30,11 @@ require_once($CFG->dirroot . '/user/selector/lib.php');
 $PAGE->set_context(context_system::instance());
 $PAGE->set_url('/user/selector/search.php');
 
-// In developer debug mode, when there is a debug=1 in the URL send as plain text
-// for easier debugging.
-if (debugging('', DEBUG_DEVELOPER) && optional_param('debug', false, PARAM_BOOL)) {
-    header('Content-type: text/plain; charset=UTF-8');
-    $debugmode = true;
-} else {
-    header('Content-type: application/json; charset=utf-8');
-    $debugmode = false;
-}
+echo $OUTPUT->header();
 
 // Check access.
-if (!isloggedin()) {;
-    print_error('mustbeloggedin');
-}
-if (!confirm_sesskey()) {
-    print_error('invalidsesskey');
-}
+require_login();
+require_sesskey();
 
 // Get the search parameter.
 $search = required_param('search', PARAM_RAW);
@@ -58,13 +47,6 @@ if (!isset($USER->userselectors[$selectorhash])) {
 
 // Get the options.
 $options = $USER->userselectors[$selectorhash];
-
-if ($debugmode) {
-    echo 'Search string: ', $search, "\n";
-    echo 'Options: ';
-    print_r($options);
-    echo "\n";
-}
 
 // Create the appropriate userselector.
 $classname = $options['class'];

@@ -25,7 +25,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2012112900;
-$plugin->requires  = 2012112900;
+$plugin->version   = 2014051200;
+$plugin->requires  = 2014050800;
 $plugin->component = 'tool_timezoneimport'; // Full name of the plugin (used for diagnostics)
 

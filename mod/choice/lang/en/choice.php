@@ -18,7 +18,7 @@
 /**
  * Strings for component 'choice', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package   choice
+ * @package   mod_choice
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -28,8 +28,11 @@ $string['allowupdate'] = 'Allow choice to be updated';
 $string['answered'] = 'Answered';
 $string['completionsubmit'] = 'Show as complete when user makes a choice';
 $string['displayhorizontal'] = 'Display horizontally';
-$string['displaymode'] = 'Display mode';
+$string['displaymode'] = 'Display mode for the options';
 $string['displayvertical'] = 'Display vertically';
+$string['eventanswercreated'] = 'Choice made';
+$string['eventanswerupdated'] = 'Choice updated';
+$string['eventreportviewed'] = 'Choice report viewed';
 $string['expired'] = 'Sorry, this activity closed on {$a} and is no longer available';
 $string['atleastoneoption'] = 'You need to provide at least one possible answer.';
 $string['full'] = '(Full)';
@@ -55,6 +58,7 @@ $string['choicesaved'] = 'Your choice has been saved';
 $string['choicetext'] = 'Choice text';
 $string['chooseaction'] = 'Choose an action ...';
 $string['limit'] = 'Limit';
+$string['limitno'] = 'Limit {no}';
 $string['limitanswers'] = 'Limit the number of responses allowed';
 $string['modulename'] = 'Choice';
 $string['modulename_help'] = 'The choice activity module enables a teacher to ask a single question and offer a selection of possible responses.
@@ -75,9 +79,11 @@ $string['noresultsviewable'] = 'The results are not currently viewable.';
 $string['notanswered'] = 'Not answered yet';
 $string['notenrolledchoose'] = 'Sorry, only enrolled users are allowed to make choices.';
 $string['notopenyet'] = 'Sorry, this activity is not available until {$a}';
-$string['numberofuser'] = 'The number of user';
-$string['numberofuserinpercentage'] = 'The number of user in percentage';
+$string['numberofuser'] = 'Number of participants';
+$string['numberofuserinpercentage'] = 'Percentage of participants';
 $string['option'] = 'Option';
+$string['optionno'] = 'Option {no}';
+$string['options'] = 'Options';
 $string['page-mod-choice-x'] = 'Any choice module page';
 $string['pluginadministration'] = 'Choice administration';
 $string['pluginname'] = 'Choice';
@@ -94,6 +100,7 @@ $string['removeresponses'] = 'Remove all responses';
 $string['responses'] = 'Responses';
 $string['responsesresultgraphheader'] = 'Graph display';
 $string['responsesto'] = 'Responses to {$a}';
+$string['results'] = 'Results';
 $string['savemychoice'] = 'Save my choice';
 $string['showunanswered'] = 'Show column for unanswered';
 $string['spaceleft'] = 'space available';

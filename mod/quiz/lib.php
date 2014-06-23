@@ -20,8 +20,7 @@
  * This contains functions that are called also from outside the quiz module
  * Functions that are only called by the quiz module itself are in {@link locallib.php}
  *
- * @package    mod
- * @subpackage quiz
+ * @package    mod_quiz
  * @copyright  1999 onwards Martin Dougiamas {@link http://moodle.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -81,7 +80,6 @@ function quiz_add_instance($quiz) {
 
     // Process the options from the form.
     $quiz->created = time();
-    $quiz->questions = '';
     $result = quiz_process_options($quiz);
     if ($result && is_string($result)) {
         return $result;
@@ -106,6 +104,7 @@ function quiz_add_instance($quiz) {
  */
 function quiz_update_instance($quiz, $mform) {
     global $CFG, $DB;
+    require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 
     // Process the options from the form.
     $result = quiz_process_options($quiz);
@@ -113,15 +112,13 @@ function quiz_update_instance($quiz, $mform) {
         return $result;
     }
 
+    // Get the current value, so we can see what changed.
     $oldquiz = $DB->get_record('quiz', array('id' => $quiz->instance));
 
-    // Repaginate, if asked to.
-    if (!$quiz->shufflequestions && !empty($quiz->repaginatenow)) {
-        require_once($CFG->dirroot . '/mod/quiz/locallib.php');
-        $quiz->questions = quiz_repaginate(quiz_clean_layout($oldquiz->questions, true),
-                $quiz->questionsperpage);
-    }
-    unset($quiz->repaginatenow);
+    // We need two values from the existing DB record that are not in the form,
+    // in some of the function calls below.
+    $quiz->sumgrades = $oldquiz->sumgrades;
+    $quiz->grade     = $oldquiz->grade;
 
     // Update the database.
     $quiz->id = $quiz->instance;
@@ -131,23 +128,24 @@ function quiz_update_instance($quiz, $mform) {
     quiz_after_add_or_update($quiz);
 
     if ($oldquiz->grademethod != $quiz->grademethod) {
-        require_once($CFG->dirroot . '/mod/quiz/locallib.php');
-        $quiz->sumgrades = $oldquiz->sumgrades;
-        $quiz->grade = $oldquiz->grade;
         quiz_update_all_final_grades($quiz);
         quiz_update_grades($quiz);
     }
 
-    $updateattempts = $oldquiz->timelimit != $quiz->timelimit
-                   || $oldquiz->timeclose != $quiz->timeclose
-                   || $oldquiz->graceperiod != $quiz->graceperiod;
-    if ($updateattempts) {
-        require_once($CFG->dirroot . '/mod/quiz/locallib.php');
-        quiz_update_open_attempts(array('quizid'=>$quiz->id));
+    $quizdateschanged = $oldquiz->timelimit   != $quiz->timelimit
+                     || $oldquiz->timeclose   != $quiz->timeclose
+                     || $oldquiz->graceperiod != $quiz->graceperiod;
+    if ($quizdateschanged) {
+        quiz_update_open_attempts(array('quizid' => $quiz->id));
     }
 
     // Delete any previous preview attempts.
     quiz_delete_previews($quiz);
+
+    // Repaginate, if asked to.
+    if (!$quiz->shufflequestions && !empty($quiz->repaginatenow)) {
+        quiz_repaginate_questions($quiz->id, $quiz->questionsperpage);
+    }
 
     return true;
 }
@@ -168,8 +166,23 @@ function quiz_delete_instance($id) {
     quiz_delete_all_attempts($quiz);
     quiz_delete_all_overrides($quiz);
 
-    $DB->delete_records('quiz_question_instances', array('quiz' => $quiz->id));
+    // Look for random questions that may no longer be used when this quiz is gone.
+    $sql = "SELECT q.id
+              FROM {quiz_slots} slot
+              JOIN {question} q ON q.id = slot.questionid
+             WHERE slot.quizid = ? AND q.qtype = ?";
+    $questionids = $DB->get_fieldset_sql($sql, array($quiz->id, 'random'));
+
+    // We need to do this before we try and delete randoms, otherwise they would still be 'in use'.
+    $DB->delete_records('quiz_slots', array('quizid' => $quiz->id));
+
+    foreach ($questionids as $questionid) {
+        question_delete_question($questionid);
+    }
+
     $DB->delete_records('quiz_feedback', array('quizid' => $quiz->id));
+
+    quiz_access_manager::delete_settings($quiz);
 
     $events = $DB->get_records('event', array('modulename' => 'quiz', 'instance' => $quiz->id));
     foreach ($events as $event) {
@@ -193,6 +206,11 @@ function quiz_delete_instance($id) {
 function quiz_delete_override($quiz, $overrideid) {
     global $DB;
 
+    if (!isset($quiz->cmid)) {
+        $cm = get_coursemodule_from_instance('quiz', $quiz->id, $quiz->course);
+        $quiz->cmid = $cm->id;
+    }
+
     $override = $DB->get_record('quiz_overrides', array('id' => $overrideid), '*', MUST_EXIST);
 
     // Delete the events.
@@ -205,6 +223,28 @@ function quiz_delete_override($quiz, $overrideid) {
     }
 
     $DB->delete_records('quiz_overrides', array('id' => $overrideid));
+
+    // Set the common parameters for one of the events we will be triggering.
+    $params = array(
+        'objectid' => $override->id,
+        'context' => context_module::instance($quiz->cmid),
+        'other' => array(
+            'quizid' => $override->quiz
+        )
+    );
+    // Determine which override deleted event to fire.
+    if (!empty($override->userid)) {
+        $params['relateduserid'] = $override->userid;
+        $event = \mod_quiz\event\user_override_deleted::create($params);
+    } else {
+        $params['other']['groupid'] = $override->groupid;
+        $event = \mod_quiz\event\group_override_deleted::create($params);
+    }
+
+    // Trigger the override deleted event.
+    $event->add_record_snapshot('quiz_overrides', $override);
+    $event->trigger();
+
     return true;
 }
 
@@ -376,6 +416,16 @@ function quiz_get_best_grade($quiz, $userid) {
  */
 function quiz_has_grades($quiz) {
     return $quiz->grade >= 0.000005 && $quiz->sumgrades >= 0.000005;
+}
+
+/**
+ * Does this quiz allow multiple tries?
+ *
+ * @return bool
+ */
+function quiz_allows_multiple_tries($quiz) {
+    $bt = question_engine::get_behaviour_type($quiz->preferredbehaviour);
+    return $bt->allows_multiple_submitted_responses();
 }
 
 /**
@@ -717,6 +767,18 @@ function quiz_grade_item_update($quiz, $grades = null) {
         $params['hidden'] = 0;
     }
 
+    if (!$params['hidden']) {
+        // If the grade item is not hidden by the quiz logic, then we need to
+        // hide it if the quiz is hidden from students.
+        if (property_exists($quiz, 'visible')) {
+            // Saving the quiz form, and cm not yet updated in the database.
+            $params['hidden'] = !$quiz->visible;
+        } else {
+            $cm = get_coursemodule_from_instance('quiz', $quiz->id);
+            $params['hidden'] = !$cm->visible;
+        }
+    }
+
     if ($grades  === 'reset') {
         $params['reset'] = true;
         $grades = null;
@@ -729,18 +791,19 @@ function quiz_grade_item_update($quiz, $grades = null) {
             // NOTE: this is an extremely nasty hack! It is not a bug if this confirmation fails badly. --skodak.
             $confirm_regrade = optional_param('confirm_regrade', 0, PARAM_INT);
             if (!$confirm_regrade) {
-                $message = get_string('gradeitemislocked', 'grades');
-                $back_link = $CFG->wwwroot . '/mod/quiz/report.php?q=' . $quiz->id .
-                        '&amp;mode=overview';
-                $regrade_link = qualified_me() . '&amp;confirm_regrade=1';
-                echo $OUTPUT->box_start('generalbox', 'notice');
-                echo '<p>'. $message .'</p>';
-                echo $OUTPUT->container_start('buttons');
-                echo $OUTPUT->single_button($regrade_link, get_string('regradeanyway', 'grades'));
-                echo $OUTPUT->single_button($back_link,  get_string('cancel'));
-                echo $OUTPUT->container_end();
-                echo $OUTPUT->box_end();
-
+                if (!AJAX_SCRIPT) {
+                    $message = get_string('gradeitemislocked', 'grades');
+                    $back_link = $CFG->wwwroot . '/mod/quiz/report.php?q=' . $quiz->id .
+                            '&amp;mode=overview';
+                    $regrade_link = qualified_me() . '&amp;confirm_regrade=1';
+                    echo $OUTPUT->box_start('generalbox', 'notice');
+                    echo '<p>'. $message .'</p>';
+                    echo $OUTPUT->container_start('buttons');
+                    echo $OUTPUT->single_button($regrade_link, get_string('regradeanyway', 'grades'));
+                    echo $OUTPUT->single_button($back_link,  get_string('cancel'));
+                    echo $OUTPUT->container_end();
+                    echo $OUTPUT->box_end();
+                }
                 return GRADE_UPDATE_ITEM_LOCKED;
             }
         }
@@ -799,15 +862,10 @@ function quiz_refresh_events($courseid = 0) {
  */
 function quiz_get_recent_mod_activity(&$activities, &$index, $timestart,
         $courseid, $cmid, $userid = 0, $groupid = 0) {
-    global $CFG, $COURSE, $USER, $DB;
+    global $CFG, $USER, $DB;
     require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 
-    if ($COURSE->id == $courseid) {
-        $course = $COURSE;
-    } else {
-        $course = $DB->get_record('course', array('id' => $courseid));
-    }
-
+    $course = get_course($courseid);
     $modinfo = get_fast_modinfo($course);
 
     $cm = $modinfo->cms[$cmid];
@@ -832,9 +890,10 @@ function quiz_get_recent_mod_activity(&$activities, &$index, $timestart,
     $params['timestart'] = $timestart;
     $params['quizid'] = $quiz->id;
 
+    $ufields = user_picture::fields('u', null, 'useridagain');
     if (!$attempts = $DB->get_records_sql("
               SELECT qa.*,
-                     u.firstname, u.lastname, u.email, u.picture, u.imagealt
+                     {$ufields}
                 FROM {quiz_attempts} qa
                      JOIN {user} u ON u.id = qa.userid
                      $groupjoin
@@ -853,11 +912,6 @@ function quiz_get_recent_mod_activity(&$activities, &$index, $timestart,
     $grader          = has_capability('mod/quiz:viewreports', $context);
     $groupmode       = groups_get_activity_groupmode($cm, $course);
 
-    if (is_null($modinfo->groups)) {
-        // Load all my groups and cache it in modinfo.
-        $modinfo->groups = groups_get_user_groups($course->id);
-    }
-
     $usersgroups = null;
     $aname = format_string($cm->name, true);
     foreach ($attempts as $attempt) {
@@ -868,16 +922,10 @@ function quiz_get_recent_mod_activity(&$activities, &$index, $timestart,
             }
 
             if ($groupmode == SEPARATEGROUPS and !$accessallgroups) {
-                if (is_null($usersgroups)) {
-                    $usersgroups = groups_get_all_groups($course->id,
-                            $attempt->userid, $cm->groupingid);
-                    if (is_array($usersgroups)) {
-                        $usersgroups = array_keys($usersgroups);
-                    } else {
-                        $usersgroups = array();
-                    }
-                }
-                if (!array_intersect($usersgroups, $modinfo->groups[$cm->id])) {
+                $usersgroups = groups_get_all_groups($course->id,
+                        $attempt->userid, $cm->groupingid);
+                $usersgroups = array_keys($usersgroups);
+                if (!array_intersect($usersgroups, $modinfo->get_groups($cm->groupingid))) {
                     continue;
                 }
             }
@@ -904,14 +952,8 @@ function quiz_get_recent_mod_activity(&$activities, &$index, $timestart,
             $tmpactivity->content->maxgrade  = null;
         }
 
-        $tmpactivity->user = new stdClass();
-        $tmpactivity->user->id        = $attempt->userid;
-        $tmpactivity->user->firstname = $attempt->firstname;
-        $tmpactivity->user->lastname  = $attempt->lastname;
-        $tmpactivity->user->fullname  = fullname($attempt, $viewfullnames);
-        $tmpactivity->user->picture   = $attempt->picture;
-        $tmpactivity->user->imagealt  = $attempt->imagealt;
-        $tmpactivity->user->email     = $attempt->email;
+        $tmpactivity->user = user_picture::unalias($attempt, null, 'useridagain');
+        $tmpactivity->user->fullname  = fullname($tmpactivity->user, $viewfullnames);
 
         $activities[$index++] = $tmpactivity;
     }
@@ -1245,6 +1287,13 @@ function quiz_update_events($quiz, $override = null) {
 }
 
 /**
+ * List the actions that correspond to a view of this module.
+ * This is used by the participation report.
+ *
+ * Note: This is not used by new logging system. Event with
+ *       crud = 'r' and edulevel = LEVEL_PARTICIPATING will
+ *       be considered as view action.
+ *
  * @return array
  */
 function quiz_get_view_actions() {
@@ -1252,6 +1301,13 @@ function quiz_get_view_actions() {
 }
 
 /**
+ * List the actions that correspond to a post of this module.
+ * This is used by the participation report.
+ *
+ * Note: This is not used by new logging system. Event with
+ *       crud = ('c' || 'u' || 'd') and edulevel = LEVEL_PARTICIPATING
+ *       will be considered as post action.
+ *
  * @return array
  */
 function quiz_get_post_actions() {
@@ -1267,8 +1323,8 @@ function quiz_questions_in_use($questionids) {
     global $DB, $CFG;
     require_once($CFG->libdir . '/questionlib.php');
     list($test, $params) = $DB->get_in_or_equal($questionids);
-    return $DB->record_exists_select('quiz_question_instances',
-            'question ' . $test, $params) || question_engine::questions_in_use(
+    return $DB->record_exists_select('quiz_slots',
+            'questionid ' . $test, $params) || question_engine::questions_in_use(
             $questionids, new qubaid_join('{quiz_attempts} quiza',
             'quiza.uniqueid', 'quiza.preview = 0'));
 }
@@ -1537,6 +1593,7 @@ function quiz_supports($feature) {
         case FEATURE_BACKUP_MOODLE2:            return true;
         case FEATURE_SHOW_DESCRIPTION:          return true;
         case FEATURE_CONTROLS_GRADE_VISIBILITY: return true;
+        case FEATURE_USES_QUESTIONS:            return true;
 
         default: return null;
     }
@@ -1554,48 +1611,6 @@ function quiz_get_extra_capabilities() {
 }
 
 /**
- * This fucntion extends the global navigation for the site.
- * It is important to note that you should not rely on PAGE objects within this
- * body of code as there is no guarantee that during an AJAX request they are
- * available
- *
- * @param navigation_node $quiznode The quiz node within the global navigation
- * @param object $course The course object returned from the DB
- * @param object $module The module object returned from the DB
- * @param object $cm The course module instance returned from the DB
- */
-function quiz_extend_navigation($quiznode, $course, $module, $cm) {
-    global $CFG;
-
-    $context = context_module::instance($cm->id);
-
-    if (has_capability('mod/quiz:view', $context)) {
-        $url = new moodle_url('/mod/quiz/view.php', array('id'=>$cm->id));
-        $quiznode->add(get_string('info', 'quiz'), $url, navigation_node::TYPE_SETTING,
-                null, null, new pix_icon('i/info', ''));
-    }
-
-    if (has_any_capability(array('mod/quiz:viewreports', 'mod/quiz:grade'), $context)) {
-        require_once($CFG->dirroot . '/mod/quiz/report/reportlib.php');
-        $reportlist = quiz_report_list($context);
-
-        $url = new moodle_url('/mod/quiz/report.php',
-                array('id' => $cm->id, 'mode' => reset($reportlist)));
-        $reportnode = $quiznode->add(get_string('results', 'quiz'), $url,
-                navigation_node::TYPE_SETTING,
-                null, null, new pix_icon('i/report', ''));
-
-        foreach ($reportlist as $report) {
-            $url = new moodle_url('/mod/quiz/report.php',
-                    array('id' => $cm->id, 'mode' => $report));
-            $reportnode->add(get_string($report, 'quiz_'.$report), $url,
-                    navigation_node::TYPE_SETTING,
-                    null, 'quiz_report_' . $report, new pix_icon('i/item', ''));
-        }
-    }
-}
-
-/**
  * This function extends the settings navigation block for the site.
  *
  * It is safe to rely on PAGE here as we will only ever be within the module
@@ -1603,6 +1618,7 @@ function quiz_extend_navigation($quiznode, $course, $module, $cm) {
  *
  * @param settings_navigation $settings
  * @param navigation_node $quiznode
+ * @return void
  */
 function quiz_extend_settings_navigation($settings, $quiznode) {
     global $PAGE, $CFG;
@@ -1650,6 +1666,25 @@ function quiz_extend_settings_navigation($settings, $quiznode) {
                 navigation_node::TYPE_SETTING, null, 'mod_quiz_preview',
                 new pix_icon('i/preview', ''));
         $quiznode->add_node($node, $beforekey);
+    }
+
+    if (has_any_capability(array('mod/quiz:viewreports', 'mod/quiz:grade'), $PAGE->cm->context)) {
+        require_once($CFG->dirroot . '/mod/quiz/report/reportlib.php');
+        $reportlist = quiz_report_list($PAGE->cm->context);
+
+        $url = new moodle_url('/mod/quiz/report.php',
+                array('id' => $PAGE->cm->id, 'mode' => reset($reportlist)));
+        $reportnode = $quiznode->add_node(navigation_node::create(get_string('results', 'quiz'), $url,
+                navigation_node::TYPE_SETTING,
+                null, null, new pix_icon('i/report', '')), $beforekey);
+
+        foreach ($reportlist as $report) {
+            $url = new moodle_url('/mod/quiz/report.php',
+                    array('id' => $PAGE->cm->id, 'mode' => $report));
+            $reportnode->add_node(navigation_node::create(get_string($report, 'quiz_'.$report), $url,
+                    navigation_node::TYPE_SETTING,
+                    null, 'quiz_report_' . $report, new pix_icon('i/item', '')));
+        }
     }
 
     question_extend_settings_navigation($quiznode, $PAGE->cm->context)->trim_if_empty();
@@ -1763,8 +1798,14 @@ function quiz_question_pluginfile($course, $context, $component,
  */
 function quiz_page_type_list($pagetype, $parentcontext, $currentcontext) {
     $module_pagetype = array(
-        'mod-quiz-*'=>get_string('page-mod-quiz-x', 'quiz'),
-        'mod-quiz-edit'=>get_string('page-mod-quiz-edit', 'quiz'));
+        'mod-quiz-*'       => get_string('page-mod-quiz-x', 'quiz'),
+        'mod-quiz-view'    => get_string('page-mod-quiz-view', 'quiz'),
+        'mod-quiz-attempt' => get_string('page-mod-quiz-attempt', 'quiz'),
+        'mod-quiz-summary' => get_string('page-mod-quiz-summary', 'quiz'),
+        'mod-quiz-review'  => get_string('page-mod-quiz-review', 'quiz'),
+        'mod-quiz-edit'    => get_string('page-mod-quiz-edit', 'quiz'),
+        'mod-quiz-report'  => get_string('page-mod-quiz-report', 'quiz'),
+    );
     return $module_pagetype;
 }
 

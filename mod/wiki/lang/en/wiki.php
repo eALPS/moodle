@@ -7,7 +7,7 @@
  * @author Kenneth Riba
  *
  * @license http://www.gnu.org/copyleft/gpl.html GNU Public License
- * @package wiki
+ * @package mod_wiki
  */
 $string['addcomment'] = 'Add comment';
 $string['admin'] = 'Administration';
@@ -62,6 +62,17 @@ $string['editing'] = 'Editing wiki page';
 $string['editingcomment'] = 'Editing comment';
 $string['editingpage'] = 'Editing this page \'{$a}\'';
 $string['editsection'] = 'edit';
+$string['eventdiffviewed'] = 'Wiki diff viewed';
+$string['eventhistoryviewed'] = 'Wiki history viewed';
+$string['eventmapviewed'] = 'Wiki page map viewed';
+$string['eventpagedeleted'] = 'Wiki page deleted';
+$string['eventpagecreated'] = 'Wiki page created';
+$string['eventpagelocksdeleted'] = 'Wiki page locks deleted';
+$string['eventpageviewed'] = 'Wiki page viewed';
+$string['eventpageupdated'] = 'Wiki page updated';
+$string['eventpageversiondeleted'] = 'Wiki page version deleted';
+$string['eventversionrestored'] = 'Wiki version restored';
+$string['eventversionviewed'] = 'Wiki page version viewed';
 $string['files'] = 'Files';
 $string['filenotuploadederror'] = 'File \'{$a}\' could not be uploaded correctly.';
 $string['filtername'] = 'Wiki auto-linking';
@@ -131,6 +142,7 @@ $string['navigationfrom_help'] = 'The wiki pages linking to this page';
 $string['navigationto'] = 'This page goes to';
 $string['navigationto_help'] = 'Links to other pages';
 $string['newpage'] = 'New';
+$string['newpagehdr'] = 'New page';
 $string['newpagetitle'] = 'New page title';
 $string['noattachments'] = '<strong>No files attached</strong>';
 $string['nocontent'] = 'There is no content for this page';
@@ -177,6 +189,7 @@ $string['peerreview'] = 'Peer review';
 $string['pluginadministration'] = 'Wiki administration';
 $string['pluginname'] = 'Wiki';
 $string['prettyprint'] = 'Printer-friendly version';
+$string['print'] = 'Print';
 $string['previewwarning'] = 'This is a preview. Changes have not been saved yet.';
 $string['rated']='You rated this page as a {$a}';
 $string['rating']='Rating';
@@ -197,6 +210,7 @@ $string['saving'] = 'Saving wiki page';
 $string['savingerror'] = 'Saving error';
 $string['searchcontent'] = 'Search in page content';
 $string['searchresult'] = 'Search results:';
+$string['searchterms'] = 'Search terms';
 $string['searchwikis'] = 'Search wikis';
 $string['special'] = 'Special';
 $string['tableofcontents'] = 'Table of contents';
@@ -230,7 +244,7 @@ $string['wikiheader'] = 'Level {$a} Header';
 $string['wikihr'] = 'Horizontal rule';
 $string['wikiimage'] = 'Image';
 $string['wikiinternalurl'] = 'Internal link';
-$string['wikiintro'] = 'Wiki description';
+$string['wikiintro'] = 'Description';
 $string['wikiitalictext'] = 'Italic text';
 $string['wikilockingsettings'] = 'Locking and reparsing timeouts';
 $string['wikimode'] = 'Wiki mode';

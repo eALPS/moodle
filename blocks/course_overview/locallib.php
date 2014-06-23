@@ -31,8 +31,17 @@
 function block_course_overview_get_overviews($courses) {
     $htmlarray = array();
     if ($modules = get_plugin_list_with_function('mod', 'print_overview')) {
-        foreach ($modules as $fname) {
-            $fname($courses,$htmlarray);
+        // Split courses list into batches with no more than MAX_MODINFO_CACHE_SIZE courses in one batch.
+        // Otherwise we exceed the cache limit in get_fast_modinfo() and rebuild it too often.
+        if (defined('MAX_MODINFO_CACHE_SIZE') && MAX_MODINFO_CACHE_SIZE > 0 && count($courses) > MAX_MODINFO_CACHE_SIZE) {
+            $batches = array_chunk($courses, MAX_MODINFO_CACHE_SIZE, true);
+        } else {
+            $batches = array($courses);
+        }
+        foreach ($batches as $courses) {
+            foreach ($modules as $fname) {
+                $fname($courses, $htmlarray);
+            }
         }
     }
     return $htmlarray;
@@ -101,16 +110,21 @@ function block_course_overview_get_child_shortnames($courseid) {
 /**
  * Returns maximum number of courses which will be displayed in course_overview block
  *
+ * @param bool $showallcourses if set true all courses will be visible.
  * @return int maximum number of courses
  */
-function block_course_overview_get_max_user_courses() {
+function block_course_overview_get_max_user_courses($showallcourses = false) {
     // Get block configuration
     $config = get_config('block_course_overview');
     $limit = $config->defaultmaxcourses;
 
     // If max course is not set then try get user preference
     if (empty($config->forcedefaultmaxcourses)) {
-        $limit = get_user_preferences('course_overview_number_of_courses', $limit);
+        if ($showallcourses) {
+            $limit = 0;
+        } else {
+            $limit = get_user_preferences('course_overview_number_of_courses', $limit);
+        }
     }
     return $limit;
 }
@@ -118,14 +132,15 @@ function block_course_overview_get_max_user_courses() {
 /**
  * Return sorted list of user courses
  *
+ * @param bool $showallcourses if set true all courses will be visible.
  * @return array list of sorted courses and count of courses.
  */
-function block_course_overview_get_sorted_courses() {
+function block_course_overview_get_sorted_courses($showallcourses = false) {
     global $USER;
 
-    $limit = block_course_overview_get_max_user_courses();
+    $limit = block_course_overview_get_max_user_courses($showallcourses);
 
-    $courses = enrol_get_my_courses('id, shortname, fullname, modinfo, sectioncache');
+    $courses = enrol_get_my_courses();
     $site = get_site();
 
     if (array_key_exists($site->id,$courses)) {

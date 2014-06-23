@@ -290,7 +290,7 @@ class qformat_default {
         global $USER, $CFG, $DB, $OUTPUT;
 
         // reset the timer in case file upload was slow
-        set_time_limit(0);
+        core_php_time_limit::raise();
 
         // STAGE 1: Parse the file
         echo $OUTPUT->notification(get_string('parsingquestions', 'question'), 'notifysuccess');
@@ -325,18 +325,19 @@ class qformat_default {
         foreach ($questions as $question) {
             if (!empty($question->fraction) and (is_array($question->fraction))) {
                 $fractions = $question->fraction;
-                $answersvalid = true; // in case they are!
+                $invalidfractions = array();
                 foreach ($fractions as $key => $fraction) {
                     $newfraction = match_grade_options($gradeoptionsfull, $fraction,
                             $this->matchgrades);
                     if ($newfraction === false) {
-                        $answersvalid = false;
+                        $invalidfractions[] = $fraction;
                     } else {
                         $fractions[$key] = $newfraction;
                     }
                 }
-                if (!$answersvalid) {
-                    echo $OUTPUT->notification(get_string('invalidgrade', 'question'));
+                if ($invalidfractions) {
+                    echo $OUTPUT->notification(get_string('invalidgrade', 'question',
+                            implode(', ', $invalidfractions)));
                     ++$gradeerrors;
                     continue;
                 } else {
@@ -358,7 +359,7 @@ class qformat_default {
         foreach ($questions as $question) {   // Process and store each question
 
             // reset the php timeout
-            set_time_limit(0);
+            core_php_time_limit::raise();
 
             // check for category modifiers
             if ($question->qtype == 'category') {
@@ -386,24 +387,15 @@ class qformat_default {
             $question->modifiedby = $USER->id;
             $question->timemodified = time();
             $fileoptions = array(
-                    'subdirs' => false,
+                    'subdirs' => true,
                     'maxfiles' => -1,
                     'maxbytes' => 0,
                 );
-            if (is_array($question->questiontext)) {
-                // Importing images from draftfile.
-                $questiontext = $question->questiontext;
-                $question->questiontext = $questiontext['text'];
-            }
-            if (is_array($question->generalfeedback)) {
-                $generalfeedback = $question->generalfeedback;
-                $question->generalfeedback = $generalfeedback['text'];
-            }
 
             $question->id = $DB->insert_record('question', $question);
 
-            if (!empty($questiontext['itemid'])) {
-                $question->questiontext = file_save_draft_area_files($questiontext['itemid'],
+            if (isset($question->questiontextitemid)) {
+                $question->questiontext = file_save_draft_area_files($question->questiontextitemid,
                         $this->importcontext->id, 'question', 'questiontext', $question->id,
                         $fileoptions, $question->questiontext);
             } else if (isset($question->questiontextfiles)) {
@@ -412,8 +404,8 @@ class qformat_default {
                             $this->importcontext, 'question', 'questiontext', $question->id, $file);
                 }
             }
-            if (!empty($generalfeedback['itemid'])) {
-                $question->generalfeedback = file_save_draft_area_files($generalfeedback['itemid'],
+            if (isset($question->generalfeedbackitemid)) {
+                $question->generalfeedback = file_save_draft_area_files($question->generalfeedbackitemid,
                         $this->importcontext->id, 'question', 'generalfeedback', $question->id,
                         $fileoptions, $question->generalfeedback);
             } else if (isset($question->generalfeedbackfiles)) {
@@ -432,7 +424,7 @@ class qformat_default {
 
             if (!empty($CFG->usetags) && isset($question->tags)) {
                 require_once($CFG->dirroot . '/tag/lib.php');
-                tag_set('question', $question->id, $question->tags);
+                tag_set('question', $question->id, $question->tags, 'core_question', $question->context);
             }
 
             if (!empty($result->error)) {
@@ -541,7 +533,7 @@ class qformat_default {
             $filearray = file($filename);
 
             // If the first line of the file starts with a UTF-8 BOM, remove it.
-            $filearray[0] = textlib::trim_utf8_bom($filearray[0]);
+            $filearray[0] = core_text::trim_utf8_bom($filearray[0]);
 
             // Check for Macintosh OS line returns (ie file on one line), and fix.
             if (preg_match("~\r~", $filearray[0]) AND !preg_match("~\n~", $filearray[0])) {
@@ -661,7 +653,7 @@ class qformat_default {
         $name = clean_param($name, PARAM_TEXT); // Matches what the question editing form does.
         $name = trim($name);
         $trimlength = 251;
-        while (textlib::strlen($name) > 255 && $trimlength > 0) {
+        while (core_text::strlen($name) > 255 && $trimlength > 0) {
             $name = shorten_text($name, $trimlength);
             $trimlength -= 10;
         }
@@ -941,11 +933,8 @@ class qformat_default {
      * during import to let the user see roughly what is going on.
      */
     protected function format_question_text($question) {
-        global $DB;
-        $formatoptions = new stdClass();
-        $formatoptions->noclean = true;
-        return html_to_text(format_text($question->questiontext,
-                $question->questiontextformat, $formatoptions), 0, false);
+        return question_utils::to_plain_text($question->questiontext,
+                $question->questiontextformat);
     }
 }
 
@@ -968,8 +957,8 @@ class qformat_based_on_xml extends qformat_default {
             "&#8212;" => "-",
         );
         $str = strtr($str, $html_code_list);
-        // Use textlib entities_to_utf8 function to convert only numerical entities.
-        $str = textlib::entities_to_utf8($str, false);
+        // Use core_text entities_to_utf8 function to convert only numerical entities.
+        $str = core_text::entities_to_utf8($str, false);
         return $str;
     }
 

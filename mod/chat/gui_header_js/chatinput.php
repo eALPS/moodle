@@ -24,6 +24,7 @@ if (!$cm = get_coursemodule_from_instance('chat', $chat->id, $course->id)) {
 }
 
 $PAGE->set_url('/mod/chat/gui_header_js/chatinput.php', array('chat_sid'=>$chat_sid, 'chat_id'=>$chatid));
+$PAGE->set_popup_notification_allowed(false);
 
 //Get the user theme
 $USER = $DB->get_record('user', array('id'=>$chatuser->userid));
@@ -48,7 +49,6 @@ echo html_writer::label(get_string('entermessage', 'chat'), 'input_chat_message'
 echo html_writer::empty_tag('input', array('type'=>'text', 'id'=>'input_chat_message', 'name'=>'chat_message', 'size'=>'50', 'value'=>''));
 echo html_writer::empty_tag('input', array('type'=>'checkbox', 'id'=>'auto', 'checked'=>'checked', 'value'=>''));
 echo html_writer::tag('label', get_string('autoscroll', 'chat'), array('for'=>'auto'));
-echo $OUTPUT->help_icon('usingchat', 'chat');
 echo html_writer::end_tag('form');
 
 echo html_writer::start_tag('form', array('action'=>'insert.php', 'method'=>'post', 'target'=>'empty', 'id'=>'sendForm'));

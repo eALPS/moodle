@@ -18,7 +18,7 @@
 /**
  * This plugin is used to access recent used files
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    repository_recent
  * @copyright  2010 Dongsheng Cai {@link http://dongsheng.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -28,7 +28,7 @@ require_once($CFG->dirroot . '/repository/lib.php');
 /**
  * repository_recent class is used to browse recent used files
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    repository_recent
  * @copyright  2010 Dongsheng Cai {@link http://dongsheng.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -166,6 +166,7 @@ class repository_recent extends repository {
             $number = DEFAULT_RECENT_FILES_NUM;
         }
         $mform->addElement('text', 'recentfilesnumber', get_string('recentfilesnumber', 'repository_recent'));
+        $mform->setType('recentfilesnumber', PARAM_INT);
         $mform->setDefault('recentfilesnumber', $number);
     }
 
@@ -202,5 +203,14 @@ class repository_recent extends repository {
      */
     public function has_moodle_files() {
         return true;
+    }
+
+    /**
+     * Is this repository accessing private data?
+     *
+     * @return bool
+     */
+    public function contains_private_data() {
+        return false;
     }
 }

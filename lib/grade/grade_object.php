@@ -396,7 +396,7 @@ abstract class grade_object {
      *
      * @param bool $deleted
      */
-    function notify_changed($deleted) {
+    protected function notify_changed($deleted) {
     }
 
     /**
@@ -437,5 +437,14 @@ abstract class grade_object {
     function set_hidden($hidden, $cascade=false) {
         $this->hidden = $hidden;
         $this->update();
+    }
+
+    /**
+     * Returns whether the grade object can control the visibility of the grades.
+     *
+     * @return bool
+     */
+    public function can_control_visibility() {
+        return true;
     }
 }

@@ -18,8 +18,7 @@
 /**
  * Standard library of functions and constants for lesson
  *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  **/
@@ -401,7 +400,7 @@ function lesson_update_grades($lesson, $userid=0, $nullifnone=true) {
     } else if ($userid and $nullifnone) {
         $grade = new stdClass();
         $grade->userid   = $userid;
-        $grade->rawgrade = NULL;
+        $grade->rawgrade = null;
         lesson_grade_item_update($lesson, $grade);
 
     } else {
@@ -449,7 +448,7 @@ function lesson_upgrade_grades() {
  * @param array|object $grades optional array/object of grade(s); 'reset' means reset grades in gradebook
  * @return int 0 if ok, error code otherwise
  */
-function lesson_grade_item_update($lesson, $grades=NULL) {
+function lesson_grade_item_update($lesson, $grades=null) {
     global $CFG;
     if (!function_exists('grade_update')) { //workaround for buggy PHP versions
         require_once($CFG->libdir.'/gradelib.php');
@@ -468,13 +467,29 @@ function lesson_grade_item_update($lesson, $grades=NULL) {
     } else if ($lesson->grade < 0) {
         $params['gradetype']  = GRADE_TYPE_SCALE;
         $params['scaleid']   = -$lesson->grade;
+
+        // Make sure current grade fetched correctly from $grades
+        $currentgrade = null;
+        if (!empty($grades)) {
+            if (is_array($grades)) {
+                $currentgrade = reset($grades);
+            } else {
+                $currentgrade = $grades;
+            }
+        }
+
+        // When converting a score to a scale, use scale's grade maximum to calculate it.
+        if (!empty($currentgrade) && $currentgrade->rawgrade !== null) {
+            $grade = grade_get_grades($lesson->course, 'mod', 'lesson', $lesson->id, $currentgrade->userid);
+            $params['grademax']   = reset($grade->items)->grademax;
+        }
     } else {
         $params['gradetype']  = GRADE_TYPE_NONE;
     }
 
     if ($grades  === 'reset') {
         $params['reset'] = true;
-        $grades = NULL;
+        $grades = null;
     } else if (!empty($grades)) {
         // Need to calculate raw grade (Note: $grades has many forms)
         if (is_object($grades)) {
@@ -488,7 +503,7 @@ function lesson_grade_item_update($lesson, $grades=NULL) {
             }
             //check raw grade isnt null otherwise we erroneously insert a grade of 0
             if ($grade['rawgrade'] !== null) {
-                $grades[$key]['rawgrade'] = ($grade['rawgrade'] * $lesson->grade / 100);
+                $grades[$key]['rawgrade'] = ($grade['rawgrade'] * $params['grademax'] / 100);
             } else {
                 //setting rawgrade to null just in case user is deleting a grade
                 $grades[$key]['rawgrade'] = null;
@@ -512,6 +527,13 @@ function lesson_grade_item_delete($lesson) {
 }
 
 /**
+ * List the actions that correspond to a view of this module.
+ * This is used by the participation report.
+ *
+ * Note: This is not used by new logging system. Event with
+ *       crud = 'r' and edulevel = LEVEL_PARTICIPATING will
+ *       be considered as view action.
+ *
  * @return array
  */
 function lesson_get_view_actions() {
@@ -519,6 +541,13 @@ function lesson_get_view_actions() {
 }
 
 /**
+ * List the actions that correspond to a post of this module.
+ * This is used by the participation report.
+ *
+ * Note: This is not used by new logging system. Event with
+ *       crud = ('c' || 'u' || 'd') and edulevel = LEVEL_PARTICIPATING
+ *       will be considered as post action.
+ *
  * @return array
  */
 function lesson_get_post_actions() {
@@ -803,7 +832,7 @@ function lesson_extend_settings_navigation($settings, $lessonnode) {
  */
 function lesson_get_import_export_formats($type) {
     global $CFG;
-    $fileformats = get_plugin_list("qformat");
+    $fileformats = core_component::get_plugin_list("qformat");
 
     $fileformatname=array();
     foreach ($fileformats as $fileformat=>$fdir) {
@@ -869,7 +898,11 @@ function lesson_pluginfile($course, $cm, $context, $filearea, $args, $forcedownl
         $fullpath = "/$context->id/mod_lesson/$filearea/$pageid/".implode('/', $args);
 
     } else if ($filearea === 'mediafile') {
-        array_shift($args); // ignore itemid - caching only
+        if (count($args) > 1) {
+            // Remove the itemid when it appears to be part of the arguments. If there is only one argument
+            // then it is surely the file name. The itemid is sometimes used to prevent browser caching.
+            array_shift($args);
+        }
         $fullpath = "/$context->id/mod_lesson/$filearea/0/".implode('/', $args);
 
     } else {
@@ -890,14 +923,12 @@ function lesson_pluginfile($course, $cm, $context, $filearea, $args, $forcedownl
  *
  * @package  mod_lesson
  * @category files
- * @todo MDL-31048 localize
  * @return array a list of available file areas
  */
 function lesson_get_file_areas() {
     $areas = array();
-    $areas['page_contents'] = 'Page contents'; //TODO: localize!!!!
-    $areas['mediafile'] = 'Media file'; //TODO: localize!!!!
-
+    $areas['page_contents'] = get_string('pagecontents', 'mod_lesson');
+    $areas['mediafile'] = get_string('mediafile', 'mod_lesson');
     return $areas;
 }
 
@@ -919,20 +950,43 @@ function lesson_get_file_areas() {
  * @return file_info_stored
  */
 function lesson_get_file_info($browser, $areas, $course, $cm, $context, $filearea, $itemid, $filepath, $filename) {
-    global $CFG;
-    if (has_capability('moodle/course:managefiles', $context)) {
-        // no peaking here for students!!
+    global $CFG, $DB;
+
+    if (!has_capability('moodle/course:managefiles', $context)) {
+        // No peaking here for students!
         return null;
+    }
+
+    // Mediafile area does not have sub directories, so let's select the default itemid to prevent
+    // the user from selecting a directory to access the mediafile content.
+    if ($filearea == 'mediafile' && is_null($itemid)) {
+        $itemid = 0;
+    }
+
+    if (is_null($itemid)) {
+        return new mod_lesson_file_info($browser, $course, $cm, $context, $areas, $filearea);
     }
 
     $fs = get_file_storage();
     $filepath = is_null($filepath) ? '/' : $filepath;
     $filename = is_null($filename) ? '.' : $filename;
-    $urlbase = $CFG->wwwroot.'/pluginfile.php';
     if (!$storedfile = $fs->get_file($context->id, 'mod_lesson', $filearea, $itemid, $filepath, $filename)) {
         return null;
     }
-    return new file_info_stored($browser, $context, $storedfile, $urlbase, $filearea, $itemid, true, true, false);
+
+    $itemname = $filearea;
+    if ($filearea == 'page_contents') {
+        $itemname = $DB->get_field('lesson_pages', 'title', array('lessonid' => $cm->instance, 'id' => $itemid));
+        $itemname = format_string($itemname, true, array('context' => $context));
+    } else {
+        $areas = lesson_get_file_areas();
+        if (isset($areas[$filearea])) {
+            $itemname = $areas[$filearea];
+        }
+    }
+
+    $urlbase = $CFG->wwwroot . '/pluginfile.php';
+    return new file_info_stored($browser, $context, $storedfile, $urlbase, $itemname, $itemid, true, true, false);
 }
 
 

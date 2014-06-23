@@ -26,8 +26,7 @@
  * through a confirmation page that redirects the user back with the
  * sesskey.
  *
- * @package    mod
- * @subpackage forum
+ * @package   mod_forum
  * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -103,19 +102,25 @@ if (!is_null($mode) and has_capability('mod/forum:managesubscriptions', $context
     require_sesskey();
     switch ($mode) {
         case FORUM_CHOOSESUBSCRIBE : // 0
-            forum_forcesubscribe($forum->id, 0);
+            forum_forcesubscribe($forum->id, FORUM_CHOOSESUBSCRIBE);
             redirect($returnto, get_string("everyonecannowchoose", "forum"), 1);
             break;
         case FORUM_FORCESUBSCRIBE : // 1
-            forum_forcesubscribe($forum->id, 1);
+            forum_forcesubscribe($forum->id, FORUM_FORCESUBSCRIBE);
             redirect($returnto, get_string("everyoneisnowsubscribed", "forum"), 1);
             break;
         case FORUM_INITIALSUBSCRIBE : // 2
-            forum_forcesubscribe($forum->id, 2);
+            if ($forum->forcesubscribe <> FORUM_INITIALSUBSCRIBE) {
+                $users = forum_get_potential_subscribers($context, 0, 'u.id, u.email', '');
+                foreach ($users as $user) {
+                    forum_subscribe($user->id, $forum->id);
+                }
+            }
+            forum_forcesubscribe($forum->id, FORUM_INITIALSUBSCRIBE);
             redirect($returnto, get_string("everyoneisnowsubscribed", "forum"), 1);
             break;
         case FORUM_DISALLOWSUBSCRIBE : // 3
-            forum_forcesubscribe($forum->id, 3);
+            forum_forcesubscribe($forum->id, FORUM_DISALLOWSUBSCRIBE);
             redirect($returnto, get_string("noonecansubscribenow", "forum"), 1);
             break;
         default:
@@ -143,7 +148,6 @@ if (forum_is_subscribed($user->id, $forum->id)) {
     }
     require_sesskey();
     if (forum_unsubscribe($user->id, $forum->id)) {
-        add_to_log($course->id, "forum", "unsubscribe", "view.php?f=$forum->id", $forum->id, $cm->id);
         redirect($returnto, get_string("nownotsubscribed", "forum", $info), 1);
     } else {
         print_error('cannotunsubscribe', 'forum', $_SERVER["HTTP_REFERER"]);
@@ -168,6 +172,5 @@ if (forum_is_subscribed($user->id, $forum->id)) {
     }
     require_sesskey();
     forum_subscribe($user->id, $forum->id);
-    add_to_log($course->id, "forum", "subscribe", "view.php?f=$forum->id", $forum->id, $cm->id);
     redirect($returnto, get_string("nowsubscribed", "forum", $info), 1);
 }

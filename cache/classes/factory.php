@@ -48,6 +48,8 @@ class cache_factory {
     const STATE_SAVING = 2;
     /** The cache is ready to use. */
     const STATE_READY = 3;
+    /** The cache is currently updating itself */
+    const STATE_UPDATING = 4;
     /** The cache encountered an error while initialising. */
     const STATE_ERROR_INITIALISING = 9;
     /** The cache has been disabled. */
@@ -74,6 +76,12 @@ class cache_factory {
     protected $cachesfromparams = array();
 
     /**
+     * An array of stores organised by definitions.
+     * @var array
+     */
+    protected $definitionstores = array();
+
+    /**
      * An array of instantiated stores.
      * @var array
      */
@@ -95,7 +103,7 @@ class cache_factory {
      * An array of lock plugins.
      * @var array
      */
-    protected $lockplugins = null;
+    protected $lockplugins = array();
 
     /**
      * The current state of the cache API.
@@ -123,7 +131,7 @@ class cache_factory {
                 self::$instance = new cache_factory();
                 if (defined('CACHE_DISABLE_STORES') && CACHE_DISABLE_STORES !== false) {
                     // The cache stores have been disabled.
-                    self::$instance->set_state(self::STATE_STORES_DISABLED);;
+                    self::$instance->set_state(self::STATE_STORES_DISABLED);
                 }
             }
         }
@@ -142,14 +150,24 @@ class cache_factory {
      */
     public static function reset() {
         $factory = self::instance();
-        $factory->cachesfromdefinitions = array();
-        $factory->cachesfromparams = array();
-        $factory->stores = array();
+        $factory->reset_cache_instances();
         $factory->configs = array();
         $factory->definitions = array();
-        $factory->lockplugins = null; // MUST be null in order to force its regeneration.
+        $factory->lockplugins = array(); // MUST be null in order to force its regeneration.
         // Reset the state to uninitialised.
         $factory->state = self::STATE_UNINITIALISED;
+    }
+
+    /**
+     * Resets the stores, clearing the array of created stores.
+     *
+     * Cache objects still held onto by the code that initialised them will remain as is
+     * however all future requests for a cache/store will lead to a new instance being re-initialised.
+     */
+    public function reset_cache_instances() {
+        $this->cachesfromdefinitions = array();
+        $this->cachesfromparams = array();
+        $this->stores = array();
     }
 
     /**
@@ -165,7 +183,7 @@ class cache_factory {
      */
     public function create_cache_from_definition($component, $area, array $identifiers = array(), $aggregate = null) {
         $definitionname = $component.'/'.$area;
-        if (array_key_exists($definitionname, $this->cachesfromdefinitions)) {
+        if (isset($this->cachesfromdefinitions[$definitionname])) {
             $cache = $this->cachesfromdefinitions[$definitionname];
             $cache->set_identifiers($identifiers);
             return $cache;
@@ -173,9 +191,8 @@ class cache_factory {
         $definition = $this->create_definition($component, $area, $aggregate);
         $definition->set_identifiers($identifiers);
         $cache = $this->create_cache($definition, $identifiers);
-        if ($definition->should_be_persistent()) {
-            $this->cachesfromdefinitions[$definitionname] = $cache;
-        }
+        // Loaders are always held onto to speed up subsequent requests.
+        $this->cachesfromdefinitions[$definitionname] = $cache;
         return $cache;
     }
 
@@ -191,7 +208,8 @@ class cache_factory {
      * @param array $options An array of options, available options are:
      *   - simplekeys : Set to true if the keys you will use are a-zA-Z0-9_
      *   - simpledata : Set to true if the type of the data you are going to store is scalar, or an array of scalar vars
-     *   - persistent : If set to true the cache will persist construction requests.
+     *   - staticacceleration : If set to true the cache will hold onto data passing through it.
+     *   - staticaccelerationsize : The maximum number of items to hold onto for acceleration purposes.
      * @return cache_application|cache_session|cache_request
      */
     public function create_cache_from_params($mode, $component, $area, array $identifiers = array(), array $options = array()) {
@@ -199,13 +217,10 @@ class cache_factory {
         if (array_key_exists($key, $this->cachesfromparams)) {
             return $this->cachesfromparams[$key];
         }
-        // Get the class. Note this is a late static binding so we need to use get_called_class.
         $definition = cache_definition::load_adhoc($mode, $component, $area, $options);
         $definition->set_identifiers($identifiers);
         $cache = $this->create_cache($definition, $identifiers);
-        if ($definition->should_be_persistent()) {
-            $this->cachesfromparams[$key] = $cache;
-        }
+        $this->cachesfromparams[$key] = $cache;
         return $cache;
     }
 
@@ -220,9 +235,14 @@ class cache_factory {
      */
     public function create_cache(cache_definition $definition) {
         $class = $definition->get_cache_class();
-        $stores = cache_helper::get_cache_stores($definition);
+        $stores = cache_helper::get_stores_suitable_for_definition($definition);
+        foreach ($stores as $key => $store) {
+            if (!$store::are_requirements_met()) {
+                unset($stores[$key]);
+            }
+        }
         if (count($stores) === 0) {
-            // Hmm no stores, better provide a dummy store to mimick functionality. The dev will be none the wiser.
+            // Hmm still no stores, better provide a dummy store to mimic functionality. The dev will be none the wiser.
             $stores[] = $this->create_dummy_store($definition);
         }
         $loader = null;
@@ -238,7 +258,7 @@ class cache_factory {
     /**
      * Creates a store instance given its name and configuration.
      *
-     * If the store has already been instantiated then the original objetc will be returned. (reused)
+     * If the store has already been instantiated then the original object will be returned. (reused)
      *
      * @param string $name The name of the store (must be unique remember)
      * @param array $details
@@ -252,13 +272,48 @@ class cache_factory {
             $store = new $class($details['name'], $details['configuration']);
             $this->stores[$name] = $store;
         }
+        /* @var cache_store $store */
         $store = $this->stores[$name];
-        if (!$store->is_ready() || !$store->is_supported_mode($definition->get_mode())) {
+        // We check are_requirements_met although we expect is_ready is going to check as well.
+        if (!$store::are_requirements_met() || !$store->is_ready() || !$store->is_supported_mode($definition->get_mode())) {
             return false;
         }
-        $store = clone($this->stores[$name]);
+        // We always create a clone of the original store.
+        // If we were to clone a store that had already been initialised with a definition then
+        // we'd run into a myriad of issues.
+        // We use a method of the store to create a clone rather than just creating it ourselves
+        // so that if any store out there doesn't handle cloning they can override this method in
+        // order to address the issues.
+        $store = $this->stores[$name]->create_clone($details);
         $store->initialise($definition);
+        $definitionid = $definition->get_id();
+        if (!isset($this->definitionstores[$definitionid])) {
+            $this->definitionstores[$definitionid] = array();
+        }
+        $this->definitionstores[$definitionid][] = $store;
         return $store;
+    }
+
+    /**
+     * Returns an array of cache stores that have been initialised for use in definitions.
+     * @param cache_definition $definition
+     * @return array
+     */
+    public function get_store_instances_in_use(cache_definition $definition) {
+        $id = $definition->get_id();
+        if (!isset($this->definitionstores[$id])) {
+            return array();
+        }
+        return $this->definitionstores[$id];
+    }
+
+    /**
+     * Returns the cache instances that have been used within this request.
+     * @since Moodle 2.6
+     * @return array
+     */
+    public function get_caches_in_use() {
+        return $this->cachesfromdefinitions;
     }
 
     /**
@@ -332,22 +387,53 @@ class cache_factory {
         if ($aggregate) {
             $id .= '::'.$aggregate;
         }
-        if (!array_key_exists($id, $this->definitions)) {
-            $instance = $this->create_config_instance();
-            $definition = $instance->get_definition_by_id($id);
-            if (!$definition) {
-                $this->reset();
-                $instance = $this->create_config_instance(true);
-                $instance->update_definitions();
+        if (!isset($this->definitions[$id])) {
+            // This is the first time this definition has been requested.
+            if ($this->is_initialising()) {
+                // We're initialising the cache right now. Don't try to create another config instance.
+                // We'll just use an ad-hoc cache for the time being.
+                $definition = cache_definition::load_adhoc(cache_store::MODE_REQUEST, $component, $area);
+            } else {
+                // Load all the known definitions and find the desired one.
+                $instance = $this->create_config_instance();
                 $definition = $instance->get_definition_by_id($id);
                 if (!$definition) {
-                    throw new coding_exception('The requested cache definition does not exist.'. $id, $id);
+                    // Oh-oh the definition doesn't exist.
+                    // There are several things that could be going on here.
+                    // We may be installing/upgrading a site and have hit a definition that hasn't been used before.
+                    // Of the developer may be trying to use a newly created definition.
+                    if ($this->is_updating()) {
+                        // The cache is presently initialising and the requested cache definition has not been found.
+                        // This means that the cache initialisation has requested something from a cache (I had recursive nightmares about this).
+                        // To serve this purpose and avoid errors we are going to make use of an ad-hoc cache rather than
+                        // search for the definition which would possibly cause an infitite loop trying to initialise the cache.
+                        $definition = cache_definition::load_adhoc(cache_store::MODE_REQUEST, $component, $area);
+                        if ($aggregate !== null) {
+                            // If you get here you deserve a warning. We have to use an ad-hoc cache here, so we can't find the definition and therefor
+                            // can't find any information about the datasource or any of its aggregated.
+                            // Best of luck.
+                            debugging('An unknown cache was requested during development with an aggregate that could not be loaded. Ad-hoc cache used instead.', DEBUG_DEVELOPER);
+                            $aggregate = null;
+                        }
+                    } else {
+                        // Either a typo of the developer has just created the definition and is using it for the first time.
+                        $this->reset();
+                        $instance = $this->create_config_instance(true);
+                        $instance->update_definitions();
+                        $definition = $instance->get_definition_by_id($id);
+                        if (!$definition) {
+                            throw new coding_exception('The requested cache definition does not exist.'. $id, $id);
+                        } else if (!$this->is_disabled()) {
+                            debugging('Cache definitions reparsed causing cache reset in order to locate definition.
+                                You should bump the version number to ensure definitions are reprocessed.', DEBUG_DEVELOPER);
+                        }
+                        $definition = cache_definition::load($id, $definition, $aggregate);
+                    }
                 } else {
-                    debugging('Cache definitions reparsed causing cache reset in order to locate definition.
-                        You should bump the version number to ensure definitions are reprocessed.', DEBUG_DEVELOPER);
+                    $definition = cache_definition::load($id, $definition, $aggregate);
                 }
             }
-            $this->definitions[$id] = cache_definition::load($id, $definition, $aggregate);
+            $this->definitions[$id] = $definition;
         }
         return $this->definitions[$id];
     }
@@ -373,6 +459,7 @@ class cache_factory {
      * @return cache_lock_interface
      */
     public function create_lock_instance(array $config) {
+        global $CFG;
         if (!array_key_exists('name', $config) || !array_key_exists('type', $config)) {
             throw new coding_exception('Invalid cache lock instance provided');
         }
@@ -381,8 +468,16 @@ class cache_factory {
         unset($config['name']);
         unset($config['type']);
 
-        if ($this->lockplugins === null) {
-            $this->lockplugins = get_plugin_list_with_class('cachelock', '', 'lib.php');
+        if (!isset($this->lockplugins[$type])) {
+            $pluginname = substr($type, 10);
+            $file = $CFG->dirroot."/cache/locks/{$pluginname}/lib.php";
+            if (file_exists($file) && is_readable($file)) {
+                require_once($file);
+            }
+            if (!class_exists($type)) {
+                throw new coding_exception('Invalid lock plugin requested.');
+            }
+            $this->lockplugins[$type] = $type;
         }
         if (!array_key_exists($type, $this->lockplugins)) {
             throw new coding_exception('Invalid cache lock type.');
@@ -415,12 +510,55 @@ class cache_factory {
     }
 
     /**
+     * Informs the factory that the cache is currently updating itself.
+     *
+     * This forces the state to upgrading and can only be called once the cache is ready to use.
+     * Calling it ensure we don't try to reinstantite things when requesting cache definitions that don't exist yet.
+     */
+    public function updating_started() {
+        if ($this->state !== self::STATE_READY) {
+            return false;
+        }
+        $this->state = self::STATE_UPDATING;
+        return true;
+    }
+
+    /**
+     * Informs the factory that the upgrading has finished.
+     *
+     * This forces the state back to ready.
+     */
+    public function updating_finished() {
+        $this->state = self::STATE_READY;
+    }
+
+    /**
      * Returns true if the cache API has been disabled.
      *
      * @return bool
      */
     public function is_disabled() {
         return $this->state === self::STATE_DISABLED;
+    }
+
+    /**
+     * Returns true if the cache is currently initialising itself.
+     *
+     * This includes both initialisation and saving the cache config file as part of that initialisation.
+     *
+     * @return bool
+     */
+    public function is_initialising() {
+        return $this->state === self::STATE_INITIALISING || $this->state === self::STATE_SAVING;
+    }
+
+    /**
+     * Returns true if the cache is currently updating itself.
+     *
+     * @return bool
+     */
+    public function is_updating() {
+        return $this->state === self::STATE_UPDATING;
     }
 
     /**
@@ -466,7 +604,9 @@ class cache_factory {
      * </code>
      */
     public static function disable_stores() {
+        // First reset to clear any static acceleration array.
         $factory = self::instance();
+        $factory->reset_cache_instances();
         $factory->set_state(self::STATE_STORES_DISABLED);
     }
 }

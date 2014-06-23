@@ -30,9 +30,10 @@ require_once('import_outcomes_form.php');
 
 $courseid = optional_param('courseid', 0, PARAM_INT);
 $action   = optional_param('action', '', PARAM_ALPHA);
-$scope    = optional_param('scope', 'global', PARAM_ALPHA);
+$scope    = optional_param('scope', 'custom', PARAM_ALPHA);
 
 $PAGE->set_url('/grade/edit/outcome/import.php', array('courseid' => $courseid));
+$PAGE->set_pagelayout('admin');
 
 /// Make sure they can even access this course
 if ($courseid) {

@@ -36,6 +36,9 @@ require_once($CFG->dirroot.'/grade/grading/lib.php');
  */
 class assign_feedback_offline extends assign_feedback_plugin {
 
+    /** @var boolean|null $enabledcache Cached lookup of the is_enabled function */
+    private $enabledcache = null;
+
     /**
      * Get the name of the file feedback plugin
      * @return string
@@ -80,7 +83,7 @@ class assign_feedback_offline extends assign_feedback_plugin {
 
         $gradeimporter = new assignfeedback_offline_grade_importer($importid, $this->assignment);
 
-        $context = get_context_instance(CONTEXT_USER, $USER->id);
+        $context = context_user::instance($USER->id);
         $fs = get_file_storage();
         if (!$files = $fs->get_area_files($context->id, 'user', 'draft', $draftid, 'id DESC', false)) {
             redirect(new moodle_url('view.php',
@@ -107,9 +110,8 @@ class assign_feedback_offline extends assign_feedback_plugin {
         // Does this assignment use a scale?
         $scaleoptions = null;
         if ($this->assignment->get_instance()->grade < 0) {
-            $scale = $DB->get_record('scale', array('id'=>-($this->assignment->get_instance()->grade)));
-            if ($scale) {
-                $scaleoptions = explode(',', $scale->scale);
+            if ($scale = $DB->get_record('scale', array('id'=>-($this->assignment->get_instance()->grade)))) {
+                $scaleoptions = make_menu_from_list($scale->scale);
             }
         }
         // We may need to upgrade the gradebook comments after this update.
@@ -127,10 +129,12 @@ class assign_feedback_offline extends assign_feedback_plugin {
                 // This is a scale - we need to convert any grades to indexes in the scale.
                 $scaleindex = array_search($record->grade, $scaleoptions);
                 if ($scaleindex !== false) {
-                    $record->grade = $scaleindex + 1;
+                    $record->grade = $scaleindex;
                 } else {
                     $record->grade = '';
                 }
+            } else {
+                $record->grade = unformat_float($record->grade);
             }
 
             // Note: Do not count the seconds when comparing modified dates.
@@ -149,6 +153,10 @@ class assign_feedback_offline extends assign_feedback_plugin {
             } else if ($this->assignment->grading_disabled($record->user->id)) {
                 // Skip grade is locked.
                 $skip = true;
+            } else if (($this->assignment->get_instance()->grade > -1) &&
+                      (($record->grade < 0) || ($record->grade > $this->assignment->get_instance()->grade))) {
+                // Out of range.
+                $skip = true;
             }
 
             if (!$skip) {
@@ -157,7 +165,7 @@ class assign_feedback_offline extends assign_feedback_plugin {
                 $grade->grade = $record->grade;
                 $grade->grader = $USER->id;
                 if ($this->assignment->update_grade($grade)) {
-                    $this->assignment->add_to_log('grade submission', $this->assignment->format_grade_for_log($grade));
+                    $this->assignment->notify_grade_modified($grade);
                     $updatecount += 1;
                 }
             }
@@ -178,14 +186,8 @@ class assign_feedback_offline extends assign_feedback_plugin {
                     if ($newvalue != $oldvalue) {
                         $updatecount += 1;
                         $grade = $this->assignment->get_user_grade($record->user->id, true);
-                        if ($plugin->set_editor_text($field, $newvalue, $grade->id)) {
-                            $logdesc = get_string('feedbackupdate', 'assignfeedback_offline',
-                                                  array('field'=>$description,
-                                                        'student'=>$userdesc,
-                                                        'text'=>$newvalue));
-
-                            $this->assignment->add_to_log('save grading feedback', $logdesc);
-                        }
+                        $this->assignment->notify_grade_modified($grade);
+                        $plugin->set_editor_text($field, $newvalue, $grade->id);
 
                         // If this is the gradebook comments plugin - post an update to the gradebook.
                         if (($plugin->get_subtype() . '_' . $plugin->get_type()) == $gradebookplugin) {
@@ -366,14 +368,18 @@ class assign_feedback_offline extends assign_feedback_plugin {
      * @return bool
      */
     public function is_enabled() {
-        $gradingmanager = get_grading_manager($this->assignment->get_context(), 'mod_assign', 'submissions');
-        $controller = $gradingmanager->get_active_controller();
-        $active = !empty($controller);
+        if ($this->enabledcache === null) {
+            $gradingmanager = get_grading_manager($this->assignment->get_context(), 'mod_assign', 'submissions');
+            $controller = $gradingmanager->get_active_controller();
+            $active = !empty($controller);
 
-        if ($active) {
-            return false;
+            if ($active) {
+                $this->enabledcache = false;
+            } else {
+                $this->enabledcache = parent::is_enabled();
+            }
         }
-        return parent::is_enabled();
+        return $this->enabledcache;
     }
 
     /**

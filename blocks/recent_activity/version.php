@@ -17,14 +17,14 @@
 /**
  * Version details
  *
- * @package    block
- * @subpackage recent_activity
+ * @package    block_recent_activity
  * @copyright  1999 onwards Martin Dougiamas (http://dougiamas.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2012112900;        // The current plugin version (Date: YYYYMMDDXX)
-$plugin->requires  = 2012112900;        // Requires this Moodle version
+$plugin->version   = 2014051200;        // The current plugin version (Date: YYYYMMDDXX)
+$plugin->requires  = 2014050800;        // Requires this Moodle version
 $plugin->component = 'block_recent_activity'; // Full name of the plugin (used for diagnostics)
+$plugin->cron      = 24*3600;           // Cron interval 1 day.

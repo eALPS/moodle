@@ -19,7 +19,7 @@
 /**
  * This file is used to manage repositories
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    core
  * @subpackage repository
  * @copyright  2009 Dongsheng Cai <dongsheng@moodle.com>
@@ -96,7 +96,7 @@ if ($context->contextlevel == CONTEXT_COURSE) {
 }
 
 /// Security: we cannot perform any action if the type is not visible or if the context has been disabled
-if (!empty($new)){
+if (!empty($new) && empty($edit)){
     $type = repository::get_type_by_typename($new);
 } else if (!empty($edit)){
     $instance = repository::get_instance($edit);
@@ -118,6 +118,22 @@ if (isset($type)) {
     }
 }
 
+// We have an instance when we are going to edit, or delete. Several checks need to be done!
+if (!empty($instance)) {
+    // The context passed MUST match the context of the repository. And as both have to be
+    // similar, this also ensures that the context is either a user one, or a course one.
+    if ($instance->instance->contextid != $context->id) {
+        print_error('invalidcontext');
+    }
+    if ($instance->readonly) {
+        // Cannot edit, or delete a readonly instance.
+        throw new repository_exception('readonlyinstance', 'repository');
+    } else if (!$instance->can_be_edited_by_user()) {
+        // The user has to have the right to edit the instance.
+        throw new repository_exception('nopermissiontoaccess', 'repository');
+    }
+}
+
 /// Create navigation links
 if (!empty($course)) {
     $PAGE->navbar->add($pagename);
@@ -129,27 +145,13 @@ if (!empty($course)) {
     $PAGE->navbar->add($strrepos);
 }
 
-$title = $pagename;
-
-/// Display page header
-$PAGE->set_title($title);
+// Display page header.
+$PAGE->set_title($pagename);
 $PAGE->set_heading($fullname);
-echo $OUTPUT->header();
-
-if ($context->contextlevel == CONTEXT_USER) {
-    if ( !$course = $DB->get_record('course', array('id'=>$usercourseid))) {
-        print_error('invalidcourseid');
-    }
-}
 
 $return = true;
 if (!empty($edit) || !empty($new)) {
     if (!empty($edit)) {
-        $instance = repository::get_instance($edit);
-        //if you try to edit an instance set as readonly, display an error message
-        if ($instance->readonly) {
-            throw new repository_exception('readonlyinstance', 'repository');
-        }
         $instancetype = repository::get_type_by_id($instance->options['typeid']);
         $classname = 'repository_' . $instancetype->get_typename();
         $configs  = $instance->get_instance_option_names();
@@ -177,7 +179,7 @@ if (!empty($edit) || !empty($new)) {
             $settings = array();
             $settings['name'] = $fromform->name;
             foreach($configs as $config) {
-                $settings[$config] = $fromform->$config;
+                $settings[$config] = isset($fromform->$config) ? $fromform->$config : null;
             }
             $success = $instance->set_option($settings);
         } else {
@@ -186,13 +188,13 @@ if (!empty($edit) || !empty($new)) {
         }
         if ($success) {
             $savedstr = get_string('configsaved', 'repository');
-            echo $OUTPUT->heading($savedstr);
             redirect($baseurl);
         } else {
             print_error('instancenotsaved', 'repository', $baseurl);
         }
         exit;
     } else {     // Display the form
+        echo $OUTPUT->header();
         echo $OUTPUT->heading(get_string('configplugin', 'repository_'.$plugin));
         $OUTPUT->box_start();
         $mform->display();
@@ -200,30 +202,25 @@ if (!empty($edit) || !empty($new)) {
         $return = false;
     }
 } else if (!empty($delete)) {
-    // echo $OUTPUT->header();
-    $instance = repository::get_instance($delete);
-     //if you try to delete an instance set as readonly, display an error message
-    if ($instance->readonly) {
-        throw new repository_exception('readonlyinstance', 'repository');
-    }
     if ($sure) {
         if (!confirm_sesskey()) {
             print_error('confirmsesskeybad', '', $baseurl);
         }
         if ($instance->delete()) {
             $deletedstr = get_string('instancedeleted', 'repository');
-            echo $OUTPUT->heading($deletedstr);
             redirect($baseurl, $deletedstr, 3);
         } else {
             print_error('instancenotdeleted', 'repository', $baseurl);
         }
         exit;
     }
+    echo $OUTPUT->header();
     $formcontinue = new single_button(new moodle_url($baseurl, array('delete' => $delete, 'sure' => 'yes')), get_string('yes'));
     $formcancel = new single_button($baseurl, get_string('no'));
     echo $OUTPUT->confirm(get_string('confirmdelete', 'repository', $instance->name), $formcontinue, $formcancel);
     $return = false;
 } else {
+    echo $OUTPUT->header();
     repository::display_instances_list($context);
     $return = false;
 }

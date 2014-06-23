@@ -26,7 +26,7 @@ class grade_edit_tree {
     public $columns = array();
 
     /**
-     * @var object $gtree          @see grade/lib.php
+     * @var grade_tree $gtree   @see grade/lib.php
      */
     public $gtree;
 
@@ -273,12 +273,6 @@ class grade_edit_tree {
                 $root = true;
             }
 
-            $row_count_offset = 0;
-
-            if (empty($category_total_item) && !$this->moving) {
-                $row_count_offset = -1;
-            }
-
             $levelclass = "level$level";
 
             $courseclass = '';
@@ -297,7 +291,7 @@ class grade_edit_tree {
             $headercell->scope = 'row';
             $headercell->attributes['title'] = $object->stripped_name;
             $headercell->attributes['class'] = 'cell rowspan ' . $levelclass;
-            $headercell->rowspan = $row_count+1+$row_count_offset;
+            $headercell->rowspan = $row_count + 1;
             $row->cells[] = $headercell;
 
             foreach ($this->columns as $column) {
@@ -315,7 +309,7 @@ class grade_edit_tree {
             $endcell->colspan = (19 - $level);
             $endcell->attributes['class'] = 'colspan ' . $levelclass;
 
-            $returnrows[] = new html_table_row(array($endcell));;
+            $returnrows[] = new html_table_row(array($endcell));
 
         } else { // Dealing with a grade item
 
@@ -799,9 +793,12 @@ class grade_edit_tree_column_range extends grade_edit_tree_column {
     public function get_item_cell($item, $params) {
         global $DB, $OUTPUT;
 
-        // If the parent aggregation is Sum of Grades, this cannot be changed
+        // If the parent aggregation is Sum of Grades, we should show the number, even for scales, as that value is used...
+        // ...in the computation. For text grades, the grademax is not used, so we can still show the no value string.
         $parent_cat = $item->get_parent_category();
-        if ($parent_cat->aggregation == GRADE_AGGREGATE_SUM) {
+        if ($item->gradetype == GRADE_TYPE_TEXT) {
+            $grademax = ' - ';
+        } else if ($parent_cat->aggregation == GRADE_AGGREGATE_SUM) {
             $grademax = format_float($item->grademax, $item->get_decimals());
         } elseif ($item->gradetype == GRADE_TYPE_SCALE) {
             $scale = $DB->get_record('scale', array('id' => $item->scaleid));

@@ -67,9 +67,8 @@ class assignfeedback_offline_import_grades_form extends moodleform implements re
 
         $scaleoptions = null;
         if ($assignment->get_instance()->grade < 0) {
-            $scale = $DB->get_record('scale', array('id'=>-($assignment->get_instance()->grade)));
-            if ($scale) {
-                $scaleoptions = explode(',', $scale->scale);
+            if ($scale = $DB->get_record('scale', array('id'=>-($assignment->get_instance()->grade)))) {
+                $scaleoptions = make_menu_from_list($scale->scale);
             }
         }
         if (!$gradeimporter->init()) {
@@ -88,11 +87,10 @@ class assignfeedback_offline_import_grades_form extends moodleform implements re
         while ($record = $gradeimporter->next()) {
             $user = $record->user;
             $grade = $record->grade;
-            $gradedesc = $grade;
             $modified = $record->modified;
             $userdesc = fullname($user);
             if ($assignment->is_blind_marking()) {
-                $userdesc = get_string('hiddenuser', 'assign') . $assignment->get_unique_id_for_user($user->id);
+                $userdesc = get_string('hiddenuser', 'assign') . $assignment->get_uniqueid_for_user($user->id);
             }
 
             $usergrade = $assignment->get_user_grade($user->id, false);
@@ -105,10 +103,12 @@ class assignfeedback_offline_import_grades_form extends moodleform implements re
                 // This is a scale - we need to convert any grades to indexes in the scale.
                 $scaleindex = array_search($grade, $scaleoptions);
                 if ($scaleindex !== false) {
-                    $grade = $scaleindex + 1;
+                    $grade = $scaleindex;
                 } else {
                     $grade = '';
                 }
+            } else {
+                $grade = unformat_float($grade);
             }
 
             if ($usergrade && $usergrade->grade == $grade) {
@@ -123,17 +123,21 @@ class assignfeedback_offline_import_grades_form extends moodleform implements re
             } else if ($assignment->grading_disabled($user->id)) {
                 // Skip grade is locked.
                 $skip = true;
-            } else if (!is_numeric($gradedesc) && ($assignment->get_instance()->grade) > -1) {
-                $skip = true;
             } else if (($assignment->get_instance()->grade > -1) &&
-                      (($gradedesc < 0) || ($gradedesc > $assignment->get_instance()->grade))) {
+                      (($grade < 0) || ($grade > $assignment->get_instance()->grade))) {
+                // Out of range.
                 $skip = true;
             }
 
             if (!$skip) {
                 $update = true;
+                if (!empty($scaleoptions)) {
+                    $formattedgrade = $scaleoptions[$grade];
+                } else {
+                    $formattedgrade = format_float($grade, 2);
+                }
                 $updates[] = get_string('gradeupdate', 'assignfeedback_offline',
-                                            array('grade'=>$gradedesc, 'student'=>$userdesc));
+                                            array('grade'=>$formattedgrade, 'student'=>$userdesc));
             }
 
             if ($ignoremodified || !$stalemodificationdate) {
@@ -164,14 +168,23 @@ class assignfeedback_offline_import_grades_form extends moodleform implements re
         }
 
         $mform->addElement('hidden', 'id', $assignment->get_course_module()->id);
+        $mform->setType('id', PARAM_INT);
         $mform->addElement('hidden', 'action', 'viewpluginpage');
+        $mform->setType('action', PARAM_ALPHA);
         $mform->addElement('hidden', 'confirm', 'true');
+        $mform->setType('confirm', PARAM_BOOL);
         $mform->addElement('hidden', 'plugin', 'offline');
+        $mform->setType('plugin', PARAM_PLUGIN);
         $mform->addElement('hidden', 'pluginsubtype', 'assignfeedback');
+        $mform->setType('pluginsubtype', PARAM_PLUGIN);
         $mform->addElement('hidden', 'pluginaction', 'uploadgrades');
+        $mform->setType('pluginaction', PARAM_ALPHA);
         $mform->addElement('hidden', 'importid', $gradeimporter->importid);
+        $mform->setType('importid', PARAM_INT);
         $mform->addElement('hidden', 'ignoremodified', $ignoremodified);
+        $mform->setType('ignoremodified', PARAM_BOOL);
         $mform->addElement('hidden', 'draftid', $draftid);
+        $mform->setType('draftid', PARAM_INT);
         if ($update) {
             $this->add_action_buttons(true, get_string('confirm'));
         } else {

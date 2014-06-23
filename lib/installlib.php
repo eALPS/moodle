@@ -93,7 +93,7 @@ function install_init_dataroot($dataroot, $dirpermissions) {
         return false;
     }
 
-    umask(0000);
+    umask(0000); // $CFG->umaskpermissions is not set yet.
     if (!file_exists($dataroot)) {
         if (!mkdir($dataroot, $dirpermissions, true)) {
             // most probably this does not work, but anyway
@@ -192,7 +192,30 @@ function install_db_validate($database, $dbhost, $dbuser, $dbpass, $dbname, $pre
         }
         return '';
     } catch (dml_exception $ex) {
-        return get_string($ex->errorcode, $ex->module, $ex->a).'<br />'.$ex->debuginfo;
+        $stringmanager = get_string_manager();
+        $errorstring = $ex->errorcode.'oninstall';
+        $legacystring = $ex->errorcode;
+        if ($stringmanager->string_exists($errorstring, $ex->module)) {
+            // By using a different string id from the error code we are separating exception handling and output.
+            $returnstring = $stringmanager->get_string($errorstring, $ex->module, $ex->a);
+            if ($ex->debuginfo) {
+                $returnstring .= '<br />'.$ex->debuginfo;
+            }
+
+            return $returnstring;
+        } else if ($stringmanager->string_exists($legacystring, $ex->module)) {
+            // There are some DML exceptions that may be thrown here as well as during normal operation.
+            // If we have a translated message already we still want to serve it here.
+            // However it is not the preferred way.
+            $returnstring = $stringmanager->get_string($legacystring, $ex->module, $ex->a);
+            if ($ex->debuginfo) {
+                $returnstring .= '<br />'.$ex->debuginfo;
+            }
+
+            return $returnstring;
+        }
+        // No specific translation. Deliver a generic error message.
+        return $stringmanager->get_string('dmlexceptiononinstall', 'error', $ex);
     }
 }
 
@@ -233,8 +256,6 @@ function install_generate_configphp($database, $cfg) {
     }
     $configphp .= '$CFG->directorypermissions = ' . $chmod . ';' . PHP_EOL . PHP_EOL;
 
-    $configphp .= '$CFG->passwordsaltmain = '.var_export(complex_random_string(), true) . ';' . PHP_EOL . PHP_EOL;
-
     $configphp .= 'require_once(dirname(__FILE__) . \'/lib/setup.php\');' . PHP_EOL . PHP_EOL;
     $configphp .= '// There is no php closing tag in this file,' . PHP_EOL;
     $configphp .= '// it is intentional because it prevents trailing whitespace problems!' . PHP_EOL;
@@ -263,14 +284,11 @@ function install_print_help_page($help) {
     echo '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">';
     echo '<html dir="'.(right_to_left() ? 'rtl' : 'ltr').'">
           <head>
-          <link rel="shortcut icon" href="theme/standard/pix/favicon.ico" />
+          <link rel="shortcut icon" href="theme/clean/pix/favicon.ico" />
           <link rel="stylesheet" type="text/css" href="'.$CFG->wwwroot.'/install/css.php" />
           <title>'.get_string('installation','install').'</title>
           <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
-          <meta http-equiv="pragma" content="no-cache" />
-          <meta http-equiv="expires" content="0" />';
-
-    echo '</head><body>';
+          </head><body>';
     switch ($help) {
         case 'phpversionhelp':
             print_string($help, 'install', phpversion());
@@ -294,9 +312,10 @@ function install_print_help_page($help) {
  * @param string $stagename
  * @param string $heading
  * @param string $stagetext
+ * @param string $stageclass
  * @return void
  */
-function install_print_header($config, $stagename, $heading, $stagetext) {
+function install_print_header($config, $stagename, $heading, $stagetext, $stageclass = "alert-info") {
     global $CFG;
 
     @header('Content-Type: text/html; charset=UTF-8');
@@ -310,7 +329,7 @@ function install_print_header($config, $stagename, $heading, $stagetext) {
     echo '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">';
     echo '<html dir="'.(right_to_left() ? 'rtl' : 'ltr').'">
           <head>
-          <link rel="shortcut icon" href="theme/standard/pix/favicon.ico" />';
+          <link rel="shortcut icon" href="theme/clean/pix/favicon.ico" />';
 
     echo '<link rel="stylesheet" type="text/css" href="'.$CFG->wwwroot.'/install/css.php" />
           <title>'.get_string('installation','install').' - Moodle '.$CFG->target_release.'</title>
@@ -326,9 +345,9 @@ function install_print_header($config, $stagename, $heading, $stagetext) {
                         <div class="headermenu">&nbsp;</div>
                     </div>
                     <div class="navbar clearfix">
-                        <div class="breadcrumb">
-                            <ul><li class="first">'.$stagename.'</li></ul>
-                        </div>
+                        <nav class="breadcrumb-nav">
+                            <ul class="breadcrumb"><li class="first">'.$stagename.'</li></ul>
+                        </nav>
                         <div class="navbutton">&nbsp;</div>
                     </div>
                 </div>
@@ -338,7 +357,7 @@ function install_print_header($config, $stagename, $heading, $stagetext) {
     echo '<h2>'.$heading.'</h2>';
 
     if ($stagetext !== '') {
-        echo '<div class="stage generalbox box">';
+        echo '<div class="alert ' . $stageclass . '">';
         echo $stagetext;
         echo '</div>';
     }
@@ -374,19 +393,19 @@ function install_print_footer($config, $reload=false) {
     }
 
     if ($reload) {
-        $next = '<input type="submit" id="nextbutton" name="next" value="'.s(get_string('reload')).'" />';
+        $next = '<input type="submit" id="nextbutton" class="btn btn-primary" name="next" value="'.s(get_string('reload')).'" />';
     } else {
-        $next = '<input type="submit" id="nextbutton" name="next" value="'.s(get_string('next')).' &raquo;" />';
+        $next = '<input type="submit" id="nextbutton" class="btn btn-primary" name="next" value="'.s(get_string('next')).' &raquo;" />';
     }
 
     echo '</fieldset><fieldset id="nav_buttons">'.$first.$next.'</fieldset>';
 
     $homelink  = '<div class="sitelink">'.
        '<a title="Moodle '. $CFG->target_release .'" href="http://docs.moodle.org/en/Administrator_documentation" onclick="this.target=\'_blank\'">'.
-       '<img style="width:100px;height:30px" src="pix/moodlelogo.gif" alt="moodlelogo" /></a></div>';
+       '<img src="pix/moodlelogo.png" alt="moodlelogo" /></a></div>';
 
     echo '</form></div>';
-    echo '<div id="footer"><hr />'.$homelink.'</div>';
+    echo '<div id="page-footer">'.$homelink.'</div>';
     echo '</div></body></html>';
 }
 
@@ -408,6 +427,7 @@ function install_cli_database(array $options, $interactive) {
     @ini_set('display_errors', '1');
     $CFG->debug = (E_ALL | E_STRICT);
     $CFG->debugdisplay = true;
+    $CFG->debugdeveloper = true;
 
     $CFG->version = '';
     $CFG->release = '';
@@ -478,7 +498,7 @@ function install_cli_database(array $options, $interactive) {
     upgrade_finished();
 
     // log in as admin - we need do anything when applying defaults
-    session_set_user(get_admin());
+    \core\session\manager::set_user(get_admin());
 
     // apply all default settings, do it twice to fill all defaults - some settings depend on other setting
     admin_apply_default_settings(NULL, true);

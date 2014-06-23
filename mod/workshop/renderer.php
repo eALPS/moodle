@@ -18,8 +18,7 @@
 /**
  * Workshop module renderering methods are defined here
  *
- * @package    mod
- * @subpackage workshop
+ * @package    mod_workshop
  * @copyright  2009 David Mudrak <david.mudrak@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -102,13 +101,9 @@ class mod_workshop_renderer extends plugin_renderer_base {
         $o .= $this->output->heading($title, 3, 'title');
 
         if (!$anonymous) {
-            $author             = new stdclass();
-            $author->id         = $submission->authorid;
-            $author->firstname  = $submission->authorfirstname;
-            $author->lastname   = $submission->authorlastname;
-            $author->picture    = $submission->authorpicture;
-            $author->imagealt   = $submission->authorimagealt;
-            $author->email      = $submission->authoremail;
+            $author = new stdclass();
+            $additionalfields = explode(',', user_picture::fields());
+            $author = username_load_fields_from_object($author, $submission, 'author', $additionalfields);
             $userpic            = $this->output->user_picture($author, array('courseid' => $this->page->course->id, 'size' => 64));
             $userurl            = new moodle_url('/user/view.php',
                                             array('id' => $author->id, 'course' => $this->page->course->id));
@@ -132,9 +127,9 @@ class mod_workshop_renderer extends plugin_renderer_base {
 
         $o .= $this->output->container_end(); // end of header
 
-        $content = format_text($submission->content, $submission->contentformat, array('overflowdiv'=>true));
-        $content = file_rewrite_pluginfile_urls($content, 'pluginfile.php', $this->page->context->id,
+        $content = file_rewrite_pluginfile_urls($submission->content, 'pluginfile.php', $this->page->context->id,
                                                         'mod_workshop', 'submission_content', $submission->id);
+        $content = format_text($content, $submission->contentformat, array('overflowdiv'=>true));
         if (!empty($content)) {
             if (!empty($CFG->enableplagiarism)) {
                 require_once($CFG->libdir.'/plagiarismlib.php');
@@ -185,12 +180,8 @@ class mod_workshop_renderer extends plugin_renderer_base {
 
         if (!$anonymous) {
             $author             = new stdClass();
-            $author->id         = $summary->authorid;
-            $author->firstname  = $summary->authorfirstname;
-            $author->lastname   = $summary->authorlastname;
-            $author->picture    = $summary->authorpicture;
-            $author->imagealt   = $summary->authorimagealt;
-            $author->email      = $summary->authoremail;
+            $additionalfields = explode(',', user_picture::fields());
+            $author = username_load_fields_from_object($author, $summary, 'author', $additionalfields);
             $userpic            = $this->output->user_picture($author, array('courseid' => $this->page->course->id, 'size' => 35));
             $userurl            = new moodle_url('/user/view.php',
                                             array('id' => $author->id, 'course' => $this->page->course->id));
@@ -229,12 +220,12 @@ class mod_workshop_renderer extends plugin_renderer_base {
         $classes = 'submission-full example';
         $o .= $this->output->container_start($classes);
         $o .= $this->output->container_start('header');
-        $o .= $this->output->heading(format_string($example->title), 3, 'title');
+        $o .= $this->output->container(format_string($example->title), array('class' => 'title'));
         $o .= $this->output->container_end(); // end of header
 
-        $content = format_text($example->content, $example->contentformat, array('overflowdiv'=>true));
-        $content = file_rewrite_pluginfile_urls($content, 'pluginfile.php', $this->page->context->id,
+        $content = file_rewrite_pluginfile_urls($example->content, 'pluginfile.php', $this->page->context->id,
                                                         'mod_workshop', 'submission_content', $example->id);
+        $content = format_text($content, $example->contentformat, array('overflowdiv'=>true));
         $o .= $this->output->container($content, 'content');
 
         $o .= $this->helper_submission_attachments($example->id, 'html');
@@ -339,6 +330,7 @@ class mod_workshop_renderer extends plugin_renderer_base {
      * @return string HTML to be echoed
      */
     protected function render_workshop_allocation_result(workshop_allocation_result $result) {
+        global $CFG;
 
         $status = $result->get_status();
 
@@ -384,7 +376,7 @@ class mod_workshop_renderer extends plugin_renderer_base {
         if (is_array($logs) and !empty($logs)) {
             $o .= html_writer::start_tag('ul', array('class' => 'allocation-init-results'));
             foreach ($logs as $log) {
-                if ($log->type == 'debug' and !debugging('', DEBUG_DEVELOPER)) {
+                if ($log->type == 'debug' and !$CFG->debugdeveloper) {
                     // display allocation debugging messages for developers only
                     continue;
                 }
@@ -673,6 +665,10 @@ class mod_workshop_renderer extends plugin_renderer_base {
                     get_string('assessmentform', 'workshop'), '', false, true);
             $o .= $this->output->container(self::moodleform($assessment->form), 'assessment-form');
             $o .= print_collapsible_region_end(true);
+
+            if (!$assessment->form->is_editable()) {
+                $o .= $this->overall_feedback($assessment);
+            }
         }
 
         $o .= $this->output->container_end(); // main wrapper
@@ -698,6 +694,67 @@ class mod_workshop_renderer extends plugin_renderer_base {
      */
     protected function render_workshop_example_reference_assessment(workshop_example_reference_assessment $assessment) {
         return $this->render_workshop_assessment($assessment);
+    }
+
+    /**
+     * Renders the overall feedback for the author of the submission
+     *
+     * @param workshop_assessment $assessment
+     * @return string HTML
+     */
+    protected function overall_feedback(workshop_assessment $assessment) {
+
+        $content = $assessment->get_overall_feedback_content();
+
+        if ($content === false) {
+            return '';
+        }
+
+        $o = '';
+
+        if (!is_null($content)) {
+            $o .= $this->output->container($content, 'content');
+        }
+
+        $attachments = $assessment->get_overall_feedback_attachments();
+
+        if (!empty($attachments)) {
+            $o .= $this->output->container_start('attachments');
+            $images = '';
+            $files = '';
+            foreach ($attachments as $attachment) {
+                $icon = $this->output->pix_icon(file_file_icon($attachment), get_mimetype_description($attachment),
+                    'moodle', array('class' => 'icon'));
+                $link = html_writer::link($attachment->fileurl, $icon.' '.substr($attachment->filepath.$attachment->filename, 1));
+                if (file_mimetype_in_typegroup($attachment->mimetype, 'web_image')) {
+                    $preview = html_writer::empty_tag('img', array('src' => $attachment->previewurl, 'alt' => '', 'class' => 'preview'));
+                    $preview = html_writer::tag('a', $preview, array('href' => $attachment->fileurl));
+                    $images .= $this->output->container($preview);
+                } else {
+                    $files .= html_writer::tag('li', $link, array('class' => $attachment->mimetype));
+                }
+            }
+            if ($images) {
+                $images = $this->output->container($images, 'images');
+            }
+
+            if ($files) {
+                $files = html_writer::tag('ul', $files, array('class' => 'files'));
+            }
+
+            $o .= $images.$files;
+            $o .= $this->output->container_end();
+        }
+
+        if ($o === '') {
+            return '';
+        }
+
+        $o = $this->output->box($o, 'overallfeedback');
+        $o = print_collapsible_region($o, 'overall-feedback-wrapper', uniqid('workshop-overall-feedback'),
+            get_string('overallfeedback', 'workshop'), '', false, true);
+
+        return $o;
     }
 
     /**
@@ -797,8 +854,11 @@ class mod_workshop_renderer extends plugin_renderer_base {
 
             $filepath   = $file->get_filepath();
             $filename   = $file->get_filename();
-            $fileurl    = file_encode_url($CFG->wwwroot . '/pluginfile.php',
-                                '/' . $ctx->id . '/mod_workshop/submission_attachment/' . $submissionid . $filepath . $filename, true);
+            $fileurl    = moodle_url::make_pluginfile_url($ctx->id, 'mod_workshop', 'submission_attachment',
+                            $submissionid, $filepath, $filename, true);
+            $embedurl   = moodle_url::make_pluginfile_url($ctx->id, 'mod_workshop', 'submission_attachment',
+                            $submissionid, $filepath, $filename, false);
+            $embedurl   = new moodle_url($embedurl, array('preview' => 'bigthumb'));
             $type       = $file->get_mimetype();
             $image      = $this->output->pix_icon(file_file_icon($file), get_mimetype_description($file), 'moodle', array('class' => 'icon'));
 
@@ -807,7 +867,7 @@ class mod_workshop_renderer extends plugin_renderer_base {
 
             if ($format == 'html') {
                 if (file_mimetype_in_typegroup($type, 'web_image')) {
-                    $preview     = html_writer::empty_tag('img', array('src' => $fileurl, 'alt' => '', 'class' => 'preview'));
+                    $preview     = html_writer::empty_tag('img', array('src' => $embedurl, 'alt' => '', 'class' => 'preview'));
                     $preview     = html_writer::tag('a', $preview, array('href' => $fileurl));
                     $outputimgs .= $this->output->container($preview);
 

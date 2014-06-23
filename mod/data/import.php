@@ -20,7 +20,7 @@
  *
  * @copyright 2005 Martin Dougiamas  http://dougiamas.com
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @package mod-data
+ * @package mod_data
  */
 
 require_once('../../config.php');
@@ -94,7 +94,7 @@ if (!$formdata = $form->get_data()) {
     // Large files are likely to take their time and memory. Let PHP know
     // that we'll take longer, and that the process should be recycled soon
     // to free up memory.
-    @set_time_limit(0);
+    core_php_time_limit::raise();
     raise_memory_limit(MEMORY_EXTRA);
 
     $iid = csv_import_reader::get_new_iid('moddata');
@@ -156,7 +156,12 @@ if (!$formdata = $form->get_data()) {
                     // for now, only for "latlong" and "url" fields, but that should better be looked up from
                     // $CFG->dirroot . '/mod/data/field/' . $field->type . '/field.class.php'
                     // once there is stored how many contents the field can have.
-                    if (preg_match("/^(latlong|url)$/", $field->type)) {
+                    if ($field->type == 'latlong') {
+                        $values = explode(" ", $value, 2);
+                        // The lat, long values might be in a different float format.
+                        $content->content  = unformat_float($values[0]);
+                        $content->content1 = unformat_float($values[1]);
+                    } else if ($field->type == 'url') {
                         $values = explode(" ", $value, 2);
                         $content->content  = $values[0];
                         // The url field doesn't always have two values (unforced autolinking).

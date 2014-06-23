@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -24,5 +23,5 @@
  */
 
 $string['admin_bookmarks:addinstance'] = 'Add a new admin bookmarks block';
-$string['admin_bookmarks:myaddinstance'] = 'Add a new admin bookmarks block to the My Moodle page';
+$string['admin_bookmarks:myaddinstance'] = 'Add a new admin bookmarks block to My home';
 $string['pluginname'] = 'Admin bookmarks';

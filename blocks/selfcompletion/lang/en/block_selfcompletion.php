@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -28,4 +27,3 @@ $string['completecourse'] = 'Complete course';
 $string['pluginname'] = 'Self completion';
 $string['selfcompletionnotenabled'] = 'The self completion criteria has not been enabled for this course';
 $string['selfcompletion:addinstance'] = 'Add a new self completion block';
-$string['selfcompletion:myaddinstance'] = 'Add a new self completion block to the My Moodle page';

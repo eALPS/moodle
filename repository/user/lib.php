@@ -18,7 +18,7 @@
 /**
  * This plugin is used to access user's private files
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    repository_user
  * @copyright  2010 Dongsheng Cai {@link http://dongsheng.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -28,7 +28,7 @@ require_once($CFG->dirroot . '/repository/lib.php');
 /**
  * repository_user class is used to browse user private files
  *
- * @since     2.0
+ * @since     Moodle 2.0
  * @package   repository_user
  * @copyright 2010 Dongsheng Cai {@link http://dongsheng.org}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -63,7 +63,7 @@ class repository_user extends repository {
         if (!empty($encodedpath)) {
             $params = unserialize(base64_decode($encodedpath));
             if (is_array($params)) {
-                $filepath = clean_param($params['filepath'], PARAM_PATH);;
+                $filepath = clean_param($params['filepath'], PARAM_PATH);
                 $filename = clean_param($params['filename'], PARAM_FILE);
             }
         } else {
@@ -160,13 +160,11 @@ class repository_user extends repository {
     }
 
     /**
-     * Return reference file life time
+     * Is this repository accessing private data?
      *
-     * @param string $ref
-     * @return int
+     * @return bool
      */
-    public function get_reference_file_lifetime($ref) {
-        // this should be realtime
-        return 0;
+    public function contains_private_data() {
+        return false;
     }
 }

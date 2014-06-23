@@ -183,18 +183,19 @@ M.gradereport_grader.classes.report.prototype.table_highlight_row = function (e,
     tr.all('.cell').toggleClass('hmarked');
 };
 /**
- * Highlights a cell in the table
+ * Highlights a column in the table
  *
  * @function
  * @param {Event} e
  * @param {Y.Node} cell
  */
 M.gradereport_grader.classes.report.prototype.table_highlight_column = function(e, cell) {
-    var column = 0;
-    while (cell = cell.previous('.cell')) {
-        column += parseFloat(cell.getAttribute('colspan')) || 1;
+    // Among cell classes find the one that matches pattern / i[\d]+ /
+    var itemclass = (' '+cell.getAttribute('class')+' ').match(/ (i[\d]+) /);
+    if (itemclass) {
+        // Toggle class .vmarked for all cells in the table with the same class
+        this.table.all('.cell.'+itemclass[1]).toggleClass('vmarked');
     }
-    this.table.all('.c'+column).toggleClass('vmarked');
 };
 /**
  * Builds an object containing information at the relevant cell given either
@@ -323,9 +324,9 @@ M.gradereport_grader.classes.ajax = function(report, cfg) {
                 this.existingfields[userid][itemid] = new M.gradereport_grader.classes.existingfield(this, userid, itemid);
             }
         }
-        // Hide the Update button
+        // Disable the Update button as we're saving using ajax.
         submitbutton = this.report.Y.one('#gradersubmit');
-        submitbutton.setStyle('visibility', 'hidden');
+        submitbutton.set('disabled', true);
     }
 };
 /**
@@ -377,6 +378,12 @@ M.gradereport_grader.classes.ajax.prototype.make_editable = function(e) {
             break;
     }
     this.current.replace().attach_key_events();
+
+    // Making a field editable changes the grade table width.
+    // Update the top scroll bar to reflect the new table width.
+    Y.use('moodle-gradereport_grader-scrollview', function() {
+        M.gradereport_grader.scrollview.resize();
+    });
 };
 /**
  * Callback function for the user pressing the enter key on an editable field
@@ -741,9 +748,11 @@ M.gradereport_grader.classes.existingfield = function(ajax, userid, itemid) {
     this.editfeedback = ajax.showquickfeedback;
     this.grade = this.report.Y.one('#grade_'+userid+'_'+itemid);
 
-    for(var i = 0; i < this.report.grades.length; i++) {
-        if (this.report.grades[i]['user']==this.userid && this.report.grades[i]['item']==this.itemid) {
-            this.oldgrade = this.report.grades[i]['grade'];
+    if (this.report.grades) {
+        for (var i = 0; i < this.report.grades.length; i++) {
+            if (this.report.grades[i]['user']==this.userid && this.report.grades[i]['item']==this.itemid) {
+                this.oldgrade = this.report.grades[i]['grade'];
+            }
         }
     }
 

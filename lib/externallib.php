@@ -43,12 +43,18 @@ function external_function_info($function, $strictness=MUST_EXIST) {
         }
     }
 
-    //first find and include the ext implementation class
-    $function->classpath = empty($function->classpath) ? get_component_directory($function->component).'/externallib.php' : $CFG->dirroot.'/'.$function->classpath;
-    if (!file_exists($function->classpath)) {
-        throw new coding_exception('Can not find file with external function implementation');
+    // First try class autoloading.
+    if (!class_exists($function->classname)) {
+        // Fallback to explicit include of externallib.php.
+        $function->classpath = empty($function->classpath) ? core_component::get_component_directory($function->component).'/externallib.php' : $CFG->dirroot.'/'.$function->classpath;
+        if (!file_exists($function->classpath)) {
+            throw new coding_exception('Cannot find file with external function implementation');
+        }
+        require_once($function->classpath);
+        if (!class_exists($function->classname)) {
+            throw new coding_exception('Cannot find external class');
+        }
     }
-    require_once($function->classpath);
 
     $function->parameters_method = $function->methodname.'_parameters';
     $function->returns_method    = $function->methodname.'_returns';
@@ -83,7 +89,7 @@ function external_function_info($function, $strictness=MUST_EXIST) {
     //      on the other hand this is still a bit in a flux and we need to find some new naming
     //      conventions for these descriptions in lang packs
     $function->description = null;
-    $servicesfile = get_component_directory($function->component).'/db/services.php';
+    $servicesfile = core_component::get_component_directory($function->component).'/db/services.php';
     if (file_exists($servicesfile)) {
         $functions = null;
         include($servicesfile);
@@ -149,7 +155,7 @@ class external_api {
      */
     public static function set_timeout($seconds=360) {
         $seconds = ($seconds < 300) ? 300 : $seconds;
-        set_time_limit($seconds);
+        core_php_time_limit::raise($seconds);
     }
 
     /**
@@ -266,10 +272,16 @@ class external_api {
             }
 
         } else if ($description instanceof external_single_structure) {
-            if (!is_array($response)) {
-                throw new invalid_response_exception('Only arrays accepted. The bad value is: \'' .
+            if (!is_array($response) && !is_object($response)) {
+                throw new invalid_response_exception('Only arrays/objects accepted. The bad value is: \'' .
                         print_r($response, true) . '\'');
             }
+
+            // Cast objects into arrays.
+            if (is_object($response)) {
+                $response = (array) $response;
+            }
+
             $result = array();
             foreach ($description->keys as $key=>$subdesc) {
                 if (!array_key_exists($key, $response)) {
@@ -339,7 +351,7 @@ class external_api {
         } else if ($rcontext->contextlevel > $context->contextlevel) {
             throw new restricted_context_exception();
         } else {
-            $parents = get_parent_contexts($context);
+            $parents = $context->get_parent_context_ids();
             if (!in_array($rcontext->id, $parents)) {
                 throw new restricted_context_exception();
             }
@@ -348,6 +360,34 @@ class external_api {
         if ($context->contextlevel >= CONTEXT_COURSE) {
             list($context, $course, $cm) = get_context_info_array($context->id);
             require_login($course, false, $cm, false, true);
+        }
+    }
+
+    /**
+     * Get context from passed parameters.
+     * The passed array must either contain a contextid or a combination of context level and instance id to fetch the context.
+     * For example, the context level can be "course" and instanceid can be courseid.
+     *
+     * See context_helper::get_all_levels() for a list of valid context levels.
+     *
+     * @param array $param
+     * @since Moodle 2.6
+     * @throws invalid_parameter_exception
+     * @return context
+     */
+    protected static function get_context_from_params($param) {
+        $levels = context_helper::get_all_levels();
+        if (isset($param['contextid'])) {
+            return context::instance_by_id($param['contextid'], IGNORE_MISSING);
+        } else if (isset($param['contextlevel']) && isset($param['instanceid'])) {
+            $contextlevel = "context_".$param['contextlevel'];
+            if (!array_search($contextlevel, $levels)) {
+                throw new invalid_parameter_exception('Invalid context level = '.$param['contextlevel']);
+            }
+           return $contextlevel::instance($param['instanceid'], IGNORE_MISSING);
+        } else {
+            // No valid context info was found.
+            throw new invalid_parameter_exception('Missing parameters, please provide either context level with instance id or contextid');
         }
     }
 }
@@ -598,15 +638,15 @@ class external_warnings extends external_multiple_structure {
      *
      * @since Moodle 2.3
      */
-    public function __construct() {
+    public function __construct($itemdesc = 'item', $itemiddesc = 'item id',
+        $warningcodedesc = 'the warning code can be used by the client app to implement specific behaviour') {
 
         parent::__construct(
             new external_single_structure(
                 array(
-                    'item' => new external_value(PARAM_TEXT, 'item', VALUE_OPTIONAL),
-                    'itemid' => new external_value(PARAM_INT, 'item id', VALUE_OPTIONAL),
-                    'warningcode' => new external_value(PARAM_ALPHANUM,
-                            'the warning code can be used by the client app to implement specific behaviour'),
+                    'item' => new external_value(PARAM_TEXT, $itemdesc, VALUE_OPTIONAL),
+                    'itemid' => new external_value(PARAM_INT, $itemiddesc, VALUE_OPTIONAL),
+                    'warningcode' => new external_value(PARAM_ALPHANUM, $warningcodedesc),
                     'message' => new external_value(PARAM_TEXT,
                             'untranslated english message to explain the warning')
                 ), 'warning'),
@@ -654,7 +694,7 @@ class external_format_value extends external_value {
  * @param array $format the format to validate
  * @return the validated format
  * @throws coding_exception
- * @since 2.3
+ * @since Moodle 2.3
  */
 function external_validate_format($format) {
     $allowedformats = array(FORMAT_HTML, FORMAT_MOODLE, FORMAT_PLAIN, FORMAT_MARKDOWN);
@@ -687,6 +727,7 @@ function external_format_text($text, $textformat, $contextid, $component, $filea
     $settings = external_settings::get_instance();
 
     if ($settings->get_fileurl()) {
+        require_once($CFG->libdir . "/filelib.php");
         $text = file_rewrite_pluginfile_urls($text, $settings->get_file(), $contextid, $component, $filearea, $itemid);
     }
 

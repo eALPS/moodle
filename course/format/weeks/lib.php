@@ -17,7 +17,7 @@
 /**
  * This file contains main class for the course format Weeks
  *
- * @since     2.0
+ * @since     Moodle 2.0
  * @package   format_weeks
  * @copyright 2009 Sam Hemelryk
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -64,7 +64,7 @@ class format_weeks extends format_base {
             // We subtract 24 hours for display purposes.
             $dates->end = ($dates->end - 86400);
 
-            $dateformat = ' '.get_string('strftimedateshort');
+            $dateformat = get_string('strftimedateshort');
             $weekday = userdate($dates->start, $dateformat);
             $endweekday = userdate($dates->end, $dateformat);
             return $weekday.' - '.$endweekday;
@@ -122,14 +122,12 @@ class format_weeks extends format_base {
      *
      * The returned object's property (boolean)capable indicates that
      * the course format supports Moodle course ajax features.
-     * The property (array)testedbrowsers can be used as a parameter for {@link ajaxenabled()}.
      *
      * @return stdClass
      */
     public function supports_ajax() {
         $ajaxsupport = new stdClass();
         $ajaxsupport->capable = true;
-        $ajaxsupport->testedbrowsers = array('MSIE' => 6.0, 'Gecko' => 20061111, 'Safari' => 531, 'Chrome' => 6.0);
         return $ajaxsupport;
     }
 
@@ -162,15 +160,19 @@ class format_weeks extends format_base {
     function ajax_section_move() {
         global $PAGE;
         $titles = array();
+        $current = -1;
         $course = $this->get_course();
         $modinfo = get_fast_modinfo($course);
         $renderer = $this->get_renderer($PAGE);
         if ($renderer && ($sections = $modinfo->get_section_info_all())) {
             foreach ($sections as $number => $section) {
                 $titles[$number] = $renderer->section_title($section, $course);
+                if ($this->is_section_current($section)) {
+                    $current = $number;
+                }
             }
         }
-        return array('sectiontitles' => $titles, 'action' => 'move');
+        return array('sectiontitles' => $titles, 'current' => $current, 'action' => 'move');
     }
 
     /**
@@ -263,6 +265,37 @@ class format_weeks extends format_base {
     }
 
     /**
+     * Adds format options elements to the course/section edit form.
+     *
+     * This function is called from {@link course_edit_form::definition_after_data()}.
+     *
+     * @param MoodleQuickForm $mform form the elements are added to.
+     * @param bool $forsection 'true' if this is a section edit form, 'false' if this is course edit form.
+     * @return array array of references to the added form elements.
+     */
+    public function create_edit_form_elements(&$mform, $forsection = false) {
+        $elements = parent::create_edit_form_elements($mform, $forsection);
+
+        // Increase the number of sections combo box values if the user has increased the number of sections
+        // using the icon on the course page beyond course 'maxsections' or course 'maxsections' has been
+        // reduced below the number of sections already set for the course on the site administration course
+        // defaults page.  This is so that the number of sections is not reduced leaving unintended orphaned
+        // activities / resources.
+        if (!$forsection) {
+            $maxsections = get_config('moodlecourse', 'maxsections');
+            $numsections = $mform->getElementValue('numsections');
+            $numsections = $numsections[0];
+            if ($numsections > $maxsections) {
+                $element = $mform->getElement('numsections');
+                for ($i = $maxsections+1; $i <= $numsections; $i++) {
+                    $element->addOption("$i", $i);
+                }
+            }
+        }
+        return $elements;
+    }
+
+    /**
      * Updates format options for a course
      *
      * In case if course format was changed to 'weeks', we try to copy options
@@ -276,6 +309,7 @@ class format_weeks extends format_base {
      * @return bool whether there were any changes to the options values
      */
     public function update_course_format_options($data, $oldcourse = null) {
+        global $DB;
         if ($oldcourse !== null) {
             $data = (array)$data;
             $oldcourse = (array)$oldcourse;

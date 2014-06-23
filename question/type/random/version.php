@@ -26,8 +26,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'qtype_random';
-$plugin->version   = 2012112900;
+$plugin->version   = 2014051201;
 
-$plugin->requires  = 2012112900;
+$plugin->requires  = 2014050800;
 
 $plugin->maturity  = MATURITY_STABLE;

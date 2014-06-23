@@ -50,8 +50,6 @@ if (!report_completion_can_access_user_report($user, $course, true)) {
     error('Can not access user completion report');
 }
 
-add_to_log($course->id, 'course', 'report completion', "report/completion/user.php?id=$user->id&course=$course->id", $course->id);
-
 $stractivityreport = get_string('activityreport');
 
 $PAGE->set_pagelayout('admin');
@@ -157,7 +155,7 @@ foreach ($courses as $type => $infos) {
     if (!empty($infos)) {
 
         echo '<h1 align="center">'.get_string($type, 'report_completion').'</h1>';
-        echo '<table class="generalbox boxaligncenter">';
+        echo '<table class="generaltable boxaligncenter">';
         echo '<tr class="ccheader">';
         echo '<th class="c0 header" scope="col">'.get_string('course').'</th>';
         echo '<th class="c1 header" scope="col">'.get_string('requiredcriteria', 'completion').'</th>';
@@ -301,3 +299,6 @@ foreach ($courses as $type => $infos) {
 
 
 echo $OUTPUT->footer();
+// Trigger a user report viewed event.
+$event = \report_completion\event\user_report_viewed::create(array('context' => $coursecontext, 'relateduserid' => $userid));
+$event->trigger();

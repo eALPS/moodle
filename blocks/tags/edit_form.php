@@ -17,7 +17,7 @@
 /**
  * Form for editing tag block instances.
  *
- * @package   moodlecore
+ * @package   block_tags
  * @copyright 2009 Tim Hunt
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -33,7 +33,7 @@ class block_tags_edit_form extends block_edit_form {
         // Fields for editing HTML block title and contents.
         $mform->addElement('header', 'configheader', get_string('blocksettings', 'block'));
 
-        $mform->addElement('text', 'config_title', get_string('pluginname', 'block_tags'));
+        $mform->addElement('text', 'config_title', get_string('configtitle', 'block_tags'));
         $mform->setType('config_title', PARAM_TEXT);
         $mform->setDefault('config_title', get_string('pluginname', 'block_tags'));
 

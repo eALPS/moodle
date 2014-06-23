@@ -124,7 +124,7 @@ $options->behaviour = $quba->get_preferred_behaviour();
 $options->maxmark = $quba->get_question_max_mark($slot);
 
 // Create the settings form, and initialise the fields.
-$optionsform = new preview_options_form(question_preview_form_url($question->id, $context),
+$optionsform = new preview_options_form(question_preview_form_url($question->id, $context, $previewid),
         array('quba' => $quba, 'maxvariant' => $maxvariant));
 $optionsform->set_data($options);
 
@@ -135,7 +135,9 @@ if ($newoptions = $optionsform->get_submitted_data()) {
     if (!isset($newoptions->variant)) {
         $newoptions->variant = $options->variant;
     }
-    restart_preview($previewid, $question->id, $newoptions, $context);
+    if (isset($newoptions->saverestart)) {
+        restart_preview($previewid, $question->id, $newoptions, $context);
+    }
 }
 
 // Prepare a URL that is used in various places.
@@ -224,6 +226,7 @@ $technical = array();
 $technical[] = get_string('behaviourbeingused', 'question',
         question_engine::get_behaviour_name($qa->get_behaviour_name()));
 $technical[] = get_string('technicalinfominfraction',     'question', $qa->get_min_fraction());
+$technical[] = get_string('technicalinfomaxfraction',     'question', $qa->get_max_fraction());
 $technical[] = get_string('technicalinfoquestionsummary', 'question', s($qa->get_question_summary()));
 $technical[] = get_string('technicalinforightsummary',    'question', s($qa->get_right_answer_summary()));
 $technical[] = get_string('technicalinfostate',           'question', '' . $qa->get_state());
@@ -272,12 +275,10 @@ print_collapsible_region_end();
 // Display the settings form.
 $optionsform->display();
 
-$PAGE->requires->js_init_call('M.core_question_preview.init', null, false, array(
-        'name' => 'core_question_preview',
-        'fullpath' => '/question/preview.js',
-        'requires' => array('base', 'dom', 'event-delegate', 'event-key', 'core_question_engine'),
-        'strings' => array(
-            array('closepreview', 'question'),
-        )));
+$PAGE->requires->js_module('core_question_engine');
+$PAGE->requires->strings_for_js(array(
+    'closepreview',
+), 'question');
+$PAGE->requires->yui_module('moodle-question-preview', 'M.question.preview.init');
 echo $OUTPUT->footer();
 

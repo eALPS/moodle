@@ -28,6 +28,6 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version  = 2012112900;
-$plugin->requires = 2012112900;  // Requires this Moodle version
+$plugin->version  = 2014051200;
+$plugin->requires = 2014050800;  // Requires this Moodle version
 $plugin->component = 'workshopform_comments';

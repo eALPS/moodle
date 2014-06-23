@@ -204,7 +204,7 @@ class file_info_context_coursecat extends file_info {
             return $cnt;
         }
 
-        $rs = $DB->get_recordset_sql('SELECT ctx.id contextid, c.visible
+        $rs = $DB->get_recordset_sql('SELECT ctx.id AS contextid, c.visible
                 FROM {context} ctx, {course} c
                 WHERE ctx.instanceid = c.id
                 AND ctx.contextlevel = :courselevel
@@ -226,7 +226,7 @@ class file_info_context_coursecat extends file_info {
             return $cnt;
         }
 
-        $rs = $DB->get_recordset_sql('SELECT ctx.id contextid, cat.visible
+        $rs = $DB->get_recordset_sql('SELECT ctx.id AS contextid, cat.visible
                 FROM {context} ctx, {course_categories} cat
                 WHERE ctx.instanceid = cat.id
                 AND ctx.contextlevel = :catlevel
@@ -254,8 +254,7 @@ class file_info_context_coursecat extends file_info {
      * @return file_info|null fileinfo instance or null for root directory
      */
     public function get_parent() {
-        $cid = get_parent_contextid($this->context);
-        $parent = context::instance_by_id($cid, IGNORE_MISSING);
+        $parent = $this->context->get_parent_context();
         return $this->browser->get_file_info($parent);
     }
 }

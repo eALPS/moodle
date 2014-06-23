@@ -62,8 +62,6 @@ if (!empty($userid)) {
     require_capability('report/stats:view', $coursecontext);
 }
 
-add_to_log($course->id, 'course', 'report stats', "report/stats/graph.php?userid=$userid&id=$course->id&mode=$mode&roleid=$roleid", $course->id);
-
 stats_check_uptodate($course->id);
 
 $param = stats_get_parameters($time,$report,$course->id,$mode);

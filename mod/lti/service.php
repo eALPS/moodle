@@ -17,12 +17,13 @@
 /**
  * LTI web service endpoints
  *
- * @package    mod
- * @subpackage lti
+ * @package mod_lti
  * @copyright  Copyright (c) 2011 Moodlerooms Inc. (http://www.moodlerooms.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @author     Chris Scribner
  */
+
+define('NO_DEBUG_DISPLAY', true);
 
 require_once(dirname(__FILE__) . "/../../config.php");
 require_once($CFG->dirroot.'/mod/lti/locallib.php');
@@ -33,7 +34,7 @@ use moodle\mod\lti as lti;
 
 $rawbody = file_get_contents("php://input");
 
-foreach (getallheaders() as $name => $value) {
+foreach (lti\OAuthUtil::get_headers() as $name => $value) {
     if ($name === 'Authorization') {
         // TODO: Switch to core oauthlib once implemented - MDL-30149
         $oauthparams = lti\OAuthUtil::split_header($value);
@@ -106,7 +107,7 @@ switch ($messagetype) {
         $grade = lti_read_grade($ltiinstance, $parsed->userid);
 
         $responsexml = lti_get_response_xml(
-                isset($grade) ? 'success' : 'failure',
+                'success',  // Empty grade is also 'success'
                 'Result read',
                 $parsed->messageid,
                 'readResultResponse'
@@ -151,13 +152,29 @@ switch ($messagetype) {
         $data->messagetype = $messagetype;
         $data->consumerkey = $consumerkey;
         $data->sharedsecret = $sharedsecret;
+        $eventdata = array();
+        $eventdata['other'] = array();
+        $eventdata['other']['messageid'] = lti_parse_message_id($xml);
+        $eventdata['other']['messagetype'] = $messagetype;
+        $eventdata['other']['consumerkey'] = $consumerkey;
+
+        // Before firing the event, allow subplugins a chance to handle.
+        if (lti_extend_lti_services((object) $eventdata['other'])) {
+            break;
+        }
 
         //If an event handler handles the web service, it should set this global to true
         //So this code knows whether to send an "operation not supported" or not.
         global $lti_web_service_handled;
         $lti_web_service_handled = false;
 
-        events_trigger('lti_unknown_service_api_call', $data);
+        try {
+            $event = \mod_lti\event\unknown_service_api_called::create($eventdata);
+            $event->set_message_data($data);
+            $event->trigger();
+        } catch (Exception $e) {
+            $lti_web_service_handled = false;
+        }
 
         if (!$lti_web_service_handled) {
             $responsexml = lti_get_response_xml(

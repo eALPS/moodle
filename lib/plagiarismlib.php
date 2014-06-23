@@ -18,7 +18,7 @@
 /**
  * plagiarismlib.php - Contains core Plagiarism related functions.
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    moodlecore
  * @subpackage plagiarism
  * @copyright  2010 Dan Marsden http://danmarsden.com
@@ -171,13 +171,15 @@ function plagiarism_cron() {
     }
     $plagiarismplugins = plagiarism_load_available_plugins();
     foreach($plagiarismplugins as $plugin => $dir) {
+        mtrace('Processing cron function for plagiarism_plugin_' . $plugin . '...', '');
+        cron_trace_time_and_memory();
         require_once($dir.'/lib.php');
         $plagiarismclass = "plagiarism_plugin_$plugin";
         $plagiarismplugin = new $plagiarismclass;
         $plagiarismplugin->cron();
     }
 }
-/** 
+/**
  * helper function - also loads lib file of plagiarism plugin
  * @return array of available plugins
  */
@@ -186,7 +188,7 @@ function plagiarism_load_available_plugins() {
     if (empty($CFG->enableplagiarism)) {
         return array();
     }
-    $plagiarismplugins = get_plugin_list('plagiarism');
+    $plagiarismplugins = core_component::get_plugin_list('plagiarism');
     $availableplugins = array();
     foreach($plagiarismplugins as $plugin => $dir) {
         //check this plugin is enabled and a lib file exists.

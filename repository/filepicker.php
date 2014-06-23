@@ -19,7 +19,7 @@
 /**
  * This file is used to browse repositories in non-javascript mode
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    core
  * @subpackage repository
  * @copyright  2009 Dongsheng Cai <dongsheng@moodle.com>
@@ -30,7 +30,7 @@ require_once('../config.php');
 require_once($CFG->libdir.'/filelib.php');
 require_once('lib.php');
 /// Wait as long as it takes for this script to finish
-set_time_limit(0);
+core_php_time_limit::raise();
 
 require_sesskey();
 require_login();
@@ -142,12 +142,12 @@ case 'search':
             if (isset($item['thumbnail_width'])) {
                 $style .= 'max-width:'.$item['thumbnail_width'].'px;';
             }
-            echo html_writer::empty_tag('img', array('src' => $item['thumbnail'], 'style' => $style));
+            echo html_writer::empty_tag('img', array('src' => $item['thumbnail'], 'alt' => '', 'style' => $style));
             echo '</td><td>';
             if (!empty($item['url'])) {
-                echo html_writer::link($item['url'], $item['title'], array('target'=>'_blank'));
+                echo html_writer::link($item['url'], s($item['title']), array('target'=>'_blank'));
             } else {
-                echo $item['title'];
+                echo s($item['title']);
             }
             echo '</td>';
             echo '<td>';
@@ -204,7 +204,7 @@ case 'sign':
                         'draftpath'=>$draftpath,
                         'savepath'=>$savepath
                         ));
-                    echo '<strong>' . html_writer::link($pathurl, $p['name']) . '</strong>';
+                    echo '<strong>' . html_writer::link($pathurl, s($p['name'])) . '</strong>';
                     echo '<span> / </span>';
                 }
             }
@@ -241,9 +241,9 @@ case 'sign':
                 echo html_writer::empty_tag('img', array('src' => $item['thumbnail'], 'style' => $style));
                 echo '</td><td>';
                 if (!empty($item['url'])) {
-                    echo html_writer::link($item['url'], $item['title'], array('target'=>'_blank'));
+                    echo html_writer::link($item['url'], s($item['title']), array('target'=>'_blank'));
                 } else {
-                    echo $item['title'];
+                    echo s($item['title']);
                 }
                 echo '</td>';
                 echo '<td>';
@@ -377,7 +377,7 @@ case 'confirm':
 default:
 case 'plugins':
     $params = array();
-    $params['context'] = array($user_context, get_system_context());
+    $params['context'] = array($user_context, context_system::instance());
     $params['currentcontext'] = $PAGE->context;
     $params['return_types'] = FILE_INTERNAL;
 
@@ -393,8 +393,8 @@ case 'plugins':
         $aurl->params(array('savepath'=>$savepath, 'action' => 'list', 'repo_id' => $info->id, 'draftpath'=>$draftpath));
 
         echo '<li>';
-        echo '<img src="'.$info->icon.'" alt="'.$info->name.'" width="16" height="16" /> ';
-        echo html_writer::link($aurl, $info->name);
+        echo html_writer::empty_tag('img', array('src'=>$info->icon, 'alt'=>$info->name, 'class'=>'icon icon-pre'));
+        echo html_writer::link($aurl, s($info->name));
         echo '</li>';
     }
     echo '</ul>';

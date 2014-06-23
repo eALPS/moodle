@@ -23,7 +23,7 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-$string['addfields'] = 'Add {$a} fields to form';
+$string['addfields'] = 'Add {$a} field(s) to form';
 $string['advancedelement'] = 'Advanced element';
 $string['close'] = 'Close';
 $string['day'] = 'Day';
@@ -57,6 +57,8 @@ $string['security'] = 'Security';
 $string['selectallornone'] = 'Select all/none';
 $string['selected'] = 'Selected';
 $string['showadvanced'] = 'Show advanced';
+$string['showless'] = 'Show less...';
+$string['showmore'] = 'Show more...';
 $string['somefieldsrequired'] = 'There are required fields in this form marked {$a}.';
 $string['time'] = 'Time';
 $string['timeunit'] = 'Time unit';

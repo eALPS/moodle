@@ -18,8 +18,7 @@
 /**
  * Displays the lesson statistics.
  *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or late
  **/
@@ -28,7 +27,7 @@ require_once('../../config.php');
 require_once($CFG->dirroot.'/mod/lesson/locallib.php');
 
 $id     = required_param('id', PARAM_INT);    // Course Module ID
-$pageid = optional_param('pageid', NULL, PARAM_INT);    // Lesson Page ID
+$pageid = optional_param('pageid', null, PARAM_INT);    // Lesson Page ID
 $action = optional_param('action', 'reportoverview', PARAM_ALPHA);  // action to take
 $nothingtodisplay = false;
 
@@ -47,13 +46,14 @@ list($sort, $sortparams) = users_order_by_sql('u');
 $params = array_merge($params, $sortparams);
 // TODO: Improve this. Fetching all students always is crazy!
 if (!empty($cm->groupingid)) {
-    $params["groupid"] = $cm->groupingid;
+    $params["groupingid"] = $cm->groupingid;
     $sql = "SELECT DISTINCT $ufields
                 FROM {lesson_attempts} a
                     INNER JOIN {user} u ON u.id = a.userid
                     INNER JOIN {groups_members} gm ON gm.userid = u.id
-                    INNER JOIN {groupings_groups} gg ON gm.groupid = :groupid
-                WHERE a.lessonid = :lessonid
+                    INNER JOIN {groupings_groups} gg ON gm.groupid = gg.groupid
+                WHERE a.lessonid = :lessonid AND
+                      gg.groupingid = :groupingid
                 ORDER BY $sort";
 } else {
     $sql = "SELECT DISTINCT $ufields
@@ -72,7 +72,7 @@ $url = new moodle_url('/mod/lesson/report.php', array('id'=>$id));
 if ($action !== 'reportoverview') {
     $url->param('action', $action);
 }
-if ($pageid !== NULL) {
+if ($pageid !== null) {
     $url->param('pageid', $pageid);
 }
 $PAGE->set_url($url);
@@ -181,7 +181,7 @@ if ($action === 'delete') {
             $n = 0;
             $timestart = 0;
             $timeend = 0;
-            $usergrade = NULL;
+            $usergrade = null;
 
             // search for the grade record for this try. if not there, the nulls defined above will be used.
             foreach($grades as $grade) {
@@ -225,10 +225,10 @@ if ($action === 'delete') {
     $numofattempts = 0;
     $avescore      = 0;
     $avetime       = 0;
-    $highscore     = NULL;
-    $lowscore      = NULL;
-    $hightime      = NULL;
-    $lowtime       = NULL;
+    $highscore     = null;
+    $lowscore      = null;
+    $hightime      = null;
+    $lowtime       = null;
 
     $table = new html_table();
 
@@ -261,7 +261,7 @@ if ($action === 'delete') {
                 }
 
                 $temp .= "<a href=\"report.php?id=$cm->id&amp;action=reportdetail&amp;userid=".$try['userid'].'&amp;try='.$try['try'].'">';
-                if ($try["grade"] !== NULL) { // if NULL then not done yet
+                if ($try["grade"] !== null) { // if null then not done yet
                     // this is what the link does when the user has completed the try
                     $timetotake = $try["timeend"] - $try["timestart"];
 
@@ -276,26 +276,26 @@ if ($action === 'delete') {
                     // this is what the link does/looks like when the user has not completed the try
                     $temp .= get_string("notcompleted", "lesson");
                     $temp .= "&nbsp;".userdate($try["timestart"])."</a>";
-                    $timetotake = NULL;
+                    $timetotake = null;
                 }
                 // build up the attempts array
                 $attempts[] = $temp;
 
                 // run these lines for the stats only if the user finnished the lesson
-                if ($try["grade"] !== NULL) {
+                if ($try["grade"] !== null) {
                     $numofattempts++;
                     $avescore += $try["grade"];
                     $avetime += $timetotake;
-                    if ($try["grade"] > $highscore || $highscore == NULL) {
+                    if ($try["grade"] > $highscore || $highscore === null) {
                         $highscore = $try["grade"];
                     }
-                    if ($try["grade"] < $lowscore || $lowscore == NULL) {
+                    if ($try["grade"] < $lowscore || $lowscore === null) {
                         $lowscore = $try["grade"];
                     }
-                    if ($timetotake > $hightime || $hightime == NULL) {
+                    if ($timetotake > $hightime || $hightime == null) {
                         $hightime = $timetotake;
                     }
-                    if ($timetotake < $lowtime || $lowtime == NULL) {
+                    if ($timetotake < $lowtime || $lowtime == null) {
                         $lowtime = $timetotake;
                     }
                 }
@@ -332,31 +332,31 @@ if ($action === 'delete') {
     } else {
         $avescore = format_float($avescore/$numofattempts, 2);
     }
-    if ($avetime == NULL) {
+    if ($avetime == null) {
         $avetime = get_string("notcompleted", "lesson");
     } else {
         $avetime = format_float($avetime/$numofattempts, 0);
         $avetime = format_time($avetime);
     }
-    if ($hightime == NULL) {
+    if ($hightime == null) {
         $hightime = get_string("notcompleted", "lesson");
     } else {
         $hightime = format_time($hightime);
     }
-    if ($lowtime == NULL) {
+    if ($lowtime == null) {
         $lowtime = get_string("notcompleted", "lesson");
     } else {
         $lowtime = format_time($lowtime);
     }
-    if ($highscore == NULL) {
+    if ($highscore === null) {
         $highscore = get_string("notcompleted", "lesson");
     }
-    if ($lowscore == NULL) {
+    if ($lowscore === null) {
         $lowscore = get_string("notcompleted", "lesson");
     }
 
     // output the stats
-    echo $OUTPUT->heading(get_string('lessonstats', 'lesson'));
+    echo $OUTPUT->heading(get_string('lessonstats', 'lesson'), 3);
     $stattable = new html_table();
     $stattable->head = array(get_string('averagescore', 'lesson'), get_string('averagetime', 'lesson'),
                             get_string('highscore', 'lesson'), get_string('lowscore', 'lesson'),
@@ -364,7 +364,14 @@ if ($action === 'delete') {
     $stattable->align = array('center', 'center', 'center', 'center', 'center', 'center');
     $stattable->wrap = array('nowrap', 'nowrap', 'nowrap', 'nowrap', 'nowrap', 'nowrap');
     $stattable->attributes['class'] = 'standardtable generaltable';
-    $stattable->data[] = array($avescore.'%', $avetime, $highscore.'%', $lowscore.'%', $hightime, $lowtime);
+
+    if (is_numeric($highscore)) {
+        $highscore .= '%';
+    }
+    if (is_numeric($lowscore)) {
+        $lowscore .= '%';
+    }
+    $stattable->data[] = array($avescore.'%', $avetime, $highscore, $lowscore, $hightime, $lowtime);
 
     echo html_writer::table($stattable);
 } else if ($action === 'reportdetail') {
@@ -394,8 +401,8 @@ if ($action === 'delete') {
     $formattextdefoptions->para = false;  //I'll use it widely in this page
     $formattextdefoptions->overflowdiv = true;
 
-    $userid = optional_param('userid', NULL, PARAM_INT); // if empty, then will display the general detailed view
-    $try    = optional_param('try', NULL, PARAM_INT);
+    $userid = optional_param('userid', null, PARAM_INT); // if empty, then will display the general detailed view
+    $try    = optional_param('try', null, PARAM_INT);
 
     $lessonpages = $lesson->load_all_pages();
     foreach ($lessonpages as $lessonpage) {
@@ -448,8 +455,8 @@ if ($action === 'delete') {
 
         $answerdata = new stdClass;
         // Set some defaults for the answer data.
-        $answerdata->score = NULL;
-        $answerdata->response = NULL;
+        $answerdata->score = null;
+        $answerdata->response = null;
         $answerdata->responseformat = FORMAT_PLAIN;
 
         $answerpage->title = format_string($page->title);
@@ -466,7 +473,7 @@ if ($action === 'delete') {
         if (empty($userid)) {
             // there is no userid, so set these vars and display stats.
             $answerpage->grayout = 0;
-            $useranswer = NULL;
+            $useranswer = null;
         } elseif ($useranswers = $DB->get_records("lesson_attempts",array("lessonid"=>$lesson->id, "userid"=>$userid, "retry"=>$try,"pageid"=>$page->id), "timeseen")) {
             // get the user's answer for this page
             // need to find the right one
@@ -481,7 +488,7 @@ if ($action === 'delete') {
         } else {
             // user did not answer this page, gray it out and set some nulls
             $answerpage->grayout = 1;
-            $useranswer = NULL;
+            $useranswer = null;
         }
         $i = 0;
         $n = 0;
@@ -501,7 +508,7 @@ if ($action === 'delete') {
             //$headingobject->firstname = $students[$userid]->firstname;
             //$headingobject->attempt = $try + 1;
             //print_heading(get_string("studentattemptlesson", "lesson", $headingobject));
-        echo $OUTPUT->heading(get_string('attempt', 'lesson', $try+1));
+        echo $OUTPUT->heading(get_string('attempt', 'lesson', $try+1), 3);
 
         $table->head = array();
         $table->align = array('right', 'left');
@@ -583,7 +590,9 @@ if ($action === 'delete') {
         } else {
             $table->data[] = array(get_string('didnotanswerquestion', 'lesson'), " ");
         }
+        echo html_writer::start_tag('div', array('class' => 'no-overflow'));
         echo html_writer::table($table);
+        echo html_writer::end_tag('div');
     }
 } else {
     print_error('unknowaction');

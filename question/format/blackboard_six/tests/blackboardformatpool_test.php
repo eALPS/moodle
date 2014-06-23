@@ -41,8 +41,10 @@ require_once($CFG->dirroot . '/question/engine/tests/helpers.php');
 class qformat_blackboard_six_pool_test extends question_testcase {
 
     public function make_test_xml() {
-        $xml = file_get_contents(__DIR__ . '/fixtures/sample_blackboard_pool.dat');
-        return array(0=>$xml);
+        $xmlfile = new qformat_blackboard_six_file();
+        $xmlfile->filetype = 2;
+        $xmlfile->text = file_get_contents(__DIR__ . '/fixtures/sample_blackboard_pool.dat');
+        return array(0 => $xmlfile);
     }
 
     public function test_import_match() {
@@ -50,18 +52,18 @@ class qformat_blackboard_six_pool_test extends question_testcase {
         $xml = $this->make_test_xml();
 
         $importer = new qformat_blackboard_six();
-        $importer->set_filetype(2);
         $questions = $importer->readquestions($xml);
 
-        $q = $questions[4];
+        $q = $questions[5];
+
+        // If qtype_ddmatch is installed, the formatter produces ddmatch
+        // qtypes, not match ones.
+        $ddmatchisinstalled = question_bank::is_qtype_installed('ddmatch');
 
         $expectedq = new stdClass();
-        $expectedq->qtype = 'match';
+        $expectedq->qtype = $ddmatchisinstalled ? 'ddmatch' : 'match';
         $expectedq->name = 'Classify the animals.';
-        $expectedq->questiontext = array(
-                'text' => '<i>Classify the animals.</i>',
-                'format' => FORMAT_HTML,
-            );
+        $expectedq->questiontext = '<i>Classify the animals.</i>';
         $expectedq->questiontextformat = FORMAT_HTML;
         $expectedq->correctfeedback = array('text' => '',
                 'format' => FORMAT_HTML);
@@ -80,8 +82,17 @@ class qformat_blackboard_six_pool_test extends question_testcase {
             array('text' => '', 'format' => FORMAT_HTML),
             array('text' => 'frog', 'format' => FORMAT_HTML),
             array('text' => 'newt', 'format' => FORMAT_HTML));
-        $expectedq->subanswers = array('mammal', 'insect', 'amphibian', 'amphibian');
 
+        if ($ddmatchisinstalled) {
+            $expectedq->subanswers = array(
+                array('text' => 'mammal', 'format' => FORMAT_HTML),
+                array('text' => 'insect', 'format' => FORMAT_HTML),
+                array('text' => 'amphibian', 'format' => FORMAT_HTML),
+                array('text' => 'amphibian', 'format' => FORMAT_HTML),
+            );
+        } else {
+            $expectedq->subanswers = array('mammal', 'insect', 'amphibian', 'amphibian');
+        }
         $this->assert(new question_check_specified_fields_expectation($expectedq), $q);
     }
 
@@ -90,18 +101,14 @@ class qformat_blackboard_six_pool_test extends question_testcase {
         $xml = $this->make_test_xml();
 
         $importer = new qformat_blackboard_six();
-        $importer->set_filetype(2);
         $questions = $importer->readquestions($xml);
-        $q = $questions[1];
+        $q = $questions[2];
 
         $expectedq = new stdClass();
         $expectedq->qtype = 'multichoice';
         $expectedq->single = 1;
         $expectedq->name = 'What\'s between orange and green in the spectrum?';
-        $expectedq->questiontext = array(
-                'text' =>'<span style="font-size:12pt">What\'s between orange and green in the spectrum?</span>',
-                'format' => FORMAT_HTML,
-            );
+        $expectedq->questiontext = '<span style="font-size:12pt">What\'s between orange and green in the spectrum?</span>';
         $expectedq->questiontextformat = FORMAT_HTML;
         $expectedq->correctfeedback = array('text' => 'You gave the right answer.',
                 'format' => FORMAT_HTML);
@@ -153,18 +160,14 @@ class qformat_blackboard_six_pool_test extends question_testcase {
         $xml = $this->make_test_xml();
 
         $importer = new qformat_blackboard_six();
-        $importer->set_filetype(2);
         $questions = $importer->readquestions($xml);
-        $q = $questions[2];
+        $q = $questions[3];
 
         $expectedq = new stdClass();
         $expectedq->qtype = 'multichoice';
         $expectedq->single = 0;
         $expectedq->name = 'What\'s between orange and green in the spectrum?';
-        $expectedq->questiontext = array(
-                'text' => '<span style="font-size:12pt">What\'s between orange and green in the spectrum?</span>',
-                'format' => FORMAT_HTML,
-            );
+        $expectedq->questiontext = '<span style="font-size:12pt">What\'s between orange and green in the spectrum?</span>';
         $expectedq->questiontextformat = FORMAT_HTML;
         $expectedq->correctfeedback = array(
                 'text' => 'You gave the right answer.',
@@ -230,17 +233,13 @@ class qformat_blackboard_six_pool_test extends question_testcase {
         $xml = $this->make_test_xml();
 
         $importer = new qformat_blackboard_six();
-        $importer->set_filetype(2);
         $questions = $importer->readquestions($xml);
-        $q = $questions[0];
+        $q = $questions[1];
 
         $expectedq = new stdClass();
         $expectedq->qtype = 'truefalse';
         $expectedq->name = '42 is the Absolute Answer to everything.';
-        $expectedq->questiontext = array(
-                'text' => '<span style="font-size:12pt">42 is the Absolute Answer to everything.</span>',
-                'format' => FORMAT_HTML,
-            );
+        $expectedq->questiontext = '<span style="font-size:12pt">42 is the Absolute Answer to everything.</span>';
         $expectedq->questiontextformat = FORMAT_HTML;
         $expectedq->generalfeedback = '';
         $expectedq->generalfeedbackformat = FORMAT_HTML;
@@ -263,17 +262,13 @@ class qformat_blackboard_six_pool_test extends question_testcase {
         $xml = $this->make_test_xml();
 
         $importer = new qformat_blackboard_six();
-        $importer->set_filetype(2);
         $questions = $importer->readquestions($xml);
-        $q = $questions[3];
+        $q = $questions[4];
 
         $expectedq = new stdClass();
         $expectedq->qtype = 'shortanswer';
         $expectedq->name = 'Name an amphibian: __________.';
-        $expectedq->questiontext = array(
-                'text' => '<span style="font-size:12pt">Name an amphibian: __________.</span>',
-                'format' => FORMAT_HTML,
-            );
+        $expectedq->questiontext = '<span style="font-size:12pt">Name an amphibian: __________.</span>';
         $expectedq->questiontextformat = FORMAT_HTML;
         $expectedq->generalfeedback = '';
         $expectedq->generalfeedbackformat = FORMAT_HTML;
@@ -301,17 +296,13 @@ class qformat_blackboard_six_pool_test extends question_testcase {
         $xml = $this->make_test_xml();
 
         $importer = new qformat_blackboard_six();
-        $importer->set_filetype(2);
         $questions = $importer->readquestions($xml);
-        $q = $questions[5];
+        $q = $questions[6];
 
         $expectedq = new stdClass();
         $expectedq->qtype = 'essay';
         $expectedq->name = 'How are you?';
-        $expectedq->questiontext = array(
-                'text' => 'How are you?',
-                'format' => FORMAT_HTML,
-            );
+        $expectedq->questiontext = 'How are you?';
         $expectedq->questiontextformat = FORMAT_HTML;
         $expectedq->generalfeedback = '';
         $expectedq->generalfeedbackformat = FORMAT_HTML;
@@ -324,6 +315,21 @@ class qformat_blackboard_six_pool_test extends question_testcase {
                 'text' => 'Blackboard answer for essay questions will be imported as informations for graders.',
                 'format' => FORMAT_HTML,
             );
+
+        $this->assert(new question_check_specified_fields_expectation($expectedq), $q);
+    }
+
+    public function test_import_category() {
+
+        $xml = $this->make_test_xml();
+
+        $importer = new qformat_blackboard_six();
+        $questions = $importer->readquestions($xml);
+        $q = $questions[0];
+
+        $expectedq = new stdClass();
+        $expectedq->qtype = 'category';
+        $expectedq->category = 'exam 3 2008-9';
 
         $this->assert(new question_check_specified_fields_expectation($expectedq), $q);
     }

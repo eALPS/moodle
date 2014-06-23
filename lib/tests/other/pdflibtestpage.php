@@ -61,7 +61,7 @@ if ($getpdf) {
     $doc->setPrintHeader(true);
     $doc->setHeaderMargin(10);
     $doc->setHeaderFont(array($fontfamily, 'b', 10));
-    $doc->setHeaderData('pix/moodlelogo-med-white.gif', 40, $SITE->fullname, $CFG->wwwroot);
+    $doc->setHeaderData('pix/moodlelogo-med.png', 40, $SITE->fullname, $CFG->wwwroot);
 
     $doc->setPrintFooter(true);
     $doc->setFooterMargin(10);
@@ -80,7 +80,7 @@ if ($getpdf) {
 
     $c  = '<h3>General information</h3>';
     $c .= 'Moodle release: '            . $CFG->release . '<br />';
-    $c .= 'PDF producer: TCPDF '        . $doc->getTCPDFVersion()  . ' (http://www.tcpdf.org) <br />';
+    $c .= 'PDF producer: TCPDF '        . TCPDF_STATIC::getTCPDFVersion() . ' (http://www.tcpdf.org) <br />';
     $c .= 'Font of this test page: '    . $fontfamily   . '<br />';
 
     $c .= '<h3>Current settings</h3>';

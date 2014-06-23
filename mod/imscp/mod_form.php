@@ -18,8 +18,7 @@
 /**
  * IMS CP configuration form
  *
- * @package    mod
- * @subpackage imscp
+ * @package mod_imscp
  * @copyright  2009 Petr Skoda  {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -45,10 +44,12 @@ class mod_imscp_mod_form extends moodleform_mod {
             $mform->setType('name', PARAM_CLEANHTML);
         }
         $mform->addRule('name', null, 'required', null, 'client');
+        $mform->addRule('name', get_string('maximumchars', '', 255), 'maxlength', 255, 'client');
         $this->add_intro_editor($config->requiremodintro);
 
         //-------------------------------------------------------
         $mform->addElement('header', 'content', get_string('contentheader', 'imscp'));
+        $mform->setExpanded('content', true);
         $mform->addElement('filepicker', 'package', get_string('packagefile', 'imscp'));
 
         $options = array('-1'=>get_string('all'), '0'=>get_string('no'), '1'=>'1', '2'=>'2', '5'=>'5', '10'=>'10', '20'=>'20');

@@ -18,8 +18,7 @@
 /**
  * End of branch table
  *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright  2009 Sam Hemelryk
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  **/
@@ -107,6 +106,7 @@ class lesson_page_type_endofbranch extends lesson_page {
         if (empty($properties->qoption)) {
             $properties->qoption = '0';
         }
+        $properties->timemodified = time();
         $properties = file_postupdate_standard_editor($properties, 'contents', array('noclean'=>true, 'maxfiles'=>EDITOR_UNLIMITED_FILES, 'maxbytes'=>$PAGE->course->maxbytes), context_module::instance($PAGE->cm->id), 'mod_lesson', 'page_contents', $properties->id);
         $DB->update_record("lesson_pages", $properties);
 
@@ -122,7 +122,7 @@ class lesson_page_type_endofbranch extends lesson_page {
             $answer = new stdClass;
         }
 
-        $answer->timemodified = time();;
+        $answer->timemodified = time();
         if (isset($properties->jumpto[0])) {
             $answer->jumpto = $properties->jumpto[0];
         }

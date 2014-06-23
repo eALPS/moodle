@@ -22,7 +22,8 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once $CFG->libdir.'/gradelib.php';
+require_once($CFG->libdir . '/gradelib.php');
+require_once($CFG->dirroot . '/grade/export/lib.php');
 
 /**
  * This class iterates over all users that are graded in a course.
@@ -94,6 +95,12 @@ class graded_users_iterator {
     protected $allowusercustomfields = false;
 
     /**
+     * List of suspended users in course. This includes users whose enrolment status is suspended
+     * or enrolment has expired or not started.
+     */
+    protected $suspendedusers = array();
+
+    /**
      * Constructor
      *
      * @param object $course A course object
@@ -128,21 +135,20 @@ class graded_users_iterator {
 
         $this->close();
 
-        grade_regrade_final_grades($this->course->id);
+        export_verify_grades($this->course->id);
         $course_item = grade_item::fetch_course_item($this->course->id);
         if ($course_item->needsupdate) {
-            // can not calculate all final grades - sorry
+            // Can not calculate all final grades - sorry.
             return false;
         }
 
         $coursecontext = context_course::instance($this->course->id);
-        $relatedcontexts = get_related_contexts_string($coursecontext);
 
-        list($gradebookroles_sql, $params) =
-            $DB->get_in_or_equal(explode(',', $CFG->gradebookroles), SQL_PARAMS_NAMED, 'grbr');
+        list($relatedctxsql, $relatedctxparams) = $DB->get_in_or_equal($coursecontext->get_parent_context_ids(true), SQL_PARAMS_NAMED, 'relatedctx');
+        list($gradebookroles_sql, $params) = $DB->get_in_or_equal(explode(',', $CFG->gradebookroles), SQL_PARAMS_NAMED, 'grbr');
         list($enrolledsql, $enrolledparams) = get_enrolled_sql($coursecontext, '', 0, $this->onlyactive);
 
-        $params = array_merge($params, $enrolledparams);
+        $params = array_merge($params, $enrolledparams, $relatedctxparams);
 
         if ($this->groupid) {
             $groupsql = "INNER JOIN {groups_members} gm ON gm.userid = u.id";
@@ -155,7 +161,7 @@ class graded_users_iterator {
         }
 
         if (empty($this->sortfield1)) {
-            // we must do some sorting even if not specified
+            // We must do some sorting even if not specified.
             $ofields = ", u.id AS usrt";
             $order   = "usrt ASC";
 
@@ -167,8 +173,8 @@ class graded_users_iterator {
                 $order   .= ", usrt2 $this->sortorder2";
             }
             if ($this->sortfield1 != 'id' and $this->sortfield2 != 'id') {
-                // user order MUST be the same in both queries,
-                // must include the only unique user->id if not already present
+                // User order MUST be the same in both queries,
+                // must include the only unique user->id if not already present.
                 $ofields .= ", u.id AS usrt";
                 $order   .= ", usrt ASC";
             }
@@ -185,14 +191,13 @@ class graded_users_iterator {
                             LEFT JOIN (SELECT * FROM {user_info_data}
                                 WHERE fieldid = :cf$customfieldscount) cf$customfieldscount
                             ON u.id = cf$customfieldscount.userid";
-                    $userfields .= ", cf$customfieldscount.data AS 'customfield_{$field->shortname}'";
+                    $userfields .= ", cf$customfieldscount.data AS customfield_{$field->shortname}";
                     $params['cf'.$customfieldscount] = $field->customid;
                     $customfieldscount++;
                 }
             }
         }
 
-        // $params contents: gradebookroles and groupid (for $groupwheresql)
         $users_sql = "SELECT $userfields $ofields
                         FROM {user} u
                         JOIN ($enrolledsql) je ON je.id = u.id
@@ -201,18 +206,24 @@ class graded_users_iterator {
                                   SELECT DISTINCT ra.userid
                                     FROM {role_assignments} ra
                                    WHERE ra.roleid $gradebookroles_sql
-                                     AND ra.contextid $relatedcontexts
+                                     AND ra.contextid $relatedctxsql
                              ) rainner ON rainner.userid = u.id
                          WHERE u.deleted = 0
                              $groupwheresql
                     ORDER BY $order";
         $this->users_rs = $DB->get_recordset_sql($users_sql, $params);
 
+        if (!$this->onlyactive) {
+            $context = context_course::instance($this->course->id);
+            $this->suspendedusers = get_suspended_userids($context);
+        } else {
+            $this->suspendedusers = array();
+        }
+
         if (!empty($this->grade_items)) {
             $itemids = array_keys($this->grade_items);
             list($itemidsql, $grades_params) = $DB->get_in_or_equal($itemids, SQL_PARAMS_NAMED, 'items');
             $params = array_merge($params, $grades_params);
-            // $params contents: gradebookroles, enrolledparams, groupid (for $groupwheresql) and itemids
 
             $grades_sql = "SELECT g.* $ofields
                              FROM {grade_grades} g
@@ -223,7 +234,7 @@ class graded_users_iterator {
                                       SELECT DISTINCT ra.userid
                                         FROM {role_assignments} ra
                                        WHERE ra.roleid $gradebookroles_sql
-                                         AND ra.contextid $relatedcontexts
+                                         AND ra.contextid $relatedctxsql
                                   ) rainner ON rainner.userid = u.id
                               WHERE u.deleted = 0
                               AND g.itemid $itemidsql
@@ -300,6 +311,8 @@ class graded_users_iterator {
             }
         }
 
+        // Set user suspended status.
+        $user->suspendedenrolment = isset($this->suspendedusers[$user->id]);
         $result = new stdClass();
         $result->user      = $user;
         $result->grades    = $grades;
@@ -402,14 +415,19 @@ function print_graded_users_selector($course, $actionpage, $userid=0, $groupid=0
 }
 
 function grade_get_graded_users_select($report, $course, $userid, $groupid, $includeall) {
-    global $USER;
+    global $USER, $CFG;
 
     if (is_null($userid)) {
         $userid = $USER->id;
     }
-
+    $coursecontext = context_course::instance($course->id);
+    $defaultgradeshowactiveenrol = !empty($CFG->grade_report_showonlyactiveenrol);
+    $showonlyactiveenrol = get_user_preferences('grade_report_showonlyactiveenrol', $defaultgradeshowactiveenrol);
+    $showonlyactiveenrol = $showonlyactiveenrol || !has_capability('moodle/course:viewsuspendedusers', $coursecontext);
     $menu = array(); // Will be a list of userid => user name
+    $menususpendedusers = array(); // Suspended users go to a separate optgroup.
     $gui = new graded_users_iterator($course, null, $groupid);
+    $gui->require_active_enrolment($showonlyactiveenrol);
     $gui->init();
     $label = get_string('selectauser', 'grades');
     if ($includeall) {
@@ -418,12 +436,21 @@ function grade_get_graded_users_select($report, $course, $userid, $groupid, $inc
     }
     while ($userdata = $gui->next_user()) {
         $user = $userdata->user;
-        $menu[$user->id] = fullname($user);
+        $userfullname = fullname($user);
+        if ($user->suspendedenrolment) {
+            $menususpendedusers[$user->id] = $userfullname;
+        } else {
+            $menu[$user->id] = $userfullname;
+        }
     }
     $gui->close();
 
     if ($includeall) {
-        $menu[0] .= " (" . (count($menu) - 1) . ")";
+        $menu[0] .= " (" . (count($menu) + count($menususpendedusers) - 1) . ")";
+    }
+
+    if (!empty($menususpendedusers)) {
+        $menu[] = array(get_string('suspendedusers') => $menususpendedusers);
     }
     $select = new single_select(new moodle_url('/grade/report/'.$report.'/index.php', array('id'=>$course->id)), 'userid', $menu, $userid);
     $select->label = $label;
@@ -1514,6 +1541,10 @@ class grade_structure {
     public function get_hiding_icon($element, $gpr) {
         global $CFG, $OUTPUT;
 
+        if (!$element['object']->can_control_visibility()) {
+            return '';
+        }
+
         if (!has_capability('moodle/grade:manage', $this->context) and
             !has_capability('moodle/grade:hide', $this->context)) {
             return '';
@@ -2461,7 +2492,7 @@ abstract class grade_helper {
             return self::$managesetting;
         }
         $context = context_course::instance($courseid);
-        if (has_capability('moodle/course:update', $context)) {
+        if (has_capability('moodle/grade:manage', $context)) {
             self::$managesetting = new grade_plugin_info('coursesettings', new moodle_url('/grade/edit/settings/index.php', array('id'=>$courseid)), get_string('course'));
         } else {
             self::$managesetting = false;
@@ -2483,7 +2514,7 @@ abstract class grade_helper {
         $context = context_course::instance($courseid);
         $gradereports = array();
         $gradepreferences = array();
-        foreach (get_plugin_list('gradereport') as $plugin => $plugindir) {
+        foreach (core_component::get_plugin_list('gradereport') as $plugin => $plugindir) {
             //some reports make no sense if we're not within a course
             if ($courseid==$SITE->id && ($plugin=='grader' || $plugin=='user')) {
                 continue;
@@ -2649,7 +2680,7 @@ abstract class grade_helper {
         $context = context_course::instance($courseid);
 
         if (has_capability('moodle/grade:import', $context)) {
-            foreach (get_plugin_list('gradeimport') as $plugin => $plugindir) {
+            foreach (core_component::get_plugin_list('gradeimport') as $plugin => $plugindir) {
                 if (!has_capability('gradeimport/'.$plugin.':view', $context)) {
                     continue;
                 }
@@ -2687,7 +2718,7 @@ abstract class grade_helper {
         $context = context_course::instance($courseid);
         $exportplugins = array();
         if (has_capability('moodle/grade:export', $context)) {
-            foreach (get_plugin_list('gradeexport') as $plugin => $plugindir) {
+            foreach (core_component::get_plugin_list('gradeexport') as $plugin => $plugindir) {
                 if (!has_capability('gradeexport/'.$plugin.':view', $context)) {
                     continue;
                 }

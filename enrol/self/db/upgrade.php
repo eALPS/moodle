@@ -38,6 +38,32 @@ function xmldb_enrol_self_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2012101400, 'enrol', 'self');
     }
 
+    if ($oldversion < 2012120600) {
+        // Enable new self enrolments everywhere.
+        $DB->execute("UPDATE {enrol} SET customint6 = 1 WHERE enrol = 'self'");
+        upgrade_plugin_savepoint(true, 2012120600, 'enrol', 'self');
+    }
+
+
+    // Moodle v2.4.0 release upgrade line
+    // Put any upgrade step following this
+
+
+    // Moodle v2.5.0 release upgrade line.
+    // Put any upgrade step following this.
+
+
+    // Moodle v2.6.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    if ($oldversion < 2013112100) {
+        // Set customint1 (group enrolment key) to 0 if it was not set (null).
+        $DB->execute("UPDATE {enrol} SET customint1 = 0 WHERE enrol = 'self' AND customint1 IS NULL");
+        upgrade_plugin_savepoint(true, 2013112100, 'enrol', 'self');
+    }
+
+    // Moodle v2.7.0 release upgrade line.
+    // Put any upgrade step following this.
 
     return true;
 }
