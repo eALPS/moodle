@@ -54,7 +54,14 @@ if ($sharedsecret === false) {
     throw new Exception('Message signature not valid');
 }
 
-$xml = new SimpleXMLElement($rawbody);
+// TODO MDL-46023 Replace this code with a call to the new library.
+$origentity = libxml_disable_entity_loader(true);
+$xml = simplexml_load_string($rawbody);
+if (!$xml) {
+    libxml_disable_entity_loader($origentity);
+    throw new Exception('Invalid XML content');
+}
+libxml_disable_entity_loader($origentity);
 
 $body = $xml->imsx_POXBody;
 foreach ($body->children() as $child) {
@@ -149,17 +156,18 @@ switch ($messagetype) {
         $data = new stdClass();
         $data->body = $rawbody;
         $data->xml = $xml;
+        $data->messageid = lti_parse_message_id($xml);
         $data->messagetype = $messagetype;
         $data->consumerkey = $consumerkey;
         $data->sharedsecret = $sharedsecret;
         $eventdata = array();
         $eventdata['other'] = array();
-        $eventdata['other']['messageid'] = lti_parse_message_id($xml);
+        $eventdata['other']['messageid'] = $data->messageid;
         $eventdata['other']['messagetype'] = $messagetype;
         $eventdata['other']['consumerkey'] = $consumerkey;
 
         // Before firing the event, allow subplugins a chance to handle.
-        if (lti_extend_lti_services((object) $eventdata['other'])) {
+        if (lti_extend_lti_services($data)) {
             break;
         }
 

@@ -34,6 +34,13 @@ require_once($CFG->dirroot . '/tag/lib.php');
 class core_course_courselib_testcase extends advanced_testcase {
 
     /**
+     * Tidy up open files that may be left open.
+     */
+    protected function tearDown() {
+        gc_collect_cycles();
+    }
+
+    /**
      * Set forum specific test values for calling create_module().
      *
      * @param object $moduleinfo - the moduleinfo to add some specific values - passed in reference.
@@ -460,12 +467,12 @@ class core_course_courselib_testcase extends advanced_testcase {
 
         // Conditional activity.
         $coursegradeitem = grade_item::fetch_course_item($moduleinfo->course); //the activity will become available only when the user reach some grade into the course itself.
-        $moduleinfo->availability = '{"op":"&","showc":[true,true],"c":[' .
+        $moduleinfo->availability = '{"op":"&","showc":[true,true,true,true,true],"c":[' .
                 '{"type":"date","d":">=","t":' . time() . '},' .
-                '{"type":"date","d":"<","t":' . (time() + (7 * 24 * 3600)) . '}' .
+                '{"type":"date","d":"<","t":' . (time() + (7 * 24 * 3600)) . '},' .
                 '{"type":"grade","id":' . $coursegradeitem->id . ',"min":10,"max":80},' .
                 '{"type":"profile","sf":"email","op":"contains","v":"@"},'.
-                '{"type":"completion","id":'. $assigncm->id . ',"e":' . COMPLETION_COMPLETE . '}' .
+                '{"type":"completion","cm":'. $assigncm->id . ',"e":' . COMPLETION_COMPLETE . '}' .
                 ']}';
 
         // Grading and Advanced grading.
@@ -1950,7 +1957,7 @@ class core_course_courselib_testcase extends advanced_testcase {
      * Tests for event related to course module creation.
      */
     public function test_course_module_created_event() {
-        global $USER, $DB;
+        global $USER, $DB, $CFG;
         $this->resetAfterTest();
 
         // Create an assign module.
@@ -1958,9 +1965,8 @@ class core_course_courselib_testcase extends advanced_testcase {
         $modinfo = $this->create_specific_module_test('assign');
         $events = $sink->get_events();
         $event = array_pop($events);
-        $sink->close();
 
-        $cm = $DB->get_record('course_modules', array('id' => $modinfo->coursemodule), '*', MUST_EXIST);
+        $cm = get_coursemodule_from_id('assign', $modinfo->coursemodule, 0, false, MUST_EXIST);
         $mod = $DB->get_record('assign', array('id' => $modinfo->instance), '*', MUST_EXIST);
 
         // Validate event data.
@@ -1988,6 +1994,27 @@ class core_course_courselib_testcase extends advanced_testcase {
         $this->assertEventLegacyLogData($arr, $event);
         $this->assertEventContextNotUsed($event);
 
+        // Let us see if duplicating an activity results in a nice course module created event.
+        $sink->clear();
+        $course = get_course($mod->course);
+
+        // Discard error logs.
+        $oldlog = ini_get('error_log');
+        ini_set('error_log', "$CFG->dataroot/testlog.log");
+        $newcmhtml = mod_duplicate_activity($course, $cm);
+        ini_set('error_log', $oldlog);
+
+        $events = $sink->get_events();
+        $event = array_pop($events);
+        $sink->close();
+
+        // Validate event data.
+        $this->assertInstanceOf('\core\event\course_module_created', $event);
+        $this->assertEquals($newcmhtml->cmid, $event->objectid);
+        $this->assertEquals($USER->id, $event->userid);
+        $this->assertEquals($course->id, $event->courseid);
+        $url = new moodle_url('/mod/assign/view.php', array('id' => $newcmhtml->cmid));
+        $this->assertEquals($url, $event->get_url());
     }
 
     /**
@@ -2476,5 +2503,44 @@ class core_course_courselib_testcase extends advanced_testcase {
         );
         $this->assertEventLegacyLogData($expectedlegacydata, $event);
         $this->assertEventContextNotUsed($event);
+    }
+
+    /**
+     * Tests that when creating or updating a module, if the availability settings
+     * are present but set to an empty tree, availability is set to null in
+     * database.
+     */
+    public function test_empty_availability_settings() {
+        global $DB;
+        $this->setAdminUser();
+        $this->resetAfterTest();
+
+        // Enable availability.
+        set_config('enableavailability', 1);
+
+        // Test add.
+        $emptyavailability = '{"op":"&","c":[],"showc":[]}';
+        $course = self::getDataGenerator()->create_course();
+        $label = self::getDataGenerator()->create_module('label', array(
+                'course' => $course, 'availability' => $emptyavailability));
+        $this->assertNull($DB->get_field('course_modules', 'availability',
+                array('id' => $label->cmid)));
+
+        // Test update.
+        $formdata = $DB->get_record('course_modules', array('id' => $label->cmid));
+        unset($formdata->availability);
+        $formdata->availabilityconditionsjson = $emptyavailability;
+        $formdata->modulename = 'label';
+        $formdata->coursemodule = $label->cmid;
+        $draftid = 0;
+        file_prepare_draft_area($draftid, context_module::instance($label->cmid)->id,
+                'mod_label', 'intro', 0);
+        $formdata->introeditor = array(
+            'itemid' => $draftid,
+            'text' => '<p>Yo</p>',
+            'format' => FORMAT_HTML);
+        update_module($formdata);
+        $this->assertNull($DB->get_field('course_modules', 'availability',
+                array('id' => $label->cmid)));
     }
 }

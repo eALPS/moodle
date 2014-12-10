@@ -123,6 +123,10 @@ class behat_hooks extends behat_base {
             throw new Exception('Behat only can run if test mode is enabled. More info in ' . behat_command::DOCS_URL . '#Running_tests');
         }
 
+        // Reset all data, before checking for is_server_running.
+        // If not done, then it can return apache error, while running tests.
+        behat_util::reset_all_data();
+
         if (!behat_util::is_server_running()) {
             throw new Exception($CFG->behat_wwwroot .
                 ' is not available, ensure you specified correct url and that the server is set up and started.' .
@@ -132,7 +136,8 @@ class behat_hooks extends behat_base {
         // Prevents using outdated data, upgrade script would start and tests would fail.
         if (!behat_util::is_test_data_updated()) {
             $commandpath = 'php admin/tool/behat/cli/init.php';
-            throw new Exception('Your behat test site is outdated, please run ' . $commandpath . ' from your moodle dirroot to drop and install the behat test site again.');
+            throw new Exception("Your behat test site is outdated, please run\n\n    " .
+                    $commandpath . "\n\nfrom your moodle dirroot to drop and install the behat test site again.");
         }
         // Avoid parallel tests execution, it continues when the previous lock is released.
         test_lock::acquire('behat');
@@ -189,17 +194,9 @@ class behat_hooks extends behat_base {
         }
 
         // Reset $SESSION.
-        $_SESSION = array();
-        $SESSION = new stdClass();
-        $_SESSION['SESSION'] =& $SESSION;
+        \core\session\manager::init_empty_session();
 
-        behat_util::reset_database();
-        behat_util::reset_dataroot();
-
-        accesslib_clear_all_caches(true);
-
-        // Reset the nasty strings list used during the last test.
-        nasty_strings::reset_used_strings();
+        behat_util::reset_all_data();
 
         // Assign valid data to admin user (some generator-related code needs a valid user).
         $user = $DB->get_record('user', array('username' => 'admin'));

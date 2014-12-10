@@ -338,6 +338,40 @@ class page_editor {
             $DB->insert_record('assignfeedback_editpdf_cmnt', $comment);
         }
 
+        // Delete the existing stamps and copy the source ones.
+        $fs = get_file_storage();
+        $fs->delete_area_files($assignment->get_context()->id, 'assignfeedback_editpdf', 'stamps', $grade->id);
+        if ($files = $fs->get_area_files($assignment->get_context()->id,
+                                         'assignfeedback_editpdf',
+                                         'stamps',
+                                         $sourceusergrade->id,
+                                         "filename",
+                                         false)) {
+            foreach ($files as $file) {
+                $newrecord = new \stdClass();
+                $newrecord->contextid = $assignment->get_context()->id;
+                $newrecord->itemid = $grade->id;
+                $fs->create_file_from_storedfile($newrecord, $file);
+            }
+        }
+
         return true;
+    }
+
+    /**
+     * Delete the draft annotations and comments.
+     *
+     * This is intended to be used when the version of the PDF has changed and the annotations
+     * might not be relevant any more, therefore we should delete them.
+     *
+     * @param int $gradeid The grade ID.
+     * @return bool
+     */
+    public static function delete_draft_content($gradeid) {
+        global $DB;
+        $conditions = array('gradeid' => $gradeid, 'draft' => 1);
+        $result = $DB->delete_records('assignfeedback_editpdf_annot', $conditions);
+        $result = $result && $DB->delete_records('assignfeedback_editpdf_cmnt', $conditions);
+        return $result;
     }
 }

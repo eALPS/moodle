@@ -189,14 +189,9 @@ class phpunit_util extends testing_util {
         $FULLME = null;
         $ME = null;
         $SCRIPT = null;
-        $SESSION = new stdClass();
-        $_SESSION['SESSION'] =& $SESSION;
 
-        // set fresh new not-logged-in user
-        $user = new stdClass();
-        $user->id = 0;
-        $user->mnethostid = $CFG->mnet_localhost_id;
-        \core\session\manager::set_user($user);
+        // Empty sessison and set fresh new not-logged-in user.
+        \core\session\manager::init_empty_session();
 
         // reset all static caches
         \core\event\manager::phpunit_reset();
@@ -413,6 +408,9 @@ class phpunit_util extends testing_util {
 
         install_cli_database($options, false);
 
+        // Set the admin email address.
+        $DB->set_field('user', 'email', 'admin@example.com', array('username' => 'admin'));
+
         // Disable all logging for performance and sanity reasons.
         set_config('enabled_stores', '', 'tool_log');
 
@@ -440,7 +438,7 @@ class phpunit_util extends testing_util {
         global $CFG;
 
         $template = '
-        <testsuite name="@component@ test suite">
+        <testsuite name="@component@_testsuite">
             <directory suffix="_test.php">@dir@</directory>
         </testsuite>';
         $data = file_get_contents("$CFG->dirroot/phpunit.xml.dist");

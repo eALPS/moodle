@@ -230,7 +230,7 @@ class qformat_default {
         echo "<strong>$message</strong>\n";
         echo "</div>";
 
-         $this->importerrors++;
+        $this->importerrors++;
     }
 
     /**
@@ -357,6 +357,7 @@ class qformat_default {
         $count = 0;
 
         foreach ($questions as $question) {   // Process and store each question
+            $transaction = $DB->start_delegated_transaction();
 
             // reset the php timeout
             core_php_time_limit::raise();
@@ -371,6 +372,7 @@ class qformat_default {
                         $this->category = $newcategory;
                     }
                 }
+                $transaction->allow_commit();
                 continue;
             }
             $question->context = $this->importcontext;
@@ -424,13 +426,18 @@ class qformat_default {
 
             if (!empty($CFG->usetags) && isset($question->tags)) {
                 require_once($CFG->dirroot . '/tag/lib.php');
-                tag_set('question', $question->id, $question->tags, 'core_question', $question->context);
+                tag_set('question', $question->id, $question->tags, 'core_question', $question->context->id);
             }
 
             if (!empty($result->error)) {
                 echo $OUTPUT->notification($result->error);
+                // Can't use $transaction->rollback(); since it requires an exception,
+                // and I don't want to rewrite this code to change the error handling now.
+                $DB->force_transaction_rollback();
                 return false;
             }
+
+            $transaction->allow_commit();
 
             if (!empty($result->notice)) {
                 echo $OUTPUT->notification($result->notice);
@@ -689,9 +696,8 @@ class qformat_default {
      * @return object question object
      */
     protected function readquestion($lines) {
-
-        $formatnotimplemented = get_string('formatnotimplemented', 'question');
-        echo "<p>$formatnotimplemented</p>";
+        // We should never get there unless the qformat plugin is broken.
+        throw new coding_exception('Question format plugin is missing important code: readquestion.');
 
         return null;
     }
@@ -923,8 +929,7 @@ class qformat_default {
      */
     protected function writequestion($question) {
         // if not overidden, then this is an error.
-        $formatnotimplemented = get_string('formatnotimplemented', 'question');
-        echo "<p>$formatnotimplemented</p>";
+        throw new coding_exception('Question format plugin is missing important code: writequestion.');
         return null;
     }
 

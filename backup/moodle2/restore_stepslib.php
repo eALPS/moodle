@@ -564,6 +564,9 @@ class restore_update_availability extends restore_execution_step {
         rebuild_course_cache($this->get_courseid(), true);
         $modinfo = get_fast_modinfo($this->get_courseid());
 
+        // Get the date offset for this restore.
+        $dateoffset = $this->apply_date_offset(1) - 1;
+
         // Update all sections that were restored.
         $params = array('backupid' => $this->get_restoreid(), 'itemname' => 'course_section');
         $rs = $DB->get_recordset('backup_ids_temp', $params, '', 'newitemid');
@@ -586,7 +589,7 @@ class restore_update_availability extends restore_execution_step {
             if (!is_null($section->availability)) {
                 $info = new \core_availability\info_section($section);
                 $info->update_after_restore($this->get_restoreid(),
-                        $this->get_courseid(), $this->get_logger());
+                        $this->get_courseid(), $this->get_logger(), $dateoffset);
             }
         }
         $rs->close();
@@ -606,7 +609,7 @@ class restore_update_availability extends restore_execution_step {
             if (!is_null($cm->availability)) {
                 $info = new \core_availability\info_module($cm);
                 $info->update_after_restore($this->get_restoreid(),
-                        $this->get_courseid(), $this->get_logger());
+                        $this->get_courseid(), $this->get_logger(), $dateoffset);
             }
         }
         $rs->close();
@@ -1472,11 +1475,14 @@ class restore_course_structure_step extends restore_structure_step {
         $data->fullname = $fullname;
         $data->shortname= $shortname;
 
+        // Only allow the idnumber to be set if the user has permission and the idnumber is not already in use by
+        // another course on this site.
         $context = context::instance_by_id($this->task->get_contextid());
-        if (has_capability('moodle/course:changeidnumber', $context, $this->task->get_userid())) {
-            $data->idnumber = '';
+        if (!empty($data->idnumber) && has_capability('moodle/course:changeidnumber', $context, $this->task->get_userid()) &&
+                $this->task->is_samesite() && !$DB->record_exists('course', array('idnumber' => $data->idnumber))) {
+            // Do not reset idnumber.
         } else {
-            unset($data->idnumber);
+            $data->idnumber = '';
         }
 
         // Any empty value for course->hiddensections will lead to 0 (default, show collapsed).
@@ -2111,7 +2117,13 @@ class restore_badges_structure_step extends restore_structure_step {
 
         $data = (object)$data;
         $data->usercreated = $this->get_mappingid('user', $data->usercreated);
+        if (empty($data->usercreated)) {
+            $data->usercreated = $this->task->get_userid();
+        }
         $data->usermodified = $this->get_mappingid('user', $data->usermodified);
+        if (empty($data->usermodified)) {
+            $data->usermodified = $this->task->get_userid();
+        }
 
         // We'll restore the badge image.
         $restorefiles = true;
@@ -2208,6 +2220,12 @@ class restore_badges_structure_step extends restore_structure_step {
                 'issuerrole'  => $role,
                 'datemet'     => $this->apply_date_offset($data->datemet)
             );
+
+            // Skip the manual award if recipient or issuer can not be mapped to.
+            if (empty($award['recipientid']) || empty($award['issuerid'])) {
+                return;
+            }
+
             $DB->insert_record('badge_manual_award', $award);
         }
     }
@@ -2233,15 +2251,17 @@ class restore_calendarevents_structure_step extends restore_structure_step {
     }
 
     public function process_calendarevents($data) {
-        global $DB, $SITE;
+        global $DB, $SITE, $USER;
 
         $data = (object)$data;
         $oldid = $data->id;
         $restorefiles = true; // We'll restore the files
-        // Find the userid and the groupid associated with the event. Return if not found.
+        // Find the userid and the groupid associated with the event.
         $data->userid = $this->get_mappingid('user', $data->userid);
         if ($data->userid === false) {
-            return;
+            // Blank user ID means that we are dealing with module generated events such as quiz starting times.
+            // Use the current user ID for these events.
+            $data->userid = $USER->id;
         }
         if (!empty($data->groupid)) {
             $data->groupid = $this->get_mappingid('group', $data->groupid);
@@ -2609,7 +2629,18 @@ class restore_course_logs_structure_step extends restore_structure_step {
 
         // If we have data, insert it, else something went wrong in the restore_logs_processor
         if ($data) {
-            $DB->insert_record('log', $data);
+            if (empty($data->url)) {
+                $data->url = '';
+            }
+            if (empty($data->info)) {
+                $data->info = '';
+            }
+            // Store the data in the legacy log table if we are still using it.
+            $manager = get_log_manager();
+            if (method_exists($manager, 'legacy_add_to_log')) {
+                $manager->legacy_add_to_log($data->course, $data->module, $data->action, $data->url,
+                    $data->info, $data->cmid, $data->userid);
+            }
         }
     }
 }
@@ -2647,7 +2678,18 @@ class restore_activity_logs_structure_step extends restore_course_logs_structure
 
         // If we have data, insert it, else something went wrong in the restore_logs_processor
         if ($data) {
-            $DB->insert_record('log', $data);
+            if (empty($data->url)) {
+                $data->url = '';
+            }
+            if (empty($data->info)) {
+                $data->info = '';
+            }
+            // Store the data in the legacy log table if we are still using it.
+            $manager = get_log_manager();
+            if (method_exists($manager, 'legacy_add_to_log')) {
+                $manager->legacy_add_to_log($data->course, $data->module, $data->action, $data->url,
+                    $data->info, $data->cmid, $data->userid);
+            }
         }
     }
 }
@@ -2960,11 +3002,52 @@ class restore_block_instance_structure_step extends restore_structure_step {
         }
 
         if (!$bi->instance_allow_multiple()) {
-            if ($DB->record_exists_sql("SELECT bi.id
-                                          FROM {block_instances} bi
-                                          JOIN {block} b ON b.name = bi.blockname
-                                         WHERE bi.parentcontextid = ?
-                                           AND bi.blockname = ?", array($data->parentcontextid, $data->blockname))) {
+            // The block cannot be added twice, so we will check if the same block is already being
+            // displayed on the same page. For this, rather than mocking a page and using the block_manager
+            // we use a similar query to the one in block_manager::load_blocks(), this will give us
+            // a very good idea of the blocks already displayed in the context.
+            $params =  array(
+                'blockname' => $data->blockname
+            );
+
+            // Context matching test.
+            $context = context::instance_by_id($data->parentcontextid);
+            $contextsql = 'bi.parentcontextid = :contextid';
+            $params['contextid'] = $context->id;
+
+            $parentcontextids = $context->get_parent_context_ids();
+            if ($parentcontextids) {
+                list($parentcontextsql, $parentcontextparams) =
+                        $DB->get_in_or_equal($parentcontextids, SQL_PARAMS_NAMED);
+                $contextsql = "($contextsql OR (bi.showinsubcontexts = 1 AND bi.parentcontextid $parentcontextsql))";
+                $params = array_merge($params, $parentcontextparams);
+            }
+
+            // Page type pattern test.
+            $pagetypepatterns = matching_page_type_patterns_from_pattern($data->pagetypepattern);
+            list($pagetypepatternsql, $pagetypepatternparams) =
+                $DB->get_in_or_equal($pagetypepatterns, SQL_PARAMS_NAMED);
+            $params = array_merge($params, $pagetypepatternparams);
+
+            // Sub page pattern test.
+            $subpagepatternsql = 'bi.subpagepattern IS NULL';
+            if ($data->subpagepattern !== null) {
+                $subpagepatternsql = "($subpagepatternsql OR bi.subpagepattern = :subpagepattern)";
+                $params['subpagepattern'] = $data->subpagepattern;
+            }
+
+            $exists = $DB->record_exists_sql("SELECT bi.id
+                                                FROM {block_instances} bi
+                                                JOIN {block} b ON b.name = bi.blockname
+                                               WHERE bi.blockname = :blockname
+                                                 AND $contextsql
+                                                 AND bi.pagetypepattern $pagetypepatternsql
+                                                 AND $subpagepatternsql", $params);
+            if ($exists) {
+                // There is at least one very similar block visible on the page where we
+                // are trying to restore the block. In these circumstances the block API
+                // would not allow the user to add another instance of the block, so we
+                // apply the same rule here.
                 return false;
             }
         }

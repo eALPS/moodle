@@ -632,6 +632,10 @@ class moodle_url {
             }
         }
 
+        if ($url->anchor !== $this->anchor) {
+            return false;
+        }
+
         return true;
     }
 
@@ -1030,9 +1034,11 @@ function get_file_argument() {
 
     // Then try extract file from the slasharguments.
     if (stripos($_SERVER['SERVER_SOFTWARE'], 'iis') !== false) {
-        // NOTE: ISS tends to convert all file paths to single byte DOS encoding,
+        // NOTE: IIS tends to convert all file paths to single byte DOS encoding,
         //       we can not use other methods because they break unicode chars,
-        //       the only way is to use URL rewriting.
+        //       the only ways are to use URL rewriting
+        //       OR
+        //       to properly set the 'FastCGIUtf8ServerVariables' registry key.
         if (isset($_SERVER['PATH_INFO']) and $_SERVER['PATH_INFO'] !== '') {
             // Check that PATH_INFO works == must not contain the script name.
             if (strpos($_SERVER['PATH_INFO'], $SCRIPT) === false) {
@@ -1856,24 +1862,23 @@ function highlight($needle, $haystack, $matchcase = false,
         return $haystack;
     }
 
-    // Find all the HTML tags in the input, and store them in a placeholders array..
-    $placeholders = array();
-    $matches = array();
-    preg_match_all('/<[^>]*>/', $haystack, $matches);
-    foreach (array_unique($matches[0]) as $key => $htmltag) {
-        $placeholders['<|' . $key . '|>'] = $htmltag;
+    // Split the string into HTML tags and real content.
+    $chunks = preg_split('/((?:<[^>]*>)+)/', $haystack, -1, PREG_SPLIT_DELIM_CAPTURE);
+
+    // We have an array of alternating blocks of text, then HTML tags, then text, ...
+    // Loop through replacing search terms in the text, and leaving the HTML unchanged.
+    $ishtmlchunk = false;
+    $result = '';
+    foreach ($chunks as $chunk) {
+        if ($ishtmlchunk) {
+            $result .= $chunk;
+        } else {
+            $result .= preg_replace($regexp, $prefix . '$1' . $suffix, $chunk);
+        }
+        $ishtmlchunk = !$ishtmlchunk;
     }
 
-    // In $hastack, replace each HTML tag with the corresponding placeholder.
-    $haystack = str_replace($placeholders, array_keys($placeholders), $haystack);
-
-    // In the resulting string, Do the highlighting.
-    $haystack = preg_replace($regexp, $prefix . '$1' . $suffix, $haystack);
-
-    // Turn the placeholders back into HTML tags.
-    $haystack = str_replace(array_keys($placeholders), $placeholders, $haystack);
-
-    return $haystack;
+    return $result;
 }
 
 /**
@@ -2221,6 +2226,7 @@ function print_group_picture($group, $courseid, $large=false, $return=false, $li
     }
 
     $grouppictureurl = moodle_url::make_pluginfile_url($context->id, 'group', 'icon', $group->id, '/', $file);
+    $grouppictureurl->param('rev', $group->picture);
     $output .= '<img class="grouppicture" src="'.$grouppictureurl.'"'.
         ' alt="'.s(get_string('group').' '.$group->name).'" title="'.s($group->name).'"/>';
 

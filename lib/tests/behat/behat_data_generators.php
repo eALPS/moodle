@@ -111,7 +111,7 @@ class behat_data_generators extends behat_base {
         'activities' => array(
             'datagenerator' => 'activity',
             'required' => array('activity', 'idnumber', 'course'),
-            'switchids' => array('course' => 'course')
+            'switchids' => array('course' => 'course', 'gradecategory' => 'gradecat')
         ),
         'group members' => array(
             'datagenerator' => 'group_member',
@@ -127,9 +127,19 @@ class behat_data_generators extends behat_base {
             'datagenerator' => 'cohort',
             'required' => array('idnumber')
         ),
+        'cohort members' => array(
+            'datagenerator' => 'cohort_member',
+            'required' => array('user', 'cohort'),
+            'switchids' => array('user' => 'userid', 'cohort' => 'cohortid')
+        ),
         'roles' => array(
             'datagenerator' => 'role',
             'required' => array('shortname')
+        ),
+        'grade categories' => array(
+            'datagenerator' => 'grade_category',
+            'required' => array('fullname', 'course'),
+            'switchids' => array('course' => 'courseid', 'gradecategory' => 'parent')
         )
     );
 
@@ -213,6 +223,25 @@ class behat_data_generators extends behat_base {
     protected function preprocess_user($data) {
         if (!isset($data['password'])) {
             $data['password'] = $data['username'];
+        }
+        return $data;
+    }
+
+    /**
+     * If contextlevel and reference are specified for cohort, transform them to the contextid.
+     *
+     * @param array $data
+     * @return array
+     */
+    protected function preprocess_cohort($data) {
+        if (isset($data['contextlevel'])) {
+            if (!isset($data['reference'])) {
+                throw new Exception('If field contextlevel is specified, field reference must also be present');
+            }
+            $context = $this->get_context($data['contextlevel'], $data['reference']);
+            unset($data['contextlevel']);
+            unset($data['reference']);
+            $data['contextid'] = $context->id;
         }
         return $data;
     }
@@ -394,6 +423,31 @@ class behat_data_generators extends behat_base {
     }
 
     /**
+     * Adds members to cohorts
+     *
+     * @param array $data
+     * @return void
+     */
+    protected function process_cohort_member($data) {
+        cohort_add_member($data['cohortid'], $data['userid']);
+    }
+
+    /**
+     * Gets the grade category id from the grade category fullname
+     * @throws Exception
+     * @param string $username
+     * @return int
+     */
+    protected function get_gradecategory_id($fullname) {
+        global $DB;
+
+        if (!$id = $DB->get_field('grade_categories', 'id', array('fullname' => $fullname))) {
+            throw new Exception('The specified grade category with fullname "' . $fullname . '" does not exist');
+        }
+        return $id;
+    }
+
+    /**
      * Gets the user id from it's username.
      * @throws Exception
      * @param string $username
@@ -486,6 +540,21 @@ class behat_data_generators extends behat_base {
 
         if (!$id = $DB->get_field('groupings', 'id', array('idnumber' => $idnumber))) {
             throw new Exception('The specified grouping with idnumber "' . $idnumber . '" does not exist');
+        }
+        return $id;
+    }
+
+    /**
+     * Gets the cohort id from it's idnumber.
+     * @throws Exception
+     * @param string $idnumber
+     * @return int
+     */
+    protected function get_cohort_id($idnumber) {
+        global $DB;
+
+        if (!$id = $DB->get_field('cohort', 'id', array('idnumber' => $idnumber))) {
+            throw new Exception('The specified cohort with idnumber "' . $idnumber . '" does not exist');
         }
         return $id;
     }

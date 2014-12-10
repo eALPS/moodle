@@ -563,7 +563,6 @@ class coursecat implements renderable, cacheable_object, IteratorAggregate {
      * (category id => coursecat object) sorted by sortorder
      *
      * @see coursecat::get_children()
-     * @see coursecat::get_all_parents()
      *
      * @return cacheable_object_array array of coursecat objects
      */
@@ -2147,7 +2146,8 @@ class coursecat implements renderable, cacheable_object, IteratorAggregate {
 
         // Check if we cached the complete list of user-accessible category names ($baselist) or list of ids
         // with requried cap ($thislist).
-        $basecachekey = 'catlist';
+        $currentlang = current_language();
+        $basecachekey = $currentlang . '_catlist';
         $baselist = $coursecatcache->get($basecachekey);
         $thislist = false;
         $thiscachekey = null;

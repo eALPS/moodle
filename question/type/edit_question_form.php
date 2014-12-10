@@ -146,6 +146,9 @@ abstract class question_edit_form extends question_wizard_form {
             // Editing question with no permission to move from category.
             $mform->addElement('questioncategory', 'category', get_string('category', 'question'),
                     array('contexts' => array($this->categorycontext)));
+            $mform->addElement('hidden', 'usecurrentcat', 1);
+            $mform->setType('usecurrentcat', PARAM_BOOL);
+            $mform->setConstant('usecurrentcat', 1);
         } else {
             // Editing question with permission to move from category or save as new q.
             $currentgrp = array();
@@ -613,7 +616,7 @@ abstract class question_edit_form extends question_wizard_form {
         foreach ($question->options->answers as $answer) {
             foreach ($extraanswerfields as $field) {
                 // See hack comment in {@link data_preprocessing_answers()}.
-                unset($this->_form->_defaultValues["$field[$key]"]);
+                unset($this->_form->_defaultValues["{$field}[{$key}]"]);
                 $extrafieldsdata[$field][$key] = $this->data_preprocessing_extra_answer_field($answer, $field);
             }
             $key++;

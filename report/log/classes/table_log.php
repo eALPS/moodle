@@ -381,7 +381,7 @@ class report_log_table_log extends table_sql {
                 && !empty($this->filterparams->userid) && !empty($this->filterparams->modid);
 
         $groupid = 0;
-        if (!empty($this->filterparams->courseid)) {
+        if (!empty($this->filterparams->courseid) && $this->filterparams->courseid != SITEID) {
             if (!empty($this->filterparams->groupid)) {
                 $groupid = $this->filterparams->groupid;
             }
@@ -445,7 +445,10 @@ class report_log_table_log extends table_sql {
         if (!$this->is_downloading()) {
             $total = $this->filterparams->logreader->get_events_select_count($selector, $params);
             $this->pagesize($pagesize, $total);
+        } else {
+            $this->pageable(false);
         }
+
         $this->rawdata = $this->filterparams->logreader->get_events_select($selector, $params, $this->filterparams->orderby,
                 $this->get_page_start(), $this->get_page_size());
 
