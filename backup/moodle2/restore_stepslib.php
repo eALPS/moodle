@@ -1780,12 +1780,12 @@ class restore_enrolments_structure_step extends restore_structure_step {
 
     protected function define_structure() {
 
-        $paths = array();
+        $enrol = new restore_path_element('enrol', '/enrolments/enrols/enrol');
+        $enrolment = new restore_path_element('enrolment', '/enrolments/enrols/enrol/user_enrolments/enrolment');
+        // Attach local plugin stucture to enrol element.
+        $this->add_plugin_structure('enrol', $enrol);
 
-        $paths[] = new restore_path_element('enrol', '/enrolments/enrols/enrol');
-        $paths[] = new restore_path_element('enrolment', '/enrolments/enrols/enrol/user_enrolments/enrolment');
-
-        return $paths;
+        return array($enrol, $enrolment);
     }
 
     /**
@@ -2418,18 +2418,42 @@ class restore_course_completion_structure_step extends restore_structure_step {
         $data->timeend = $this->apply_date_offset($data->timeend);
 
         // Map the role from the criteria
-        if (!empty($data->role)) {
-            $data->role = $this->get_mappingid('role', $data->role);
-        }
+        if (isset($data->role) && $data->role != '') {
+            // Newer backups should include roleshortname, which makes this much easier.
+            if (!empty($data->roleshortname)) {
+                $roleinstanceid = $DB->get_field('role', 'id', array('shortname' => $data->roleshortname));
+                if (!$roleinstanceid) {
+                    $this->log(
+                        'Could not match the role shortname in course_completion_criteria, so skipping',
+                        backup::LOG_DEBUG
+                    );
+                    return;
+                }
+                $data->role = $roleinstanceid;
+            } else {
+                $data->role = $this->get_mappingid('role', $data->role);
+            }
 
-        $skipcriteria = false;
+            // Check we have an id, otherwise it causes all sorts of bugs.
+            if (!$data->role) {
+                $this->log(
+                    'Could not match role in course_completion_criteria, so skipping',
+                    backup::LOG_DEBUG
+                );
+                return;
+            }
+        }
 
         // If the completion criteria is for a module we need to map the module instance
         // to the new module id.
         if (!empty($data->moduleinstance) && !empty($data->module)) {
             $data->moduleinstance = $this->get_mappingid('course_module', $data->moduleinstance);
             if (empty($data->moduleinstance)) {
-                $skipcriteria = true;
+                $this->log(
+                    'Could not match the module instance in course_completion_criteria, so skipping',
+                    backup::LOG_DEBUG
+                );
+                return;
             }
         } else {
             $data->module = null;
@@ -2440,28 +2464,30 @@ class restore_course_completion_structure_step extends restore_structure_step {
         if (!empty($data->courseinstanceshortname)) {
             $courseinstanceid = $DB->get_field('course', 'id', array('shortname'=>$data->courseinstanceshortname));
             if (!$courseinstanceid) {
-                $skipcriteria = true;
+                $this->log(
+                    'Could not match the course instance in course_completion_criteria, so skipping',
+                    backup::LOG_DEBUG
+                );
+                return;
             }
         } else {
             $courseinstanceid = null;
         }
         $data->courseinstance = $courseinstanceid;
 
-        if (!$skipcriteria) {
-            $params = array(
-                'course'         => $data->course,
-                'criteriatype'   => $data->criteriatype,
-                'enrolperiod'    => $data->enrolperiod,
-                'courseinstance' => $data->courseinstance,
-                'module'         => $data->module,
-                'moduleinstance' => $data->moduleinstance,
-                'timeend'        => $data->timeend,
-                'gradepass'      => $data->gradepass,
-                'role'           => $data->role
-            );
-            $newid = $DB->insert_record('course_completion_criteria', $params);
-            $this->set_mapping('course_completion_criteria', $data->id, $newid);
-        }
+        $params = array(
+            'course'         => $data->course,
+            'criteriatype'   => $data->criteriatype,
+            'enrolperiod'    => $data->enrolperiod,
+            'courseinstance' => $data->courseinstance,
+            'module'         => $data->module,
+            'moduleinstance' => $data->moduleinstance,
+            'timeend'        => $data->timeend,
+            'gradepass'      => $data->gradepass,
+            'role'           => $data->role
+        );
+        $newid = $DB->insert_record('course_completion_criteria', $params);
+        $this->set_mapping('course_completion_criteria', $data->id, $newid);
     }
 
     /**
@@ -2521,7 +2547,21 @@ class restore_course_completion_structure_step extends restore_structure_step {
                 'timecompleted' => $this->apply_date_offset($data->timecompleted),
                 'reaggregate' => $data->reaggregate
             );
-            $DB->insert_record('course_completions', $params);
+
+            $existing = $DB->get_record('course_completions', array(
+                'userid' => $data->userid,
+                'course' => $data->course
+            ));
+
+            // MDL-46651 - If cron writes out a new record before we get to it
+            // then we should replace it with the Truth data from the backup.
+            // This may be obsolete after MDL-48518 is resolved
+            if ($existing) {
+                $params['id'] = $existing->id;
+                $DB->update_record('course_completions', $params);
+            } else {
+                $DB->insert_record('course_completions', $params);
+            }
         }
     }
 
@@ -2639,7 +2679,7 @@ class restore_course_logs_structure_step extends restore_structure_step {
             $manager = get_log_manager();
             if (method_exists($manager, 'legacy_add_to_log')) {
                 $manager->legacy_add_to_log($data->course, $data->module, $data->action, $data->url,
-                    $data->info, $data->cmid, $data->userid);
+                    $data->info, $data->cmid, $data->userid, $data->ip, $data->time);
             }
         }
     }
@@ -2688,7 +2728,7 @@ class restore_activity_logs_structure_step extends restore_course_logs_structure
             $manager = get_log_manager();
             if (method_exists($manager, 'legacy_add_to_log')) {
                 $manager->legacy_add_to_log($data->course, $data->module, $data->action, $data->url,
-                    $data->info, $data->cmid, $data->userid);
+                    $data->info, $data->cmid, $data->userid, $data->ip, $data->time);
             }
         }
     }

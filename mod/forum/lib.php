@@ -2522,9 +2522,8 @@ function forum_count_discussion_replies($forumid, $forumsort="", $limit=-1, $pag
                   FROM {forum_posts} p
                        JOIN {forum_discussions} d ON p.discussion = d.id
                  WHERE d.forum = ?
-              GROUP BY p.discussion $groupby
-              $orderby";
-        return $DB->get_records_sql("SELECT * FROM ($sql) sq", array($forumid), $limitfrom, $limitnum);
+              GROUP BY p.discussion $groupby $orderby";
+        return $DB->get_records_sql($sql, array($forumid), $limitfrom, $limitnum);
     }
 }
 
@@ -3896,8 +3895,8 @@ function forum_print_discussion_header(&$post, $forum, $group=-1, $datestring=""
     $usermodified->id = $post->usermodified;
     $usermodified = username_load_fields_from_object($usermodified, $post, 'um');
 
-    // Show link to last poster and their post if user can see them.
-    if ($canviewparticipants) {
+    // In QA forums we check that the user can view participants.
+    if ($forum->type !== 'qanda' || $canviewparticipants) {
         echo '<a href="'.$CFG->wwwroot.'/user/view.php?id='.$post->usermodified.'&amp;course='.$forum->course.'">'.
              fullname($usermodified).'</a><br />';
         $parenturl = (empty($post->lastpostid)) ? '' : '&amp;parent='.$post->lastpostid;
@@ -8378,7 +8377,7 @@ function forum_get_posts_by_user($user, array $courses, $musthaveaccess = false,
 
             // Check whether the requested user is enrolled or has access to view the course
             // if they don't we immediately have a problem.
-            if (!can_access_course($course, $user)) {
+            if (!can_access_course($course, $user) && !is_enrolled($coursecontext, $user)) {
                 if ($musthaveaccess) {
                     print_error('notenrolled', 'forum');
                 }
