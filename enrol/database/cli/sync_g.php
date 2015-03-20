@@ -36,8 +36,8 @@ define('CLI_SCRIPT', true);
 // add by eALPS Developer
 global $_SERVER;
 
-$siteEnName = 'fdsd';
-$siteJaName = 'eALPS教職員用';
+$siteEnName = 'g';
+$siteJaName = '共通教育';
 
 $fiscalYear = 0;
 if(date('n') < 3) {
