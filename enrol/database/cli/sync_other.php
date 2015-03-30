@@ -51,7 +51,7 @@ echo($siteJaName."の同期スタート\n");
 
 $startTime = microtime(true);
 
-$_SERVER['REQUEST_URI'] = '/'.$fiscalYear.'/'.$siteEnName.'/';
+$_SERVER['REQUEST_URI'] = '/'.$siteEnName.'/';
 echo('SERVER[REQUEST_URI]：'.$_SERVER['REQUEST_URI']."\n");
 // end by eALPS Developer
 
