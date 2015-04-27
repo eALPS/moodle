@@ -12,7 +12,7 @@ Feature: Award badges
       | Name | Profile Badge |
       | Description | Test badge description |
       | issuername | Test Badge Site |
-      | issuercontact | testuser@test-badge-site.com |
+      | issuercontact | testuser@example.com |
     And I upload "badges/tests/behat/badge.png" file to "Image" filemanager
     And I press "Create badge"
     And I set the field "type" to "Profile completion"
@@ -39,8 +39,8 @@ Feature: Award badges
   Scenario: Award site badge
     Given the following "users" exist:
       | username | firstname | lastname | email |
-      | teacher | teacher | 1 | teacher1@asd.com |
-      | student | student | 1 | student1@asd.com |
+      | teacher | teacher | 1 | teacher1@example.com |
+      | student | student | 1 | student1@example.com |
     And I log in as "admin"
     And I navigate to "Add a new badge" node in "Site administration > Badges"
     And I set the following fields to these values:
@@ -56,9 +56,9 @@ Feature: Award badges
     And I press "Continue"
     And I follow "Recipients (0)"
     And I press "Award badge"
-    And I set the field "potentialrecipients[]" to "teacher 1 (teacher1@asd.com)"
+    And I set the field "potentialrecipients[]" to "teacher 1 (teacher1@example.com)"
     And I press "Award badge"
-    And I set the field "potentialrecipients[]" to "student 1 (student1@asd.com)"
+    And I set the field "potentialrecipients[]" to "student 1 (student1@example.com)"
     And I press "Award badge"
     When I follow "Site Badge"
     Then I should see "Recipients (2)"
@@ -72,9 +72,9 @@ Feature: Award badges
   Scenario: Award course badge
     Given the following "users" exist:
       | username | firstname | lastname | email |
-      | teacher1 | Teacher | 1 | teacher1@asd.com |
-      | student1 | Student | 1 | student1@asd.com |
-      | student2 | Student | 2 | student2@asd.com |
+      | teacher1 | Teacher | 1 | teacher1@example.com |
+      | student1 | Student | 1 | student1@example.com |
+      | student2 | Student | 2 | student2@example.com |
     And the following "courses" exist:
       | fullname | shortname | category | groupmode |
       | Course 1 | C1 | 0 | 1 |
@@ -100,9 +100,9 @@ Feature: Award badges
     And I press "Continue"
     And I follow "Recipients (0)"
     And I press "Award badge"
-    And I set the field "potentialrecipients[]" to "Student 2 (student2@asd.com)"
+    And I set the field "potentialrecipients[]" to "Student 2 (student2@example.com)"
     And I press "Award badge"
-    And I set the field "potentialrecipients[]" to "Student 1 (student1@asd.com)"
+    And I set the field "potentialrecipients[]" to "Student 1 (student1@example.com)"
     When I press "Award badge"
     And I follow "Course Badge"
     Then I should see "Recipients (2)"
@@ -120,16 +120,15 @@ Feature: Award badges
       | Course 1 | C1 | 0 |
     And the following "users" exist:
       | username | firstname | lastname | email |
-      | teacher1 | Teacher | Frist | teacher1@asd.com |
-      | student1 | Student | First | student1@asd.com |
+      | teacher1 | Teacher | Frist | teacher1@example.com |
+      | student1 | Student | First | student1@example.com |
     And the following "course enrolments" exist:
       | user | course | role |
       | teacher1 | C1 | editingteacher |
       | student1 | C1 | student |
-    And I log in as "admin"
-    And I set the following administration settings values:
-      | Enable completion tracking | 1 |
-    And I follow "Home"
+    And the following config values are set as admin:
+      | enablecompletion | 1 |
+    And I log in as "teacher1"
     And I follow "Course 1"
     And I follow "Edit settings"
     And I set the following fields to these values:
@@ -139,8 +138,6 @@ Feature: Award badges
     And I add a "Assignment" to section "1" and I fill the form with:
       | Assignment name | Test assignment name |
       | Description | Submit your online text |
-    And I log out
-    And I log in as "teacher1"
     And I follow "Course 1"
     And I click on "//span[text()='Badges']" "xpath_element" in the "Administration" "block"
     And I follow "Add a new badge"
@@ -175,16 +172,15 @@ Feature: Award badges
       | Course 1 | C1 | 0 |
     And the following "users" exist:
       | username | firstname | lastname | email |
-      | teacher1 | Teacher | Frist | teacher1@asd.com |
-      | student1 | Student | First | student1@asd.com |
+      | teacher1 | Teacher | Frist | teacher1@example.com |
+      | student1 | Student | First | student1@example.com |
     And the following "course enrolments" exist:
       | user | course | role |
       | teacher1 | C1 | editingteacher |
       | student1 | C1 | student |
-    And I log in as "admin"
-    And I set the following administration settings values:
-      | Enable completion tracking | 1 |
-    And I follow "Home"
+    And the following config values are set as admin:
+      | enablecompletion | 1 |
+    And I log in as "teacher1"
     And I follow "Course 1"
     And I follow "Edit settings"
     And I set the following fields to these values:
@@ -200,8 +196,6 @@ Feature: Award badges
     And I click on "Condition: Activity completion" "link"
     And I set the field "Assign - Test assignment name" to "1"
     And I press "Save changes"
-    And I log out
-    And I log in as "teacher1"
     And I follow "Course 1"
     And I click on "//span[text()='Badges']" "xpath_element" in the "Administration" "block"
     And I follow "Add a new badge"
