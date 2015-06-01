@@ -14,17 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace something\largely\namespaced;
+
+defined('MOODLE_INTERNAL') || die;
+
 /**
- * Quiz statistics report version information.
- *
- * @package   mod_quiz
- * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * Simple namespaced renderable class to verify corresponding render methods are called correctly
  */
-
-defined('MOODLE_INTERNAL') || die();
-
-$plugin->version   = 2014051201; // The current module version (Date: YYYYMMDDXX).
-$plugin->requires  = 2014050800; // Requires this Moodle version.
-$plugin->component = 'mod_quiz'; // Full name of the plugin (used for diagnostics).
-$plugin->cron      = 60;
+class renderable_test implements \renderable {
+}
