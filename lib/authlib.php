@@ -61,6 +61,24 @@ define('AUTH_REMOVEUSER_KEEP', 0);
 define('AUTH_REMOVEUSER_SUSPEND', 1);
 define('AUTH_REMOVEUSER_FULLDELETE', 2);
 
+/** Login attempt successful. */
+define('AUTH_LOGIN_OK', 0);
+
+/** Can not login because user does not exist. */
+define('AUTH_LOGIN_NOUSER', 1);
+
+/** Can not login because user is suspended. */
+define('AUTH_LOGIN_SUSPENDED', 2);
+
+/** Can not login, most probably password did not match. */
+define('AUTH_LOGIN_FAILED', 3);
+
+/** Can not login because user is locked out. */
+define('AUTH_LOGIN_LOCKOUT', 4);
+
+/** Can not login becauser user is not authorised. */
+define('AUTH_LOGIN_UNAUTHORISED', 5);
+
 /**
  * Abstract authentication plugin.
  *
@@ -98,11 +116,20 @@ class auth_plugin_base {
         'department',
         'phone1',
         'phone2',
-        'address'
+        'address',
+        'firstnamephonetic',
+        'lastnamephonetic',
+        'middlename',
+        'alternatename'
     );
 
     /**
+     * Moodle custom fields to sync with.
+     * @var array()
+     */
+    var $customfields = null;
 
+    /**
      * This is the primary method that is used by the authenticate_user_login()
      * function in moodlelib.php.
      *
@@ -138,6 +165,8 @@ class auth_plugin_base {
      *
      * This method is used if can_change_password() returns true.
      * This method is called only when user is logged in, it may use global $USER.
+     * If you are using a plugin config variable in this method, please make sure it is set before using it,
+     * as this method can be called even if the plugin is disabled, in which case the config values won't be set.
      *
      * @return moodle_url url of the profile page or null if standard used
      */
@@ -181,6 +210,15 @@ class auth_plugin_base {
     function is_internal() {
         //override if needed
         return true;
+    }
+
+    /**
+     * Returns false if this plugin is enabled but not configured.
+     *
+     * @return bool
+     */
+    public function is_configured() {
+        return false;
     }
 
     /**
@@ -407,6 +445,38 @@ class auth_plugin_base {
     }
 
     /**
+     * Hook for overriding behaviour before going to the login page.
+     *
+     * This method is called from require_login from potentially any page for
+     * all enabled auth plugins and gives each plugin a chance to redirect
+     * directly to an external login page, or to instantly login a user where
+     * possible.
+     *
+     * If an auth plugin implements this hook, it must not rely on ONLY this
+     * hook in order to work, as there are many ways a user can browse directly
+     * to the standard login page. As a general rule in this case you should
+     * also implement the loginpage_hook as well.
+     *
+     */
+    function pre_loginpage_hook() {
+        // override if needed, eg by redirecting to an external login page
+        // or logging in a user:
+        // complete_user_login($user);
+    }
+
+    /**
+     * Pre user_login hook.
+     * This method is called from authenticate_user_login() right after the user
+     * object is generated. This gives the auth plugins an option to make adjustments
+     * before the verification process starts.
+     *
+     * @param object $user user object, later used for $USER
+     */
+    public function pre_user_login_hook(&$user) {
+        // Override if needed.
+    }
+
+    /**
      * Post authentication hook.
      * This method is called from authenticate_user_login() for all enabled auth plugins.
      *
@@ -478,12 +548,27 @@ class auth_plugin_base {
     }
 
     /**
-     * Returns whether or not the captcha element is enabled, and the admin settings fulfil its requirements.
+     * Returns whether or not the captcha element is enabled.
      *
      * @abstract Implement in child classes
      * @return bool
      */
     function is_captcha_enabled() {
+        return false;
+    }
+
+    /**
+     * Returns whether or not this authentication plugin can be manually set
+     * for users, for example, when bulk uploading users.
+     *
+     * This should be overriden by authentication plugins where setting the
+     * authentication method manually is allowed.
+     *
+     * @return bool
+     * @since Moodle 2.6
+     */
+    function can_be_manually_set() {
+        // Override if needed.
         return false;
     }
 
@@ -506,4 +591,328 @@ class auth_plugin_base {
         return array();
     }
 
+    /**
+     * Return custom user profile fields.
+     *
+     * @return array list of custom fields.
+     */
+    public function get_custom_user_profile_fields() {
+        global $DB;
+        // If already retrieved then return.
+        if (!is_null($this->customfields)) {
+            return $this->customfields;
+        }
+
+        $this->customfields = array();
+        if ($proffields = $DB->get_records('user_info_field')) {
+            foreach ($proffields as $proffield) {
+                $this->customfields[] = 'profile_field_'.$proffield->shortname;
+            }
+        }
+        unset($proffields);
+
+        return $this->customfields;
+    }
+
+    /**
+     * Post logout hook.
+     *
+     * This method is used after moodle logout by auth classes to execute server logout.
+     *
+     * @param stdClass $user clone of USER object before the user session was terminated
+     */
+    public function postlogout_hook($user) {
+    }
+}
+
+/**
+ * Verify if user is locked out.
+ *
+ * @param stdClass $user
+ * @return bool true if user locked out
+ */
+function login_is_lockedout($user) {
+    global $CFG;
+
+    if ($user->mnethostid != $CFG->mnet_localhost_id) {
+        return false;
+    }
+    if (isguestuser($user)) {
+        return false;
+    }
+
+    if (empty($CFG->lockoutthreshold)) {
+        // Lockout not enabled.
+        return false;
+    }
+
+    if (get_user_preferences('login_lockout_ignored', 0, $user)) {
+        // This preference may be used for accounts that must not be locked out.
+        return false;
+    }
+
+    $locked = get_user_preferences('login_lockout', 0, $user);
+    if (!$locked) {
+        return false;
+    }
+
+    if (empty($CFG->lockoutduration)) {
+        // Locked out forever.
+        return true;
+    }
+
+    if (time() - $locked < $CFG->lockoutduration) {
+        return true;
+    }
+
+    login_unlock_account($user);
+
+    return false;
+}
+
+/**
+ * To be called after valid user login.
+ * @param stdClass $user
+ */
+function login_attempt_valid($user) {
+    global $CFG;
+
+    // Note: user_loggedin event is triggered in complete_user_login().
+
+    if ($user->mnethostid != $CFG->mnet_localhost_id) {
+        return;
+    }
+    if (isguestuser($user)) {
+        return;
+    }
+
+    // Always unlock here, there might be some race conditions or leftovers when switching threshold.
+    login_unlock_account($user);
+}
+
+/**
+ * To be called after failed user login.
+ * @param stdClass $user
+ */
+function login_attempt_failed($user) {
+    global $CFG;
+
+    if ($user->mnethostid != $CFG->mnet_localhost_id) {
+        return;
+    }
+    if (isguestuser($user)) {
+        return;
+    }
+
+    $count = get_user_preferences('login_failed_count', 0, $user);
+    $last = get_user_preferences('login_failed_last', 0, $user);
+    $sincescuccess = get_user_preferences('login_failed_count_since_success', $count, $user);
+    $sincescuccess = $sincescuccess + 1;
+    set_user_preference('login_failed_count_since_success', $sincescuccess, $user);
+
+    if (empty($CFG->lockoutthreshold)) {
+        // No threshold means no lockout.
+        // Always unlock here, there might be some race conditions or leftovers when switching threshold.
+        login_unlock_account($user);
+        return;
+    }
+
+    if (!empty($CFG->lockoutwindow) and time() - $last > $CFG->lockoutwindow) {
+        $count = 0;
+    }
+
+    $count = $count+1;
+
+    set_user_preference('login_failed_count', $count, $user);
+    set_user_preference('login_failed_last', time(), $user);
+
+    if ($count >= $CFG->lockoutthreshold) {
+        login_lock_account($user);
+    }
+}
+
+/**
+ * Lockout user and send notification email.
+ *
+ * @param stdClass $user
+ */
+function login_lock_account($user) {
+    global $CFG;
+
+    if ($user->mnethostid != $CFG->mnet_localhost_id) {
+        return;
+    }
+    if (isguestuser($user)) {
+        return;
+    }
+
+    if (get_user_preferences('login_lockout_ignored', 0, $user)) {
+        // This user can not be locked out.
+        return;
+    }
+
+    $alreadylockedout = get_user_preferences('login_lockout', 0, $user);
+
+    set_user_preference('login_lockout', time(), $user);
+
+    if ($alreadylockedout == 0) {
+        $secret = random_string(15);
+        set_user_preference('login_lockout_secret', $secret, $user);
+
+        $oldforcelang = force_current_language($user->lang);
+
+        $site = get_site();
+        $supportuser = core_user::get_support_user();
+
+        $data = new stdClass();
+        $data->firstname = $user->firstname;
+        $data->lastname  = $user->lastname;
+        $data->username  = $user->username;
+        $data->sitename  = format_string($site->fullname);
+        $data->link      = $CFG->wwwroot.'/login/unlock_account.php?u='.$user->id.'&s='.$secret;
+        $data->admin     = generate_email_signoff();
+
+        $message = get_string('lockoutemailbody', 'admin', $data);
+        $subject = get_string('lockoutemailsubject', 'admin', format_string($site->fullname));
+
+        if ($message) {
+            // Directly email rather than using the messaging system to ensure its not routed to a popup or jabber.
+            email_to_user($user, $supportuser, $subject, $message);
+        }
+
+        force_current_language($oldforcelang);
+    }
+}
+
+/**
+ * Unlock user account and reset timers.
+ *
+ * @param stdClass $user
+ */
+function login_unlock_account($user) {
+    unset_user_preference('login_lockout', $user);
+    unset_user_preference('login_failed_count', $user);
+    unset_user_preference('login_failed_last', $user);
+
+    // Note: do not clear the lockout secret because user might click on the link repeatedly.
+}
+
+/**
+ * Returns whether or not the captcha element is enabled, and the admin settings fulfil its requirements.
+ * @return bool
+ */
+function signup_captcha_enabled() {
+    global $CFG;
+    $authplugin = get_auth_plugin($CFG->registerauth);
+    return !empty($CFG->recaptchapublickey) && !empty($CFG->recaptchaprivatekey) && $authplugin->is_captcha_enabled();
+}
+
+/**
+ * Validates the standard sign-up data (except recaptcha that is validated by the form element).
+ *
+ * @param  array $data  the sign-up data
+ * @param  array $files files among the data
+ * @return array list of errors, being the key the data element name and the value the error itself
+ * @since Moodle 3.2
+ */
+function signup_validate_data($data, $files) {
+    global $CFG, $DB;
+
+    $errors = array();
+    $authplugin = get_auth_plugin($CFG->registerauth);
+
+    if ($DB->record_exists('user', array('username' => $data['username'], 'mnethostid' => $CFG->mnet_localhost_id))) {
+        $errors['username'] = get_string('usernameexists');
+    } else {
+        // Check allowed characters.
+        if ($data['username'] !== core_text::strtolower($data['username'])) {
+            $errors['username'] = get_string('usernamelowercase');
+        } else {
+            if ($data['username'] !== core_user::clean_field($data['username'], 'username')) {
+                $errors['username'] = get_string('invalidusername');
+            }
+
+        }
+    }
+
+    // Check if user exists in external db.
+    // TODO: maybe we should check all enabled plugins instead.
+    if ($authplugin->user_exists($data['username'])) {
+        $errors['username'] = get_string('usernameexists');
+    }
+
+    if (! validate_email($data['email'])) {
+        $errors['email'] = get_string('invalidemail');
+
+    } else if ($DB->record_exists('user', array('email' => $data['email']))) {
+        $errors['email'] = get_string('emailexists').' <a href="forgot_password.php">'.get_string('newpassword').'?</a>';
+    }
+    if (empty($data['email2'])) {
+        $errors['email2'] = get_string('missingemail');
+
+    } else if ($data['email2'] != $data['email']) {
+        $errors['email2'] = get_string('invalidemail');
+    }
+    if (!isset($errors['email'])) {
+        if ($err = email_is_not_allowed($data['email'])) {
+            $errors['email'] = $err;
+        }
+    }
+
+    $errmsg = '';
+    if (!check_password_policy($data['password'], $errmsg)) {
+        $errors['password'] = $errmsg;
+    }
+
+    // Validate customisable profile fields. (profile_validation expects an object as the parameter with userid set).
+    $dataobject = (object)$data;
+    $dataobject->id = 0;
+    $errors += profile_validation($dataobject, $files);
+
+    return $errors;
+}
+
+/**
+ * Add the missing fields to a user that is going to be created
+ *
+ * @param  stdClass $user the new user object
+ * @return stdClass the user filled
+ * @since Moodle 3.2
+ */
+function signup_setup_new_user($user) {
+    global $CFG;
+
+    $user->confirmed   = 0;
+    $user->lang        = current_language();
+    $user->firstaccess = 0;
+    $user->timecreated = time();
+    $user->mnethostid  = $CFG->mnet_localhost_id;
+    $user->secret      = random_string(15);
+    $user->auth        = $CFG->registerauth;
+    // Initialize alternate name fields to empty strings.
+    $namefields = array_diff(get_all_user_name_fields(), useredit_get_required_name_fields());
+    foreach ($namefields as $namefield) {
+        $user->$namefield = '';
+    }
+    return $user;
+}
+
+/**
+ * Check if user confirmation is enabled on this site and return the auth plugin handling registration if enabled.
+ *
+ * @return stdClass the current auth plugin handling user registration or false if registration not enabled
+ * @since Moodle 3.2
+ */
+function signup_get_user_confirmation_authplugin() {
+    global $CFG;
+
+    if (empty($CFG->registerauth)) {
+        return false;
+    }
+    $authplugin = get_auth_plugin($CFG->registerauth);
+
+    if (!$authplugin->can_confirm()) {
+        return false;
+    }
+    return $authplugin;
 }

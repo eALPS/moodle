@@ -18,17 +18,17 @@
  * This page is the entry page into the quiz UI. Displays information about the
  * quiz to students and teachers, and lets students see their previous attempts.
  *
- * @package    mod
- * @subpackage quiz
- * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package   mod_quiz
+ * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 
-require_once(dirname(__FILE__) . '/../../config.php');
+require_once(__DIR__ . '/../../config.php');
 require_once($CFG->libdir.'/gradelib.php');
 require_once($CFG->dirroot.'/mod/quiz/locallib.php');
 require_once($CFG->libdir . '/completionlib.php');
+require_once($CFG->dirroot . '/course/format/lib.php');
 
 $id = optional_param('id', 0, PARAM_INT); // Course Module ID, or ...
 $q = optional_param('q',  0, PARAM_INT);  // Quiz ID.
@@ -69,11 +69,8 @@ $accessmanager = new quiz_access_manager($quizobj, $timenow,
         has_capability('mod/quiz:ignoretimelimits', $context, null, false));
 $quiz = $quizobj->get_quiz();
 
-// Log this request.
-add_to_log($course->id, 'quiz', 'view', 'view.php?id=' . $cm->id, $quiz->id, $cm->id);
-
-$completion = new completion_info($course);
-$completion->set_module_viewed($cm);
+// Trigger course_module_viewed event and completion.
+quiz_view($quiz, $course, $cm, $context);
 
 // Initialize $PAGE, compute blocks.
 $PAGE->set_url('/mod/quiz/view.php', array('id' => $cm->id));
@@ -87,6 +84,7 @@ $viewobj->canreviewmine = $canreviewmine;
 $attempts = quiz_get_user_attempts($quiz->id, $USER->id, 'finished', true);
 $lastfinishedattempt = end($attempts);
 $unfinished = false;
+$unfinishedattemptid = null;
 if ($unfinishedattempt = quiz_get_user_attempt_unfinished($quiz->id, $USER->id)) {
     $attempts[] = $unfinishedattempt;
 
@@ -99,6 +97,7 @@ if ($unfinishedattempt = quiz_get_user_attempt_unfinished($quiz->id, $USER->id))
     if (!$unfinished) {
         $lastfinishedattempt = $unfinishedattempt;
     }
+    $unfinishedattemptid = $unfinishedattempt->id;
     $unfinishedattempt = null; // To make it clear we do not use this again.
 }
 $numattempts = count($attempts);
@@ -147,7 +146,7 @@ $output = $PAGE->get_renderer('mod_quiz');
 // Print table with existing attempts.
 if ($attempts) {
     // Work out which columns we need, taking account what data is available in each attempt.
-    list($someoptions, $alloptions) = quiz_get_combined_reviewoptions($quiz, $attempts, $context);
+    list($someoptions, $alloptions) = quiz_get_combined_reviewoptions($quiz, $attempts);
 
     $viewobj->attemptcolumn  = $quiz->attempts != 1;
 
@@ -171,7 +170,11 @@ $viewobj->canedit = has_capability('mod/quiz:manage', $context);
 $viewobj->editurl = new moodle_url('/mod/quiz/edit.php', array('cmid' => $cm->id));
 $viewobj->backtocourseurl = new moodle_url('/course/view.php', array('id' => $course->id));
 $viewobj->startattempturl = $quizobj->start_attempt_url();
-$viewobj->startattemptwarning = $quizobj->confirm_start_attempt_message($unfinished);
+
+if ($accessmanager->is_preflight_check_required($unfinishedattemptid)) {
+    $viewobj->preflightcheckform = $accessmanager->get_preflight_check_form(
+            $viewobj->startattempturl, $unfinishedattemptid);
+}
 $viewobj->popuprequired = $accessmanager->attempt_must_be_in_popup();
 $viewobj->popupoptions = $accessmanager->get_popup_options();
 
@@ -183,7 +186,7 @@ if ($quiz->attempts != 1) {
 }
 
 // Determine wheter a start attempt button should be displayed.
-$viewobj->quizhasquestions = (bool) quiz_clean_layout($quiz->questions, true);
+$viewobj->quizhasquestions = $quizobj->has_questions();
 $viewobj->preventmessages = array();
 if (!$viewobj->quizhasquestions) {
     $viewobj->buttontext = '';
@@ -224,6 +227,9 @@ if (!$viewobj->quizhasquestions) {
         }
     }
 }
+
+$viewobj->showbacktocourse = ($viewobj->buttontext === '' &&
+        course_get_format($course)->has_view_page());
 
 echo $OUTPUT->header();
 

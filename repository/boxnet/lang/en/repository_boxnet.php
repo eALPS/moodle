@@ -24,23 +24,20 @@
  */
 
 $string['apikey'] = 'API key';
-$string['boxnet:view'] = 'View box.net repository';
-$string['configplugin'] = 'Box.net configuration';
-$string['callbackurl'] = 'Callback URL';
-$string['callbackurltext'] = '<ol>
-<li>Visit <a href="http://www.box.net/developers/services">box.net developers site</a> again.</li>
-<li>Make sure you set the callback URL of this box.net service to <strong>{$a}</strong></li></ol>';
-$string['callbackwarning'] = '<ol>
-<li>Get a <a href="http://www.box.net/developers/services">box.net API</a> from box.net for this Moodle site.</li>
-<li>Enter box.net api key here, then click Save and then come back to this page.  You will see that Moodle has generated a callback URL for you.</li>
-<li>Edit your box.net details on box.net website again and set the callback URL.</li></ol>';
-
-$string['information'] = 'Get an API key from the <a href="http://www.box.net/developers/services">Box.net developer page</a> for your Moodle site.';
+$string['boxnet:view'] = 'View Box repository';
+$string['cannotcreatereference'] = 'Cannot create a reference, not enough permissions to share the file on Box.';
+$string['clientid'] = 'Client ID';
+$string['clientsecret'] = 'Client secret';
+$string['configplugin'] = 'Box configuration';
+$string['filesourceinfo'] = 'Box ({$a->fullname}): {$a->filename}';
+$string['information'] = 'Get a client ID and secret from the <a href="https://app.box.com/developers/services">Box developer page</a> for your Moodle site.';
 $string['invalidpassword'] = 'Invalid password';
 $string['nullfilelist'] = 'There are no files in this repository';
 $string['password'] = 'Password';
-$string['pluginname_help'] = 'Repository on Box.net';
-$string['pluginname'] = 'Box.net';
-$string['saved'] = 'Box.net data saved';
+$string['pluginname_help'] = 'Repository on Box';
+$string['pluginname'] = 'Box';
+$string['saved'] = 'Box data saved';
 $string['shareurl'] = 'Share URL';
-$string['username'] = 'Username for Box.net';
+$string['username'] = 'Username for Box';
+$string['warninghttps'] = 'Box requires your website to be using HTTPS in order for the repository to work.';
+

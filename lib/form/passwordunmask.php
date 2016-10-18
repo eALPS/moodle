@@ -51,7 +51,7 @@ class MoodleQuickForm_passwordunmask extends MoodleQuickForm_password {
      * @param mixed $attributes (optional) Either a typical HTML attribute string
      *              or an associative array
      */
-    function MoodleQuickForm_passwordunmask($elementName=null, $elementLabel=null, $attributes=null) {
+    public function __construct($elementName=null, $elementLabel=null, $attributes=null) {
         global $CFG;
         // no standard mform in moodle should allow autocomplete of passwords
         if (empty($attributes)) {
@@ -64,7 +64,18 @@ class MoodleQuickForm_passwordunmask extends MoodleQuickForm_password {
             }
         }
 
-        parent::MoodleQuickForm_password($elementName, $elementLabel, $attributes);
+        parent::__construct($elementName, $elementLabel, $attributes);
+        $this->setType('passwordunmask');
+    }
+
+    /**
+     * Old syntax of class constructor. Deprecated in PHP7.
+     *
+     * @deprecated since Moodle 3.1
+     */
+    public function MoodleQuickForm_passwordunmask($elementName=null, $elementLabel=null, $attributes=null) {
+        debugging('Use of class name as constructor is deprecated', DEBUG_DEVELOPER);
+        self::__construct($elementName, $elementLabel, $attributes);
     }
 
     /**
@@ -80,8 +91,11 @@ class MoodleQuickForm_passwordunmask extends MoodleQuickForm_password {
         } else {
             $unmask = get_string('unmaskpassword', 'form');
             //Pass id of the element, so that unmask checkbox can be attached.
+            $attributes = array('formid' => $this->getAttribute('id'),
+                'checkboxlabel' => $unmask,
+                'checkboxname' => $this->getAttribute('name'));
             $PAGE->requires->yui_module('moodle-form-passwordunmask', 'M.form.passwordunmask',
-                    array(array('formid' => $this->getAttribute('id'), 'checkboxname' => $unmask)));
+                    array($attributes));
             return $this->_getTabs() . '<input' . $this->_getAttrString($this->_attributes) . ' />';
         }
     }

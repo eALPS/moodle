@@ -81,14 +81,17 @@ switch ($action) {
                 // Warn if the grade is out of bounds.
                 if (is_null($finalgrade)) {
                     // ok
-                } else if ($finalgrade < $grade_item->grademin) {
-                    $errorstr = 'lessthanmin';
-                } else if ($finalgrade > $grade_item->grademax) {
-                    $errorstr = 'morethanmax';
+                } else {
+                    $bounded = $grade_item->bounded_grade($finalgrade);
+                    if ($bounded > $finalgrade) {
+                        $errorstr = 'lessthanmin';
+                    } else if ($bounded < $finalgrade) {
+                        $errorstr = 'morethanmax';
+                    }
                 }
 
                 if ($errorstr) {
-                    $user = $DB->get_record('user', array('id' => $userid), 'id, firstname, lastname');
+                    $user = $DB->get_record('user', array('id' => $userid), 'id, ' . get_all_user_name_fields(true));
                     $gradestr = new stdClass();
                     $gradestr->username = fullname($user);
                     $gradestr->itemname = $grade_item->get_name();

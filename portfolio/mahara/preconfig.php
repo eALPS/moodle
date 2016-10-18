@@ -18,13 +18,13 @@
 /**
  * This file is the landing point for returning to moodle after authenticating at mahara
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package moodlecore
  * @subpackage portfolio
  * @copyright 2009 Penny Leach
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-require_once(dirname(dirname(dirname(__FILE__))). '/config.php');
+require_once(__DIR__ . '/../../config.php');
 
 if (empty($CFG->enableportfolios)) {
     print_error('disabled', 'portfolio');

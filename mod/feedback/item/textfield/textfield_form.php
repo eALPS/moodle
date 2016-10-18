@@ -28,7 +28,7 @@ class feedback_textfield_form extends feedback_item_form {
         $mform =& $this->_form;
 
         $mform->addElement('header', 'general', get_string($this->type, 'feedback'));
-        $mform->addElement('checkbox', 'required', get_string('required', 'feedback'));
+        $mform->addElement('advcheckbox', 'required', get_string('required', 'feedback'), '' , null , array(0, 1));
 
         $mform->addElement('text',
                             'name',
@@ -44,10 +44,11 @@ class feedback_textfield_form extends feedback_item_form {
                             get_string('textfield_size', 'feedback').'&nbsp;',
                             array_slice(range(0, 255), 5, 255, true));
 
-        $mform->addElement('select',
+        $mform->addElement('text',
                             'itemmaxlength',
-                            get_string('textfield_maxlength', 'feedback').'&nbsp;',
-                            array_slice(range(0, 255), 5, 255, true));
+                            get_string('textfield_maxlength', 'feedback'));
+        $mform->setType('itemmaxlength', PARAM_INT);
+        $mform->addRule('itemmaxlength', null, 'numeric', null, 'client');
 
         parent::definition();
         $this->set_data($item);

@@ -42,6 +42,22 @@ class HTMLPurifier_URIScheme_rtsp extends HTMLPurifier_URIScheme {
 
 
 /**
+ * Validates RTMP defined by Adobe
+ */
+class HTMLPurifier_URIScheme_rtmp extends HTMLPurifier_URIScheme {
+
+    public $browsable = false;
+    public $hierarchical = true;
+
+    public function doValidate(&$uri, $config, $context) {
+        $uri->userinfo = null;
+        return true;
+    }
+
+}
+
+
+/**
  * Validates IRC defined by IETF Draft
  */
 class HTMLPurifier_URIScheme_irc extends HTMLPurifier_URIScheme {
@@ -102,4 +118,70 @@ class HTMLPurifier_URIScheme_teamspeak extends HTMLPurifier_URIScheme {
         return true;
     }
 
+}
+
+/**
+ * A custom HTMLPurifier transformation. Adds rel="noreferrer" to all links with target="_blank".
+ *
+ * @package core
+ * @copyright Cameron Ball
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class HTMLPurifier_AttrTransform_Noreferrer extends HTMLPurifier_AttrTransform {
+    /** @var HTMLPurifier_URIParser $parser */
+    private $parser;
+
+    /**
+     * Constructor.
+     */
+    public function __construct() {
+        $this->parser = new HTMLPurifier_URIParser();
+    }
+
+    /**
+     * Transforms a tags such that when a target attribute is present, rel="noreferrer" is added.
+     *
+     * Note that this will not respect Attr.AllowedRel
+     *
+     * @param array $attr Assoc array of attributes, usually from
+     *              HTMLPurifier_Token_Tag::$attr
+     * @param HTMLPurifier_Config $config Mandatory HTMLPurifier_Config object.
+     * @param HTMLPurifier_Context $context Mandatory HTMLPurifier_Context object
+     * @return array Processed attribute array.
+     */
+    public function transform($attr, $config, $context) {
+        // Nothing to do If we already have noreferrer in the rel attribute
+        if (!empty($attr['rel']) && substr($attr['rel'], 'noreferrer') !== false) {
+            return $attr;
+        }
+
+        // If _blank target attribute exists, add rel=noreferrer
+        if (!empty($attr['target']) && $attr['target'] == '_blank') {
+            $attr['rel'] = !empty($attr['rel']) ? $attr['rel'] . ' noreferrer' : 'noreferrer';
+        }
+
+        return $attr;
+    }
+}
+
+/**
+ * A custom HTMLPurifier module to add rel="noreferrer" attributes a tags.
+ *
+ * @package    core
+ * @copyright  Cameron Ball
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class HTMLPurifier_HTMLModule_Noreferrer extends HTMLPurifier_HTMLModule {
+    /** @var string $name */
+    public $name = 'Noreferrer';
+
+    /**
+     * Module setup
+     *
+     * @param HTMLPurifier_Config $config
+     */
+    public function setup($config) {
+        $a = $this->addBlankElement('a');
+        $a->attr_transform_post[] = new HTMLPurifier_AttrTransform_Noreferrer();
+    }
 }

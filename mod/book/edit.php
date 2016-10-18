@@ -22,9 +22,9 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require(dirname(__FILE__).'/../../config.php');
-require_once(dirname(__FILE__).'/locallib.php');
-require_once(dirname(__FILE__).'/edit_form.php');
+require(__DIR__.'/../../config.php');
+require_once(__DIR__.'/locallib.php');
+require_once(__DIR__.'/edit_form.php');
 
 $cmid       = required_param('cmid', PARAM_INT);  // Book Course Module ID
 $chapterid  = optional_param('id', 0, PARAM_INT); // Chapter ID
@@ -70,11 +70,13 @@ if ($mform->is_cancelled()) {
 
     if ($data->id) {
         // store the files
+        $data->timemodified = time();
         $data = file_postupdate_standard_editor($data, 'content', $options, $context, 'mod_book', 'chapter', $data->id);
         $DB->update_record('book_chapters', $data);
+        $DB->set_field('book', 'revision', $book->revision+1, array('id'=>$book->id));
+        $chapter = $DB->get_record('book_chapters', array('id' => $data->id));
 
-        add_to_log($course->id, 'course', 'update mod', '../mod/book/view.php?id='.$cm->id, 'book '.$book->id);
-        add_to_log($course->id, 'book', 'update chapter', 'view.php?id='.$cm->id.'&chapterid='.$data->id, $data->id, $cm->id);
+        \mod_book\event\chapter_updated::create_from_chapter($book, $context, $chapter)->trigger();
 
     } else {
         // adding new chapter
@@ -98,9 +100,9 @@ if ($mform->is_cancelled()) {
         $data = file_postupdate_standard_editor($data, 'content', $options, $context, 'mod_book', 'chapter', $data->id);
         $DB->update_record('book_chapters', $data);
         $DB->set_field('book', 'revision', $book->revision+1, array('id'=>$book->id));
+        $chapter = $DB->get_record('book_chapters', array('id' => $data->id));
 
-        add_to_log($course->id, 'course', 'update mod', '../mod/book/view.php?id='.$cm->id, 'book '.$book->id);
-        add_to_log($course->id, 'book', 'add chapter', 'view.php?id='.$cm->id.'&chapterid='.$data->id, $data->id, $cm->id);
+        \mod_book\event\chapter_created::create_from_chapter($book, $context, $chapter)->trigger();
     }
 
     book_preload_chapters($book); // fix structure
@@ -112,7 +114,7 @@ $PAGE->set_title($book->name);
 $PAGE->set_heading($course->fullname);
 
 echo $OUTPUT->header();
-echo $OUTPUT->heading(get_string('editingchapter', 'mod_book'));
+echo $OUTPUT->heading($book->name);
 
 $mform->display();
 

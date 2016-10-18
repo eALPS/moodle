@@ -19,16 +19,16 @@
 /**
  * Repository instance callback script
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    core
  * @subpackage repository
  * @copyright  2009 Dongsheng Cai <dongsheng@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once(dirname(dirname(__FILE__)).'/config.php');
-require_once(dirname(dirname(__FILE__)).'/lib/filelib.php');
-require_once(dirname(__FILE__).'/lib.php');
+require_once(__DIR__ . '/../config.php');
+require_once(__DIR__ . '/../lib/filelib.php');
+require_once(__DIR__.'/lib.php');
 
 require_login();
 
@@ -40,7 +40,7 @@ header('Cache-Control: no-cache, must-revalidate');
 header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
 
 /// Wait as long as it takes for this script to finish
-set_time_limit(0);
+core_php_time_limit::raise();
 
 /// Get repository instance information
 $sql = 'SELECT i.name, i.typeid, r.type, i.contextid FROM {repository} r, {repository_instances} i '.
@@ -67,17 +67,21 @@ $repo->callback();
 // If Moodle is working on HTTPS mode, then we are not allowed to access
 // parent window, in this case, we need to alert user to refresh the repository
 // manually.
-$strhttpsbug = get_string('cannotaccessparentwin', 'repository');
+$strhttpsbug = json_encode(get_string('cannotaccessparentwin', 'repository'));
 $strrefreshnonjs = get_string('refreshnonjsfilepicker', 'repository');
 $js =<<<EOD
 <html>
 <head>
     <script type="text/javascript">
-    if(window.opener){
-        window.opener.M.core_filepicker.active_filepicker.list();
-        window.close();
-    } else {
-        alert("{$strhttpsbug }");
+    try {
+        if (window.opener) {
+            window.opener.M.core_filepicker.active_filepicker.list();
+            window.close();
+        } else {
+            throw new Error('Whoops!');
+        }
+    } catch (e) {
+        alert({$strhttpsbug});
     }
     </script>
 </head>

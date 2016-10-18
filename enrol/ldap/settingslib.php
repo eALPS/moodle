@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,8 +17,7 @@
 /**
  * LDAP enrolment plugin admin setting classes
  *
- * @package    enrol
- * @subpackage ldap
+ * @package    enrol_ldap
  * @author     Iñaki Arenaza
  * @copyright  2010 Iñaki Arenaza <iarenaza@eps.mondragon.edu>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -65,24 +63,12 @@ class admin_setting_configtext_trim_lower extends admin_setting_configtext {
             return $validated;
         }
         if ($this->lowercase) {
-            $data = textlib::strtolower($data);
+            $data = core_text::strtolower($data);
         }
         if (!$this->enabled) {
             return '';
         }
         return ($this->config_write($this->name, trim($data)) ? '' : get_string('errorsetting', 'admin'));
-    }
-
-    /**
-     * Return an XHTML string for the setting
-     * @return string Returns an XHTML string
-     */
-    public function output_html($data, $query='') {
-        $default = $this->get_defaultsetting();
-        $disabled = $this->enabled ? '': ' disabled="disabled"';
-        return format_admin_setting($this, $this->visiblename,
-        '<div class="form-text defaultsnext"><input type="text" size="'.$this->size.'" id="'.$this->get_id().'" name="'.$this->get_full_name().'" value="'.s($data).'" '.$disabled.' /></div>',
-        $this->description, true, '', $default, $query);
     }
 
 }
@@ -136,7 +122,7 @@ class admin_setting_ldap_rolemapping extends admin_setting {
             if (!$this->config_write('contexts_role'.$roleid, trim($data['contexts']))) {
                 $return = get_string('errorsetting', 'admin');
             }
-            if (!$this->config_write('memberattribute_role'.$roleid, textlib::strtolower(trim($data['memberattribute'])))) {
+            if (!$this->config_write('memberattribute_role'.$roleid, core_text::strtolower(trim($data['memberattribute'])))) {
                 $return = get_string('errorsetting', 'admin');
             }
         }
@@ -171,7 +157,8 @@ class admin_setting_ldap_rolemapping extends admin_setting {
             $contextname = $this->get_full_name().'['.$role['id'].'][contexts]';
             $return .= html_writer::start_tag('div', array('style' => 'height: 2em;'));
             $return .= html_writer::label(get_string('role_mapping_context', 'enrol_ldap', $role['name']), $contextid, false, array('class' => 'accesshide'));
-            $attrs = array('type' => 'text', 'size' => '40', 'id' => $contextid, 'name' => $contextname, 'value' => s($role['contexts']));
+            $attrs = array('type' => 'text', 'size' => '40', 'id' => $contextid, 'name' => $contextname,
+                'value' => s($role['contexts']), 'class' => 'text-ltr');
             $return .= html_writer::empty_tag('input', $attrs);
             $return .= html_writer::end_tag('div');
         }
@@ -184,7 +171,8 @@ class admin_setting_ldap_rolemapping extends admin_setting {
             $memberattrname = $this->get_full_name().'['.$role['id'].'][memberattribute]';
             $return .= html_writer::start_tag('div', array('style' => 'height: 2em;'));
             $return .= html_writer::label(get_string('role_mapping_attribute', 'enrol_ldap', $role['name']), $memberattrid, false, array('class' => 'accesshide'));
-            $attrs = array('type' => 'text', 'size' => '15', 'id' => $memberattrid, 'name' => $memberattrname, 'value' => s($role['memberattribute']));
+            $attrs = array('type' => 'text', 'size' => '15', 'id' => $memberattrid, 'name' => $memberattrname,
+                'value' => s($role['memberattribute']), 'class' => 'text-ltr');
             $return .= html_writer::empty_tag('input', $attrs);
             $return .= html_writer::end_tag('div');
         }
@@ -193,5 +181,26 @@ class admin_setting_ldap_rolemapping extends admin_setting {
 
         return format_admin_setting($this, $this->visiblename, $return,
                                     $this->description, true, '', '', $query);
+    }
+}
+
+/**
+ * Class implements new specialized setting for course categories that are loaded
+ * only when required
+ * @author Darko Miletic
+ *
+ */
+class enrol_ldap_admin_setting_category extends admin_setting_configselect {
+    public function __construct($name, $visiblename, $description) {
+        parent::__construct($name, $visiblename, $description, 1, null);
+    }
+
+    public function load_choices() {
+        if (is_array($this->choices)) {
+            return true;
+        }
+
+        $this->choices = make_categories_options();
+        return true;
     }
 }

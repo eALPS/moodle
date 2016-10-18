@@ -19,6 +19,9 @@
  * Toggles the manual completion flag for a particular activity or course completion
  * and the current user.
  *
+ * If by student params: course=2
+ * If by manager params: course=2&user=4&rolec=3&sesskey=ghfgsdf
+ *
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @package course
  */
@@ -30,6 +33,10 @@ require_once($CFG->libdir.'/completionlib.php');
 $cmid = optional_param('id', 0, PARAM_INT);
 $courseid = optional_param('course', 0, PARAM_INT);
 $confirm = optional_param('confirm', 0, PARAM_BOOL);
+
+// Check if we are marking a user complete via the completion report.
+$user = optional_param('user', 0, PARAM_INT);
+$rolec = optional_param('rolec', 0, PARAM_INT);
 
 if (!$cmid && !$courseid) {
     print_error('invalidarguments');
@@ -45,10 +52,13 @@ if ($courseid) {
     require_login($course);
 
     $completion = new completion_info($course);
+    $trackeduser = ($user ? $user : $USER->id);
 
-    // Check if we are marking a user complete via the completion report
-    $user = optional_param('user', 0, PARAM_INT);
-    $rolec = optional_param('rolec', 0, PARAM_INT);
+    if (!$completion->is_enabled()) {
+        throw new moodle_exception('completionnotenabled', 'completion');
+    } else if (!$completion->is_tracked_user($trackeduser)) {
+        throw new moodle_exception('nottracked', 'completion');
+    }
 
     if ($user && $rolec) {
         require_sesskey();
@@ -68,8 +78,9 @@ if ($courseid) {
         }
 
         // Return to previous page
-        if (!empty($_SERVER['HTTP_REFERER'])) {
-            redirect($_SERVER['HTTP_REFERER']);
+        $referer = get_local_referer(false);
+        if (!empty($referer)) {
+            redirect($referer);
         } else {
             redirect('view.php?id='.$course->id);
         }
@@ -123,7 +134,7 @@ switch($targetstate) {
 }
 
 // Get course-modules entry
-$cm = get_coursemodule_from_id(null, $cmid, null, false, MUST_EXIST);
+$cm = get_coursemodule_from_id(null, $cmid, null, true, MUST_EXIST);
 $course = $DB->get_record('course', array('id'=>$cm->course), '*', MUST_EXIST);
 
 // Check user is logged in
@@ -133,11 +144,16 @@ if (isguestuser() or !confirm_sesskey()) {
     print_error('error');
 }
 
-// Now change state
+// Set up completion object and check it is enabled.
 $completion = new completion_info($course);
 if (!$completion->is_enabled()) {
-    die;
+    throw new moodle_exception('completionnotenabled', 'completion');
 }
+
+// NOTE: All users are allowed to toggle their completion state, including
+// users for whom completion information is not directly tracked. (I.e. even
+// if you are a teacher, or admin who is not enrolled, you can still toggle
+// your own completion state. You just don't appear on the reports.)
 
 // Check completion state is manual
 if($cm->completion != COMPLETION_TRACKING_MANUAL) {
@@ -152,8 +168,12 @@ if ($fromajax) {
 } else {
     // In case of use in other areas of code we allow a 'backto' parameter,
     // otherwise go back to course page
-    $backto = optional_param('backto', 'view.php?id='.$course->id, PARAM_URL);
-    redirect($backto);
+
+    if ($backto = optional_param('backto', null, PARAM_URL)) {
+        redirect($backto);
+    } else {
+        redirect(course_get_url($course, $cm->sectionnum));
+    }
 }
 
 // utility functions

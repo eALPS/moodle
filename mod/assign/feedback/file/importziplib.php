@@ -59,7 +59,7 @@ class assignfeedback_file_zip_importer {
             return false;
         }
 
-        $info = explode('_', $fileinfo->get_filename(), 5);
+        $info = explode('_', $fileinfo->get_filepath() . $fileinfo->get_filename(), 5);
 
         if (count($info) < 5) {
             return false;
@@ -112,7 +112,7 @@ class assignfeedback_file_zip_importer {
         if (!$sg) {
             return true;
         }
-        foreach ($plugin->get_files($sg) as $pluginfilename => $file) {
+        foreach ($plugin->get_files($sg, $user) as $pluginfilename => $file) {
             if ($pluginfilename == $filename) {
                 // Extract the file and compare hashes.
                 $contenthash = '';
@@ -144,7 +144,7 @@ class assignfeedback_file_zip_importer {
         $fs = get_file_storage();
 
         return $fs->delete_area_files($contextid,
-                                      'assignfeedback_files',
+                                      'assignfeedback_file',
                                       ASSIGNFEEDBACK_FILE_IMPORT_FILEAREA,
                                       $USER->id);
     }
@@ -167,7 +167,7 @@ class assignfeedback_file_zip_importer {
         raise_memory_limit(MEMORY_EXTRA);
 
         $packer = get_file_packer('application/zip');
-        @set_time_limit(ASSIGNFEEDBACK_FILE_MAXFILEUNZIPTIME);
+        core_php_time_limit::raise(ASSIGNFEEDBACK_FILE_MAXFILEUNZIPTIME);
 
         return $packer->extract_to_storage($zipfile,
                                     $contextid,
@@ -192,7 +192,9 @@ class assignfeedback_file_zip_importer {
                                           'assignfeedback_file',
                                           ASSIGNFEEDBACK_FILE_IMPORT_FILEAREA,
                                           $USER->id,
-                                          '/import/');
+                                          '/import/', true); // Get files recursive (all levels).
+
+        $keys = array_keys($files);
 
         return $files;
     }
@@ -205,9 +207,9 @@ class assignfeedback_file_zip_importer {
      * @return string - The html response
      */
     public function import_zip_files($assignment, $fileplugin) {
-        global $USER, $CFG, $PAGE, $DB;
+        global $CFG, $PAGE, $DB;
 
-        @set_time_limit(ASSIGNFEEDBACK_FILE_MAXFILEUNZIPTIME);
+        core_php_time_limit::raise(ASSIGNFEEDBACK_FILE_MAXFILEUNZIPTIME);
         $packer = get_file_packer('application/zip');
 
         $feedbackfilesupdated = 0;
@@ -216,11 +218,7 @@ class assignfeedback_file_zip_importer {
         $contextid = $assignment->get_context()->id;
 
         $fs = get_file_storage();
-        $files = $fs->get_directory_files($contextid,
-                                          'assignfeedback_file',
-                                          ASSIGNFEEDBACK_FILE_IMPORT_FILEAREA,
-                                          $USER->id,
-                                          '/import/');
+        $files = $this->get_import_files($contextid);
 
         $currentgroup = groups_get_activity_group($assignment->get_course_module(), true);
         $allusers = $assignment->list_participants($currentgroup, false);
@@ -239,14 +237,30 @@ class assignfeedback_file_zip_importer {
                 if ($this->is_file_modified($assignment, $user, $plugin, $filename, $unzippedfile)) {
                     $grade = $assignment->get_user_grade($user->id, true);
 
+                    // In 3.1 the download structure of the submission files changed so that each student had their own
+                    // separate folder, the files were not renamed and the folder structure was kept. It is possible that
+                    // a user downloaded the submission files in 3.0 (or earlier) and edited the zip to add feedback and
+                    // in that time the site was updated to 3.1, the following code means that we will still support the
+                    // old file structure. For more information please see - MDL-52489.
+                    $path = pathinfo($filename);
+                    if ($path['dirname'] == '.') { // Old structure as students are not in separate folders.
+                        $basename = $filename;
+                        $dirname = "/";
+                        $dirnamewslash = "/";
+                    } else {
+                        $basename = $path['basename'];
+                        $dirname = $path['dirname'];
+                        $dirnamewslash = $dirname . "/";
+                    }
+
                     if ($oldfile = $fs->get_file($contextid,
                                                  'assignfeedback_file',
                                                  ASSIGNFEEDBACK_FILE_FILEAREA,
                                                  $grade->id,
-                                                 '/',
-                                                 $filename)) {
+                                                 $dirname,
+                                                 $basename)) {
                         // Update existing feedback file.
-                        $oldfile->replace_content_with($unzippedfile);
+                        $oldfile->replace_file_with($unzippedfile);
                         $feedbackfilesupdated++;
                     } else {
                         // Create a new feedback file.
@@ -254,8 +268,8 @@ class assignfeedback_file_zip_importer {
                         $newfilerecord->contextid = $contextid;
                         $newfilerecord->component = 'assignfeedback_file';
                         $newfilerecord->filearea = ASSIGNFEEDBACK_FILE_FILEAREA;
-                        $newfilerecord->filename = $filename;
-                        $newfilerecord->filepath = '/';
+                        $newfilerecord->filename = $basename;
+                        $newfilerecord->filepath = $dirnamewslash;
                         $newfilerecord->itemid = $grade->id;
                         $fs->create_file_from_storedfile($newfilerecord, $unzippedfile);
                         $feedbackfilesadded++;
@@ -266,7 +280,7 @@ class assignfeedback_file_zip_importer {
                     $fileplugin->update_file_count($grade);
 
                     // Update the last modified time on the grade which will trigger student notifications.
-                    $assignment->update_grade($grade);
+                    $assignment->notify_grade_modified($grade);
                 }
             }
         }

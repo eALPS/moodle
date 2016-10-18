@@ -1,8 +1,8 @@
-<?PHP
+<?php
 
     // Allows the admin to configure mnet stuff
 
-    require_once(dirname(dirname(dirname(__FILE__))) . '/config.php');
+    require(__DIR__.'/../../config.php');
     require_once($CFG->libdir.'/adminlib.php');
     include_once($CFG->dirroot.'/mnet/lib.php');
 
@@ -85,7 +85,7 @@
     echo $OUTPUT->header();
 ?>
 <form method="post" action="index.php">
-    <table align="center" width="635" class="generalbox" border="0" cellpadding="5" cellspacing="0">
+    <table align="center" width="635" class="generaltable" border="0" cellpadding="5" cellspacing="0">
         <tr>
             <td  class="generalboxcontent">
             <table cellpadding="9" cellspacing="0" >
@@ -106,7 +106,7 @@
     </table>
 </form>
 <form method="post" action="index.php">
-    <table align="center" width="635" class="generalbox" border="0" cellpadding="5" cellspacing="0">
+    <table align="center" width="635" class="generaltable" border="0" cellpadding="5" cellspacing="0">
         <tr>
             <td  class="generalboxcontent">
             <table cellpadding="9" cellspacing="0" >

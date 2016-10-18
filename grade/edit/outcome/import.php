@@ -22,7 +22,7 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once(dirname(__FILE__).'/../../../config.php');
+require_once(__DIR__.'/../../../config.php');
 require_once($CFG->dirroot.'/lib/formslib.php');
 require_once($CFG->dirroot.'/grade/lib.php');
 require_once($CFG->libdir.'/gradelib.php');
@@ -30,9 +30,10 @@ require_once('import_outcomes_form.php');
 
 $courseid = optional_param('courseid', 0, PARAM_INT);
 $action   = optional_param('action', '', PARAM_ALPHA);
-$scope    = optional_param('scope', 'global', PARAM_ALPHA);
+$scope    = optional_param('scope', 'custom', PARAM_ALPHA);
 
 $PAGE->set_url('/grade/edit/outcome/import.php', array('courseid' => $courseid));
+$PAGE->set_pagelayout('admin');
 
 /// Make sure they can even access this course
 if ($courseid) {

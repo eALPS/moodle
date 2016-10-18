@@ -29,9 +29,9 @@ require_once($CFG->libdir.'/adminlib.php');
 require_once("$CFG->libdir/externallib.php");
 require_once($CFG->dirroot . "/" . $CFG->admin . "/webservice/testclient_forms.php");
 
-$function = optional_param('function', '', PARAM_SAFEDIR);
-$protocol = optional_param('protocol', '', PARAM_SAFEDIR);
-$authmethod = optional_param('authmethod', '', PARAM_SAFEDIR);
+$function = optional_param('function', '', PARAM_PLUGIN);
+$protocol = optional_param('protocol', '', PARAM_ALPHA);
+$authmethod = optional_param('authmethod', '', PARAM_ALPHA);
 
 $PAGE->set_url('/' . $CFG->admin . '/webservice/testclient.php');
 $PAGE->navbar->ignore_active(true);
@@ -49,7 +49,7 @@ admin_externalpage_setup('testclient');
 $allfunctions = $DB->get_records('external_functions', array(), 'name ASC');
 $functions = array();
 foreach ($allfunctions as $f) {
-    $finfo = external_function_info($f);
+    $finfo = external_api::external_function_info($f);
     if (!empty($finfo->testclientpath) and file_exists($CFG->dirroot.'/'.$finfo->testclientpath)) {
         //some plugins may want to have own test client forms
         include_once($CFG->dirroot.'/'.$finfo->testclientpath);
@@ -67,7 +67,7 @@ if (!isset($functions[$function])) {
 }
 
 // list all enabled webservices
-$available_protocols = get_plugin_list('webservice');
+$available_protocols = core_component::get_plugin_list('webservice');
 $active_protocols = empty($CFG->webserviceprotocols) ? array() : explode(',', $CFG->webserviceprotocols);
 $protocols = array();
 foreach ($active_protocols as $p) {
@@ -95,10 +95,6 @@ if (!$function or !$protocol) {
     $descparams = new stdClass();
     $descparams->atag = $atag;
     $descparams->mode = get_string('debugnormal', 'admin');
-    $amfclienturl = new moodle_url('/webservice/amf/testclient/index.php');
-    $amfclientatag =html_writer::tag('a', get_string('amftestclient', 'webservice'),
-            array('href' => $amfclienturl));
-    $descparams->amfatag = $amfclientatag;
     echo get_string('testclientdescription', 'webservice', $descparams);
     echo $OUTPUT->box_end();
 
@@ -117,7 +113,7 @@ if ($mform->is_cancelled()) {
 
 } else if ($data = $mform->get_data()) {
 
-    $functioninfo = external_function_info($function);
+    $functioninfo = external_api::external_function_info($function);
 
     // first load lib of selected protocol
     require_once("$CFG->dirroot/webservice/$protocol/locallib.php");

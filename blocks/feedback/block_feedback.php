@@ -1,8 +1,30 @@
 <?php
-if (is_file($CFG->dirroot.'/mod/feedback/lib.php')) {
-    require_once($CFG->dirroot.'/mod/feedback/lib.php');
-    define('FEEDBACK_BLOCK_LIB_IS_OK', true);
-}
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * Feedback block.
+ *
+ * @package    block_feedback
+ * @copyright  1999 onwards Martin Dougiamas (http://dougiamas.com)
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+defined('MOODLE_INTERNAL') || die();
+
+require_once($CFG->dirroot . '/mod/feedback/lib.php');
 
 class block_feedback extends block_list {
 
@@ -25,11 +47,6 @@ class block_feedback extends block_list {
         $this->content->items = array();
         $this->content->icons = array();
         $this->content->footer = '';
-
-        if (!defined('FEEDBACK_BLOCK_LIB_IS_OK')) {
-            $this->content->items = array(get_string('missing_feedback_module', 'block_feedback'));
-            return $this->content;
-        }
 
         $courseid = $this->page->course->id;
         if ($courseid <= 0) {

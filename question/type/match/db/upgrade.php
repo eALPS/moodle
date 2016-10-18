@@ -17,32 +17,31 @@
 /**
  * Matching question type upgrade code.
  *
- * @package    qtype
- * @subpackage match
- * @copyright  1999 onwards Martin Dougiamas {@link http://moodle.com}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package   qtype_match
+ * @copyright 1999 onwards Martin Dougiamas {@link http://moodle.com}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-
 defined('MOODLE_INTERNAL') || die();
-
 
 /**
  * Upgrade code for the matching question type.
  * @param int $oldversion the version we are upgrading from.
  */
 function xmldb_qtype_match_upgrade($oldversion) {
-    global $CFG, $DB;
+    global $CFG;
 
-    $dbman = $DB->get_manager();
+    // Moodle v2.8.0 release upgrade line.
+    // Put any upgrade step following this.
 
+    // Moodle v2.9.0 release upgrade line.
+    // Put any upgrade step following this.
 
-    // Moodle v2.2.0 release upgrade line
-    // Put any upgrade step following this
+    // Moodle v3.0.0 release upgrade line.
+    // Put any upgrade step following this.
 
-    // Moodle v2.3.0 release upgrade line
-    // Put any upgrade step following this
-
+    // Moodle v3.1.0 release upgrade line.
+    // Put any upgrade step following this.
 
     return true;
 }

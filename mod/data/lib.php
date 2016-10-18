@@ -16,10 +16,12 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * @package   mod-data
+ * @package   mod_data
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+
+defined('MOODLE_INTERNAL') || die();
 
 // Some constants
 define ('DATA_MAX_ENTRIES', 50);
@@ -42,7 +44,7 @@ define('DATA_PRESET_CONTEXT', SYSCONTEXTID);
 // In Moodle >= 2, new roles may be introduced and used instead.
 
 /**
- * @package   mod-data
+ * @package   mod_data
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -62,6 +64,18 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
     var $cm;
     /** @var object activity context */
     var $context;
+    /** @var priority for globalsearch indexing */
+    protected static $priority = self::NO_PRIORITY;
+    /** priority value for invalid fields regarding indexing */
+    const NO_PRIORITY = 0;
+    /** priority value for minimum priority */
+    const MIN_PRIORITY = 1;
+    /** priority value for low priority */
+    const LOW_PRIORITY = 2;
+    /** priority value for high priority */
+    const HIGH_PRIORITY = 3;
+    /** priority value for maximum priority */
+    const MAX_PRIORITY = 4;
 
     /**
      * Constructor function
@@ -137,6 +151,7 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
         $this->field->param3 = '';
         $this->field->name = '';
         $this->field->description = '';
+        $this->field->required = false;
 
         return true;
     }
@@ -152,6 +167,7 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
 
         $this->field->name        = trim($data->name);
         $this->field->description = trim($data->description);
+        $this->field->required    = !empty($data->required) ? 1 : 0;
 
         if (isset($data->param1)) {
             $this->field->param1 = trim($data->param1);
@@ -188,6 +204,18 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
         }
 
         $this->field->id = $DB->insert_record('data_fields',$this->field);
+
+        // Trigger an event for creating this field.
+        $event = \mod_data\event\field_created::create(array(
+            'objectid' => $this->field->id,
+            'context' => $this->context,
+            'other' => array(
+                'fieldname' => $this->field->name,
+                'dataid' => $this->data->id
+            )
+        ));
+        $event->trigger();
+
         return true;
     }
 
@@ -202,6 +230,18 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
         global $DB;
 
         $DB->update_record('data_fields', $this->field);
+
+        // Trigger an event for updating this field.
+        $event = \mod_data\event\field_updated::create(array(
+            'objectid' => $this->field->id,
+            'context' => $this->context,
+            'other' => array(
+                'fieldname' => $this->field->name,
+                'dataid' => $this->data->id
+            )
+        ));
+        $event->trigger();
+
         return true;
     }
 
@@ -215,9 +255,25 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
         global $DB;
 
         if (!empty($this->field->id)) {
+            // Get the field before we delete it.
+            $field = $DB->get_record('data_fields', array('id' => $this->field->id));
+
             $this->delete_content();
             $DB->delete_records('data_fields', array('id'=>$this->field->id));
+
+            // Trigger an event for deleting this field.
+            $event = \mod_data\event\field_deleted::create(array(
+                'objectid' => $this->field->id,
+                'context' => $this->context,
+                'other' => array(
+                    'fieldname' => $this->field->name,
+                    'dataid' => $this->data->id
+                 )
+            ));
+            $event->add_record_snapshot('data_fields', $field);
+            $event->trigger();
         }
+
         return true;
     }
 
@@ -228,10 +284,13 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
      * @param int $recordid
      * @return string
      */
-    function display_add_field($recordid=0){
-        global $DB;
+    function display_add_field($recordid=0, $formdata=null) {
+        global $DB, $OUTPUT;
 
-        if ($recordid){
+        if ($formdata) {
+            $fieldname = 'field_' . $this->field->id;
+            $content = $formdata->$fieldname;
+        } else if ($recordid) {
             $content = $DB->get_field('data_content', 'content', array('fieldid'=>$this->field->id, 'recordid'=>$recordid));
         } else {
             $content = '';
@@ -242,9 +301,15 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
             $content='';
         }
 
-        $str = '<div title="'.s($this->field->description).'">';
-        $str .= '<label class="accesshide" for="field_'.$this->field->id.'">'.$this->field->description.'</label>';
-        $str .= '<input class="basefieldinput" type="text" name="field_'.$this->field->id.'" id="field_'.$this->field->id.'" value="'.s($content).'" />';
+        $str = '<div title="' . s($this->field->description) . '">';
+        $str .= '<label for="field_'.$this->field->id.'"><span class="accesshide">'.$this->field->name.'</span>';
+        if ($this->field->required) {
+            $image = html_writer::img($OUTPUT->pix_url('req'), get_string('requiredelement', 'form'),
+                                     array('class' => 'req', 'title' => get_string('requiredelement', 'form')));
+            $str .= html_writer::div($image, 'inline-req');
+        }
+        $str .= '</label><input class="basefieldinput mod-data-input" type="text" name="field_'.$this->field->id.'"';
+        $str .= ' id="field_' . $this->field->id . '" value="'.s($content).'" />';
         $str .= '</div>';
 
         return $str;
@@ -279,7 +344,7 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
         echo '<input type="hidden" name="type" value="'.$this->type.'" />'."\n";
         echo '<input name="sesskey" value="'.sesskey().'" type="hidden" />'."\n";
 
-        echo $OUTPUT->heading($this->name());
+        echo $OUTPUT->heading($this->name(), 3);
 
         require_once($CFG->dirroot.'/mod/data/field/'.$this->type.'/mod.html');
 
@@ -424,7 +489,7 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
      * @return string
      */
     function name() {
-        return get_string('name'.$this->type, 'data');
+        return get_string('fieldtypelabel', "datafield_$this->type");
     }
 
     /**
@@ -474,6 +539,27 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
     function file_ok($relativepath) {
         return false;
     }
+
+    /**
+     * Returns the priority for being indexed by globalsearch
+     *
+     * @return int
+     */
+    public static function get_priority() {
+        return static::$priority;
+    }
+
+    /**
+     * Returns the presentable string value for a field content.
+     *
+     * The returned string should be plain text.
+     *
+     * @param stdClass $content
+     * @return string
+     */
+    public static function get_content_value($content) {
+        return trim($content->content, "\r\n ");
+    }
 }
 
 
@@ -502,13 +588,13 @@ function data_generate_default_template(&$data, $template, $recordid=0, $form=fa
     if ($fields = $DB->get_records('data_fields', array('dataid'=>$data->id), 'id')) {
 
         $table = new html_table();
-        $table->attributes['class'] = 'mod-data-default-template';
+        $table->attributes['class'] = 'mod-data-default-template ##approvalstatus##';
         $table->colclasses = array('template-field', 'template-token');
         $table->data = array();
         foreach ($fields as $field) {
             if ($form) {   // Print forms instead of data
                 $fieldobj = data_get_field($field, $data);
-                $token = $fieldobj->display_add_field($recordid);
+                $token = $fieldobj->display_add_field($recordid, null);
             } else {           // Just print the tag
                 $token = '[['.$field->name.']]';
             }
@@ -518,12 +604,12 @@ function data_generate_default_template(&$data, $template, $recordid=0, $form=fa
             );
         }
         if ($template == 'listtemplate') {
-            $cell = new html_table_cell('##edit##  ##more##  ##delete##  ##approve##  ##export##');
+            $cell = new html_table_cell('##edit##  ##more##  ##delete##  ##approve##  ##disapprove##  ##export##');
             $cell->colspan = 2;
             $cell->attributes['class'] = 'controls';
             $table->data[] = new html_table_row(array($cell));
         } else if ($template == 'singletemplate') {
-            $cell = new html_table_cell('##edit##  ##delete##  ##approve##  ##export##');
+            $cell = new html_table_cell('##edit##  ##delete##  ##approve##  ##disapprove##  ##export##');
             $cell->colspan = 2;
             $cell->attributes['class'] = 'controls';
             $table->data[] = new html_table_row(array($cell));
@@ -536,7 +622,13 @@ function data_generate_default_template(&$data, $template, $recordid=0, $form=fa
             $table->data[] = $row;
         }
 
-        $str  = html_writer::start_tag('div', array('class' => 'defaulttemplate'));
+        $str = '';
+        if ($template == 'listtemplate'){
+            $str .= '##delcheck##';
+            $str .= html_writer::empty_tag('br');
+        }
+
+        $str .= html_writer::start_tag('div', array('class' => 'defaulttemplate'));
         $str .= html_writer::table($table);
         $str .= html_writer::end_tag('div');
         if ($template == 'listtemplate'){
@@ -796,7 +888,19 @@ function data_add_record($data, $groupid=0){
     } else {
         $record->approved = 0;
     }
-    return $DB->insert_record('data_records', $record);
+    $record->id = $DB->insert_record('data_records', $record);
+
+    // Trigger an event for creating this record.
+    $event = \mod_data\event\record_created::create(array(
+        'objectid' => $record->id,
+        'context' => $context,
+        'other' => array(
+            'dataid' => $data->id
+        )
+    ));
+    $event->trigger();
+
+    return $record->id;
 }
 
 /**
@@ -817,7 +921,7 @@ function data_tags_check($dataid, $template) {
     // then we generate strings to replace
     $tagsok = true; // let's be optimistic
     foreach ($fields as $field){
-        $pattern="/\[\[".$field->name."\]\]/i";
+        $pattern="/\[\[" . preg_quote($field->name, '/') . "\]\]/i";
         if (preg_match_all($pattern, $template, $dummy)>1){
             $tagsok = false;
             echo $OUTPUT->notification('[['.$field->name.']] - '.get_string('multipletags','data'));
@@ -835,15 +939,24 @@ function data_tags_check($dataid, $template) {
  * @return int intance id
  */
 function data_add_instance($data, $mform = null) {
-    global $DB;
+    global $DB, $CFG;
+    require_once($CFG->dirroot.'/mod/data/locallib.php');
 
     if (empty($data->assessed)) {
         $data->assessed = 0;
     }
 
+    if (empty($data->ratingtime) || empty($data->assessed)) {
+        $data->assesstimestart  = 0;
+        $data->assesstimefinish = 0;
+    }
+
     $data->timemodified = time();
 
     $data->id = $DB->insert_record('data', $data);
+
+    // Add calendar events if necessary.
+    data_set_events($data);
 
     data_grade_item_update($data);
 
@@ -858,7 +971,8 @@ function data_add_instance($data, $mform = null) {
  * @return bool
  */
 function data_update_instance($data) {
-    global $DB, $OUTPUT;
+    global $DB, $CFG;
+    require_once($CFG->dirroot.'/mod/data/locallib.php');
 
     $data->timemodified = time();
     $data->id           = $data->instance;
@@ -877,6 +991,9 @@ function data_update_instance($data) {
     }
 
     $DB->update_record('data', $data);
+
+    // Add calendar events if necessary.
+    data_set_events($data);
 
     data_grade_item_update($data);
 
@@ -917,6 +1034,13 @@ function data_delete_instance($id) {    // takes the dataid
     // delete all the records and fields
     $DB->delete_records('data_records', array('dataid'=>$id));
     $DB->delete_records('data_fields', array('dataid'=>$id));
+
+    // Remove old calendar events.
+    $events = $DB->get_records('event', array('modulename' => 'data', 'instance' => $id));
+    foreach ($events as $event) {
+        $event = calendar_event::load($event);
+        $event->delete();
+    }
 
     // Delete the instance itself
     $result = $DB->delete_records('data', array('id'=>$id));
@@ -1064,37 +1188,6 @@ function data_update_grades($data, $userid=0, $nullifnone=true) {
 }
 
 /**
- * Update all grades in gradebook.
- *
- * @global object
- */
-function data_upgrade_grades() {
-    global $DB;
-
-    $sql = "SELECT COUNT('x')
-              FROM {data} d, {course_modules} cm, {modules} m
-             WHERE m.name='data' AND m.id=cm.module AND cm.instance=d.id";
-    $count = $DB->count_records_sql($sql);
-
-    $sql = "SELECT d.*, cm.idnumber AS cmidnumber, d.course AS courseid
-              FROM {data} d, {course_modules} cm, {modules} m
-             WHERE m.name='data' AND m.id=cm.module AND cm.instance=d.id";
-    $rs = $DB->get_recordset_sql($sql);
-    if ($rs->valid()) {
-        // too much debug output
-        $pbar = new progress_bar('dataupgradegrades', 500, true);
-        $i=0;
-        foreach ($rs as $data) {
-            $i++;
-            upgrade_set_timeout(60*5); // set up timeout, may also abort execution
-            data_update_grades($data, 0, false);
-            $pbar->update($i, $count, "Updating Database grades ($i/$count).");
-        }
-    }
-    $rs->close();
-}
-
-/**
  * Update/create grade item for given data
  *
  * @category grade
@@ -1156,21 +1249,22 @@ function data_grade_item_delete($data) {
  * @param string $search
  * @param int $page
  * @param bool $return
+ * @param object $jumpurl a moodle_url by which to jump back to the record list (can be null)
  * @return mixed
  */
-function data_print_template($template, $records, $data, $search='', $page=0, $return=false) {
+function data_print_template($template, $records, $data, $search='', $page=0, $return=false, moodle_url $jumpurl=null) {
     global $CFG, $DB, $OUTPUT;
+
     $cm = get_coursemodule_from_instance('data', $data->id);
     $context = context_module::instance($cm->id);
 
-    static $fields = NULL;
-    static $isteacher;
-    static $dataid = NULL;
+    static $fields = array();
+    static $dataid = null;
 
     if (empty($dataid)) {
         $dataid = $data->id;
     } else if ($dataid != $data->id) {
-        $fields = NULL;
+        $fields = array();
     }
 
     if (empty($fields)) {
@@ -1178,15 +1272,16 @@ function data_print_template($template, $records, $data, $search='', $page=0, $r
         foreach ($fieldrecords as $fieldrecord) {
             $fields[]= data_get_field($fieldrecord, $data);
         }
-        $isteacher = has_capability('mod/data:managetemplates', $context);
     }
 
     if (empty($records)) {
         return;
     }
 
-    // Check whether this activity is read-only at present
-    $readonly = data_in_readonly_period($data);
+    if (!$jumpurl) {
+        $jumpurl = new moodle_url('/mod/data/view.php', array('d' => $data->id));
+    }
+    $jumpurl = new moodle_url($jumpurl, array('page' => $page, 'sesskey' => sesskey()));
 
     foreach ($records as $record) {   // Might be just one for the single template
 
@@ -1200,10 +1295,12 @@ function data_print_template($template, $records, $data, $search='', $page=0, $r
             $replacement[] = highlight($search, $field->display_browse_field($record->id, $template));
         }
 
+        $canmanageentries = has_capability('mod/data:manageentries', $context);
+
     // Replacing special tags (##Edit##, ##Delete##, ##More##)
         $patterns[]='##edit##';
         $patterns[]='##delete##';
-        if (has_capability('mod/data:manageentries', $context) || (!$readonly && data_isowner($record->id))) {
+        if (data_user_can_manage_entry($record, $data, $context)) {
             $replacement[] = '<a href="'.$CFG->wwwroot.'/mod/data/edit.php?d='
                              .$data->id.'&amp;rid='.$record->id.'&amp;sesskey='.sesskey().'"><img src="'.$OUTPUT->pix_url('t/edit') . '" class="iconsmall" alt="'.get_string('edit').'" title="'.get_string('edit').'" /></a>';
             $replacement[] = '<a href="'.$CFG->wwwroot.'/mod/data/view.php?d='
@@ -1225,9 +1322,20 @@ function data_print_template($template, $records, $data, $search='', $page=0, $r
         $patterns[]='##moreurl##';
         $replacement[] = $moreurl;
 
+        $patterns[]='##delcheck##';
+        if ($canmanageentries) {
+            $replacement[] = html_writer::checkbox('delcheck[]', $record->id, false, '', array('class' => 'recordcheckbox'));
+        } else {
+            $replacement[] = '';
+        }
+
         $patterns[]='##user##';
         $replacement[] = '<a href="'.$CFG->wwwroot.'/user/view.php?id='.$record->userid.
                                '&amp;course='.$data->course.'">'.fullname($record).'</a>';
+
+        $patterns[] = '##userpicture##';
+        $ruser = user_picture::unalias($record, null, 'userid');
+        $replacement[] = $OUTPUT->user_picture($ruser, array('courseid' => $data->course));
 
         $patterns[]='##export##';
 
@@ -1252,13 +1360,31 @@ function data_print_template($template, $records, $data, $search='', $page=0, $r
 
         $patterns[]='##approve##';
         if (has_capability('mod/data:approve', $context) && ($data->approval) && (!$record->approved)) {
-            $approveurl = new moodle_url('/mod/data/view.php',
-                    array('d' => $data->id, 'approve' => $record->id, 'sesskey' => sesskey()));
-            $approveicon = new pix_icon('t/approve', get_string('approve'), '', array('class' => 'iconsmall'));
+            $approveurl = new moodle_url($jumpurl, array('approve' => $record->id));
+            $approveicon = new pix_icon('t/approve', get_string('approve', 'data'), '', array('class' => 'iconsmall'));
             $replacement[] = html_writer::tag('span', $OUTPUT->action_icon($approveurl, $approveicon),
                     array('class' => 'approve'));
         } else {
             $replacement[] = '';
+        }
+
+        $patterns[]='##disapprove##';
+        if (has_capability('mod/data:approve', $context) && ($data->approval) && ($record->approved)) {
+            $disapproveurl = new moodle_url($jumpurl, array('disapprove' => $record->id));
+            $disapproveicon = new pix_icon('t/block', get_string('disapprove', 'data'), '', array('class' => 'iconsmall'));
+            $replacement[] = html_writer::tag('span', $OUTPUT->action_icon($disapproveurl, $disapproveicon),
+                    array('class' => 'disapprove'));
+        } else {
+            $replacement[] = '';
+        }
+
+        $patterns[] = '##approvalstatus##';
+        if (!$data->approval) {
+            $replacement[] = '';
+        } else if ($record->approved) {
+            $replacement[] = get_string('approved', 'data');
+        } else {
+            $replacement[] = get_string('notapproved', 'data');
         }
 
         $patterns[]='##comments##';
@@ -1448,6 +1574,58 @@ function data_rating_validate($params) {
     return true;
 }
 
+/**
+ * Can the current user see ratings for a given itemid?
+ *
+ * @param array $params submitted data
+ *            contextid => int contextid [required]
+ *            component => The component for this module - should always be mod_data [required]
+ *            ratingarea => object the context in which the rated items exists [required]
+ *            itemid => int the ID of the object being rated [required]
+ *            scaleid => int scale id [optional]
+ * @return bool
+ * @throws coding_exception
+ * @throws rating_exception
+ */
+function mod_data_rating_can_see_item_ratings($params) {
+    global $DB;
+
+    // Check the component is mod_data.
+    if (!isset($params['component']) || $params['component'] != 'mod_data') {
+        throw new rating_exception('invalidcomponent');
+    }
+
+    // Check the ratingarea is entry (the only rating area in data).
+    if (!isset($params['ratingarea']) || $params['ratingarea'] != 'entry') {
+        throw new rating_exception('invalidratingarea');
+    }
+
+    if (!isset($params['itemid'])) {
+        throw new rating_exception('invaliditemid');
+    }
+
+    $datasql = "SELECT d.id as dataid, d.course, r.groupid
+                  FROM {data_records} r
+                  JOIN {data} d ON r.dataid = d.id
+                 WHERE r.id = :itemid";
+    $dataparams = array('itemid' => $params['itemid']);
+    if (!$info = $DB->get_record_sql($datasql, $dataparams)) {
+        // Item doesn't exist.
+        throw new rating_exception('invaliditemid');
+    }
+
+    // User can see ratings of all participants.
+    if ($info->groupid == 0) {
+        return true;
+    }
+
+    $course = $DB->get_record('course', array('id' => $info->course), '*', MUST_EXIST);
+    $cm = get_coursemodule_from_instance('data', $info->dataid, $course->id, false, MUST_EXIST);
+
+    // Make sure groups allow this user to see the item they're rating.
+    return groups_group_visible($info->groupid, $course, $cm);
+}
+
 
 /**
  * function that takes in the current data, number of items per page,
@@ -1568,14 +1746,13 @@ function data_print_preference_form($data, $perpage, $search, $sort='', $order='
         data_generate_default_template($data, 'asearchtemplate');
     }
 
-    static $fields = NULL;
-    static $isteacher;
-    static $dataid = NULL;
+    static $fields = array();
+    static $dataid = null;
 
     if (empty($dataid)) {
         $dataid = $data->id;
     } else if ($dataid != $data->id) {
-        $fields = NULL;
+        $fields = array();
     }
 
     if (empty($fields)) {
@@ -1583,8 +1760,6 @@ function data_print_preference_form($data, $perpage, $search, $sort='', $order='
         foreach ($fieldrecords as $fieldrecord) {
             $fields[]= data_get_field($fieldrecord, $data);
         }
-
-        $isteacher = has_capability('mod/data:managetemplates', $context);
     }
 
     // Replacing tags
@@ -1606,9 +1781,9 @@ function data_print_preference_form($data, $perpage, $search, $sort='', $order='
     $fn = !empty($search_array[DATA_FIRSTNAME]->data) ? $search_array[DATA_FIRSTNAME]->data : '';
     $ln = !empty($search_array[DATA_LASTNAME]->data) ? $search_array[DATA_LASTNAME]->data : '';
     $patterns[]    = '/##firstname##/';
-    $replacement[] = '<label class="accesshide" for="u_fn">'.get_string('authorfirstname', 'data').'</label><input type="text" size="16" id="u_fn" name="u_fn" value="'.$fn.'" />';
+    $replacement[] = '<label class="accesshide" for="u_fn">'.get_string('authorfirstname', 'data').'</label><input type="text" size="16" id="u_fn" name="u_fn" value="'.s($fn).'" />';
     $patterns[]    = '/##lastname##/';
-    $replacement[] = '<label class="accesshide" for="u_ln">'.get_string('authorlastname', 'data').'</label><input type="text" size="16" id="u_ln" name="u_ln" value="'.$ln.'" />';
+    $replacement[] = '<label class="accesshide" for="u_ln">'.get_string('authorlastname', 'data').'</label><input type="text" size="16" id="u_ln" name="u_ln" value="'.s($ln).'" />';
 
     // actual replacement of the tags
     $newtext = preg_replace($patterns, $replacement, $data->asearchtemplate);
@@ -1643,7 +1818,12 @@ function data_print_ratings($data, $record) {
 }
 
 /**
- * For Participantion Reports
+ * List the actions that correspond to a view of this module.
+ * This is used by the participation report.
+ *
+ * Note: This is not used by new logging system. Event with
+ *       crud = 'r' and edulevel = LEVEL_PARTICIPATING will
+ *       be considered as view action.
  *
  * @return array
  */
@@ -1652,6 +1832,13 @@ function data_get_view_actions() {
 }
 
 /**
+ * List the actions that correspond to a post of this module.
+ * This is used by the participation report.
+ *
+ * Note: This is not used by new logging system. Event with
+ *       crud = ('c' || 'u' || 'd') and edulevel = LEVEL_PARTICIPATING
+ *       will be considered as post action.
+ *
  * @return array
  */
 function data_get_post_actions() {
@@ -1877,9 +2064,8 @@ function data_get_available_presets($context) {
     $presets = array();
 
     // First load the ratings sub plugins that exist within the modules preset dir
-    if ($dirs = get_list_of_plugins('mod/data/preset')) {
-        foreach ($dirs as $dir) {
-            $fulldir = $CFG->dirroot.'/mod/data/preset/'.$dir;
+    if ($dirs = core_component::get_plugin_list('datapreset')) {
+        foreach ($dirs as $dir=>$fulldir) {
             if (is_directory_a_preset($fulldir)) {
                 $preset = new stdClass();
                 $preset->path = $fulldir;
@@ -1971,9 +2157,10 @@ function data_print_header($course, $cm, $data, $currenttab='') {
 
     $PAGE->set_title($data->name);
     echo $OUTPUT->header();
-    echo $OUTPUT->heading(format_string($data->name));
+    echo $OUTPUT->heading(format_string($data->name), 2);
+    echo $OUTPUT->box(format_module_intro('data', $data, $cm->id), 'generalbox', 'intro');
 
-// Groups needed for Add entry tab
+    // Groups needed for Add entry tab
     $currentgroup = groups_get_activity_group($cm);
     $groupmode = groups_get_activity_groupmode($cm);
 
@@ -2036,6 +2223,44 @@ function data_user_can_add_entry($data, $currentgroup, $groupmode, $context = nu
             return false;
         }
     }
+}
+
+/**
+ * Check whether the current user is allowed to manage the given record considering manageentries capability,
+ * data_in_readonly_period() result, ownership (determined by data_isowner()) and manageapproved setting.
+ * @param mixed $record record object or id
+ * @param object $data data object
+ * @param object $context context object
+ * @return bool returns true if the user is allowd to edit the entry, false otherwise
+ */
+function data_user_can_manage_entry($record, $data, $context) {
+    global $DB;
+
+    if (has_capability('mod/data:manageentries', $context)) {
+        return true;
+    }
+
+    // Check whether this activity is read-only at present.
+    $readonly = data_in_readonly_period($data);
+
+    if (!$readonly) {
+        // Get record object from db if just id given like in data_isowner.
+        // ...done before calling data_isowner() to avoid querying db twice.
+        if (!is_object($record)) {
+            if (!$record = $DB->get_record('data_records', array('id' => $record))) {
+                return false;
+            }
+        }
+        if (data_isowner($record)) {
+            if ($data->approval && $record->approved) {
+                return $data->manageapproved == 1;
+            } else {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -2503,6 +2728,9 @@ function data_reset_userdata($data) {
     $ratingdeloptions->component = 'mod_data';
     $ratingdeloptions->ratingarea = 'entry';
 
+    // Set the file storage - may need it to remove files later.
+    $fs = get_file_storage();
+
     // delete entries if requested
     if (!empty($data->reset_data)) {
         $DB->delete_records_select('comments', "itemid IN ($allrecordssql) AND commentarea='database_entry'", array($data->courseid));
@@ -2511,12 +2739,13 @@ function data_reset_userdata($data) {
 
         if ($datas = $DB->get_records_sql($alldatassql, array($data->courseid))) {
             foreach ($datas as $dataid=>$unused) {
-                fulldelete("$CFG->dataroot/$data->courseid/moddata/data/$dataid");
-
                 if (!$cm = get_coursemodule_from_instance('data', $dataid)) {
                     continue;
                 }
                 $datacontext = context_module::instance($cm->id);
+
+                // Delete any files that may exist.
+                $fs->delete_area_files($datacontext->id, 'mod_data', 'content');
 
                 $ratingdeloptions->contextid = $datacontext->id;
                 $rm->delete_ratings($ratingdeloptions);
@@ -2554,21 +2783,17 @@ function data_reset_userdata($data) {
                 $ratingdeloptions->itemid = $record->id;
                 $rm->delete_ratings($ratingdeloptions);
 
-                $DB->delete_records('comments', array('itemid'=>$record->id, 'commentarea'=>'database_entry'));
-                $DB->delete_records('data_content', array('recordid'=>$record->id));
-                $DB->delete_records('data_records', array('id'=>$record->id));
-                // HACK: this is ugly - the recordid should be before the fieldid!
-                if (!array_key_exists($record->dataid, $fields)) {
-                    if ($fs = $DB->get_records('data_fields', array('dataid'=>$record->dataid))) {
-                        $fields[$record->dataid] = array_keys($fs);
-                    } else {
-                        $fields[$record->dataid] = array();
+                // Delete any files that may exist.
+                if ($contents = $DB->get_records('data_content', array('recordid' => $record->id), '', 'id')) {
+                    foreach ($contents as $content) {
+                        $fs->delete_area_files($datacontext->id, 'mod_data', 'content', $content->id);
                     }
                 }
-                foreach($fields[$record->dataid] as $fieldid) {
-                    fulldelete("$CFG->dataroot/$data->courseid/moddata/data/$record->dataid/$fieldid/$record->id");
-                }
                 $notenrolled[$record->userid] = true;
+
+                $DB->delete_records('comments', array('itemid' => $record->id, 'commentarea' => 'database_entry'));
+                $DB->delete_records('data_content', array('recordid' => $record->id));
+                $DB->delete_records('data_records', array('id' => $record->id));
             }
         }
         $rs->close();
@@ -2629,7 +2854,6 @@ function data_supports($feature) {
     switch($feature) {
         case FEATURE_GROUPS:                  return true;
         case FEATURE_GROUPINGS:               return true;
-        case FEATURE_GROUPMEMBERSONLY:        return true;
         case FEATURE_MOD_INTRO:               return true;
         case FEATURE_COMPLETION_TRACKS_VIEWS: return true;
         case FEATURE_GRADE_HAS_GRADE:         return true;
@@ -2686,7 +2910,7 @@ function data_export_xls($export, $dataname, $count) {
     $workbook = new MoodleExcelWorkbook($filearg);
     $workbook->send($filename);
     $worksheet = array();
-    $worksheet[0] =& $workbook->add_worksheet('');
+    $worksheet[0] = $workbook->add_worksheet('');
     $rowno = 0;
     foreach ($export as $row) {
         $colno = 0;
@@ -2720,7 +2944,7 @@ function data_export_ods($export, $dataname, $count) {
     $workbook = new MoodleODSWorkbook($filearg);
     $workbook->send($filename);
     $worksheet = array();
-    $worksheet[0] =& $workbook->add_worksheet('');
+    $worksheet[0] = $workbook->add_worksheet('');
     $rowno = 0;
     foreach ($export as $row) {
         $colno = 0;
@@ -3180,6 +3404,7 @@ function data_presets_generate_xml($course, $cm, $data) {
         'maxentries',
         'rssarticles',
         'approval',
+        'manageapproved',
         'defaultsortdir'
     );
 
@@ -3474,6 +3699,11 @@ function data_get_all_recordids($dataid, $selectdata = '', $params = null) {
  * @return array $recordids   An array of record ids.
  */
 function data_get_advance_search_ids($recordids, $searcharray, $dataid) {
+    // Check to see if we have any record IDs.
+    if (empty($recordids)) {
+        // Send back an empty search.
+        return array();
+    }
     $searchcriteria = array_keys($searcharray);
     // Loop through and reduce the IDs one search criteria at a time.
     foreach ($searchcriteria as $key) {
@@ -3547,12 +3777,17 @@ function data_get_recordids($alias, $searcharray, $dataid, $recordids) {
  */
 function data_get_advanced_search_sql($sort, $data, $recordids, $selectdata, $sortorder) {
     global $DB;
+
+    $namefields = user_picture::fields('u');
+    // Remove the id from the string. This already exists in the sql statement.
+    $namefields = str_replace('u.id,', '', $namefields);
+
     if ($sort == 0) {
-        $nestselectsql = 'SELECT r.id, r.approved, r.timecreated, r.timemodified, r.userid, u.firstname, u.lastname
+        $nestselectsql = 'SELECT r.id, r.approved, r.timecreated, r.timemodified, r.userid, ' . $namefields . '
                         FROM {data_content} c,
                              {data_records} r,
                              {user} u ';
-        $groupsql = ' GROUP BY r.id, r.approved, r.timecreated, r.timemodified, r.userid, u.firstname, u.lastname ';
+        $groupsql = ' GROUP BY r.id, r.approved, r.timecreated, r.timemodified, r.userid, u.firstname, u.lastname, ' . $namefields;
     } else {
         // Sorting through 'Other' criteria
         if ($sort <= 0) {
@@ -3579,12 +3814,13 @@ function data_get_advanced_search_sql($sort, $data, $recordids, $selectdata, $so
             $sortcontentfull = $sortfield->get_sort_sql($sortcontent);
         }
 
-        $nestselectsql = 'SELECT r.id, r.approved, r.timecreated, r.timemodified, r.userid, u.firstname, u.lastname, ' . $sortcontentfull . '
+        $nestselectsql = 'SELECT r.id, r.approved, r.timecreated, r.timemodified, r.userid, ' . $namefields . ',
+                                 ' . $sortcontentfull . '
                               AS sortorder
                             FROM {data_content} c,
                                  {data_records} r,
                                  {user} u ';
-        $groupsql = ' GROUP BY r.id, r.approved, r.timecreated, r.timemodified, r.userid, u.firstname, u.lastname, ' .$sortcontentfull;
+        $groupsql = ' GROUP BY r.id, r.approved, r.timecreated, r.timemodified, r.userid, ' . $namefields . ', ' .$sortcontentfull;
     }
 
     // Default to a standard Where statement if $selectdata is empty.
@@ -3628,5 +3864,230 @@ function data_user_can_delete_preset($context, $preset) {
             $candelete = true;
         }
         return $candelete;
+    }
+}
+
+/**
+ * Delete a record entry.
+ *
+ * @param int $recordid The ID for the record to be deleted.
+ * @param object $data The data object for this activity.
+ * @param int $courseid ID for the current course (for logging).
+ * @param int $cmid The course module ID.
+ * @return bool True if the record deleted, false if not.
+ */
+function data_delete_record($recordid, $data, $courseid, $cmid) {
+    global $DB, $CFG;
+
+    if ($deleterecord = $DB->get_record('data_records', array('id' => $recordid))) {
+        if ($deleterecord->dataid == $data->id) {
+            if ($contents = $DB->get_records('data_content', array('recordid' => $deleterecord->id))) {
+                foreach ($contents as $content) {
+                    if ($field = data_get_field_from_id($content->fieldid, $data)) {
+                        $field->delete_content($content->recordid);
+                    }
+                }
+                $DB->delete_records('data_content', array('recordid'=>$deleterecord->id));
+                $DB->delete_records('data_records', array('id'=>$deleterecord->id));
+
+                // Delete cached RSS feeds.
+                if (!empty($CFG->enablerssfeeds)) {
+                    require_once($CFG->dirroot.'/mod/data/rsslib.php');
+                    data_rss_delete_file($data);
+                }
+
+                // Trigger an event for deleting this record.
+                $event = \mod_data\event\record_deleted::create(array(
+                    'objectid' => $deleterecord->id,
+                    'context' => context_module::instance($cmid),
+                    'courseid' => $courseid,
+                    'other' => array(
+                        'dataid' => $deleterecord->dataid
+                    )
+                ));
+                $event->add_record_snapshot('data_records', $deleterecord);
+                $event->trigger();
+
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * Check for required fields, and build a list of fields to be updated in a
+ * submission.
+ *
+ * @param $mod stdClass The current recordid - provided as an optimisation.
+ * @param $fields array The field data
+ * @param $datarecord stdClass The submitted data.
+ * @return stdClass containing:
+ * * string[] generalnotifications Notifications for the form as a whole.
+ * * string[] fieldnotifications Notifications for a specific field.
+ * * bool validated Whether the field was validated successfully.
+ * * data_field_base[] fields The field objects to be update.
+ */
+function data_process_submission(stdClass $mod, $fields, stdClass $datarecord) {
+    $result = new stdClass();
+
+    // Empty form checking - you can't submit an empty form.
+    $emptyform = true;
+    $requiredfieldsfilled = true;
+    $fieldsvalidated = true;
+
+    // Store the notifications.
+    $result->generalnotifications = array();
+    $result->fieldnotifications = array();
+
+    // Store the instantiated classes as an optimisation when processing the result.
+    // This prevents the fields being re-initialised when updating.
+    $result->fields = array();
+
+    $submitteddata = array();
+    foreach ($datarecord as $fieldname => $fieldvalue) {
+        if (strpos($fieldname, '_')) {
+            $namearray = explode('_', $fieldname, 3);
+            $fieldid = $namearray[1];
+            if (!isset($submitteddata[$fieldid])) {
+                $submitteddata[$fieldid] = array();
+            }
+            if (count($namearray) === 2) {
+                $subfieldid = 0;
+            } else {
+                $subfieldid = $namearray[2];
+            }
+
+            $fielddata = new stdClass();
+            $fielddata->fieldname = $fieldname;
+            $fielddata->value = $fieldvalue;
+            $submitteddata[$fieldid][$subfieldid] = $fielddata;
+        }
+    }
+
+    // Check all form fields which have the required are filled.
+    foreach ($fields as $fieldrecord) {
+        // Check whether the field has any data.
+        $fieldhascontent = false;
+
+        $field = data_get_field($fieldrecord, $mod);
+        if (isset($submitteddata[$fieldrecord->id])) {
+            // Field validation check.
+            if (method_exists($field, 'field_validation')) {
+                $errormessage = $field->field_validation($submitteddata[$fieldrecord->id]);
+                if ($errormessage) {
+                    $result->fieldnotifications[$field->field->name][] = $errormessage;
+                    $fieldsvalidated = false;
+                }
+            }
+            foreach ($submitteddata[$fieldrecord->id] as $fieldname => $value) {
+                if ($field->notemptyfield($value->value, $value->fieldname)) {
+                    // The field has content and the form is not empty.
+                    $fieldhascontent = true;
+                    $emptyform = false;
+                }
+            }
+        }
+
+        // If the field is required, add a notification to that effect.
+        if ($field->field->required && !$fieldhascontent) {
+            if (!isset($result->fieldnotifications[$field->field->name])) {
+                $result->fieldnotifications[$field->field->name] = array();
+            }
+            $result->fieldnotifications[$field->field->name][] = get_string('errormustsupplyvalue', 'data');
+            $requiredfieldsfilled = false;
+        }
+
+        // Update the field.
+        if (isset($submitteddata[$fieldrecord->id])) {
+            foreach ($submitteddata[$fieldrecord->id] as $value) {
+                $result->fields[$value->fieldname] = $field;
+            }
+        }
+    }
+
+    if ($emptyform) {
+        // The form is empty.
+        $result->generalnotifications[] = get_string('emptyaddform', 'data');
+    }
+
+    $result->validated = $requiredfieldsfilled && !$emptyform && $fieldsvalidated;
+
+    return $result;
+}
+
+/**
+ * This standard function will check all instances of this module
+ * and make sure there are up-to-date events created for each of them.
+ * If courseid = 0, then every data event in the site is checked, else
+ * only data events belonging to the course specified are checked.
+ * This function is used, in its new format, by restore_refresh_events()
+ *
+ * @param int $courseid
+ * @return bool
+ */
+function data_refresh_events($courseid = 0) {
+    global $DB, $CFG;
+    require_once($CFG->dirroot.'/mod/data/locallib.php');
+
+    if ($courseid) {
+        if (! $data = $DB->get_records("data", array("course" => $courseid))) {
+            return true;
+        }
+    } else {
+        if (! $data = $DB->get_records("data")) {
+            return true;
+        }
+    }
+
+    foreach ($data as $datum) {
+        data_set_events($datum);
+    }
+    return true;
+}
+
+/**
+ * Fetch the configuration for this database activity.
+ *
+ * @param   stdClass    $database   The object returned from the database for this instance
+ * @param   string      $key        The name of the key to retrieve. If none is supplied, then all configuration is returned
+ * @param   mixed       $default    The default value to use if no value was found for the specified key
+ * @return  mixed                   The returned value
+ */
+function data_get_config($database, $key = null, $default = null) {
+    if (!empty($database->config)) {
+        $config = json_decode($database->config);
+    } else {
+        $config = new stdClass();
+    }
+
+    if ($key === null) {
+        return $config;
+    }
+
+    if (property_exists($config, $key)) {
+        return $config->$key;
+    }
+    return $default;
+}
+
+/**
+ * Update the configuration for this database activity.
+ *
+ * @param   stdClass    $database   The object returned from the database for this instance
+ * @param   string      $key        The name of the key to set
+ * @param   mixed       $value      The value to set for the key
+ */
+function data_set_config(&$database, $key, $value) {
+    // Note: We must pass $database by reference because there may be subsequent calls to update_record and these should
+    // not overwrite the configuration just set.
+    global $DB;
+
+    $config = data_get_config($database);
+
+    if (!isset($config->$key) || $config->$key !== $value) {
+        $config->$key = $value;
+        $database->config = json_encode($config);
+        $DB->set_field('data', 'config', $database->config, ['id' => $database->id]);
     }
 }

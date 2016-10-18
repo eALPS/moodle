@@ -1,5 +1,4 @@
 <?php
-
 // This file keeps track of upgrades to
 // the data module
 //
@@ -20,20 +19,83 @@
 // Please do not forget to use upgrade_set_timeout()
 // before any action that may take longer time to finish.
 
+defined('MOODLE_INTERNAL') || die();
+
 function xmldb_data_upgrade($oldversion) {
-    global $CFG, $DB, $OUTPUT;
+    global $CFG, $DB;
 
     $dbman = $DB->get_manager();
 
+    // Moodle v2.8.0 release upgrade line.
+    // Put any upgrade step following this.
 
-    // Moodle v2.2.0 release upgrade line
-    // Put any upgrade step following this
+    if ($oldversion < 2015030900) {
+        // Define field required to be added to data_fields.
+        $table = new xmldb_table('data_fields');
+        $field = new xmldb_field('required', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0', 'description');
 
-    // Moodle v2.3.0 release upgrade line
-    // Put any upgrade step following this
+        // Conditionally launch add field required.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
 
+        upgrade_mod_savepoint(true, 2015030900, 'data');
+    }
+
+    // Moodle v2.9.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    if ($oldversion < 2015092200) {
+
+        // Define field manageapproved to be added to data.
+        $table = new xmldb_table('data');
+        $field = new xmldb_field('manageapproved', XMLDB_TYPE_INTEGER, '4', null, XMLDB_NOTNULL, null, '1', 'approval');
+
+        // Conditionally launch add field manageapproved.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Data savepoint reached.
+        upgrade_mod_savepoint(true, 2015092200, 'data');
+    }
+
+    // Moodle v3.0.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    if ($oldversion < 2016030300) {
+
+        // Define field timemodified to be added to data.
+        $table = new xmldb_table('data');
+        $field = new xmldb_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'notification');
+
+        // Conditionally launch add field timemodified.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Data savepoint reached.
+        upgrade_mod_savepoint(true, 2016030300, 'data');
+    }
+
+
+    // Moodle v3.1.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    if ($oldversion < 2016090600) {
+
+        // Define field config to be added to data.
+        $table = new xmldb_table('data');
+        $field = new xmldb_field('config', XMLDB_TYPE_TEXT, null, null, null, null, null, 'timemodified');
+
+        // Conditionally launch add field config.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Data savepoint reached.
+        upgrade_mod_savepoint(true, 2016090600, 'data');
+    }
 
     return true;
 }
-
-

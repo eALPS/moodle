@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,7 +17,7 @@
 /**
  * Form for editing RSS client block instances.
  *
- * @package   moodlecore
+ * @package   block_rss_client
  * @copyright 2009 Tim Hunt
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -48,19 +47,31 @@ class block_rss_client_edit_form extends block_edit_form {
             $mform->setDefault('config_shownumentries', 5);
         }
 
-        $rssfeeds = $DB->get_records_sql_menu('
-                SELECT id,
-                       CASE WHEN preferredtitle = ? THEN ' . $DB->sql_compare_text('title', 64) .' ELSE preferredtitle END
-                FROM {block_rss_client}
-                WHERE userid = ? OR shared = 1
-                ORDER BY CASE WHEN preferredtitle = ? THEN ' . $DB->sql_compare_text('title', 64) . ' ELSE preferredtitle END ',
-                array($DB->sql_empty(), $USER->id, $DB->sql_empty()));
+        $insql = '';
+        $params = array('userid' => $USER->id);
+        $rssconfig = unserialize(base64_decode($this->block->instance->configdata));
+        if ($rssconfig && !empty($rssconfig->rssid)) {
+            list($insql, $inparams) = $DB->get_in_or_equal($rssconfig->rssid, SQL_PARAMS_NAMED);
+            $insql = "OR id $insql ";
+            $params += $inparams;
+        }
+
+        $titlesql = "CASE WHEN {$DB->sql_isempty('block_rss_client','preferredtitle', false, false)}
+                      THEN {$DB->sql_compare_text('title', 64)} ELSE preferredtitle END";
+
+        $rssfeeds = $DB->get_records_sql_menu("
+                SELECT id, $titlesql
+                  FROM {block_rss_client}
+                 WHERE userid = :userid OR shared = 1 $insql
+                 ORDER BY $titlesql",
+                $params);
+
         if ($rssfeeds) {
             $select = $mform->addElement('select', 'config_rssid', get_string('choosefeedlabel', 'block_rss_client'), $rssfeeds);
             $select->setMultiple(true);
 
         } else {
-            $mform->addElement('static', 'config_rssid', get_string('choosefeedlabel', 'block_rss_client'),
+            $mform->addElement('static', 'config_rssid_no_feeds', get_string('choosefeedlabel', 'block_rss_client'),
                     get_string('nofeeds', 'block_rss_client'));
         }
 

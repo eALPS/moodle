@@ -17,8 +17,7 @@
 /**
  * This file keeps track of upgrades to the paypal enrolment plugin
  *
- * @package    enrol
- * @subpackage paypal
+ * @package    enrol_paypal
  * @copyright  2010 Eugene Venter
  * @author     Eugene Venter
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -41,15 +40,22 @@
 // Please do not forget to use upgrade_set_timeout()
 // before any action that may take longer time to finish.
 
+defined('MOODLE_INTERNAL') || die();
+
 function xmldb_enrol_paypal_upgrade($oldversion) {
-    global $CFG, $DB;
+    global $CFG;
 
-    $dbman = $DB->get_manager();
+    // Moodle v2.8.0 release upgrade line.
+    // Put any upgrade step following this.
 
+    // Moodle v2.9.0 release upgrade line.
+    // Put any upgrade step following this.
 
-    // Moodle v2.3.0 release upgrade line
-    // Put any upgrade step following this
+    // Moodle v3.0.0 release upgrade line.
+    // Put any upgrade step following this.
 
+    // Moodle v3.1.0 release upgrade line.
+    // Put any upgrade step following this.
 
     return true;
 }

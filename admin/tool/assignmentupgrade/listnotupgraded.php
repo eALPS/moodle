@@ -22,14 +22,14 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once(dirname(__FILE__) . '/../../../config.php');
+require_once(__DIR__ . '/../../../config.php');
 require_once($CFG->libdir . '/adminlib.php');
 require_once($CFG->dirroot . '/'.$CFG->admin.'/tool/assignmentupgrade/locallib.php');
 require_once($CFG->dirroot . '/'.$CFG->admin.'/tool/assignmentupgrade/upgradableassignmentstable.php');
 require_once($CFG->dirroot . '/'.$CFG->admin.'/tool/assignmentupgrade/upgradableassignmentsbatchform.php');
 require_once($CFG->dirroot . '/'.$CFG->admin.'/tool/assignmentupgrade/paginationform.php');
 
-// admin_externalpage_setup calls require_login and checks moodle/site:config
+// This calls require_login and checks moodle/site:config.
 admin_externalpage_setup('assignmentupgrade', '', array(), tool_assignmentupgrade_url('listnotupgraded'));
 $PAGE->navbar->add(get_string('listnotupgraded', 'tool_assignmentupgrade'));
 
@@ -56,5 +56,4 @@ if ($data && $data->selectedassignments != '' || $data && isset($data->upgradeal
     $paginationform->set_data($pagedata);
     echo $renderer->assignment_list_page($assignments, $batchform, $paginationform);
 }
-
 

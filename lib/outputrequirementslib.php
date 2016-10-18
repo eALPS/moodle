@@ -35,11 +35,12 @@ defined('MOODLE_INTERNAL') || die();
  *
  * Typical usage would be
  * <pre>
- *     $PAGE->requires->js_init_call('M.mod_forum.init_view');
+ *     $PAGE->requires->js_call_amd('mod_forum/view', 'init');
  * </pre>
  *
- * It also supports obsoleted coding style withouth YUI3 modules.
+ * It also supports obsoleted coding style with/without YUI3 modules.
  * <pre>
+ *     $PAGE->requires->js_init_call('M.mod_forum.init_view');
  *     $PAGE->requires->css('/mod/mymod/userstyles.php?id='.$id); // not overridable via themes!
  *     $PAGE->requires->js('/mod/mymod/script.js');
  *     $PAGE->requires->js('/mod/mymod/small_but_urgent.js', true);
@@ -79,6 +80,11 @@ class page_requirements_manager {
     protected $jsincludes = array('head'=>array(), 'footer'=>array());
 
     /**
+     * @var array Inline scripts using RequireJS module loading.
+     */
+    protected $amdjscode = array('');
+
+    /**
      * @var array List of needed function calls
      */
     protected $jscalls = array('normal'=>array(), 'ondomready'=>array());
@@ -116,6 +122,13 @@ class page_requirements_manager {
     protected $extramodules = array();
 
     /**
+     * @var array trackes the names of bits of HTML that are only required once
+     * per page. See {@link has_one_time_item_been_created()},
+     * {@link set_one_time_item_created()} and {@link should_create_one_time_item_now()}.
+     */
+    protected $onetimeitemsoutput = array();
+
+    /**
      * @var bool Flag indicated head stuff already printed
      */
     protected $headdone = false;
@@ -131,9 +144,14 @@ class page_requirements_manager {
     protected $yui3loader;
 
     /**
-     * @var stdClass default YUI loader configuration
+     * @var YUI_config default YUI loader configuration
      */
     protected $YUI_config;
+
+    /**
+     * @var array $yuicssmodules
+     */
+    protected $yuicssmodules = array();
 
     /**
      * @var array Some config vars exposed in JS, please no secret stuff there
@@ -141,9 +159,14 @@ class page_requirements_manager {
     protected $M_cfg;
 
     /**
-     * @var array Stores debug backtraces from when JS modules were included in the page
+     * @var array list of requested jQuery plugins
      */
-    protected $debug_moduleloadstacktraces = array();
+    protected $jqueryplugins = array();
+
+    /**
+     * @var array list of jQuery plugin overrides
+     */
+    protected $jquerypluginoverrides = array();
 
     /**
      * Page requirements constructor.
@@ -155,92 +178,161 @@ class page_requirements_manager {
         $sep = empty($CFG->yuislasharguments) ? '?' : '/';
 
         $this->yui3loader = new stdClass();
+        $this->YUI_config = new YUI_config();
+
+        if (is_https()) {
+            // On HTTPS sites all JS must be loaded from https sites,
+            // YUI CDN does not support https yet, sorry.
+            $CFG->useexternalyui = 0;
+        }
 
         // Set up some loader options.
-        if (debugging('', DEBUG_DEVELOPER)) {
-            $this->yui3loader->filter = 'RAW'; // For more detailed logging info use 'DEBUG' here.
-        } else {
-            $this->yui3loader->filter = null;
-        }
-        if (!empty($CFG->useexternalyui) and strpos($CFG->httpswwwroot, 'https:') !== 0) {
-            $this->yui3loader->base = 'http://yui.yahooapis.com/' . $CFG->yui3version . '/build/';
+        $this->yui3loader->local_base = $CFG->httpswwwroot . '/lib/yuilib/'. $CFG->yui3version . '/';
+        $this->yui3loader->local_comboBase = $CFG->httpswwwroot . '/theme/yui_combo.php'.$sep;
+
+        if (!empty($CFG->useexternalyui)) {
+            $this->yui3loader->base = 'http://yui.yahooapis.com/' . $CFG->yui3version . '/';
             $this->yui3loader->comboBase = 'http://yui.yahooapis.com/combo?';
         } else {
-            $this->yui3loader->base = $CFG->httpswwwroot . '/lib/yuilib/'. $CFG->yui3version . '/build/';
-            $this->yui3loader->comboBase = $CFG->httpswwwroot . '/theme/yui_combo.php'.$sep;
+            $this->yui3loader->base = $this->yui3loader->local_base;
+            $this->yui3loader->comboBase = $this->yui3loader->local_comboBase;
         }
 
         // Enable combo loader? This significantly helps with caching and performance!
         $this->yui3loader->combine = !empty($CFG->yuicomboloading);
 
-        if (empty($CFG->cachejs)) {
-            $jsrev = -1;
-        } else if (empty($CFG->jsrev)) {
-            $jsrev = 1;
-        } else {
-            $jsrev = $CFG->jsrev;
-        }
+        $jsrev = $this->get_jsrev();
 
         // Set up JS YUI loader helper object.
-        $this->YUI_config = new stdClass();
         $this->YUI_config->base         = $this->yui3loader->base;
         $this->YUI_config->comboBase    = $this->yui3loader->comboBase;
         $this->YUI_config->combine      = $this->yui3loader->combine;
-        $this->YUI_config->filter       = (string)$this->yui3loader->filter;
-        $this->YUI_config->insertBefore = 'firstthemesheet';
-        $this->YUI_config->modules      = array();
-        $this->YUI_config->groups       = array(
-            // Loader for our YUI modules stored in /yui/ subdirectories of our plugins and subsystems.
-            'moodle' => array(
-                'name' => 'moodle',
-                'base' => $CFG->httpswwwroot . '/theme/yui_combo.php'.$sep.'moodle/'.$jsrev.'/',
-                'comboBase' => $CFG->httpswwwroot . '/theme/yui_combo.php'.$sep,
-                'combine' => $this->yui3loader->combine,
-                'filter' => '',
-                'ext' => false,
-                'root' => 'moodle/'.$jsrev.'/', // Add the rev to the root path so that we can control caching.
-                'patterns' => array(
-                    'moodle-' => array(
-                        'group' => 'moodle',
-                        'configFn' => '@MOODLECONFIGFN@'
-                    )
-                )
-            ),
-            // Gallery modules are not supported much, sorry.
-            'local' => array(
-                'name' => 'gallery',
-                'base' => $CFG->httpswwwroot . '/lib/yui/gallery/',
-                'comboBase' => $CFG->httpswwwroot . '/theme/yui_combo.php'.$sep,
-                'combine' => $this->yui3loader->combine,
-                'filter' => $this->YUI_config->filter,
-                'ext' => false,
-                'root' => 'gallery/',
-                'patterns' => array(
-                    'gallery-' => array(
-                        'group' => 'gallery',
-                        'configFn' => '@GALLERYCONFIGFN@',
-                    )
-                )
-            ),
+
+        // If we've had to patch any YUI modules between releases, we must override the YUI configuration to include them.
+        // For important information on patching YUI modules, please see http://docs.moodle.org/dev/YUI/Patching.
+        if (!empty($CFG->yuipatchedmodules) && !empty($CFG->yuipatchlevel)) {
+            $this->YUI_config->define_patched_core_modules($this->yui3loader->local_comboBase,
+                    $CFG->yui3version,
+                    $CFG->yuipatchlevel,
+                    $CFG->yuipatchedmodules);
+        }
+
+        $configname = $this->YUI_config->set_config_source('lib/yui/config/yui2.js');
+        $this->YUI_config->add_group('yui2', array(
             // Loader configuration for our 2in3, for now ignores $CFG->useexternalyui.
-            'yui2' => array(
-                'base' => $CFG->httpswwwroot . '/lib/yuilib/2in3/' . $CFG->yui2version . '/build/',
-                'comboBase' => $CFG->httpswwwroot . '/theme/yui_combo.php'.$sep,
-                'combine' => $this->yui3loader->combine,
-                'ext' => false,
-                'root' => '2in3/' . $CFG->yui2version .'/build/',
-                'patterns' => array(
-                    'yui2-' => array(
-                        'group' => 'yui2',
-                        'configFn' => '@2IN3CONFIGFN@'
-                    )
+            'base' => $CFG->httpswwwroot . '/lib/yuilib/2in3/' . $CFG->yui2version . '/build/',
+            'comboBase' => $CFG->httpswwwroot . '/theme/yui_combo.php'.$sep,
+            'combine' => $this->yui3loader->combine,
+            'ext' => false,
+            'root' => '2in3/' . $CFG->yui2version .'/build/',
+            'patterns' => array(
+                'yui2-' => array(
+                    'group' => 'yui2',
+                    'configFn' => $configname,
                 )
             )
-        );
+        ));
+        $configname = $this->YUI_config->set_config_source('lib/yui/config/moodle.js');
+        $this->YUI_config->add_group('moodle', array(
+            'name' => 'moodle',
+            'base' => $CFG->httpswwwroot . '/theme/yui_combo.php' . $sep . 'm/' . $jsrev . '/',
+            'combine' => $this->yui3loader->combine,
+            'comboBase' => $CFG->httpswwwroot . '/theme/yui_combo.php'.$sep,
+            'ext' => false,
+            'root' => 'm/'.$jsrev.'/', // Add the rev to the root path so that we can control caching.
+            'patterns' => array(
+                'moodle-' => array(
+                    'group' => 'moodle',
+                    'configFn' => $configname,
+                )
+            )
+        ));
+
+        $this->YUI_config->add_group('gallery', array(
+            'name' => 'gallery',
+            'base' => $CFG->httpswwwroot . '/lib/yuilib/gallery/',
+            'combine' => $this->yui3loader->combine,
+            'comboBase' => $CFG->httpswwwroot . '/theme/yui_combo.php' . $sep,
+            'ext' => false,
+            'root' => 'gallery/' . $jsrev . '/',
+            'patterns' => array(
+                'gallery-' => array(
+                    'group' => 'gallery',
+                )
+            )
+        ));
+
+        // Set some more loader options applying to groups too.
+        if ($CFG->debugdeveloper) {
+            // When debugging is enabled, we want to load the non-minified (RAW) versions of YUI library modules rather
+            // than the DEBUG versions as these generally generate too much logging for our purposes.
+            // However we do want the DEBUG versions of our Moodle-specific modules.
+            // To debug a YUI-specific issue, change the yui3loader->filter value to DEBUG.
+            $this->YUI_config->filter = 'RAW';
+            $this->YUI_config->groups['moodle']['filter'] = 'DEBUG';
+
+            // We use the yui3loader->filter setting when writing the YUI3 seed scripts into the header.
+            $this->yui3loader->filter = $this->YUI_config->filter;
+            $this->YUI_config->debug = true;
+        } else {
+            $this->yui3loader->filter = null;
+            $this->YUI_config->groups['moodle']['filter'] = null;
+            $this->YUI_config->debug = false;
+        }
+
+        // Include the YUI config log filters.
+        if (!empty($CFG->yuilogexclude) && is_array($CFG->yuilogexclude)) {
+            $this->YUI_config->logExclude = $CFG->yuilogexclude;
+        }
+        if (!empty($CFG->yuiloginclude) && is_array($CFG->yuiloginclude)) {
+            $this->YUI_config->logInclude = $CFG->yuiloginclude;
+        }
+        if (!empty($CFG->yuiloglevel)) {
+            $this->YUI_config->logLevel = $CFG->yuiloglevel;
+        }
+
+        // Add the moodle group's module data.
+        $this->YUI_config->add_moodle_metadata();
 
         // Every page should include definition of following modules.
         $this->js_module($this->find_module('core_filepicker'));
-        $this->js_module($this->find_module('core_dock'));
+        $this->js_module($this->find_module('core_comment'));
+    }
+
+    /**
+     * Return the safe config values that get set for javascript in "M.cfg".
+     *
+     * @since 2.9
+     * @return array List of safe config values that are available to javascript.
+     */
+    public function get_config_for_javascript(moodle_page $page, renderer_base $renderer) {
+        global $CFG;
+
+        if (empty($this->M_cfg)) {
+            // JavaScript should always work with $CFG->httpswwwroot rather than $CFG->wwwroot.
+            // Otherwise, in some situations, users will get warnings about insecure content
+            // on secure pages from their web browser.
+
+            $this->M_cfg = array(
+                'wwwroot'             => $CFG->httpswwwroot, // Yes, really. See above.
+                'sesskey'             => sesskey(),
+                'loadingicon'         => $renderer->pix_url('i/loading_small', 'moodle')->out(false),
+                'themerev'            => theme_get_revision(),
+                'slasharguments'      => (int)(!empty($CFG->slasharguments)),
+                'theme'               => $page->theme->name,
+                'jsrev'               => $this->get_jsrev(),
+                'admin'               => $CFG->admin,
+                'svgicons'            => $page->theme->use_svg_icons()
+            );
+            if ($CFG->debugdeveloper) {
+                $this->M_cfg['developerdebug'] = true;
+            }
+            if (defined('BEHAT_SITE_RUNNING')) {
+                $this->M_cfg['behatsiterunning'] = true;
+            }
+
+        }
+        return $this->M_cfg;
     }
 
     /**
@@ -252,23 +344,8 @@ class page_requirements_manager {
     protected function init_requirements_data(moodle_page $page, core_renderer $renderer) {
         global $CFG;
 
-        // JavaScript should always work with $CFG->httpswwwroot rather than $CFG->wwwroot.
-        // Otherwise, in some situations, users will get warnings about insecure content
-        // on secure pages from their web browser.
-
-        $this->M_cfg = array(
-            'wwwroot'             => $CFG->httpswwwroot, // Yes, really. See above.
-            'sesskey'             => sesskey(),
-            'loadingicon'         => $renderer->pix_url('i/loading_small', 'moodle')->out(false),
-            'themerev'            => theme_get_revision(),
-            'slasharguments'      => (int)(!empty($CFG->slasharguments)),
-            'theme'               => $page->theme->name,
-            'jsrev'               => ((empty($CFG->cachejs) or empty($CFG->jsrev)) ? -1 : $CFG->jsrev),
-            'svgicons'            => $page->theme->use_svg_icons()
-        );
-        if (debugging('', DEBUG_DEVELOPER)) {
-            $this->M_cfg['developerdebug'] = true;
-        }
+        // Init the js config.
+        $this->get_config_for_javascript($page, $renderer);
 
         // Accessibility stuff.
         $this->skip_link_to('maincontent', get_string('tocontent', 'access'));
@@ -282,6 +359,49 @@ class page_requirements_manager {
         if ($page->pagelayout === 'frametop') {
             $this->js_init_call('M.util.init_frametop');
         }
+
+        // Include block drag/drop if editing is on
+        if ($page->user_is_editing()) {
+            $params = array(
+                'courseid' => $page->course->id,
+                'pagetype' => $page->pagetype,
+                'pagelayout' => $page->pagelayout,
+                'subpage' => $page->subpage,
+                'regions' => $page->blocks->get_regions(),
+                'contextid' => $page->context->id,
+            );
+            if (!empty($page->cm->id)) {
+                $params['cmid'] = $page->cm->id;
+            }
+            // Strings for drag and drop.
+            $this->strings_for_js(array('movecontent',
+                                        'tocontent',
+                                        'emptydragdropregion'),
+                                  'moodle');
+            $page->requires->yui_module('moodle-core-blocks', 'M.core_blocks.init_dragdrop', array($params), null, true);
+        }
+
+        // Include the YUI CSS Modules.
+        $page->requires->set_yuicssmodules($page->theme->yuicssmodules);
+    }
+
+    /**
+     * Determine the correct JS Revision to use for this load.
+     *
+     * @return int the jsrev to use.
+     */
+    protected function get_jsrev() {
+        global $CFG;
+
+        if (empty($CFG->cachejs)) {
+            $jsrev = -1;
+        } else if (empty($CFG->jsrev)) {
+            $jsrev = 1;
+        } else {
+            $jsrev = $CFG->jsrev;
+        }
+
+        return $jsrev;
     }
 
     /**
@@ -306,17 +426,249 @@ class page_requirements_manager {
     }
 
     /**
-     * This method was used to load YUI2 libraries into global scope,
-     * use YUI 2in3 instead. Every YUI2 module is represented as a yui2-*
-     * sandboxed module in YUI3 code via Y.YUI2. property.
+     * Request inclusion of jQuery library in the page.
      *
-     * {@see http://tracker.moodle.org/browse/MDL-34741}
+     * NOTE: this should not be used in official Moodle distribution!
      *
-     * @param string|array $libname
-     * @deprecated since 2.4
+     * {@see http://docs.moodle.org/dev/jQuery}
      */
-    public function yui2_lib($libname) {
-        throw new coding_exception('PAGE->yui2_lib() is not available any more, use YUI 2in3 instead, see MDL-34741 for more information.');
+    public function jquery() {
+        $this->jquery_plugin('jquery');
+    }
+
+    /**
+     * Request inclusion of jQuery plugin.
+     *
+     * NOTE: this should not be used in official Moodle distribution!
+     *
+     * jQuery plugins are located in plugin/jquery/* subdirectory,
+     * plugin/jquery/plugins.php lists all available plugins.
+     *
+     * Included core plugins:
+     *   - jQuery UI
+     *
+     * Add-ons may include extra jQuery plugins in jquery/ directory,
+     * plugins.php file defines the mapping between plugin names and
+     * necessary page includes.
+     *
+     * Examples:
+     * <code>
+     *   // file: mod/xxx/view.php
+     *   $PAGE->requires->jquery();
+     *   $PAGE->requires->jquery_plugin('ui');
+     *   $PAGE->requires->jquery_plugin('ui-css');
+     * </code>
+     *
+     * <code>
+     *   // file: theme/yyy/lib.php
+     *   function theme_yyy_page_init(moodle_page $page) {
+     *       $page->requires->jquery();
+     *       $page->requires->jquery_plugin('ui');
+     *       $page->requires->jquery_plugin('ui-css');
+     *   }
+     * </code>
+     *
+     * <code>
+     *   // file: blocks/zzz/block_zzz.php
+     *   public function get_required_javascript() {
+     *       parent::get_required_javascript();
+     *       $this->page->requires->jquery();
+     *       $page->requires->jquery_plugin('ui');
+     *       $page->requires->jquery_plugin('ui-css');
+     *   }
+     * </code>
+     *
+     * {@see http://docs.moodle.org/dev/jQuery}
+     *
+     * @param string $plugin name of the jQuery plugin as defined in jquery/plugins.php
+     * @param string $component name of the component
+     * @return bool success
+     */
+    public function jquery_plugin($plugin, $component = 'core') {
+        global $CFG;
+
+        if ($this->headdone) {
+            debugging('Can not add jQuery plugins after starting page output!');
+            return false;
+        }
+
+        if ($component !== 'core' and in_array($plugin, array('jquery', 'ui', 'ui-css'))) {
+            debugging("jQuery plugin '$plugin' is included in Moodle core, other components can not use the same name.", DEBUG_DEVELOPER);
+            $component = 'core';
+        } else if ($component !== 'core' and strpos($component, '_') === false) {
+            // Let's normalise the legacy activity names, Frankenstyle rulez!
+            $component = 'mod_' . $component;
+        }
+
+        if (empty($this->jqueryplugins) and ($component !== 'core' or $plugin !== 'jquery')) {
+            // Make sure the jQuery itself is always loaded first,
+            // the order of all other plugins depends on order of $PAGE_>requires->.
+            $this->jquery_plugin('jquery', 'core');
+        }
+
+        if (isset($this->jqueryplugins[$plugin])) {
+            // No problem, we already have something, first Moodle plugin to register the jQuery plugin wins.
+            return true;
+        }
+
+        $componentdir = core_component::get_component_directory($component);
+        if (!file_exists($componentdir) or !file_exists("$componentdir/jquery/plugins.php")) {
+            debugging("Can not load jQuery plugin '$plugin', missing plugins.php in component '$component'.", DEBUG_DEVELOPER);
+            return false;
+        }
+
+        $plugins = array();
+        require("$componentdir/jquery/plugins.php");
+
+        if (!isset($plugins[$plugin])) {
+            debugging("jQuery plugin '$plugin' can not be found in component '$component'.", DEBUG_DEVELOPER);
+            return false;
+        }
+
+        $this->jqueryplugins[$plugin] = new stdClass();
+        $this->jqueryplugins[$plugin]->plugin    = $plugin;
+        $this->jqueryplugins[$plugin]->component = $component;
+        $this->jqueryplugins[$plugin]->urls      = array();
+
+        foreach ($plugins[$plugin]['files'] as $file) {
+            if ($CFG->debugdeveloper) {
+                if (!file_exists("$componentdir/jquery/$file")) {
+                    debugging("Invalid file '$file' specified in jQuery plugin '$plugin' in component '$component'");
+                    continue;
+                }
+                $file = str_replace('.min.css', '.css', $file);
+                $file = str_replace('.min.js', '.js', $file);
+            }
+            if (!file_exists("$componentdir/jquery/$file")) {
+                debugging("Invalid file '$file' specified in jQuery plugin '$plugin' in component '$component'");
+                continue;
+            }
+            if (!empty($CFG->slasharguments)) {
+                $url = new moodle_url("$CFG->httpswwwroot/theme/jquery.php");
+                $url->set_slashargument("/$component/$file");
+
+            } else {
+                // This is not really good, we need slasharguments for relative links, this means no caching...
+                $path = realpath("$componentdir/jquery/$file");
+                if (strpos($path, $CFG->dirroot) === 0) {
+                    $url = $CFG->httpswwwroot.preg_replace('/^'.preg_quote($CFG->dirroot, '/').'/', '', $path);
+                    // Replace all occurences of backslashes characters in url to forward slashes.
+                    $url = str_replace('\\', '/', $url);
+                    $url = new moodle_url($url);
+                } else {
+                    // Bad luck, fix your server!
+                    debugging("Moodle jQuery integration requires 'slasharguments' setting to be enabled.");
+                    continue;
+                }
+            }
+            $this->jqueryplugins[$plugin]->urls[] = $url;
+        }
+
+        return true;
+    }
+
+    /**
+     * Request replacement of one jQuery plugin by another.
+     *
+     * This is useful when themes want to replace the jQuery UI theme,
+     * the problem is that theme can not prevent others from including the core ui-css plugin.
+     *
+     * Example:
+     *  1/ generate new jQuery UI theme and place it into theme/yourtheme/jquery/
+     *  2/ write theme/yourtheme/jquery/plugins.php
+     *  3/ init jQuery from theme
+     *
+     * <code>
+     *   // file theme/yourtheme/lib.php
+     *   function theme_yourtheme_page_init($page) {
+     *       $page->requires->jquery_plugin('yourtheme-ui-css', 'theme_yourtheme');
+     *       $page->requires->jquery_override_plugin('ui-css', 'yourtheme-ui-css');
+     *   }
+     * </code>
+     *
+     * This code prevents loading of standard 'ui-css' which my be requested by other plugins,
+     * the 'yourtheme-ui-css' gets loaded only if some other code requires jquery.
+     *
+     * {@see http://docs.moodle.org/dev/jQuery}
+     *
+     * @param string $oldplugin original plugin
+     * @param string $newplugin the replacement
+     */
+    public function jquery_override_plugin($oldplugin, $newplugin) {
+        if ($this->headdone) {
+            debugging('Can not override jQuery plugins after starting page output!');
+            return;
+        }
+        $this->jquerypluginoverrides[$oldplugin] = $newplugin;
+    }
+
+    /**
+     * Return jQuery related markup for page start.
+     * @return string
+     */
+    protected function get_jquery_headcode() {
+        if (empty($this->jqueryplugins['jquery'])) {
+            // If nobody requested jQuery then do not bother to load anything.
+            // This may be useful for themes that want to override 'ui-css' only if requested by something else.
+            return '';
+        }
+
+        $included = array();
+        $urls = array();
+
+        foreach ($this->jqueryplugins as $name => $unused) {
+            if (isset($included[$name])) {
+                continue;
+            }
+            if (array_key_exists($name, $this->jquerypluginoverrides)) {
+                // The following loop tries to resolve the replacements,
+                // use max 100 iterations to prevent infinite loop resulting
+                // in blank page.
+                $cyclic = true;
+                $oldname = $name;
+                for ($i=0; $i<100; $i++) {
+                    $name = $this->jquerypluginoverrides[$name];
+                    if (!array_key_exists($name, $this->jquerypluginoverrides)) {
+                        $cyclic = false;
+                        break;
+                    }
+                }
+                if ($cyclic) {
+                    // We can not do much with cyclic references here, let's use the old plugin.
+                    $name = $oldname;
+                    debugging("Cyclic overrides detected for jQuery plugin '$name'");
+
+                } else if (empty($name)) {
+                    // Developer requested removal of the plugin.
+                    continue;
+
+                } else if (!isset($this->jqueryplugins[$name])) {
+                    debugging("Unknown jQuery override plugin '$name' detected");
+                    $name = $oldname;
+
+                } else if (isset($included[$name])) {
+                    // The plugin was already included, easy.
+                    continue;
+                }
+            }
+
+            $plugin = $this->jqueryplugins[$name];
+            $urls = array_merge($urls, $plugin->urls);
+            $included[$name] = true;
+        }
+
+        $output = '';
+        $attributes = array('rel' => 'stylesheet', 'type' => 'text/css');
+        foreach ($urls as $url) {
+            if (preg_match('/\.js$/', $url)) {
+                $output .= html_writer::script('', $url);
+            } else if (preg_match('/\.css$/', $url)) {
+                $attributes['href'] = $url;
+                $output .= html_writer::empty_tag('link', $attributes) . "\n";
+            }
+        }
+
+        return $output;
     }
 
     /**
@@ -343,12 +695,13 @@ class page_requirements_manager {
                     throw new coding_exception('Attempt to require a JavaScript file that does not exist.', $url);
                 }
             }
-            if (!empty($CFG->cachejs) and !empty($CFG->jsrev) and $CFG->jsrev > 0 and substr($url, -3) === '.js') {
+            if (substr($url, -3) === '.js') {
+                $jsrev = $this->get_jsrev();
                 if (empty($CFG->slasharguments)) {
-                    return new moodle_url($CFG->httpswwwroot.'/lib/javascript.php', array('rev'=>$CFG->jsrev, 'jsfile'=>$url));
+                    return new moodle_url($CFG->httpswwwroot.'/lib/javascript.php', array('rev'=>$jsrev, 'jsfile'=>$url));
                 } else {
                     $returnurl = new moodle_url($CFG->httpswwwroot.'/lib/javascript.php');
-                    $returnurl->set_slashargument('/'.$CFG->jsrev.$url);
+                    $returnurl->set_slashargument('/'.$jsrev.$url);
                     return $returnurl;
                 }
             } else {
@@ -377,14 +730,14 @@ class page_requirements_manager {
                 case 'core_filepicker':
                     $module = array('name'     => 'core_filepicker',
                                     'fullpath' => '/repository/filepicker.js',
-                                    'requires' => array('base', 'node', 'node-event-simulate', 'json', 'async-queue', 'io-base', 'io-upload-iframe', 'io-form', 'yui2-treeview', 'panel', 'cookie', 'datatable', 'datatable-sort', 'resize-plugin', 'dd-plugin', 'moodle-core_filepicker'),
+                                    'requires' => array('base', 'node', 'node-event-simulate', 'json', 'async-queue', 'io-base', 'io-upload-iframe', 'io-form', 'yui2-treeview', 'panel', 'cookie', 'datatable', 'datatable-sort', 'resize-plugin', 'dd-plugin', 'escape', 'moodle-core_filepicker'),
                                     'strings'  => array(array('lastmodified', 'moodle'), array('name', 'moodle'), array('type', 'repository'), array('size', 'repository'),
                                                         array('invalidjson', 'repository'), array('error', 'moodle'), array('info', 'moodle'),
                                                         array('nofilesattached', 'repository'), array('filepicker', 'repository'), array('logout', 'repository'),
                                                         array('nofilesavailable', 'repository'), array('norepositoriesavailable', 'repository'),
                                                         array('fileexistsdialogheader', 'repository'), array('fileexistsdialog_editor', 'repository'),
                                                         array('fileexistsdialog_filemanager', 'repository'), array('renameto', 'repository'),
-                                                        array('referencesexist', 'repository')
+                                                        array('referencesexist', 'repository'), array('select', 'repository')
                                                     ));
                     break;
                 case 'core_comment':
@@ -402,12 +755,6 @@ class page_requirements_manager {
                 case 'core_completion':
                     $module = array('name'     => 'core_completion',
                                     'fullpath' => '/course/completion.js');
-                    break;
-                case 'core_dock':
-                    $module = array('name'     => 'core_dock',
-                                    'fullpath' => '/blocks/dock.js',
-                                    'requires' => array('base', 'node', 'event-custom', 'event-mouseenter', 'event-resize'),
-                                    'strings' => array(array('addtodock', 'block'),array('undockitem', 'block'),array('undockall', 'block'),array('thisdirectionvertical', 'langconfig')));
                     break;
                 case 'core_message':
                     $module = array('name'     => 'core_message',
@@ -433,12 +780,16 @@ class page_requirements_manager {
                     $module = array('name'     => 'core_dndupload',
                                     'fullpath' => '/lib/form/dndupload.js',
                                     'requires' => array('node', 'event', 'json', 'core_filepicker'),
-                                    'strings'  => array(array('uploadformlimit', 'moodle'), array('droptoupload', 'moodle'), array('maxfilesreached', 'moodle'), array('dndenabled_inbox', 'moodle'), array('fileexists', 'moodle')));
+                                    'strings'  => array(array('uploadformlimit', 'moodle'), array('droptoupload', 'moodle'), array('maxfilesreached', 'moodle'),
+                                                        array('dndenabled_inbox', 'moodle'), array('fileexists', 'moodle'), array('maxbytesfile', 'error'),
+                                                        array('sizegb', 'moodle'), array('sizemb', 'moodle'), array('sizekb', 'moodle'), array('sizeb', 'moodle'),
+                                                        array('maxareabytesreached', 'moodle'), array('serverconnection', 'error'),
+                                                    ));
                     break;
             }
 
         } else {
-            if ($dir = get_component_directory($component)) {
+            if ($dir = core_component::get_component_directory($component)) {
                 if (file_exists("$dir/module.js")) {
                     if (strpos($dir, $CFG->dirroot.'/') === 0) {
                         $dir = substr($dir, strlen($CFG->dirroot));
@@ -473,14 +824,6 @@ class page_requirements_manager {
             throw new coding_exception('Missing YUI3 module details.');
         }
 
-        // Don't load this module if we already have, no need to!
-        if ($this->js_module_loaded($module['name'])) {
-            if (debugging('', DEBUG_DEVELOPER)) {
-                $this->debug_moduleloadstacktraces[$module['name']][] = format_backtrace(debug_backtrace());
-            }
-            return;
-        }
-
         $module['fullpath'] = $this->js_fix_url($module['fullpath'])->out(false);
         // Add all needed strings.
         if (!empty($module['strings'])) {
@@ -507,13 +850,7 @@ class page_requirements_manager {
         if ($this->headdone) {
             $this->extramodules[$module['name']] = $module;
         } else {
-            $this->YUI_config->modules[$module['name']] = $module;
-        }
-        if (debugging('', DEBUG_DEVELOPER)) {
-            if (!array_key_exists($module['name'], $this->debug_moduleloadstacktraces)) {
-                $this->debug_moduleloadstacktraces[$module['name']] = array();
-            }
-            $this->debug_moduleloadstacktraces[$module['name']][] = format_backtrace(debug_backtrace());
+            $this->YUI_config->add_module_config($module['name'], $module);
         }
     }
 
@@ -531,14 +868,6 @@ class page_requirements_manager {
         }
         return array_key_exists($modulename, $this->YUI_config->modules) ||
                array_key_exists($modulename, $this->extramodules);
-    }
-
-    /**
-     * Returns the stacktraces from loading js modules.
-     * @return array
-     */
-    public function get_loaded_modules() {
-        return $this->debug_moduleloadstacktraces;
     }
 
     /**
@@ -646,20 +975,49 @@ class page_requirements_manager {
     }
 
     /**
-     * Adds a call to make use of a YUI gallery module. DEPRECATED DO NOT USE!!!
+     * This function appends a block of code to the AMD specific javascript block executed
+     * in the page footer, just after loading the requirejs library.
      *
-     * @deprecated DO NOT USE
+     * The code passed here can rely on AMD module loading, e.g. require('jquery', function($) {...});
      *
-     * @param string|array $modules One or more gallery modules to require
-     * @param string $version
-     * @param string $function
-     * @param array $arguments
-     * @param bool $ondomready
+     * @param string $code The JS code to append.
      */
-    public function js_gallery_module($modules, $version, $function, array $arguments = null, $ondomready = false) {
+    public function js_amd_inline($code) {
+        $this->amdjscode[] = $code;
+    }
+
+    /**
+     * This function creates a minimal JS script that requires and calls a single function from an AMD module with arguments.
+     * If it is called multiple times, it will be executed multiple times.
+     *
+     * @param string $fullmodule The format for module names is <component name>/<module name>.
+     * @param string $func The function from the module to call
+     * @param array $params The params to pass to the function. They will be json encoded, so no nasty classes/types please.
+     */
+    public function js_call_amd($fullmodule, $func, $params = array()) {
         global $CFG;
-        debugging('This function will be removed before 2.0 is released please change it from js_gallery_module to yui_module', DEBUG_DEVELOPER);
-        $this->yui_module($modules, $function, $arguments, $version, $ondomready);
+
+        list($component, $module) = explode('/', $fullmodule, 2);
+
+        $component = clean_param($component, PARAM_COMPONENT);
+        $module = clean_param($module, PARAM_ALPHANUMEXT);
+        $func = clean_param($func, PARAM_ALPHANUMEXT);
+
+        $jsonparams = array();
+        foreach ($params as $param) {
+            $jsonparams[] = json_encode($param);
+        }
+        $strparams = implode(', ', $jsonparams);
+        if ($CFG->debugdeveloper) {
+            $toomanyparamslimit = 1024;
+            if (strlen($strparams) > $toomanyparamslimit) {
+                debugging('Too many params passed to js_call_amd("' . $fullmodule . '", "' . $func . '")', DEBUG_DEVELOPER);
+            }
+        }
+
+        $js = 'require(["' . $component . '/' . $module . '"], function(amd) { amd.' . $func . '(' . $strparams . '); });';
+
+        $this->js_amd_inline($js);
     }
 
     /**
@@ -671,34 +1029,38 @@ class page_requirements_manager {
      *     - Moodle modules  [moodle-*]
      *     - Gallery modules [gallery-*]
      *
+     * Before writing new code that makes extensive use of YUI, you should consider it's replacement AMD/JQuery.
+     * @see js_call_amd()
+     *
      * @param array|string $modules One or more modules
      * @param string $function The function to call once modules have been loaded
      * @param array $arguments An array of arguments to pass to the function
-     * @param string $galleryversion The gallery version to use
+     * @param string $galleryversion Deprecated: The gallery version to use
      * @param bool $ondomready
      */
     public function yui_module($modules, $function, array $arguments = null, $galleryversion = null, $ondomready = false) {
-        global $CFG;
-
-        if (!$galleryversion) {
-            $galleryversion = '2010.04.08-12-35';
-        }
-
         if (!is_array($modules)) {
             $modules = array($modules);
         }
-        if (empty($CFG->useexternalyui)) {
-            // We need to set the M.yui.galleryversion to the correct version
-            $jscode = 'M.yui.galleryversion='.json_encode($galleryversion).';';
-        } else {
-            // Set Y's config.gallery to the version
-            $jscode = 'Y.config.gallery='.json_encode($galleryversion).';';
+
+        if ($galleryversion != null) {
+            debugging('The galleryversion parameter to yui_module has been deprecated since Moodle 2.3.');
         }
-        $jscode .= 'Y.use('.join(',', array_map('json_encode', convert_to_array($modules))).',function() {'.js_writer::function_call($function, $arguments).'});';
+
+        $jscode = 'Y.use('.join(',', array_map('json_encode', convert_to_array($modules))).',function() {'.js_writer::function_call($function, $arguments).'});';
         if ($ondomready) {
             $jscode = "Y.on('domready', function() { $jscode });";
         }
         $this->jsinitcode[] = $jscode;
+    }
+
+    /**
+     * Set the CSS Modules to be included from YUI.
+     *
+     * @param array $modules The list of YUI CSS Modules to include.
+     */
+    public function set_yuicssmodules(array $modules = array()) {
+        $this->yuicssmodules = $modules;
     }
 
     /**
@@ -738,14 +1100,18 @@ class page_requirements_manager {
     public function js_init_code($jscode, $ondomready = false, array $module = null) {
         $jscode = trim($jscode, " ;\n"). ';';
 
+        $uniqid = html_writer::random_id();
+        $startjs = " M.util.js_pending('" . $uniqid . "');";
+        $endjs = " M.util.js_complete('" . $uniqid . "');";
+
         if ($module) {
             $this->js_module($module);
             $modulename = $module['name'];
-            $jscode = "Y.use('$modulename', function(Y) { $jscode });";
+            $jscode = "$startjs Y.use('$modulename', function(Y) { $jscode $endjs });";
         }
 
         if ($ondomready) {
-            $jscode = "Y.on('domready', function() { $jscode });";
+            $jscode = "$startjs Y.on('domready', function() { $jscode $endjs });";
         }
 
         $this->jsinitcode[] = $jscode;
@@ -911,7 +1277,7 @@ class page_requirements_manager {
                 $output .= js_writer::function_call($data[0], $data[1], $data[2]);
             }
             if (!empty($ondomready)) {
-                $output = "    Y.on('domready', function() {\n$output\n    });";
+                $output = "    Y.on('domready', function() {\n$output\n});";
             }
         }
         return $output;
@@ -929,47 +1295,130 @@ class page_requirements_manager {
     }
 
     /**
-     * Returns basic YUI3 JS loading code.
-     * YUI3 is using autoloading of both CSS and JS code.
+     * Returns js code to load amd module loader, then insert inline script tags
+     * that contain require() calls using RequireJS.
+     * @return string
+     */
+    protected function get_amd_footercode() {
+        global $CFG;
+        $output = '';
+        $jsrev = $this->get_jsrev();
+
+        $jsloader = new moodle_url($CFG->httpswwwroot . '/lib/javascript.php');
+        $jsloader->set_slashargument('/' . $jsrev . '/');
+        $requirejsloader = new moodle_url($CFG->httpswwwroot . '/lib/requirejs.php');
+        $requirejsloader->set_slashargument('/' . $jsrev . '/');
+
+        $requirejsconfig = file_get_contents($CFG->dirroot . '/lib/requirejs/moodle-config.js');
+
+        // No extension required unless slash args is disabled.
+        $jsextension = '.js';
+        if (!empty($CFG->slasharguments)) {
+            $jsextension = '';
+        }
+
+        $requirejsconfig = str_replace('[BASEURL]', $requirejsloader, $requirejsconfig);
+        $requirejsconfig = str_replace('[JSURL]', $jsloader, $requirejsconfig);
+        $requirejsconfig = str_replace('[JSEXT]', $jsextension, $requirejsconfig);
+
+        $output .= html_writer::script($requirejsconfig);
+        if ($CFG->debugdeveloper) {
+            $output .= html_writer::script('', $this->js_fix_url('/lib/requirejs/require.js'));
+        } else {
+            $output .= html_writer::script('', $this->js_fix_url('/lib/requirejs/require.min.js'));
+        }
+
+        // First include must be to a module with no dependencies, this prevents multiple requests.
+        $prefix = "require(['core/first'], function() {\n";
+        $suffix = "\n});";
+        $output .= html_writer::script($prefix . implode(";\n", $this->amdjscode) . $suffix);
+        return $output;
+    }
+
+    /**
+     * Returns basic YUI3 CSS code.
      *
-     * Major benefit of this compared to standard js/csss loader is much improved
-     * caching, better browser cache utilisation, much fewer http requests.
+     * @return string
+     */
+    protected function get_yui3lib_headcss() {
+        global $CFG;
+
+        $yuiformat = '-min';
+        if ($this->yui3loader->filter === 'RAW') {
+            $yuiformat = '';
+        }
+
+        $code = '';
+        if ($this->yui3loader->combine) {
+            if (!empty($this->yuicssmodules)) {
+                $modules = array();
+                foreach ($this->yuicssmodules as $module) {
+                    $modules[] = "$CFG->yui3version/$module/$module-min.css";
+                }
+                $code .= '<link rel="stylesheet" type="text/css" href="'.$this->yui3loader->comboBase.implode('&amp;', $modules).'" />';
+            }
+            $code .= '<link rel="stylesheet" type="text/css" href="'.$this->yui3loader->local_comboBase.'rollup/'.$CFG->yui3version.'/yui-moodlesimple' . $yuiformat . '.css" />';
+
+        } else {
+            if (!empty($this->yuicssmodules)) {
+                foreach ($this->yuicssmodules as $module) {
+                    $code .= '<link rel="stylesheet" type="text/css" href="'.$this->yui3loader->base.$module.'/'.$module.'-min.css" />';
+                }
+            }
+            $code .= '<link rel="stylesheet" type="text/css" href="'.$this->yui3loader->local_comboBase.'rollup/'.$CFG->yui3version.'/yui-moodlesimple' . $yuiformat . '.css" />';
+        }
+
+        if ($this->yui3loader->filter === 'RAW') {
+            $code = str_replace('-min.css', '.css', $code);
+        } else if ($this->yui3loader->filter === 'DEBUG') {
+            $code = str_replace('-min.css', '.css', $code);
+        }
+        return $code;
+    }
+
+    /**
+     * Returns basic YUI3 JS loading code.
      *
      * @return string
      */
     protected function get_yui3lib_headcode() {
         global $CFG;
 
-        $code = '';
+        $jsrev = $this->get_jsrev();
+
+        $yuiformat = '-min';
+        if ($this->yui3loader->filter === 'RAW') {
+            $yuiformat = '';
+        }
+
+        $format = '-min';
+        if ($this->YUI_config->groups['moodle']['filter'] === 'DEBUG') {
+            $format = '-debug';
+        }
+
+        $rollupversion = $CFG->yui3version;
+        if (!empty($CFG->yuipatchlevel)) {
+            $rollupversion .= '_' . $CFG->yuipatchlevel;
+        }
+
+        $baserollups = array(
+            'rollup/' . $rollupversion . "/yui-moodlesimple{$yuiformat}.js",
+            'rollup/' . $jsrev . "/mcore{$format}.js",
+        );
 
         if ($this->yui3loader->combine) {
-            $code .= '<link rel="stylesheet" type="text/css" href="'.$this->yui3loader->comboBase
-                     .$CFG->yui3version.'/build/cssreset/reset-min.css&amp;'
-                     .$CFG->yui3version.'/build/cssfonts/fonts-min.css&amp;'
-                     .$CFG->yui3version.'/build/cssgrids/grids-min.css&amp;'
-                     .$CFG->yui3version.'/build/cssbase/base-min.css" />';
-            $code .= '<script type="text/javascript" src="'.$this->yui3loader->comboBase
-                     .$CFG->yui3version.'/build/simpleyui/simpleyui-min.js&amp;'
-                     .$CFG->yui3version.'/build/loader/loader-min.js"></script>';
+            return '<script type="text/javascript" src="' .
+                    $this->yui3loader->local_comboBase .
+                    implode('&amp;', $baserollups) .
+                    '"></script>';
         } else {
-            $code .= '<link rel="stylesheet" type="text/css" href="'.$this->yui3loader->base.'cssreset/reset-min.css" />';
-            $code .= '<link rel="stylesheet" type="text/css" href="'.$this->yui3loader->base.'cssfonts/fonts-min.css" />';
-            $code .= '<link rel="stylesheet" type="text/css" href="'.$this->yui3loader->base.'cssgrids/grids-min.css" />';
-            $code .= '<link rel="stylesheet" type="text/css" href="'.$this->yui3loader->base.'cssbase/base-min.css" />';
-            $code .= '<script type="text/javascript" src="'.$this->yui3loader->base.'simpleyui/simpleyui-min.js"></script>';
-            $code .= '<script type="text/javascript" src="'.$this->yui3loader->base.'loader/loader-min.js"></script>';
+            $code = '';
+            foreach ($baserollups as $rollup) {
+                $code .= '<script type="text/javascript" src="'.$this->yui3loader->local_comboBase.$rollup.'"></script>';
+            }
+            return $code;
         }
 
-
-        if ($this->yui3loader->filter === 'RAW') {
-            $code = str_replace('-min.css', '.css', $code);
-            $code = str_replace('-min.js', '.js', $code);
-        } else if ($this->yui3loader->filter === 'DEBUG') {
-            $code = str_replace('-min.css', '.css', $code);
-            $code = str_replace('-min.js', '-debug.js', $code);
-        }
-
-        return $code;
     }
 
     /**
@@ -984,12 +1433,15 @@ class page_requirements_manager {
         // It is suitable only for things like mod/data which accepts CSS from teachers.
         $attributes = array('rel'=>'stylesheet', 'type'=>'text/css');
 
+        // Add the YUI code first. We want this to be overridden by any Moodle CSS.
+        $code = $this->get_yui3lib_headcss();
+
         // This line of code may look funny but it is currently required in order
         // to avoid MASSIVE display issues in Internet Explorer.
         // As of IE8 + YUI3.1.1 the reference stylesheet (firstthemesheet) gets
         // ignored whenever another resource is added until such time as a redraw
         // is forced, usually by moving the mouse over the affected element.
-        $code = html_writer::tag('script', '/** Required in order to fix style inclusion problems in IE with YUI **/', array('id'=>'firstthemesheet', 'type'=>'text/css'));
+        $code .= html_writer::tag('script', '/** Required in order to fix style inclusion problems in IE with YUI **/', array('id'=>'firstthemesheet', 'type'=>'text/css'));
 
         $urls = $this->cssthemeurls + $this->cssurls;
         foreach ($urls as $url) {
@@ -1031,30 +1483,31 @@ class page_requirements_manager {
         // create circular references in memory which prevents garbage collection.
         $this->init_requirements_data($page, $renderer);
 
-        // YUI3 JS and CSS is always loaded first - it is cached in browser.
-        $output = $this->get_yui3lib_headcode();
+        $output = '';
 
-        // Now theme CSS + custom CSS in this specific order.
+        // Add all standard CSS for this page.
         $output .= $this->get_css_code();
+
+        // Set up the M namespace.
+        $js = "var M = {}; M.yui = {};\n";
+
+        // Capture the time now ASAP during page load. This minimises the lag when
+        // we try to relate times on the server to times in the browser.
+        // An example of where this is used is the quiz countdown timer.
+        $js .= "M.pageloadstarttime = new Date();\n";
+
+        // Add a subset of Moodle configuration to the M namespace.
+        $js .= js_writer::set_variable('M.cfg', $this->M_cfg, false);
 
         // Set up global YUI3 loader object - this should contain all code needed by plugins.
         // Note: in JavaScript just use "YUI().use('overlay', function(Y) { .... });",
         //       this needs to be done before including any other script.
-        $js = "var M = {}; M.yui = {};
-var moodleConfigFn = function(me) {var p = me.path, b = me.name.replace(/^moodle-/,'').split('-', 3), n = b.pop();if (/(skin|core)/.test(n)) {n = b.pop();me.type = 'css';};me.path = b.join('-')+'/'+n+'/'+n+'.'+me.type;};
-var galleryConfigFn = function(me) {var p = me.path,v=M.yui.galleryversion,f;if(/-(skin|core)/.test(me.name)) {me.type = 'css';p = p.replace(/-(skin|core)/, '').replace(/\.js/, '.css').split('/'), f = p.pop().replace(/(\-(min|debug))/, '');if (/-skin/.test(me.name)) {p.splice(p.length,0,v,'assets','skins','sam', f);} else {p.splice(p.length,0,v,'assets', f);};} else {p = p.split('/'), f = p.pop();p.splice(p.length,0,v, f);};me.path = p.join('/');};
-var yui2in3ConfigFn = function(me) {if(/-skin|reset|fonts|grids|base/.test(me.name)){me.type='css';me.path=me.path.replace(/\.js/,'.css');me.path=me.path.replace(/\/yui2-skin/,'/assets/skins/sam/yui2-skin');}};\n";
+        $js .= $this->YUI_config->get_config_functions();
         $js .= js_writer::set_variable('YUI_config', $this->YUI_config, false) . "\n";
         $js .= "M.yui.loader = {modules: {}};\n"; // Backwards compatibility only, not used any more.
-        $js .= js_writer::set_variable('M.cfg', $this->M_cfg, false);
-        $js = str_replace('"@GALLERYCONFIGFN@"', 'galleryConfigFn', $js);
-        $js = str_replace('"@MOODLECONFIGFN@"', 'moodleConfigFn', $js);
-        $js = str_replace('"@2IN3CONFIGFN@"', 'yui2in3ConfigFn', $js);
+        $js = $this->YUI_config->update_header_js($js);
 
         $output .= html_writer::script($js);
-
-        // Link our main JS file, all core stuff should be there.
-        $output .= html_writer::script('', $this->js_fix_url('/lib/javascript-static.js'));
 
         // Add variables.
         if ($this->jsinitvariables['head']) {
@@ -1064,13 +1517,6 @@ var yui2in3ConfigFn = function(me) {if(/-skin|reset|fonts|grids|base/.test(me.na
                 $js .= js_writer::set_variable($var, $value, true);
             }
             $output .= html_writer::script($js);
-        }
-
-        // All the other linked things from HEAD - there should be as few as possible.
-        if ($this->jsincludes['head']) {
-            foreach ($this->jsincludes['head'] as $url) {
-                $output .= html_writer::script('', $url);
-            }
         }
 
         // Mark head sending done, it is not possible to anything there.
@@ -1085,17 +1531,28 @@ var yui2in3ConfigFn = function(me) {if(/-skin|reset|fonts|grids|base/.test(me.na
      * Normally, this method is called automatically by the code that prints the
      * <head> tag. You should not normally need to call it in your own code.
      *
+     * @param renderer_base $renderer
      * @return string the HTML code to go at the start of the <body> tag.
      */
-    public function get_top_of_body_code() {
+    public function get_top_of_body_code(renderer_base $renderer) {
         // First the skip links.
-        $links = '';
-        $attributes = array('class'=>'skip');
-        foreach ($this->skiplinks as $url => $text) {
-            $attributes['href'] = '#' . $url;
-            $links .= html_writer::tag('a', $text, $attributes);
+        $output = $renderer->render_skip_links($this->skiplinks);
+
+        // YUI3 JS needs to be loaded early in the body. It should be cached well by the browser.
+        $output .= $this->get_yui3lib_headcode();
+
+        // Add hacked jQuery support, it is not intended for standard Moodle distribution!
+        $output .= $this->get_jquery_headcode();
+
+        // Link our main JS file, all core stuff should be there.
+        $output .= html_writer::script('', $this->js_fix_url('/lib/javascript-static.js'));
+
+        // All the other linked things from HEAD - there should be as few as possible.
+        if ($this->jsincludes['head']) {
+            foreach ($this->jsincludes['head'] as $url) {
+                $output .= html_writer::script('', $url);
+            }
         }
-        $output = html_writer::tag('div', $links, array('class'=>'skiplinks')) . "\n";
 
         // Then the clever trick for hiding of things not needed when JS works.
         $output .= html_writer::script("document.body.className += ' jsenabled';") . "\n";
@@ -1113,9 +1570,23 @@ var yui2in3ConfigFn = function(me) {if(/-skin|reset|fonts|grids|base/.test(me.na
      */
     public function get_end_code() {
         global $CFG;
+        $output = '';
+
+        // Set the log level for the JS logging.
+        $logconfig = new stdClass();
+        $logconfig->level = 'warn';
+        if ($CFG->debugdeveloper) {
+            $logconfig->level = 'trace';
+        }
+        $this->js_call_amd('core/log', 'setConfig', array($logconfig));
+
+        // Call amd init functions.
+        $output .= $this->get_amd_footercode();
 
         // Add other requested modules.
-        $output = $this->get_extra_modules_code();
+        $output .= $this->get_extra_modules_code();
+
+        $this->js_init_code('M.util.js_complete("init");', true);
 
         // All the other linked scripts - there should be as few as possible.
         if ($this->jsincludes['footer']) {
@@ -1125,6 +1596,15 @@ var yui2in3ConfigFn = function(me) {if(/-skin|reset|fonts|grids|base/.test(me.na
         }
 
         // Add all needed strings.
+        // First add core strings required for some dialogues.
+        $this->strings_for_js(array(
+            'confirm',
+            'yes',
+            'no',
+            'areyousure',
+            'closebuttontitle',
+            'unknownerror',
+        ), 'moodle');
         if (!empty($this->stringsforjs)) {
             $strings = array();
             foreach ($this->stringsforjs as $component=>$v) {
@@ -1150,8 +1630,8 @@ var yui2in3ConfigFn = function(me) {if(/-skin|reset|fonts|grids|base/.test(me.na
         $jsinit = $this->get_javascript_init_code();
         $handlersjs = $this->get_event_handler_code();
 
-        // There is no global Y, make sure it is available in your scope.
-        $js = "YUI().use('node', function(Y) {\n{$inyuijs}{$ondomreadyjs}{$jsinit}{$handlersjs}\n});";
+        // There is a global Y, make sure it is available in your scope.
+        $js = "(function() {{$inyuijs}{$ondomreadyjs}{$jsinit}{$handlersjs}})();";
 
         $output .= html_writer::script($js);
 
@@ -1175,6 +1655,398 @@ var yui2in3ConfigFn = function(me) {if(/-skin|reset|fonts|grids|base/.test(me.na
     public function is_top_of_body_done() {
         return $this->topofbodydone;
     }
+
+    /**
+     * Should we generate a bit of content HTML that is only required once  on
+     * this page (e.g. the contents of the modchooser), now? Basically, we call
+     * {@link has_one_time_item_been_created()}, and if the thing has not already
+     * been output, we return true to tell the caller to generate it, and also
+     * call {@link set_one_time_item_created()} to record the fact that it is
+     * about to be generated.
+     *
+     * That is, a typical usage pattern (in a renderer method) is:
+     * <pre>
+     * if (!$this->page->requires->should_create_one_time_item_now($thing)) {
+     *     return '';
+     * }
+     * // Else generate it.
+     * </pre>
+     *
+     * @param string $thing identifier for the bit of content. Should be of the form
+     *      frankenstyle_things, e.g. core_course_modchooser.
+     * @return bool if true, the caller should generate that bit of output now, otherwise don't.
+     */
+    public function should_create_one_time_item_now($thing) {
+        if ($this->has_one_time_item_been_created($thing)) {
+            return false;
+        }
+
+        $this->set_one_time_item_created($thing);
+        return true;
+    }
+
+    /**
+     * Has a particular bit of HTML that is only required once  on this page
+     * (e.g. the contents of the modchooser) already been generated?
+     *
+     * Normally, you can use the {@link should_create_one_time_item_now()} helper
+     * method rather than calling this method directly.
+     *
+     * @param string $thing identifier for the bit of content. Should be of the form
+     *      frankenstyle_things, e.g. core_course_modchooser.
+     * @return bool whether that bit of output has been created.
+     */
+    public function has_one_time_item_been_created($thing) {
+        return isset($this->onetimeitemsoutput[$thing]);
+    }
+
+    /**
+     * Indicate that a particular bit of HTML that is only required once on this
+     * page (e.g. the contents of the modchooser) has been generated (or is about to be)?
+     *
+     * Normally, you can use the {@link should_create_one_time_item_now()} helper
+     * method rather than calling this method directly.
+     *
+     * @param string $thing identifier for the bit of content. Should be of the form
+     *      frankenstyle_things, e.g. core_course_modchooser.
+     */
+    public function set_one_time_item_created($thing) {
+        if ($this->has_one_time_item_been_created($thing)) {
+            throw new coding_exception($thing . ' is only supposed to be ouput ' .
+                    'once per page, but it seems to be being output again.');
+        }
+        return $this->onetimeitemsoutput[$thing] = true;
+    }
+}
+
+/**
+ * This class represents the YUI configuration.
+ *
+ * @copyright 2013 Andrew Nicols
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @since Moodle 2.5
+ * @package core
+ * @category output
+ */
+class YUI_config {
+    /**
+     * These settings must be public so that when the object is converted to json they are exposed.
+     * Note: Some of these are camelCase because YUI uses camelCase variable names.
+     *
+     * The settings are described and documented in the YUI API at:
+     * - http://yuilibrary.com/yui/docs/api/classes/config.html
+     * - http://yuilibrary.com/yui/docs/api/classes/Loader.html
+     */
+    public $debug = false;
+    public $base;
+    public $comboBase;
+    public $combine;
+    public $filter = null;
+    public $insertBefore = 'firstthemesheet';
+    public $groups = array();
+    public $modules = array();
+
+    /**
+     * @var array List of functions used by the YUI Loader group pattern recognition.
+     */
+    protected $jsconfigfunctions = array();
+
+    /**
+     * Create a new group within the YUI_config system.
+     *
+     * @param String $name The name of the group. This must be unique and
+     * not previously used.
+     * @param Array $config The configuration for this group.
+     * @return void
+     */
+    public function add_group($name, $config) {
+        if (isset($this->groups[$name])) {
+            throw new coding_exception("A YUI configuration group for '{$name}' already exists. To make changes to this group use YUI_config->update_group().");
+        }
+        $this->groups[$name] = $config;
+    }
+
+    /**
+     * Update an existing group configuration
+     *
+     * Note, any existing configuration for that group will be wiped out.
+     * This includes module configuration.
+     *
+     * @param String $name The name of the group. This must be unique and
+     * not previously used.
+     * @param Array $config The configuration for this group.
+     * @return void
+     */
+    public function update_group($name, $config) {
+        if (!isset($this->groups[$name])) {
+            throw new coding_exception('The Moodle YUI module does not exist. You must define the moodle module config using YUI_config->add_module_config first.');
+        }
+        $this->groups[$name] = $config;
+    }
+
+    /**
+     * Set the value of a configuration function used by the YUI Loader's pattern testing.
+     *
+     * Only the body of the function should be passed, and not the whole function wrapper.
+     *
+     * The JS function your write will be passed a single argument 'name' containing the
+     * name of the module being loaded.
+     *
+     * @param $function String the body of the JavaScript function. This should be used i
+     * @return String the name of the function to use in the group pattern configuration.
+     */
+    public function set_config_function($function) {
+        $configname = 'yui' . (count($this->jsconfigfunctions) + 1) . 'ConfigFn';
+        if (isset($this->jsconfigfunctions[$configname])) {
+            throw new coding_exception("A YUI config function with this name already exists. Config function names must be unique.");
+        }
+        $this->jsconfigfunctions[$configname] = $function;
+        return '@' . $configname . '@';
+    }
+
+    /**
+     * Allow setting of the config function described in {@see set_config_function} from a file.
+     * The contents of this file are then passed to set_config_function.
+     *
+     * When jsrev is positive, the function is minified and stored in a MUC cache for subsequent uses.
+     *
+     * @param $file The path to the JavaScript function used for YUI configuration.
+     * @return String the name of the function to use in the group pattern configuration.
+     */
+    public function set_config_source($file) {
+        global $CFG;
+        $cache = cache::make('core', 'yuimodules');
+
+        // Attempt to get the metadata from the cache.
+        $keyname = 'configfn_' . $file;
+        $fullpath = $CFG->dirroot . '/' . $file;
+        if (!isset($CFG->jsrev) || $CFG->jsrev == -1) {
+            $cache->delete($keyname);
+            $configfn = file_get_contents($fullpath);
+        } else {
+            $configfn = $cache->get($keyname);
+            if ($configfn === false) {
+                require_once($CFG->libdir . '/jslib.php');
+                $configfn = core_minify::js_files(array($fullpath));
+                $cache->set($keyname, $configfn);
+            }
+        }
+        return $this->set_config_function($configfn);
+    }
+
+    /**
+     * Retrieve the list of JavaScript functions for YUI_config groups.
+     *
+     * @return String The complete set of config functions
+     */
+    public function get_config_functions() {
+        $configfunctions = '';
+        foreach ($this->jsconfigfunctions as $functionname => $function) {
+            $configfunctions .= "var {$functionname} = function(me) {";
+            $configfunctions .= $function;
+            $configfunctions .= "};\n";
+        }
+        return $configfunctions;
+    }
+
+    /**
+     * Update the header JavaScript with any required modification for the YUI Loader.
+     *
+     * @param $js String The JavaScript to manipulate.
+     * @return String the modified JS string.
+     */
+    public function update_header_js($js) {
+        // Update the names of the the configFn variables.
+        // The PHP json_encode function cannot handle literal names so we have to wrap
+        // them in @ and then replace them with literals of the same function name.
+        foreach ($this->jsconfigfunctions as $functionname => $function) {
+            $js = str_replace('"@' . $functionname . '@"', $functionname, $js);
+        }
+        return $js;
+    }
+
+    /**
+     * Add configuration for a specific module.
+     *
+     * @param String $name The name of the module to add configuration for.
+     * @param Array $config The configuration for the specified module.
+     * @param String $group The name of the group to add configuration for.
+     * If not specified, then this module is added to the global
+     * configuration.
+     * @return void
+     */
+    public function add_module_config($name, $config, $group = null) {
+        if ($group) {
+            if (!isset($this->groups[$name])) {
+                throw new coding_exception('The Moodle YUI module does not exist. You must define the moodle module config using YUI_config->add_module_config first.');
+            }
+            if (!isset($this->groups[$group]['modules'])) {
+                $this->groups[$group]['modules'] = array();
+            }
+            $modules = &$this->groups[$group]['modules'];
+        } else {
+            $modules = &$this->modules;
+        }
+        $modules[$name] = $config;
+    }
+
+    /**
+     * Add the moodle YUI module metadata for the moodle group to the YUI_config instance.
+     *
+     * If js caching is disabled, metadata will not be served causing YUI to calculate
+     * module dependencies as each module is loaded.
+     *
+     * If metadata does not exist it will be created and stored in a MUC entry.
+     *
+     * @return void
+     */
+    public function add_moodle_metadata() {
+        global $CFG;
+        if (!isset($this->groups['moodle'])) {
+            throw new coding_exception('The Moodle YUI module does not exist. You must define the moodle module config using YUI_config->add_module_config first.');
+        }
+
+        if (!isset($this->groups['moodle']['modules'])) {
+            $this->groups['moodle']['modules'] = array();
+        }
+
+        $cache = cache::make('core', 'yuimodules');
+        if (!isset($CFG->jsrev) || $CFG->jsrev == -1) {
+            $metadata = array();
+            $metadata = $this->get_moodle_metadata();
+            $cache->delete('metadata');
+        } else {
+            // Attempt to get the metadata from the cache.
+            if (!$metadata = $cache->get('metadata')) {
+                $metadata = $this->get_moodle_metadata();
+                $cache->set('metadata', $metadata);
+            }
+        }
+
+        // Merge with any metadata added specific to this page which was added manually.
+        $this->groups['moodle']['modules'] = array_merge($this->groups['moodle']['modules'],
+                $metadata);
+    }
+
+    /**
+     * Determine the module metadata for all moodle YUI modules.
+     *
+     * This works through all modules capable of serving YUI modules, and attempts to get
+     * metadata for each of those modules.
+     *
+     * @return Array of module metadata
+     */
+    private function get_moodle_metadata() {
+        $moodlemodules = array();
+        // Core isn't a plugin type or subsystem - handle it seperately.
+        if ($module = $this->get_moodle_path_metadata(core_component::get_component_directory('core'))) {
+            $moodlemodules = array_merge($moodlemodules, $module);
+        }
+
+        // Handle other core subsystems.
+        $subsystems = core_component::get_core_subsystems();
+        foreach ($subsystems as $subsystem => $path) {
+            if (is_null($path)) {
+                continue;
+            }
+            if ($module = $this->get_moodle_path_metadata($path)) {
+                $moodlemodules = array_merge($moodlemodules, $module);
+            }
+        }
+
+        // And finally the plugins.
+        $plugintypes = core_component::get_plugin_types();
+        foreach ($plugintypes as $plugintype => $pathroot) {
+            $pluginlist = core_component::get_plugin_list($plugintype);
+            foreach ($pluginlist as $plugin => $path) {
+                if ($module = $this->get_moodle_path_metadata($path)) {
+                    $moodlemodules = array_merge($moodlemodules, $module);
+                }
+            }
+        }
+
+        return $moodlemodules;
+    }
+
+    /**
+     * Helper function process and return the YUI metadata for all of the modules under the specified path.
+     *
+     * @param String $path the UNC path to the YUI src directory.
+     * @return Array the complete array for frankenstyle directory.
+     */
+    private function get_moodle_path_metadata($path) {
+        // Add module metadata is stored in frankenstyle_modname/yui/src/yui_modname/meta/yui_modname.json.
+        $baseyui = $path . '/yui/src';
+        $modules = array();
+        if (is_dir($baseyui)) {
+            $items = new DirectoryIterator($baseyui);
+            foreach ($items as $item) {
+                if ($item->isDot() or !$item->isDir()) {
+                    continue;
+                }
+                $metafile = realpath($baseyui . '/' . $item . '/meta/' . $item . '.json');
+                if (!is_readable($metafile)) {
+                    continue;
+                }
+                $metadata = file_get_contents($metafile);
+                $modules = array_merge($modules, (array) json_decode($metadata));
+            }
+        }
+        return $modules;
+    }
+
+    /**
+     * Define YUI modules which we have been required to patch between releases.
+     *
+     * We must do this because we aggressively cache content on the browser, and we must also override use of the
+     * external CDN which will serve the true authoritative copy of the code without our patches.
+     *
+     * @param String combobase The local combobase
+     * @param String yuiversion The current YUI version
+     * @param Int patchlevel The patch level we're working to for YUI
+     * @param Array patchedmodules An array containing the names of the patched modules
+     * @return void
+     */
+    public function define_patched_core_modules($combobase, $yuiversion, $patchlevel, $patchedmodules) {
+        // The version we use is suffixed with a patchlevel so that we can get additional revisions between YUI releases.
+        $subversion = $yuiversion . '_' . $patchlevel;
+
+        if ($this->comboBase == $combobase) {
+            // If we are using the local combobase in the loader, we can add a group and still make use of the combo
+            // loader. We just need to specify a different root which includes a slightly different YUI version number
+            // to include our patchlevel.
+            $patterns = array();
+            $modules = array();
+            foreach ($patchedmodules as $modulename) {
+                // We must define the pattern and module here so that the loader uses our group configuration instead of
+                // the standard module definition. We may lose some metadata provided by upstream but this will be
+                // loaded when the module is loaded anyway.
+                $patterns[$modulename] = array(
+                    'group' => 'yui-patched',
+                );
+                $modules[$modulename] = array();
+            }
+
+            // Actually add the patch group here.
+            $this->add_group('yui-patched', array(
+                'combine' => true,
+                'root' => $subversion . '/',
+                'patterns' => $patterns,
+                'modules' => $modules,
+            ));
+
+        } else {
+            // The CDN is in use - we need to instead use the local combobase for this module and override the modules
+            // definition. We cannot use the local base - we must use the combobase because we cannot invalidate the
+            // local base in browser caches.
+            $fullpathbase = $combobase . $subversion . '/';
+            foreach ($patchedmodules as $modulename) {
+                $this->modules[$modulename] = array(
+                    'fullpath' => $fullpathbase . $modulename . '/' . $modulename . '-min.js'
+                );
+            }
+        }
+    }
 }
 
 /**
@@ -1182,7 +2054,6 @@ var yui2in3ConfigFn = function(me) {if(/-skin|reset|fonts|grids|base/.test(me.na
  */
 function js_reset_all_caches() {
     global $CFG;
-    require_once("$CFG->libdir/filelib.php");
 
     $next = time();
     if (isset($CFG->jsrev) and $next <= $CFG->jsrev and $CFG->jsrev - $next < 60*60) {
@@ -1193,5 +2064,4 @@ function js_reset_all_caches() {
     }
 
     set_config('jsrev', $next);
-    fulldelete("$CFG->cachedir/js");
 }

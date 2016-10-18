@@ -31,7 +31,7 @@ require_once($CFG->dirroot."/question/category_class.php");
 list($thispageurl, $contexts, $cmid, $cm, $module, $pagevars) =
         question_edit_setup('categories', '/question/category.php');
 
-// get values from form for actions on this page
+// Get values from form for actions on this page.
 $param = new stdClass();
 $param->moveup = optional_param('moveup', 0, PARAM_INT);
 $param->movedown = optional_param('movedown', 0, PARAM_INT);
@@ -55,44 +55,69 @@ foreach ((array)$param as $key=>$value) {
 }
 $PAGE->set_url($url);
 
-$qcobject = new question_category_object($pagevars['cpage'], $thispageurl, $contexts->having_one_edit_tab_cap('categories'), $param->edit, $pagevars['cat'], $param->delete,
-                            $contexts->having_cap('moodle/question:add'));
+$qcobject = new question_category_object($pagevars['cpage'], $thispageurl,
+        $contexts->having_one_edit_tab_cap('categories'), $param->edit,
+        $pagevars['cat'], $param->delete, $contexts->having_cap('moodle/question:add'));
 
-$streditingcategories = get_string('editcategories', 'question');
-if ($param->left || $param->right || $param->moveup || $param->movedown|| $param->moveupcontext || $param->movedowncontext){
+if ($param->left || $param->right || $param->moveup || $param->movedown) {
     require_sesskey();
-    foreach ($qcobject->editlists as $list){
-        //processing of these actions is handled in the method where appropriate and page redirects.
-        $list->process_actions($param->left, $param->right, $param->moveup, $param->movedown,
-                                $param->moveupcontext, $param->movedowncontext, $param->tocontext);
+
+    foreach ($qcobject->editlists as $list) {
+        // Processing of these actions is handled in the method where appropriate and page redirects.
+        $list->process_actions($param->left, $param->right, $param->moveup, $param->movedown);
     }
 }
-if ($param->delete && ($questionstomove = $DB->count_records("question", array("category" => $param->delete)))){
-    if (!$category = $DB->get_record("question_categories", array("id" => $param->delete))) {  // security
+
+if ($param->moveupcontext || $param->movedowncontext) {
+    require_sesskey();
+
+    if ($param->moveupcontext) {
+        $catid = $param->moveupcontext;
+    } else {
+        $catid = $param->movedowncontext;
+    }
+    $oldcat = $DB->get_record('question_categories', array('id' => $catid), '*', MUST_EXIST);
+    $qcobject->update_category($catid, '0,'.$param->tocontext, $oldcat->name, $oldcat->info);
+    // The previous line does a redirect().
+}
+
+if ($param->delete) {
+    if (!$category = $DB->get_record("question_categories", array("id" => $param->delete))) {
         print_error('nocate', 'question', $thispageurl->out(), $param->delete);
     }
-    $categorycontext = context::instance_by_id($category->contextid);
-    $qcobject->moveform = new question_move_form($thispageurl,
-                array('contexts'=>array($categorycontext), 'currentcat'=>$param->delete));
-    if ($qcobject->moveform->is_cancelled()){
-        redirect($thispageurl);
-    }  elseif ($formdata = $qcobject->moveform->get_data()) {
-        /// 'confirm' is the category to move existing questions to
-        list($tocategoryid, $tocontextid) = explode(',', $formdata->category);
-        $qcobject->move_questions_and_delete_category($formdata->delete, $tocategoryid);
-        $thispageurl->remove_params('cat', 'category');
-        redirect($thispageurl);
+
+    question_remove_stale_questions_from_category($param->delete);
+    $questionstomove = $DB->count_records("question", array("category" => $param->delete));
+
+    // Second pass, if we still have questions to move, setup the form.
+    if ($questionstomove) {
+        $categorycontext = context::instance_by_id($category->contextid);
+        $qcobject->moveform = new question_move_form($thispageurl,
+            array('contexts' => array($categorycontext), 'currentcat' => $param->delete));
+        if ($qcobject->moveform->is_cancelled()) {
+            redirect($thispageurl);
+        } else if ($formdata = $qcobject->moveform->get_data()) {
+            list($tocategoryid, $tocontextid) = explode(',', $formdata->category);
+            $qcobject->move_questions_and_delete_category($formdata->delete, $tocategoryid);
+            $thispageurl->remove_params('cat', 'category');
+            redirect($thispageurl);
+        }
     }
 } else {
     $questionstomove = 0;
 }
+
 if ($qcobject->catform->is_cancelled()) {
     redirect($thispageurl);
 } else if ($catformdata = $qcobject->catform->get_data()) {
+    $catformdata->infoformat = $catformdata->info['format'];
+    $catformdata->info       = $catformdata->info['text'];
     if (!$catformdata->id) {//new category
-        $qcobject->add_category($catformdata->parent, $catformdata->name, $catformdata->info);
+        $qcobject->add_category($catformdata->parent, $catformdata->name,
+                $catformdata->info, false, $catformdata->infoformat);
     } else {
-        $qcobject->update_category($catformdata->id, $catformdata->parent, $catformdata->name, $catformdata->info);
+        $qcobject->update_category($catformdata->id, $catformdata->parent,
+                $catformdata->name, $catformdata->info, $catformdata->infoformat);
     }
     redirect($thispageurl);
 } else if ((!empty($param->delete) and (!$questionstomove) and confirm_sesskey())) {
@@ -101,21 +126,21 @@ if ($qcobject->catform->is_cancelled()) {
     redirect($thispageurl);
 }
 
-if ($param->edit){
+if ($param->edit) {
     $PAGE->navbar->add(get_string('editingcategory', 'question'));
 }
 
-$PAGE->set_title($streditingcategories);
+$PAGE->set_title(get_string('editcategories', 'question'));
 $PAGE->set_heading($COURSE->fullname);
 echo $OUTPUT->header();
 
-// display UI
+// Display the UI.
 if (!empty($param->edit)) {
     $qcobject->edit_single_category($param->edit);
 } else if ($questionstomove){
     $qcobject->display_move_form($questionstomove, $category);
 } else {
-    // display the user interface
+    // Display the user interface.
     $qcobject->display_user_interface();
 }
 echo $OUTPUT->footer();

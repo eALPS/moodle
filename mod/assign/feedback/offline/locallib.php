@@ -36,6 +36,9 @@ require_once($CFG->dirroot.'/grade/grading/lib.php');
  */
 class assign_feedback_offline extends assign_feedback_plugin {
 
+    /** @var boolean|null $enabledcache Cached lookup of the is_enabled function */
+    private $enabledcache = null;
+
     /**
      * Get the name of the file feedback plugin
      * @return string
@@ -65,22 +68,35 @@ class assign_feedback_offline extends assign_feedback_plugin {
     }
 
     /**
+     * This plugin does not save through the normal interface so this returns false.
+     *
+     * @param stdClass $grade The grade.
+     * @param stdClass $data Form data from the feedback form.
+     * @return boolean - False
+     */
+    public function is_feedback_modified(stdClass $grade, stdClass $data) {
+        return false;
+    }
+
+    /**
      * Loop through uploaded grades and update the grades for this assignment
      *
      * @param int $draftid - The unique draft item id for this import
      * @param int $importid - The unique import ID for this csv import operation
      * @param bool $ignoremodified - Ignore the last modified date when checking fields
+     * @param string $encoding - Encoding of the file being processed.
+     * @param string $separator - The character used to separate the information.
      * @return string - The html response
      */
-    public function process_import_grades($draftid, $importid, $ignoremodified) {
+    public function process_import_grades($draftid, $importid, $ignoremodified, $encoding = 'utf-8', $separator = 'comma') {
         global $USER, $DB;
 
         require_sesskey();
         require_capability('mod/assign:grade', $this->assignment->get_context());
 
-        $gradeimporter = new assignfeedback_offline_grade_importer($importid, $this->assignment);
+        $gradeimporter = new assignfeedback_offline_grade_importer($importid, $this->assignment, $encoding, $separator);
 
-        $context = get_context_instance(CONTEXT_USER, $USER->id);
+        $context = context_user::instance($USER->id);
         $fs = get_file_storage();
         if (!$files = $fs->get_area_files($context->id, 'user', 'draft', $draftid, 'id DESC', false)) {
             redirect(new moodle_url('view.php',
@@ -100,16 +116,15 @@ class assign_feedback_offline extends assign_feedback_plugin {
                                                                      'pluginsubtype'=>'assignfeedback',
                                                                      'plugin'=>'offline',
                                                                      'pluginaction'=>'uploadgrades',
-                                                                     'id'=>$assignment->get_course_module()->id));
+                                                                     'id' => $this->assignment->get_course_module()->id));
             print_error('invalidgradeimport', 'assignfeedback_offline', $thisurl);
             return;
         }
         // Does this assignment use a scale?
         $scaleoptions = null;
         if ($this->assignment->get_instance()->grade < 0) {
-            $scale = $DB->get_record('scale', array('id'=>-($this->assignment->get_instance()->grade)));
-            if ($scale) {
-                $scaleoptions = explode(',', $scale->scale);
+            if ($scale = $DB->get_record('scale', array('id'=>-($this->assignment->get_instance()->grade)))) {
+                $scaleoptions = make_menu_from_list($scale->scale);
             }
         }
         // We may need to upgrade the gradebook comments after this update.
@@ -127,10 +142,12 @@ class assign_feedback_offline extends assign_feedback_plugin {
                 // This is a scale - we need to convert any grades to indexes in the scale.
                 $scaleindex = array_search($record->grade, $scaleoptions);
                 if ($scaleindex !== false) {
-                    $record->grade = $scaleindex + 1;
+                    $record->grade = $scaleindex;
                 } else {
                     $record->grade = '';
                 }
+            } else {
+                $record->grade = unformat_float($record->grade);
             }
 
             // Note: Do not count the seconds when comparing modified dates.
@@ -149,6 +166,10 @@ class assign_feedback_offline extends assign_feedback_plugin {
             } else if ($this->assignment->grading_disabled($record->user->id)) {
                 // Skip grade is locked.
                 $skip = true;
+            } else if (($this->assignment->get_instance()->grade > -1) &&
+                      (($record->grade < 0) || ($record->grade > $this->assignment->get_instance()->grade))) {
+                // Out of range.
+                $skip = true;
             }
 
             if (!$skip) {
@@ -157,7 +178,7 @@ class assign_feedback_offline extends assign_feedback_plugin {
                 $grade->grade = $record->grade;
                 $grade->grader = $USER->id;
                 if ($this->assignment->update_grade($grade)) {
-                    $this->assignment->add_to_log('grade submission', $this->assignment->format_grade_for_log($grade));
+                    $this->assignment->notify_grade_modified($grade);
                     $updatecount += 1;
                 }
             }
@@ -178,14 +199,8 @@ class assign_feedback_offline extends assign_feedback_plugin {
                     if ($newvalue != $oldvalue) {
                         $updatecount += 1;
                         $grade = $this->assignment->get_user_grade($record->user->id, true);
-                        if ($plugin->set_editor_text($field, $newvalue, $grade->id)) {
-                            $logdesc = get_string('feedbackupdate', 'assignfeedback_offline',
-                                                  array('field'=>$description,
-                                                        'student'=>$userdesc,
-                                                        'text'=>$newvalue));
-
-                            $this->assignment->add_to_log('save grading feedback', $logdesc);
-                        }
+                        $this->assignment->notify_grade_modified($grade);
+                        $plugin->set_editor_text($field, $newvalue, $grade->id);
 
                         // If this is the gradebook comments plugin - post an update to the gradebook.
                         if (($plugin->get_subtype() . '_' . $plugin->get_type()) == $gradebookplugin) {
@@ -248,7 +263,8 @@ class assign_feedback_offline extends assign_feedback_plugin {
                    ($csvdata = $mform->get_file_content('gradesfile'))) {
 
             $importid = csv_import_reader::get_new_iid('assignfeedback_offline');
-            $gradeimporter = new assignfeedback_offline_grade_importer($importid, $this->assignment);
+            $gradeimporter = new assignfeedback_offline_grade_importer($importid, $this->assignment,
+                    $data->encoding, $data->separator);
             // File exists and was valid.
             $ignoremodified = !empty($data->ignoremodified);
 
@@ -270,11 +286,12 @@ class assign_feedback_offline extends assign_feedback_plugin {
             $o .= $renderer->render(new assign_form('confirmimport', $mform));
             $o .= $renderer->render_footer();
         } else if ($confirm) {
-
             $importid = optional_param('importid', 0, PARAM_INT);
             $draftid = optional_param('draftid', 0, PARAM_INT);
+            $encoding = optional_param('encoding', 'utf-8', PARAM_ALPHAEXT);
+            $separator = optional_param('separator', 'comma', PARAM_ALPHA);
             $ignoremodified = optional_param('ignoremodified', 0, PARAM_BOOL);
-            $gradeimporter = new assignfeedback_offline_grade_importer($importid, $this->assignment);
+            $gradeimporter = new assignfeedback_offline_grade_importer($importid, $this->assignment, $encoding, $separator);
             $mform = new assignfeedback_offline_import_grades_form(null, array('assignment'=>$this->assignment,
                                                                        'csvdata'=>'',
                                                                        'ignoremodified'=>$ignoremodified,
@@ -287,7 +304,7 @@ class assign_feedback_offline extends assign_feedback_plugin {
                 return;
             }
 
-            $o .= $this->process_import_grades($draftid, $importid, $ignoremodified);
+            $o .= $this->process_import_grades($draftid, $importid, $ignoremodified, $encoding, $separator);
         } else {
 
             $o .= $renderer->render(new assign_header($this->assignment->get_instance(),
@@ -366,14 +383,18 @@ class assign_feedback_offline extends assign_feedback_plugin {
      * @return bool
      */
     public function is_enabled() {
-        $gradingmanager = get_grading_manager($this->assignment->get_context(), 'mod_assign', 'submissions');
-        $controller = $gradingmanager->get_active_controller();
-        $active = !empty($controller);
+        if ($this->enabledcache === null) {
+            $gradingmanager = get_grading_manager($this->assignment->get_context(), 'mod_assign', 'submissions');
+            $controller = $gradingmanager->get_active_controller();
+            $active = !empty($controller);
 
-        if ($active) {
-            return false;
+            if ($active) {
+                $this->enabledcache = false;
+            } else {
+                $this->enabledcache = parent::is_enabled();
+            }
         }
-        return parent::is_enabled();
+        return $this->enabledcache;
     }
 
     /**
@@ -385,4 +406,13 @@ class assign_feedback_offline extends assign_feedback_plugin {
         return false;
     }
 
+    /**
+     * Return the plugin configs for external functions.
+     *
+     * @return array the list of settings
+     * @since Moodle 3.2
+     */
+    public function get_config_for_external() {
+        return (array) $this->get_config();
+    }
 }

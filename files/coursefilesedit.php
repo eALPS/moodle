@@ -16,7 +16,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 require_once('../config.php');
-require_once(dirname(__FILE__) . '/coursefilesedit_form.php');
+require_once(__DIR__ . '/coursefilesedit_form.php');
 require_once($CFG->dirroot . '/repository/lib.php');
 
 // current context
@@ -43,7 +43,7 @@ if ($node = $PAGE->settingsnav->find('coursefiles', navigation_node::TYPE_SETTIN
 $PAGE->set_context($context);
 $PAGE->set_title($heading);
 $PAGE->set_heading($heading);
-$PAGE->set_pagelayout('course');
+$PAGE->set_pagelayout('incourse');
 
 $data = new stdClass();
 $options = array('subdirs'=>1, 'maxfiles'=>-1, 'accepted_types'=>'*', 'return_types'=>FILE_INTERNAL);

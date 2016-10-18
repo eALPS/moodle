@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,7 +17,7 @@
 /**
  * Strings for the advanced grading methods subsystem
  *
- * @package    core
+ * @package    core_grading
  * @subpackage grading
  * @copyright  2011 David Mudrak <david@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -31,7 +30,7 @@ $string['activemethodinfonone'] = 'There is no advanced grading method selected 
 $string['changeactivemethod'] = 'Change active grading method to';
 $string['clicktoclose'] = 'click to close';
 $string['exc_gradingformelement'] = 'Unable to instantiate grading form element';
-$string['formnotavailable'] = 'Advanced grading method was selected to use but the grading form is not available yet. You may need to define it first via a link in the Settings block.';
+$string['formnotavailable'] = 'Advanced grading method was selected to use but the grading form is not available yet. You may need to define it first via a link in the Administration block.';
 $string['gradingformunavailable'] = 'Please note: the advanced grading form is not ready at the moment. Simple grading method will be used until the form has a valid status.';
 $string['gradingmanagement'] = 'Advanced grading';
 $string['gradingmanagementtitle'] = 'Advanced grading: {$a->component} ({$a->area})';
@@ -61,10 +60,10 @@ $string['nosharedformfound'] = 'No template found';
 $string['searchtemplate'] = 'Grading forms search';
 $string['searchtemplate_help'] = 'You can search for a grading form and use it as a template for the new grading form here. Simply type words that should appear somewhere in the form name, its description or the form body itself. To search for a phrase, wrap the whole query in double quotes.
 
-By default, only the grading forms that have been saved as shared templates are included in the search results. You can also include all your own grading forms in the search results. This way, you can simply re-use your grading forms without sharing them. Only forms marked as \'Ready for usage\' can be re-used this way.';
+By default, only the grading forms that have been saved as shared templates are included in the search results. You can also include all your own grading forms in the search results. This way, you can simply re-use your grading forms without sharing them. Only forms marked as \'Ready for use\' can be re-used this way.';
 $string['searchownforms'] = 'include my own forms';
 $string['statusdraft'] = 'Draft';
-$string['statusready'] = 'Ready for usage';
+$string['statusready'] = 'Ready for use';
 $string['templatedelete'] = 'Delete';
 $string['templatedeleteconfirm'] = 'You are going to delete the shared template \'{$a}\'. Deleting a template does not affect existing forms that were created from it.';
 $string['templateedit'] = 'Edit';

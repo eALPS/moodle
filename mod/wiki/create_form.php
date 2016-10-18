@@ -18,11 +18,13 @@
 /**
  * This file contains all necessary code to define and process an edit form
  *
- * @package mod-wiki-2.0
+ * @package mod_wiki
  * @copyright 2010 Dongsheng Cai <dongsheng@moodle.com>
  *
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+
+defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->libdir.'/formslib.php');
 
@@ -35,7 +37,7 @@ class mod_wiki_create_form extends moodleform {
         $defaultformat = $this->_customdata['defaultformat'];
         $forceformat = $this->_customdata['forceformat'];
 
-        $mform->addElement('header', 'general', get_string('createpage', 'wiki'));
+        $mform->addElement('header', 'general', get_string('newpagehdr', 'wiki'));
 
         $textoptions = array();
         if (!empty($this->_customdata['disable_pagetitle'])) {
@@ -60,9 +62,9 @@ class mod_wiki_create_form extends moodleform {
                 }
                 $mform->addElement('radio', 'pageformat', '', get_string('format'.$format, 'wiki'), $format, $attr);
             }
+            $mform->addRule('pageformat', get_string('required'), 'required', null, 'client');
         }
         $mform->setType('pageformat', PARAM_ALPHANUMEXT);
-        $mform->addRule('pageformat', get_string('required'), 'required', null, 'client');
 
         if (!empty($this->_customdata['groups']->availablegroups)) {
             foreach ($this->_customdata['groups']->availablegroups as $groupdata) {
@@ -71,11 +73,13 @@ class mod_wiki_create_form extends moodleform {
             if (count($groupinfo) > 1) {
                 $mform->addElement('select', 'groupinfo', get_string('group'), $groupinfo);
                 $mform->setDefault('groupinfo', $this->_customdata['groups']->currentgroup);
+                $mform->setType('groupinfo', PARAM_INT);
             } else {
                 $groupid = key($groupinfo);
                 $groupname = $groupinfo[$groupid];
                 $mform->addElement('static', 'groupdesciption', get_string('group'), $groupname);
                 $mform->addElement('hidden', 'groupinfo', $groupid);
+                $mform->setType('groupinfo', PARAM_INT);
             }
         }
 

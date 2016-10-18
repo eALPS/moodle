@@ -17,9 +17,9 @@
 /**
  * This file contains all necessary code to define a wiki editor
  *
- * @package mod-wiki-2.0
- * @copyrigth 2009 Marc Alier, Jordi Piguillem marc.alier@upc.edu
- * @copyrigth 2009 Universitat Politecnica de Catalunya http://www.upc.edu
+ * @package mod_wiki
+ * @copyright 2009 Marc Alier, Jordi Piguillem marc.alier@upc.edu
+ * @copyright 2009 Universitat Politecnica de Catalunya http://www.upc.edu
  *
  * @author Josep Arus
  *
@@ -28,12 +28,23 @@
 
 require_once($CFG->dirroot.'/lib/formslib.php');
 require_once($CFG->dirroot.'/lib/form/textarea.php');
+require_once($CFG->dirroot.'/lib/form/templatable_form_element.php');
 
 class MoodleQuickForm_wikieditor extends MoodleQuickForm_textarea {
+    use templatable_form_element {
+        export_for_template as export_for_template_base;
+    }
 
     private $files;
 
-    function MoodleQuickForm_wikieditor($elementName = null, $elementLabel = null, $attributes = null) {
+    /**
+     * Constructor
+     *
+     * @param string $elementName (optional) name of the text field
+     * @param string $elementLabel (optional) text field label
+     * @param string $attributes (optional) Either a typical HTML attribute string or an associative array
+     */
+    function __construct($elementName = null, $elementLabel = null, $attributes = null) {
         if (isset($attributes['wiki_format'])) {
             $this->wikiformat = $attributes['wiki_format'];
             unset($attributes['wiki_format']);
@@ -43,7 +54,19 @@ class MoodleQuickForm_wikieditor extends MoodleQuickForm_textarea {
             unset($attributes['files']);
         }
 
-        parent::MoodleQuickForm_textarea($elementName, $elementLabel, $attributes);
+
+        parent::__construct($elementName, $elementLabel, $attributes);
+        $this->_type = 'wikieditor';
+    }
+
+    /**
+     * Old syntax of class constructor. Deprecated in PHP7.
+     *
+     * @deprecated since Moodle 3.1
+     */
+    public function MoodleQuickForm_wikieditor($elementName = null, $elementLabel = null, $attributes = null) {
+        debugging('Use of class name as constructor is deprecated', DEBUG_DEVELOPER);
+        self::__construct($elementName, $elementLabel, $attributes);
     }
 
     function setWikiFormat($wikiformat) {
@@ -151,6 +174,13 @@ class MoodleQuickForm_wikieditor extends MoodleQuickForm_textarea {
 
     private function escapeToken(&$token) {
         $token = urlencode(str_replace("'", "\'", $token));
+    }
+
+    public function export_for_template(renderer_base $output) {
+        $context = $this->export_for_template_base($output);
+        $context['html'] = $this->toHtml();
+
+        return $context;
     }
 }
 

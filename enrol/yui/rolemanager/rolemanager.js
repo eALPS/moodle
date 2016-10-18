@@ -56,7 +56,6 @@ YUI.add('moodle-enrol-rolemanager', function(Y) {
     Y.extend(ROLE, Y.Base, {
         users : [],
         roleAssignmentPanel : null,
-        panelsubmitevent : null,
         rolesLoadedEvent : null,
         escCloseEvent  : null,
         initializer : function(config) {
@@ -75,14 +74,16 @@ YUI.add('moodle-enrol-rolemanager', function(Y) {
             this.rolesLoadedEvent = this.on('assignablerolesloaded', function(){
                 this.rolesLoadedEvent.detach();
                 var panel = this._getRoleAssignmentPanel();
-                this.panelsubmitevent = panel.on('submit', this.addRoleCallback, this);
-                panel.hide().display(user);
+                panel.hide();
+                panel.submitevent = panel.on('submit', this.addRoleCallback, this);
+                panel.display(user);
             }, this);
             this._loadAssignableRoles();
         },
         addRoleCallback : function(e, roleid, userid) {
-            this.panelsubmitevent.detach();
             var panel = this._getRoleAssignmentPanel();
+            panel.submitevent.detach();
+            panel.submitevent = null;
             Y.io(M.cfg.wwwroot+'/enrol/ajax.php', {
                 method:'POST',
                 data:'id='+this.get(COURSEID)+'&action=assign&sesskey='+M.cfg.sesskey+'&roleid='+roleid+'&user='+userid,
@@ -93,7 +94,7 @@ YUI.add('moodle-enrol-rolemanager', function(Y) {
                             if (o.error) {
                                 new M.core.ajaxException(o);
                             } else {
-                                this.users[userid].addRoleToDisplay(args.roleid, this.get(ASSIGNABLEROLES)[args.roleid]);
+                                this.users[userid].addRoleToDisplay(args.roleid, this._getAssignableRole(args.roleid));
                             }
                         } catch (e) {
                             new M.core.exception(e);
@@ -111,14 +112,18 @@ YUI.add('moodle-enrol-rolemanager', function(Y) {
             e.halt();
             var event = this.on('assignablerolesloaded', function(){
                 event.detach();
-                var s = M.str.role, confirmation = {
-                    lightbox :  true,
-                    title    :  s.confirmunassigntitle,
-                    question :  s.confirmunassign,
-                    yesLabel :  s.confirmunassignyes,
-                    noLabel  :  s.confirmunassignno
+                var confirmation = {
+                    modal:  true,
+                    visible  :  false,
+                    centered :  true,
+                    title    :  M.util.get_string('confirmunassigntitle', 'role'),
+                    question :  M.util.get_string('confirmunassign', 'role'),
+                    yesLabel :  M.util.get_string('confirmunassignyes', 'role'),
+                    noLabel  :  M.util.get_string('confirmunassignno', 'role')
                 };
-                new M.core.confirm(confirmation).on('complete-yes', this.removeRoleCallback, this, user.get(USERID), roleid);
+                new M.core.confirm(confirmation)
+                        .show()
+                        .on('complete-yes', this.removeRoleCallback, this, user.get(USERID), roleid);
             }, this);
             this._loadAssignableRoles();
         },
@@ -146,6 +151,15 @@ YUI.add('moodle-enrol-rolemanager', function(Y) {
                     roleid : roleid
                 }
             });
+        },
+        _getAssignableRole: function(roleid) {
+            var roles = this.get(ASSIGNABLEROLES);
+            for (var i in roles) {
+                if (roles[i].id == roleid) {
+                    return roles[i].name;
+                }
+            }
+            return null;
         },
         _loadAssignableRoles : function() {
             var c = this.get(COURSEID), params = {
@@ -272,7 +286,7 @@ YUI.add('moodle-enrol-rolemanager', function(Y) {
             var current = this.get(CURRENTROLES);
             var allroles = true, i = 0;
             for (i in roles) {
-                if (!current[i]) {
+                if (!current[roles[i].id]) {
                     allroles = false;
                     break;
                 }
@@ -281,15 +295,6 @@ YUI.add('moodle-enrol-rolemanager', function(Y) {
             if (allroles) {
                 this.get(CONTAINER).addClass('hasAllRoles');
             } else {
-                if (!link) {
-                    var m = this.get(MANIPULATOR);
-                    link = Y.Node.create('<div class="addrole"></div>').append(
-                        Y.Node.create('<img alt="" />').setAttribute('src', M.util.image_url('t/enroladd', 'moodle'))
-                    );
-                    link.on('click', m.addRole, m, this);
-                    this.get(CONTAINER).one('.col_role').insert(link, 0);
-                    this.set(ASSIGNROLELINK, link);
-                }
                 this.get(CONTAINER).removeClass('hasAllRoles');
             }
         },
@@ -350,14 +355,17 @@ YUI.add('moodle-enrol-rolemanager', function(Y) {
     Y.extend(ROLEPANEL, Y.Base, {
         user : null,
         roles : [],
+        submitevent : null,
         initializer : function() {
             var i, m = this.get(MANIPULATOR);
-            var element = Y.Node.create('<div class="enrolpanel roleassign"><div class="container"><div class="header"><h2>'+M.str.role.assignroles+'</h2><div class="close"></div></div><div class="content"></div></div></div>');
+            var element = Y.Node.create('<div class="enrolpanel roleassign"><div class="container"><div class="header"><h2>'+M.util.get_string('assignroles', 'role')+'</h2><div class="close"></div></div><div class="content"></div></div></div>');
             var content = element.one('.content');
             var roles = m.get(ASSIGNABLEROLES);
             for (i in roles) {
-                var button = Y.Node.create('<input type="button" value="'+roles[i]+'" id="add_assignable_role_'+i+'" />');
-                button.on('click', this.submit, this, i);
+                var buttonid = 'add_assignable_role_' + roles[i].id;
+                var buttonhtml = '<input type="button" value="' + roles[i].name + '" id="' + buttonid + '" />';
+                var button = Y.Node.create(buttonhtml);
+                button.on('click', this.submit, this, roles[i].id);
                 content.append(button);
             }
             Y.one(document.body).append(element);
@@ -379,7 +387,11 @@ YUI.add('moodle-enrol-rolemanager', function(Y) {
             var roles = this.user.get(CONTAINER).one('.col_role .roles');
             var x = roles.getX() + 10;
             var y = roles.getY() + this.user.get(CONTAINER).get('offsetHeight') - 10;
-            this.get('elementNode').setStyle('left', x).setStyle('top', y);
+            if ( Y.one(document.body).hasClass('dir-rtl') ) {
+                this.get('elementNode').setStyle('right', x - 20).setStyle('top', y);
+            } else {
+                this.get('elementNode').setStyle('left', x).setStyle('top', y);
+            }
             this.get('elementNode').addClass('visible');
             this.escCloseEvent = Y.on('key', this.hide, document.body, 'down:27', this);
             this.displayed = true;
@@ -398,6 +410,10 @@ YUI.add('moodle-enrol-rolemanager', function(Y) {
             this.roles = [];
             this.user = null;
             this.get('elementNode').removeClass('visible');
+            if (this.submitevent) {
+                this.submitevent.detach();
+                this.submitevent = null;
+            }
             this.displayed = false;
             return this;
         },

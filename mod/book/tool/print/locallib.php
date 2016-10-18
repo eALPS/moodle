@@ -24,7 +24,7 @@
 
 defined('MOODLE_INTERNAL') || die;
 
-require_once(dirname(__FILE__).'/lib.php');
+require_once(__DIR__.'/lib.php');
 require_once($CFG->dirroot.'/mod/book/locallib.php');
 
 /**
@@ -60,7 +60,7 @@ function booktool_print_get_toc($chapters, $book, $cm) {
 
     $toc .= html_writer::tag('a', '', array('name' => 'toc')); // Representation of toc (HTML).
 
-    $toc .= html_writer::tag('h2', get_string('toc', 'mod_book'), array('class' => 'book_chapter_title'));
+    $toc .= html_writer::tag('h2', get_string('toc', 'mod_book'));
     $toc .= html_writer::start_tag('ul');
     foreach ($chapters as $ch) {
         if (!$ch->hidden) {

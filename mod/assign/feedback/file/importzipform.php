@@ -39,7 +39,7 @@ class assignfeedback_file_import_zip_form extends moodleform implements renderab
     /**
      * Create this grade import form
      */
-    function definition() {
+    public function definition() {
         global $CFG, $PAGE;
 
         $mform = $this->_form;
@@ -81,9 +81,10 @@ class assignfeedback_file_import_zip_form extends moodleform implements renderab
                 if ($importer->is_file_modified($assignment, $user, $plugin, $filename, $unzippedfile)) {
                     // Get a string we can show to identify this user.
                     $userdesc = fullname($user);
+                    $path = pathinfo($filename);
                     if ($assignment->is_blind_marking()) {
                         $userdesc = get_string('hiddenuser', 'assign') .
-                                    $assignment->get_unique_id_for_user($user->id);
+                                    $assignment->get_uniqueid_for_user($user->id);
                     }
                     $grade = $assignment->get_user_grade($user->id, false);
 
@@ -93,8 +94,8 @@ class assignfeedback_file_import_zip_form extends moodleform implements renderab
                                                    'assignfeedback_file',
                                                    ASSIGNFEEDBACK_FILE_FILEAREA,
                                                    $grade->id,
-                                                   '/',
-                                                   $filename);
+                                                   $path['dirname'],
+                                                   $path['basename']);
                     }
 
                     if (!$grade || !$exists) {
@@ -115,11 +116,17 @@ class assignfeedback_file_import_zip_form extends moodleform implements renderab
         }
 
         $mform->addElement('hidden', 'id', $assignment->get_course_module()->id);
+        $mform->setType('id', PARAM_INT);
         $mform->addElement('hidden', 'action', 'viewpluginpage');
+        $mform->setType('action', PARAM_ALPHA);
         $mform->addElement('hidden', 'confirm', 'true');
+        $mform->setType('confirm', PARAM_BOOL);
         $mform->addElement('hidden', 'plugin', 'file');
+        $mform->setTYpe('plugin', PARAM_PLUGIN);
         $mform->addElement('hidden', 'pluginsubtype', 'assignfeedback');
+        $mform->setTYpe('pluginsubtype', PARAM_PLUGIN);
         $mform->addElement('hidden', 'pluginaction', 'uploadzip');
+        $mform->setType('pluginaction', PARAM_ALPHA);
         if (count($updates)) {
             $this->add_action_buttons(true, get_string('confirm'));
         } else {

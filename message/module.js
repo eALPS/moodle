@@ -5,43 +5,16 @@ M.core_message.init_focus = function(Y, eid) {
 };
 
 M.core_message.init_refresh_page = function(Y, delay, url) {
-	var delay_callback = function() {
-		document.location.replace(url);
-	};
-	setTimeout(delay_callback, delay);
+    var delay_callback = function() {
+        document.location.replace(url);
+    };
+    setTimeout(delay_callback, delay);
 };
 
 M.core_message.combinedsearchgotfocus = function(e) {
     if (e.target.get('value')==this.defaultsearchterm) {
         e.target.select();
     }
-};
-
-M.core_message.init_notification = function(Y, title, content, url) {
-    Y.use('overlay', function() {
-        var o = new Y.Overlay({
-            headerContent :  title,
-            bodyContent : content
-        });
-        o.render(Y.one(document.body));
-
-        if (Y.UA.ie > 0 && Y.UA.ie < 7) {
-            // Adjust for IE 6 (can't handle fixed pos)
-            //align the bottom right corner of the overlay with the bottom right of the viewport
-            o.set("align", {
-                points:[Y.WidgetPositionAlign.BR, Y.WidgetPositionAlign.BR]
-            });
-        }
-
-        Y.one('#notificationyes').on('click', function(e) {
-            window.location.href = url;
-        }, o);
-        Y.one('#notificationno').on('click', function(e) {
-            o.hide();
-            e.preventDefault();
-            return false;
-        }, o);
-    });
 };
 
 M.core_message.init_defaultoutputs = function(Y) {
@@ -52,6 +25,12 @@ M.core_message.init_defaultoutputs = function(Y) {
                 // attach event listener
                 node.on('change', defaultoutputs.changeState);
                 // set initial layout
+                node.simulate("change");
+            }, this);
+
+            Y.all('#defaultmessageoutputs input.messagedisable').each(function(node) {
+                // Attach event listener
+                node.on('change', defaultoutputs.changeProviderState);
                 node.simulate("change");
             }, this);
         },
@@ -83,6 +62,26 @@ M.core_message.init_defaultoutputs = function(Y) {
                     node.setAttribute('checked', 1)
                 }
             }, this);
+        },
+
+        changeProviderState : function(e) {
+            var isenabled = e.target.get('checked') || undefined;
+            var parentnode = e.target.ancestor('tr');
+            if (!isenabled) {
+                parentnode.all('select').each(function(node) {
+                    node.set('value', 'disallowed');
+                    node.setAttribute('disabled', 1);
+                    defaultoutputs.updateCheckboxes(node.ancestor('td'), 1, 0);
+                }, this);
+                parentnode.addClass('dimmed_text');
+            } else {
+                parentnode.all('select[disabled]').each(function(node) {
+                    node.removeAttribute('disabled');
+                    node.set('value', 'permitted');
+                    defaultoutputs.updateCheckboxes(node.ancestor('td'), 0, 0);
+                }, this);
+                parentnode.removeClass('dimmed_text');
+            }
         }
     }
 

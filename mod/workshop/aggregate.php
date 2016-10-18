@@ -18,14 +18,13 @@
 /**
  * Aggregates the grades for submission and grades for assessments
  *
- * @package    mod
- * @subpackage workshop
+ * @package    mod_workshop
  * @copyright  2009 David Mudrak <david.mudrak@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once(dirname(dirname(dirname(__FILE__))).'/config.php');
-require_once(dirname(__FILE__).'/locallib.php');
+require(__DIR__.'/../../config.php');
+require_once(__DIR__.'/locallib.php');
 
 $cmid       = required_param('cmid', PARAM_INT);            // course module
 $confirm    = optional_param('confirm', false, PARAM_BOOL); // confirmation
@@ -53,7 +52,6 @@ if ($settingsdata = $settingsform->get_data()) {
     $workshop->aggregate_submission_grades();           // updates 'grade' in {workshop_submissions}
     $evaluator->update_grading_grades($settingsdata);   // updates 'gradinggrade' in {workshop_assessments}
     $workshop->aggregate_grading_grades();              // updates 'gradinggrade' in {workshop_aggregations}
-    $workshop->log('update aggregate grades');
 }
 
 redirect(new moodle_url($workshop->view_url(), compact('page', 'sortby', 'sorthow')));

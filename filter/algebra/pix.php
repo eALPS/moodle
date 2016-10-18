@@ -1,4 +1,4 @@
-<?PHP
+<?php
       // This function fetches math. images from the data directory
       // If not, it obtains the corresponding TeX expression from the cache_tex db table
       // and uses mimeTeX to create the image file
@@ -9,7 +9,7 @@ define('NO_MOODLE_COOKIES', true); // Because it interferes with caching
 
     require_once('../../config.php');
 
-    if (!filter_is_enabled('filter/algebra')) {
+    if (!filter_is_enabled('algebra')) {
         print_error('filternotenabled');
     }
 

@@ -19,13 +19,6 @@ require_once($CFG->dirroot.'/mod/feedback/item/feedback_item_class.php');
 
 class feedback_item_textfield extends feedback_item_base {
     protected $type = "textfield";
-    private $commonparams;
-    private $item_form;
-    private $item;
-
-    public function init() {
-
-    }
 
     public function build_editform($item, $feedback, $cm) {
         global $DB, $CFG;
@@ -55,7 +48,7 @@ class feedback_item_textfield extends feedback_item_base {
             $itemsize = 30;
         }
 
-        $itemlength = isset($size_and_length[1]) ? $size_and_length[1] : 5;
+        $itemlength = isset($size_and_length[1]) ? $size_and_length[1] : 255;
 
         $item->itemsize = $itemsize;
         $item->itemmaxlength = $itemlength;
@@ -75,22 +68,6 @@ class feedback_item_textfield extends feedback_item_base {
                             'position' => $position);
 
         $this->item_form = new feedback_textfield_form('edit_item.php', $customdata);
-    }
-
-    //this function only can used after the call of build_editform()
-    public function show_editform() {
-        $this->item_form->display();
-    }
-
-    public function is_cancelled() {
-        return $this->item_form->is_cancelled();
-    }
-
-    public function get_data() {
-        if ($this->item = $this->item_form->get_data()) {
-            return true;
-        }
-        return false;
     }
 
     public function save_item() {
@@ -116,9 +93,15 @@ class feedback_item_textfield extends feedback_item_base {
     }
 
 
-    //liefert eine Struktur ->name, ->data = array(mit Antworten)
-    public function get_analysed($item, $groupid = false, $courseid = false) {
-        global $DB;
+    /**
+     * Helper function for collected data for exporting to excel
+     *
+     * @param stdClass $item the db-object from feedback_item
+     * @param int $groupid
+     * @param int $courseid
+     * @return stdClass
+     */
+    protected function get_analysed($item, $groupid = false, $courseid = false) {
 
         $analysed_val = new stdClass();
         $analysed_val->data = null;
@@ -146,14 +129,21 @@ class feedback_item_textfield extends feedback_item_base {
     public function print_analysed($item, $itemnr = '', $groupid = false, $courseid = false) {
         $values = feedback_get_group_values($item, $groupid, $courseid);
         if ($values) {
+            echo "<table class=\"analysis itemtype_{$item->typ}\">";
             echo '<tr><th colspan="2" align="left">';
-            echo $itemnr.'&nbsp;('.$item->label.') '.$item->name;
+            echo $itemnr . ' ';
+            if (strval($item->label) !== '') {
+                echo '('. format_string($item->label).') ';
+            }
+            echo $this->get_display_name($item);
             echo '</th></tr>';
             foreach ($values as $value) {
-                echo '<tr><td colspan="2" valign="top" align="left">';
-                echo '-&nbsp;&nbsp;'.str_replace("\n", '<br />', $value->value);
+                $class = strlen(trim($value->value)) ? '' : ' class="isempty"';
+                echo '<tr'.$class.'><td colspan="2" class="singlevalue">';
+                echo str_replace("\n", '<br />', $value->value);
                 echo '</td></tr>';
             }
+            echo '</table>';
         }
     }
 
@@ -167,11 +157,11 @@ class feedback_item_textfield extends feedback_item_base {
         $worksheet->write_string($row_offset, 1, $item->name, $xls_formats->head2);
         $data = $analysed_item->data;
         if (is_array($data)) {
-            $worksheet->write_string($row_offset, 2, $data[0], $xls_formats->value_bold);
+            $worksheet->write_string($row_offset, 2, htmlspecialchars_decode($data[0], ENT_QUOTES), $xls_formats->value_bold);
             $row_offset++;
             $sizeofdata = count($data);
             for ($i = 1; $i < $sizeofdata; $i++) {
-                $worksheet->write_string($row_offset, 2, $data[$i], $xls_formats->default);
+                $worksheet->write_string($row_offset, 2, htmlspecialchars_decode($data[$i], ENT_QUOTES), $xls_formats->default);
                 $row_offset++;
             }
         }
@@ -179,153 +169,29 @@ class feedback_item_textfield extends feedback_item_base {
         return $row_offset;
     }
 
-    /**     
-     * print the item at the edit-page of feedback
+    /**
+     * Adds an input element to the complete form
      *
-     * @global object
-     * @param object $item
-     * @return void
+     * @param stdClass $item
+     * @param mod_feedback_complete_form $form
      */
-    public function print_item_preview($item) {
-        global $OUTPUT, $DB;
-        $align = right_to_left() ? 'right' : 'left';
-        $str_required_mark = '<span class="feedback_required_mark">*</span>';
+    public function complete_form_element($item, $form) {
+        $name = $this->get_display_name($item);
+        $inputname = $item->typ . '_' . $item->id;
+        list($size, $maxlength) = explode ("|", $item->presentation);
+        $form->add_form_element($item,
+                ['text', $inputname, $name, ['maxlength' => $maxlength, 'size' => $size]]);
+        $form->set_element_type($inputname, PARAM_NOTAGS);
 
-        $presentation = explode ("|", $item->presentation);
-        $requiredmark =  ($item->required == 1) ? $str_required_mark : '';
-        //print the question and label
-        echo '<div class="feedback_item_label_'.$align.'">';
-        echo '('.$item->label.') ';
-        echo format_text($item->name.$requiredmark, true, false, false);
-        if ($item->dependitem) {
-            if ($dependitem = $DB->get_record('feedback_item', array('id'=>$item->dependitem))) {
-                echo ' <span class="feedback_depend">';
-                echo '('.$dependitem->label.'-&gt;'.$item->dependvalue.')';
-                echo '</span>';
-            }
-        }
-        echo '</div>';
-
-        //print the presentation
-        echo '<div class="feedback_item_presentation_'.$align.'">';
-        echo '<span class="feedback_item_textfield">';
-        echo '<input type="text" '.
-                    'name="'.$item->typ.'_'.$item->id.'" '.
-                    'size="'.$presentation[0].'" '.
-                    'maxlength="'.$presentation[1].'" '.
-                    'value="" />';
-        echo '</span>';
-        echo '</div>';
+        $form->add_element_rule($inputname, get_string('maximumchars', '', $maxlength), 'maxlength', $maxlength, 'client');
     }
 
-    /**     
-     * print the item at the complete-page of feedback
-     *
-     * @global object
-     * @param object $item
-     * @param string $value
-     * @param bool $highlightrequire
-     * @return void
+    /**
+     * Converts the value from complete_form data to the string value that is stored in the db.
+     * @param mixed $value element from mod_feedback_complete_form::get_data() with the name $item->typ.'_'.$item->id
+     * @return string
      */
-    public function print_item_complete($item, $value = '', $highlightrequire = false) {
-        global $OUTPUT;
-        $align = right_to_left() ? 'right' : 'left';
-        $str_required_mark = '<span class="feedback_required_mark">*</span>';
-
-        $presentation = explode ("|", $item->presentation);
-        if ($highlightrequire AND $item->required AND strval($value) == '') {
-            $highlight = ' missingrequire';
-        } else {
-            $highlight = '';
-        }
-        $requiredmark =  ($item->required == 1) ? $str_required_mark : '';
-
-        //print the question and label
-        echo '<div class="feedback_item_label_'.$align.$highlight.'">';
-            echo format_text($item->name.$requiredmark, true, false, false);
-        echo '</div>';
-
-        //print the presentation
-        echo '<div class="feedback_item_presentation_'.$align.$highlight.'">';
-        echo '<span class="feedback_item_textfield">';
-        echo '<input type="text" '.
-                    'name="'.$item->typ.'_'.$item->id.'" '.
-                    'size="'.$presentation[0].'" '.
-                    'maxlength="'.$presentation[1].'" '.
-                    'value="'.$value.'" />';
-        echo '</span>';
-        echo '</div>';
-    }
-
-    /**     
-     * print the item at the complete-page of feedback
-     *
-     * @global object
-     * @param object $item
-     * @param string $value
-     * @return void
-     */
-    public function print_item_show_value($item, $value = '') {
-        global $OUTPUT;
-        $align = right_to_left() ? 'right' : 'left';
-        $str_required_mark = '<span class="feedback_required_mark">*</span>';
-
-        $presentation = explode ("|", $item->presentation);
-        $requiredmark =  ($item->required == 1) ? $str_required_mark : '';
-
-        //print the question and label
-        echo '<div class="feedback_item_label_'.$align.'">';
-            echo '('.$item->label.') ';
-            echo format_text($item->name . $requiredmark, true, false, false);
-        echo '</div>';
-        echo $OUTPUT->box_start('generalbox boxalign'.$align);
-        echo $value ? $value : '&nbsp;';
-        echo $OUTPUT->box_end();
-    }
-
-    public function check_value($value, $item) {
-        //if the item is not required, so the check is true if no value is given
-        if ((!isset($value) OR $value == '') AND $item->required != 1) {
-            return true;
-        }
-        if ($value == "") {
-            return false;
-        }
-        return true;
-    }
-
-    public function create_value($data) {
-        $data = s($data);
-        return $data;
-    }
-
-    //compares the dbvalue with the dependvalue
-    //dbvalue is the value put in by the user
-    //dependvalue is the value that is compared
-    public function compare_value($item, $dbvalue, $dependvalue) {
-        if ($dbvalue == $dependvalue) {
-            return true;
-        }
-        return false;
-    }
-
-    public function get_presentation($data) {
-        return $data->itemsize . '|'. $data->itemmaxlength;
-    }
-
-    public function get_hasvalue() {
-        return 1;
-    }
-
-    public function can_switch_require() {
-        return true;
-    }
-
-    public function value_type() {
-        return PARAM_RAW;
-    }
-
-    public function clean_input_value($value) {
+    public function create_value($value) {
         return s($value);
     }
 }

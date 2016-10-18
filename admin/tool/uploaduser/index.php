@@ -27,6 +27,7 @@ require('../../../config.php');
 require_once($CFG->libdir.'/adminlib.php');
 require_once($CFG->libdir.'/csvlib.class.php');
 require_once($CFG->dirroot.'/user/profile/lib.php');
+require_once($CFG->dirroot.'/user/lib.php');
 require_once($CFG->dirroot.'/group/lib.php');
 require_once($CFG->dirroot.'/cohort/lib.php');
 require_once('locallib.php');
@@ -35,7 +36,7 @@ require_once('user_form.php');
 $iid         = optional_param('iid', '', PARAM_INT);
 $previewrows = optional_param('previewrows', 10, PARAM_INT);
 
-@set_time_limit(60*60); // 1 hour should be enough
+core_php_time_limit::raise(60*60); // 1 hour should be enough
 raise_memory_limit(MEMORY_HUGE);
 
 require_login();
@@ -84,7 +85,7 @@ $today = time();
 $today = make_timestamp(date('Y', $today), date('m', $today), date('d', $today), 0, 0, 0);
 
 // array of all valid fields for validation
-$STD_FIELDS = array('id', 'firstname', 'lastname', 'username', 'email',
+$STD_FIELDS = array('id', 'username', 'email',
         'city', 'country', 'lang', 'timezone', 'mailformat',
         'maildisplay', 'maildigest', 'htmleditor', 'autosubscribe',
         'institution', 'department', 'idnumber', 'skype',
@@ -94,16 +95,24 @@ $STD_FIELDS = array('id', 'firstname', 'lastname', 'username', 'email',
         'oldusername', // use when renaming users - this is the original username
         'suspended',   // 1 means suspend user account, 0 means activate user account, nothing means keep as is for existing users
         'deleted',     // 1 means delete user
+        'mnethostid',  // Can not be used for adding, updating or deleting of users - only for enrolments, groups, cohorts and suspending.
+        'interests',
     );
+// Include all name fields.
+$STD_FIELDS = array_merge($STD_FIELDS, get_all_user_name_fields());
 
 $PRF_FIELDS = array();
 
-if ($prof_fields = $DB->get_records('user_info_field')) {
-    foreach ($prof_fields as $prof_field) {
-        $PRF_FIELDS[] = 'profile_field_'.$prof_field->shortname;
+if ($proffields = $DB->get_records('user_info_field')) {
+    foreach ($proffields as $key => $proffield) {
+        $profilefieldname = 'profile_field_'.$proffield->shortname;
+        $PRF_FIELDS[] = $profilefieldname;
+        // Re-index $proffields with key as shortname. This will be
+        // used while checking if profile data is key and needs to be converted (eg. menu profile field)
+        $proffields[$profilefieldname] = $proffield;
+        unset($proffields[$key]);
     }
 }
-unset($prof_fields);
 
 if (empty($iid)) {
     $mform1 = new admin_uploaduser_form1();
@@ -115,12 +124,11 @@ if (empty($iid)) {
         $content = $mform1->get_file_content('userfile');
 
         $readcount = $cir->load_csv_content($content, $formdata->encoding, $formdata->delimiter_name);
+        $csvloaderror = $cir->get_error();
         unset($content);
 
-        if ($readcount === false) {
-            print_error('csvloaderror', '', $returnurl);
-        } else if ($readcount == 0) {
-            print_error('csvemptyfile', 'error', $returnurl);
+        if (!is_null($csvloaderror)) {
+            print_error('csvloaderror', '', $returnurl, $csvloaderror);
         }
         // test if columns ok
         $filecolumns = uu_validate_user_upload_columns($cir, $STD_FIELDS, $PRF_FIELDS, $returnurl);
@@ -161,7 +169,7 @@ if ($formdata = $mform2->is_cancelled()) {
     $allowdeletes      = (!empty($formdata->uuallowdeletes) and $optype != UU_USER_ADDNEW and $optype != UU_USER_ADDINC);
     $allowsuspends     = (!empty($formdata->uuallowsuspends));
     $bulk              = $formdata->uubulk;
-    $noemailduplicates = $formdata->uunoemailduplicates;
+    $noemailduplicates = empty($CFG->allowaccountssameemail) ? 1 : $formdata->uunoemailduplicates;
     $standardusernames = $formdata->uustandardusernames;
     $resetpasswords    = isset($formdata->uuforcepasswordchange) ? $formdata->uuforcepasswordchange : UU_PWRESET_NONE;
 
@@ -180,7 +188,8 @@ if ($formdata = $mform2->is_cancelled()) {
     // caches
     $ccache         = array(); // course cache - do not fetch all courses here, we  will not probably use them all anyway!
     $cohorts        = array();
-    $rolecache      = uu_allowed_roles_cache(); // roles lookup cache
+    $rolecache      = uu_allowed_roles_cache(); // Course roles lookup cache.
+    $sysrolecache   = uu_allowed_sysroles_cache(); // System roles lookup cache.
     $manualcache    = array(); // cache of used manual enrol plugins in each course
     $supportedauths = uu_supported_auths(); // officially supported plugins that are enabled
 
@@ -203,7 +212,7 @@ if ($formdata = $mform2->is_cancelled()) {
     // init upload progress tracker
     $upt = new uu_progress_tracker();
     $upt->start(); // start table
-
+    $validation = array();
     while ($line = $cir->next()) {
         $upt->flush();
         $linenum++;
@@ -224,13 +233,13 @@ if ($formdata = $mform2->is_cancelled()) {
                 if (isset($USER->$key) and is_array($USER->$key)) {
                     // this must be some hacky field that is abusing arrays to store content and format
                     $user->$key = array();
-                    $user->$key['text']   = $value;
-                    $user->$key['format'] = FORMAT_MOODLE;
+                    $user->{$key['text']}   = $value;
+                    $user->{$key['format']} = FORMAT_MOODLE;
                 } else {
-                    $user->$key = $value;
+                    $user->$key = trim($value);
                 }
             } else {
-                $user->$key = $value;
+                $user->$key = trim($value);
             }
 
             if (in_array($key, $upt->columns)) {
@@ -271,7 +280,7 @@ if ($formdata = $mform2->is_cancelled()) {
         // normalize username
         $originalusername = $user->username;
         if ($standardusernames) {
-            $user->username = clean_param($user->username, PARAM_USERNAME);
+            $user->username = core_user::clean_field($user->username, 'username');
         }
 
         // make sure we really have username
@@ -286,14 +295,57 @@ if ($formdata = $mform2->is_cancelled()) {
             continue;
         }
 
-        if ($existinguser = $DB->get_record('user', array('username'=>$user->username, 'mnethostid'=>$CFG->mnet_localhost_id))) {
+        if ($user->username !== core_user::clean_field($user->username, 'username')) {
+            $upt->track('status', get_string('invalidusername', 'error', 'username'), 'error');
+            $upt->track('username', $errorstr, 'error');
+            $userserrors++;
+        }
+
+        if (empty($user->mnethostid)) {
+            $user->mnethostid = $CFG->mnet_localhost_id;
+        }
+
+        if ($existinguser = $DB->get_record('user', array('username'=>$user->username, 'mnethostid'=>$user->mnethostid))) {
             $upt->track('id', $existinguser->id, 'normal', false);
         }
 
-        // find out in username incrementing required
-        if ($existinguser and $optype == UU_USER_ADDINC) {
-            $user->username = uu_increment_username($user->username);
-            $existinguser = false;
+        if ($user->mnethostid == $CFG->mnet_localhost_id) {
+            $remoteuser = false;
+
+            // Find out if username incrementing required.
+            if ($existinguser and $optype == UU_USER_ADDINC) {
+                $user->username = uu_increment_username($user->username);
+                $existinguser = false;
+            }
+
+        } else {
+            if (!$existinguser or $optype == UU_USER_ADDINC) {
+                $upt->track('status', get_string('errormnetadd', 'tool_uploaduser'), 'error');
+                $userserrors++;
+                continue;
+            }
+
+            $remoteuser = true;
+
+            // Make sure there are no changes of existing fields except the suspended status.
+            foreach ((array)$existinguser as $k => $v) {
+                if ($k === 'suspended') {
+                    continue;
+                }
+                if (property_exists($user, $k)) {
+                    $user->$k = $v;
+                }
+                if (in_array($k, $upt->columns)) {
+                    if ($k === 'password' or $k === 'oldusername' or $k === 'deleted') {
+                        $upt->track($k, '', 'normal', false);
+                    } else {
+                        $upt->track($k, s($v), 'normal', false);
+                    }
+                }
+            }
+            unset($user->oldusername);
+            unset($user->password);
+            $user->auth = $existinguser->auth;
         }
 
         // notify about nay username changes
@@ -327,13 +379,23 @@ if ($formdata = $mform2->is_cancelled()) {
             if (isset($formdata->$field)) {
                 // process templates
                 $user->$field = uu_process_template($formdata->$field, $user);
+
+                // Form contains key and later code expects value.
+                // Convert key to value for required profile fields.
+                require_once($CFG->dirroot.'/user/profile/field/'.$proffields[$field]->datatype.'/field.class.php');
+                $profilefieldclass = 'profile_field_'.$proffields[$field]->datatype;
+                $profilefield = new $profilefieldclass($proffields[$field]->id);
+                if (method_exists($profilefield, 'convert_external_data')) {
+                    $user->$field = $profilefield->edit_save_data_preprocess($user->$field, null);
+                }
+
                 $formdefaults[$field] = true;
             }
         }
 
         // delete user
         if (!empty($user->deleted)) {
-            if (!$allowdeletes) {
+            if (!$allowdeletes or $remoteuser) {
                 $usersskipped++;
                 $upt->track('status', $strusernotdeletedoff, 'warning');
                 continue;
@@ -381,7 +443,7 @@ if ($formdata = $mform2->is_cancelled()) {
             }
 
             if ($standardusernames) {
-                $oldusername = clean_param($user->oldusername, PARAM_USERNAME);
+                $oldusername = core_user::clean_field($user->oldusername, 'username');
             } else {
                 $oldusername = $user->oldusername;
             }
@@ -453,6 +515,7 @@ if ($formdata = $mform2->is_cancelled()) {
 
             $upt->track('username', html_writer::link(new moodle_url('/user/profile.php', array('id'=>$existinguser->id)), s($existinguser->username)), 'normal', false);
             $upt->track('suspended', $stryesnooptions[$existinguser->suspended] , 'normal', false);
+            $upt->track('auth', $existinguser->auth, 'normal', false);
 
             if (is_siteadmin($user->id)) {
                 $upt->track('status', $strusernotupdatedadmin, 'error');
@@ -466,12 +529,10 @@ if ($formdata = $mform2->is_cancelled()) {
             //load existing profile data
             profile_load_data($existinguser);
 
-            $upt->track('auth', $existinguser->auth, 'normal', false);
-
             $doupdate = false;
             $dologout = false;
 
-            if ($updatetype != UU_UPDATE_NOCHANGES) {
+            if ($updatetype != UU_UPDATE_NOCHANGES and !$remoteuser) {
                 if (!empty($user->auth) and $user->auth !== $existinguser->auth) {
                     $upt->track('auth', s($existinguser->auth).'-->'.s($user->auth), 'info', false);
                     $existinguser->auth = $user->auth;
@@ -490,7 +551,6 @@ if ($formdata = $mform2->is_cancelled()) {
                         continue;
                     }
                     if (!property_exists($user, $column) or !property_exists($existinguser, $column)) {
-                        // this should never happen
                         continue;
                     }
                     if ($updatetype == UU_UPDATE_MISSING) {
@@ -508,8 +568,18 @@ if ($formdata = $mform2->is_cancelled()) {
                     }
                     if ($existinguser->$column !== $user->$column) {
                         if ($column === 'email') {
-                            if ($DB->record_exists('user', array('email'=>$user->email))) {
-                                if ($noemailduplicates) {
+                            $select = $DB->sql_like('email', ':email', false, true, false, '|');
+                            $params = array('email' => $DB->sql_like_escape($user->email, '|'));
+                            if ($DB->record_exists_select('user', $select , $params)) {
+
+                                $changeincase = core_text::strtolower($existinguser->$column) === core_text::strtolower(
+                                                $user->$column);
+
+                                if ($changeincase) {
+                                    // If only case is different then switch to lower case and carry on.
+                                    $user->$column = core_text::strtolower($user->$column);
+                                    continue;
+                                } else if ($noemailduplicates) {
                                     $upt->track('email', $stremailduplicate, 'error');
                                     $upt->track('status', $strusernotupdated, 'error');
                                     $userserrors++;
@@ -520,6 +590,16 @@ if ($formdata = $mform2->is_cancelled()) {
                             }
                             if (!validate_email($user->email)) {
                                 $upt->track('email', get_string('invalidemail'), 'warning');
+                            }
+                        }
+
+                        if ($column === 'lang') {
+                            if (empty($user->lang)) {
+                                // Do not change to not-set value.
+                                continue;
+                            } else if (core_user::clean_field($user->lang, 'lang') === '') {
+                                $upt->track('status', get_string('cannotfindlang', 'error', $user->lang), 'warning');
+                                continue;
                             }
                         }
 
@@ -559,8 +639,12 @@ if ($formdata = $mform2->is_cancelled()) {
             // changing of passwords is a special case
             // do not force password changes for external auth plugins!
             $oldpw = $existinguser->password;
-            if (!$isinternalauth) {
-                $existinguser->password = 'not cached';
+
+            if ($remoteuser) {
+                // Do not mess with passwords of remote users.
+
+            } else if (!$isinternalauth) {
+                $existinguser->password = AUTH_PASSWORD_NOT_CACHED;
                 $upt->track('password', '-', 'normal', false);
                 // clean up prefs
                 unset_user_preference('create_password', $existinguser);
@@ -568,6 +652,8 @@ if ($formdata = $mform2->is_cancelled()) {
 
             } else if (!empty($user->password)) {
                 if ($updatepasswords) {
+                    // Check for passwords that we want to force users to reset next
+                    // time they log in.
                     $errmsg = null;
                     $weak = !check_password_policy($user->password, $errmsg);
                     if ($resetpasswords == UU_PWRESET_ALL or ($resetpasswords == UU_PWRESET_WEAK and $weak)) {
@@ -580,7 +666,12 @@ if ($formdata = $mform2->is_cancelled()) {
                         unset_user_preference('auth_forcepasswordchange', $existinguser);
                     }
                     unset_user_preference('create_password', $existinguser); // no need to create password any more
-                    $existinguser->password = hash_internal_user_password($user->password);
+
+                    // Use a low cost factor when generating bcrypt hash otherwise
+                    // hashing would be slow when uploading lots of users. Hashes
+                    // will be automatically updated to a higher cost factor the first
+                    // time the user logs in.
+                    $existinguser->password = hash_internal_user_password($user->password, true);
                     $upt->track('password', $user->password, 'normal', false);
                 } else {
                     // do not print password when not changed
@@ -589,24 +680,27 @@ if ($formdata = $mform2->is_cancelled()) {
             }
 
             if ($doupdate or $existinguser->password !== $oldpw) {
-                // we want only users that were really updated
-
-                $DB->update_record('user', $existinguser);
+                // We want only users that were really updated.
+                user_update_user($existinguser, false, false);
 
                 $upt->track('status', $struserupdated);
                 $usersupdated++;
-                // pre-process custom profile menu fields data from csv file
-                $existinguser = uu_pre_process_custom_profile_data($existinguser);
-                // save custom profile fields data from csv file
-                profile_save_data($existinguser);
 
-                events_trigger('user_updated', $existinguser);
+                if (!$remoteuser) {
+                    // pre-process custom profile menu fields data from csv file
+                    $existinguser = uu_pre_process_custom_profile_data($existinguser);
+                    // save custom profile fields data from csv file
+                    profile_save_data($existinguser);
+                }
 
                 if ($bulk == UU_BULK_UPDATED or $bulk == UU_BULK_ALL) {
                     if (!in_array($user->id, $SESSION->bulk_users)) {
                         $SESSION->bulk_users[] = $user->id;
                     }
                 }
+
+                // Trigger event.
+                \core\event\user_updated::create_from_userid($existinguser->id)->trigger();
 
             } else {
                 // no user information changed
@@ -621,7 +715,7 @@ if ($formdata = $mform2->is_cancelled()) {
             }
 
             if ($dologout) {
-                session_kill_user($existinguser->id);
+                \core\session\manager::kill_user_sessions($existinguser->id);
             }
 
         } else {
@@ -678,6 +772,13 @@ if ($formdata = $mform2->is_cancelled()) {
                 $upt->track('email', get_string('invalidemail'), 'warning');
             }
 
+            if (empty($user->lang)) {
+                $user->lang = '';
+            } else if (core_user::clean_field($user->lang, 'lang') === '') {
+                $upt->track('status', get_string('cannotfindlang', 'error', $user->lang), 'warning');
+                $user->lang = '';
+            }
+
             $forcechangepassword = false;
 
             if ($isinternalauth) {
@@ -703,15 +804,18 @@ if ($formdata = $mform2->is_cancelled()) {
                         }
                         $forcechangepassword = true;
                     }
-                    $user->password = hash_internal_user_password($user->password);
+                    // Use a low cost factor when generating bcrypt hash otherwise
+                    // hashing would be slow when uploading lots of users. Hashes
+                    // will be automatically updated to a higher cost factor the first
+                    // time the user logs in.
+                    $user->password = hash_internal_user_password($user->password, true);
                 }
             } else {
-                $user->password = 'not cached';
+                $user->password = AUTH_PASSWORD_NOT_CACHED;
                 $upt->track('password', '-', 'normal', false);
             }
 
-            // create user - insert_record ignores any extra properties
-            $user->id = $DB->insert_record('user', $user);
+            $user->id = user_create_user($user, false, false);
             $upt->track('username', html_writer::link(new moodle_url('/user/profile.php', array('id'=>$user->id)), s($user->username)), 'normal', false);
 
             // pre-process custom profile menu fields data from csv file
@@ -726,14 +830,15 @@ if ($formdata = $mform2->is_cancelled()) {
                 set_user_preference('create_password', 1, $user);
             }
 
+            // Trigger event.
+            \core\event\user_created::create_from_userid($user->id)->trigger();
+
             $upt->track('status', $struseradded);
             $upt->track('id', $user->id, 'normal', false);
             $usersnew++;
 
             // make sure user context exists
             context_user::instance($user->id);
-
-            events_trigger('user_created', $user);
 
             if ($bulk == UU_BULK_NEW or $bulk == UU_BULK_ALL) {
                 if (!in_array($user->id, $SESSION->bulk_users)) {
@@ -742,6 +847,10 @@ if ($formdata = $mform2->is_cancelled()) {
             }
         }
 
+        // Update user interests.
+        if (isset($user->interests) && strval($user->interests) !== '') {
+            useredit_update_interests($user, preg_split('/\s*,\s*/', $user->interests, -1, PREG_SPLIT_NO_EMPTY));
+        }
 
         // add to cohort first, it might trigger enrolments indirectly - do NOT create cohorts here!
         foreach ($filecolumns as $column) {
@@ -757,6 +866,15 @@ if ($formdata = $mform2->is_cancelled()) {
                         $cohort = $DB->get_record('cohort', array('id'=>$addcohort));
                     } else {
                         $cohort = $DB->get_record('cohort', array('idnumber'=>$addcohort));
+                        if (empty($cohort) && has_capability('moodle/cohort:manage', context_system::instance())) {
+                            // Cohort was not found. Create a new one.
+                            $cohortid = cohort_add_cohort((object)array(
+                                'idnumber' => $addcohort,
+                                'name' => $addcohort,
+                                'contextid' => context_system::instance()->id
+                            ));
+                            $cohort = $DB->get_record('cohort', array('id'=>$cohortid));
+                        }
                     }
 
                     if (empty($cohort)) {
@@ -787,6 +905,41 @@ if ($formdata = $mform2->is_cancelled()) {
         // find course enrolments, groups, roles/types and enrol periods
         // this is again a special case, we always do this for any updated or created users
         foreach ($filecolumns as $column) {
+            if (preg_match('/^sysrole\d+$/', $column)) {
+
+                if (!empty($user->$column)) {
+                    $sysrolename = $user->$column;
+                    if ($sysrolename[0] == '-') {
+                        $removing = true;
+                        $sysrolename = substr($sysrolename, 1);
+                    } else {
+                        $removing = false;
+                    }
+
+                    if (array_key_exists($sysrolename, $sysrolecache)) {
+                        $sysroleid = $sysrolecache[$sysrolename]->id;
+                    } else {
+                        $upt->track('enrolments', get_string('unknownrole', 'error', s($sysrolename)), 'error');
+                        continue;
+                    }
+
+                    if ($removing) {
+                        if (user_has_role_assignment($user->id, $sysroleid, SYSCONTEXTID)) {
+                            role_unassign($sysroleid, $user->id, SYSCONTEXTID);
+                            $upt->track('enrolments', get_string('unassignedsysrole',
+                                    'tool_uploaduser', $sysrolecache[$sysroleid]->name));
+                        }
+                    } else {
+                        if (!user_has_role_assignment($user->id, $sysroleid, SYSCONTEXTID)) {
+                            role_assign($sysroleid, $user->id, SYSCONTEXTID);
+                            $upt->track('enrolments', get_string('assignedsysrole',
+                                    'tool_uploaduser', $sysrolecache[$sysroleid]->name));
+                        }
+                    }
+                }
+
+                continue;
+            }
             if (!preg_match('/^course\d+$/', $column)) {
                 continue;
             }
@@ -820,16 +973,37 @@ if ($formdata = $mform2->is_cancelled()) {
                 }
             }
 
-            if ($manual and $manualcache[$courseid]) {
+            if ($courseid == SITEID) {
+                // Technically frontpage does not have enrolments, but only role assignments,
+                // let's not invent new lang strings here for this rarely used feature.
+
+                if (!empty($user->{'role'.$i})) {
+                    $rolename = $user->{'role'.$i};
+                    if (array_key_exists($rolename, $rolecache)) {
+                        $roleid = $rolecache[$rolename]->id;
+                    } else {
+                        $upt->track('enrolments', get_string('unknownrole', 'error', s($rolename)), 'error');
+                        continue;
+                    }
+
+                    role_assign($roleid, $user->id, context_course::instance($courseid));
+
+                    $a = new stdClass();
+                    $a->course = $shortname;
+                    $a->role   = $rolecache[$roleid]->name;
+                    $upt->track('enrolments', get_string('enrolledincourserole', 'enrol_manual', $a));
+                }
+
+            } else if ($manual and $manualcache[$courseid]) {
 
                 // find role
-                $rid = false;
+                $roleid = false;
                 if (!empty($user->{'role'.$i})) {
-                    $addrole = $user->{'role'.$i};
-                    if (array_key_exists($addrole, $rolecache)) {
-                        $rid = $rolecache[$addrole]->id;
+                    $rolename = $user->{'role'.$i};
+                    if (array_key_exists($rolename, $rolecache)) {
+                        $roleid = $rolecache[$rolename]->id;
                     } else {
-                        $upt->track('enrolments', get_string('unknownrole', 'error', s($addrole)), 'error');
+                        $upt->track('enrolments', get_string('unknownrole', 'error', s($rolename)), 'error');
                         continue;
                     }
 
@@ -842,16 +1016,31 @@ if ($formdata = $mform2->is_cancelled()) {
                     } else if (empty($formdata->{'uulegacy'.$addtype})) {
                         continue;
                     } else {
-                        $rid = $formdata->{'uulegacy'.$addtype};
+                        $roleid = $formdata->{'uulegacy'.$addtype};
                     }
                 } else {
                     // no role specified, use the default from manual enrol plugin
-                    $rid = $manualcache[$courseid]->roleid;
+                    $roleid = $manualcache[$courseid]->roleid;
                 }
 
-                if ($rid) {
-                    // find duration
-                    $timeend   = 0;
+                if ($roleid) {
+                    // Find duration and/or enrol status.
+                    $timeend = 0;
+                    $status = null;
+
+                    if (isset($user->{'enrolstatus'.$i})) {
+                        $enrolstatus = $user->{'enrolstatus'.$i};
+                        if ($enrolstatus == '') {
+                            $status = null;
+                        } else if ($enrolstatus === (string)ENROL_USER_ACTIVE) {
+                            $status = ENROL_USER_ACTIVE;
+                        } else if ($enrolstatus === (string)ENROL_USER_SUSPENDED) {
+                            $status = ENROL_USER_SUSPENDED;
+                        } else {
+                            debugging('Unknown enrolment status.');
+                        }
+                    }
+
                     if (!empty($user->{'enrolperiod'.$i})) {
                         $duration = (int)$user->{'enrolperiod'.$i} * 60*60*24; // convert days to seconds
                         if ($duration > 0) { // sanity check
@@ -861,11 +1050,11 @@ if ($formdata = $mform2->is_cancelled()) {
                         $timeend = $today + $manualcache[$courseid]->enrolperiod;
                     }
 
-                    $manual->enrol_user($manualcache[$courseid], $user->id, $rid, $today, $timeend);
+                    $manual->enrol_user($manualcache[$courseid], $user->id, $roleid, $today, $timeend, $status);
 
                     $a = new stdClass();
                     $a->course = $shortname;
-                    $a->role   = $rolecache[$rid]->name;
+                    $a->role   = $rolecache[$roleid]->name;
                     $upt->track('enrolments', get_string('enrolledincourserole', 'enrol_manual', $a));
                 }
             }
@@ -900,7 +1089,11 @@ if ($formdata = $mform2->is_cancelled()) {
                     $newgroupdata = new stdClass();
                     $newgroupdata->name = $addgroup;
                     $newgroupdata->courseid = $ccache[$shortname]->id;
-                    if ($ccache[$shortname]->groups[$addgroup]->id = groups_create_group($newgroupdata)){
+                    $newgroupdata->description = '';
+                    $gid = groups_create_group($newgroupdata);
+                    if ($gid){
+                        $ccache[$shortname]->groups[$addgroup] = new stdClass();
+                        $ccache[$shortname]->groups[$addgroup]->id   = $gid;
                         $ccache[$shortname]->groups[$addgroup]->name = $newgroupdata->name;
                     } else {
                         $upt->track('enrolments', get_string('unknowngroup', 'error', s($addgroup)), 'error');
@@ -922,9 +1115,16 @@ if ($formdata = $mform2->is_cancelled()) {
                 }
             }
         }
+        $validation[$user->username] = core_user::validate($user);
     }
     $upt->close(); // close table
-
+    if (!empty($validation)) {
+        foreach ($validation as $username => $result) {
+            if ($result !== true) {
+                \core\notification::warning(get_string('invaliduserdata', 'tool_uploaduser', s($username)));
+            }
+        }
+    }
     $cir->close();
     $cir->cleanup(true);
 
@@ -979,12 +1179,12 @@ while ($linenum <= $previewrows and $fields = $cir->next()) {
     $rowcols = array();
     $rowcols['line'] = $linenum;
     foreach($fields as $key => $field) {
-        $rowcols[$filecolumns[$key]] = s($field);
+        $rowcols[$filecolumns[$key]] = s(trim($field));
     }
     $rowcols['status'] = array();
 
     if (isset($rowcols['username'])) {
-        $stdusername = clean_param($rowcols['username'], PARAM_USERNAME);
+        $stdusername = core_user::clean_field($rowcols['username'], 'username');
         if ($rowcols['username'] !== $stdusername) {
             $rowcols['status'][] = get_string('invalidusernameupload');
         }
@@ -999,16 +1199,16 @@ while ($linenum <= $previewrows and $fields = $cir->next()) {
         if (!validate_email($rowcols['email'])) {
             $rowcols['status'][] = get_string('invalidemail');
         }
-        if ($DB->record_exists('user', array('email'=>$rowcols['email']))) {
+
+        $select = $DB->sql_like('email', ':email', false, true, false, '|');
+        $params = array('email' => $DB->sql_like_escape($rowcols['email'], '|'));
+        if ($DB->record_exists_select('user', $select , $params)) {
             $rowcols['status'][] = $stremailduplicate;
         }
     }
 
     if (isset($rowcols['city'])) {
-        $rowcols['city'] = trim($rowcols['city']);
-        if (empty($rowcols['city'])) {
-            $rowcols['status'][] = get_string('fieldrequired', 'error', 'city');
-        }
+        $rowcols['city'] = $rowcols['city'];
     }
     // Check if rowcols have custom profile field with correct data and update error state.
     $noerror = uu_check_custom_profile_data($rowcols) && $noerror;

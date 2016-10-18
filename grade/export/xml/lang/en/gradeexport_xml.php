@@ -23,7 +23,7 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+$string['eventgradeexported'] = 'XML grade exported';
 $string['pluginname'] = 'XML file';
 $string['xml:publish'] = 'Publish XML grade export';
 $string['xml:view'] = 'Use XML grade export';
-$string['useridnumberwarning'] = 'User\'s without an ID number are excluded from the XML export as they cannot be imported';

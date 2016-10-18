@@ -22,8 +22,8 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require(dirname(__FILE__).'/../../config.php');
-require_once(dirname(__FILE__).'/locallib.php');
+require(__DIR__.'/../../config.php');
+require_once(__DIR__.'/locallib.php');
 
 $id        = required_param('id', PARAM_INT);        // Course Module ID
 $chapterid = required_param('chapterid', PARAM_INT); // Chapter ID
@@ -173,12 +173,13 @@ if (!$nothing) {
     foreach ($newchapters as $ch) {
         $ch->pagenum = $i;
         $DB->update_record('book_chapters', $ch);
+        $ch = $DB->get_record('book_chapters', array('id' => $ch->id));
+
+        \mod_book\event\chapter_updated::create_from_chapter($book, $context, $ch)->trigger();
+
         $i++;
     }
 }
-
-add_to_log($course->id, 'course', 'update mod', '../mod/book/view.php?id='.$cm->id, 'book '.$book->id);
-add_to_log($course->id, 'book', 'update', 'view.php?id='.$cm->id, $book->id, $cm->id);
 
 book_preload_chapters($book); // fix structure
 $DB->set_field('book', 'revision', $book->revision+1, array('id'=>$book->id));

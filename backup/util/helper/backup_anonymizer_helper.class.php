@@ -46,6 +46,24 @@
  */
 class backup_anonymizer_helper {
 
+    /**
+     * Determine if the given user is an 'anonymous' user, based on their username, firstname, lastname
+     * and email address.
+     * @param stdClass $user the user record to test
+     * @return bool true if this is an 'anonymous' user
+     */
+    public static function is_anonymous_user($user) {
+        if (preg_match('/^anon\d*$/', $user->username)) {
+            $match = preg_match('/^anonfirstname\d*$/', $user->firstname);
+            $match = $match && preg_match('/^anonlastname\d*$/', $user->lastname);
+            $match = $match && preg_match('/^anon\d*@doesntexist\.com$/', $user->email);
+            if ($match) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static function process_user_auth($value) {
         return 'manual'; // Set them to manual always
     }
@@ -148,5 +166,49 @@ class backup_anonymizer_helper {
 
     public static function process_user_imagealt($value) {
         return ''; // No user imagealt
+    }
+
+    /**
+     * Anonymises user's phonetic name field
+     * @param string $value value of the user field
+     * @return string anonymised phonetic name
+     */
+    public static function process_user_firstnamephonetic($value) {
+        static $counter = 0;
+        $counter++;
+        return 'anonfirstnamephonetic' . $counter; // Just a counter.
+    }
+
+    /**
+     * Anonymises user's phonetic last name field
+     * @param string $value value of the user field
+     * @return string anonymised last phonetic name
+     */
+    public static function process_user_lastnamephonetic($value) {
+        static $counter = 0;
+        $counter++;
+        return 'anonlastnamephonetic' . $counter; // Just a counter.
+    }
+
+    /**
+     * Anonymises user's middle name field
+     * @param string $value value of the user field
+     * @return string anonymised middle name
+     */
+    public static function process_user_middlename($value) {
+        static $counter = 0;
+        $counter++;
+        return 'anonmiddlename' . $counter; // Just a counter.
+    }
+
+    /**
+     * Anonymises user's alternate name field
+     * @param string $value value of the user field
+     * @return string anonymised alternate name
+     */
+    public static function process_user_alternatename($value) {
+        static $counter = 0;
+        $counter++;
+        return 'anonalternatename' . $counter; // Just a counter.
     }
 }

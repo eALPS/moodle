@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -20,6 +19,14 @@
  *
  * Finds the user and calls the appropriate routine for their authentication type.
  *
+ * There are several pathways to/through this page, summarised below:
+ * 1. User clicks the 'forgotten your username or password?' link on the login page.
+ *  - No token is received, render the username/email search form.
+ * 2. User clicks the link in the forgot password email
+ *  - Token received as GET param, store the token in session, redirect to self
+ * 3. Redirected from (2)
+ *  - Fetch token from session, and continue to run the reset routine defined in 'core_login_process_password_set()'.
+ *
  * @package    core
  * @subpackage auth
  * @copyright  1999 onwards Martin Dougiamas  http://dougiamas.com
@@ -27,10 +34,12 @@
  */
 
 require('../config.php');
+require_once($CFG->libdir.'/authlib.php');
+require_once(__DIR__ . '/lib.php');
 require_once('forgot_password_form.php');
+require_once('set_password_form.php');
 
-$p_secret   = optional_param('p', false, PARAM_RAW);
-$p_username = optional_param('s', false, PARAM_RAW);
+$token = optional_param('token', false, PARAM_ALPHANUM);
 
 //HTTPS is required in this page when $CFG->loginhttps enabled
 $PAGE->https_required();
@@ -58,137 +67,27 @@ if (isloggedin() and !isguestuser()) {
     redirect($CFG->wwwroot.'/index.php', get_string('loginalready'), 5);
 }
 
-if ($p_secret !== false) {
-///=====================
-/// user clicked on link in email message
-///=====================
-
-    update_login_count();
-
-    $user = $DB->get_record('user', array('username'=>$p_username, 'mnethostid'=>$CFG->mnet_localhost_id, 'deleted'=>0, 'suspended'=>0));
-
-    if ($user and ($user->auth === 'nologin' or !is_enabled_auth($user->auth))) {
-        // bad luck - user is not able to login, do not let them reset password
-        $user = false;
-    }
-
-    if (!empty($user) and $user->secret === '') {
-        echo $OUTPUT->header();
-        print_error('secretalreadyused');
-    } else if (!empty($user) and $user->secret == $p_secret) {
-        // make sure that url relates to a valid user
-
-        // check this isn't guest user
-        if (isguestuser($user)) {
-            print_error('cannotresetguestpwd');
-        }
-
-        // make sure user is allowed to change password
-        require_capability('moodle/user:changeownpassword', $systemcontext, $user->id);
-
-        if (!reset_password_and_mail($user)) {
-            print_error('cannotresetmail');
-        }
-
-        // Clear secret so that it can not be used again
-        $user->secret = '';
-        $DB->set_field('user', 'secret', $user->secret, array('id'=>$user->id));
-
-        reset_login_count();
-
-        $changepasswordurl = "{$CFG->httpswwwroot}/login/change_password.php";
-        $a = new stdClass();
-        $a->email = $user->email;
-        $a->link = $changepasswordurl;
-
-        echo $OUTPUT->header();
-        notice(get_string('emailpasswordsent', '', $a), $changepasswordurl);
-
-    } else {
-        if (!empty($user) and strlen($p_secret) === 15) {
-            // somebody probably tries to hack in by guessing secret - stop them!
-            $DB->set_field('user', 'secret', '', array('id'=>$user->id));
-        }
-        echo $OUTPUT->header();
-        print_error('forgotteninvalidurl');
-    }
-
-    die; //never reached
+// Fetch the token from the session, if present, and unset the session var immediately.
+$tokeninsession = false;
+if (!empty($SESSION->password_reset_token)) {
+    $token = $SESSION->password_reset_token;
+    unset($SESSION->password_reset_token);
+    $tokeninsession = true;
 }
 
-$mform = new login_forgot_password_form();
-
-if ($mform->is_cancelled()) {
-    redirect(get_login_url());
-
-} else if ($data = $mform->get_data()) {
-/// find the user in the database and mail info
-
-    // first try the username
-    if (!empty($data->username)) {
-        $username = textlib::strtolower($data->username); // mimic the login page process, if they forget username they need to use email for reset
-        $user = $DB->get_record('user', array('username'=>$username, 'mnethostid'=>$CFG->mnet_localhost_id, 'deleted'=>0, 'suspended'=>0));
-
+if (empty($token)) {
+    // This is a new password reset request.
+    // Process the request; identify the user & send confirmation email.
+    core_login_process_password_reset_request();
+} else {
+    // A token has been found, but not in the session, and not from a form post.
+    // This must be the user following the original rest link, so store the reset token in the session and redirect to self.
+    // The session var is intentionally used only during the lifespan of one request (the redirect) and is unset above.
+    if (!$tokeninsession && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $SESSION->password_reset_token = $token;
+        redirect($CFG->httpswwwroot . '/login/forgot_password.php');
     } else {
-        // this is tricky because
-        // 1/ the email is not guaranteed to be unique - TODO: send email with all usernames to select the correct account for pw reset
-        // 2/ mailbox may be case sensitive, the email domain is case insensitive - let's pretend it is all case-insensitive
-
-        $select = $DB->sql_like('email', ':email', false, true, false, '|'). " AND mnethostid = :mnethostid AND deleted=0 AND suspended=0";
-        $params = array('email'=>$DB->sql_like_escape($data->email, '|'), 'mnethostid'=>$CFG->mnet_localhost_id);
-        $user = $DB->get_record_select('user', $select, $params, '*', IGNORE_MULTIPLE);
+        // Continue with the password reset process.
+        core_login_process_password_set($token);
     }
-
-    if ($user and !empty($user->confirmed)) {
-
-        $userauth = get_auth_plugin($user->auth);
-        if (has_capability('moodle/user:changeownpassword', $systemcontext, $user->id)) {
-            // send email
-        }
-
-        if ($userauth->can_reset_password() and is_enabled_auth($user->auth)
-          and has_capability('moodle/user:changeownpassword', $systemcontext, $user->id)) {
-            // send reset password confirmation
-
-            // set 'secret' string
-            $user->secret = random_string(15);
-            $DB->set_field('user', 'secret', $user->secret, array('id'=>$user->id));
-
-            if (!send_password_change_confirmation_email($user)) {
-                print_error('cannotmailconfirm');
-            }
-
-        } else {
-            if (!send_password_change_info($user)) {
-                print_error('cannotmailconfirm');
-            }
-        }
-    }
-
-    echo $OUTPUT->header();
-
-    if (empty($user->email) or !empty($CFG->protectusernames)) {
-        // Print general confirmation message
-        notice(get_string('emailpasswordconfirmmaybesent'), $CFG->wwwroot.'/index.php');
-
-    } else {
-        // Confirm email sent
-        $protectedemail = preg_replace('/([^@]*)@(.*)/', '******@$2', $user->email); // obfuscate the email address to protect privacy
-        $stremailpasswordconfirmsent = get_string('emailpasswordconfirmsent', '', $protectedemail);
-        notice($stremailpasswordconfirmsent, $CFG->wwwroot.'/index.php');
-    }
-
-    die; // never reached
 }
-
-// make sure we really are on the https page when https login required
-$PAGE->verify_https_required();
-
-
-/// DISPLAY FORM
-
-echo $OUTPUT->header();
-echo $OUTPUT->box(get_string('passwordforgotteninstructions2'), 'generalbox boxwidthnormal boxaligncenter');
-$mform->display();
-
-echo $OUTPUT->footer();

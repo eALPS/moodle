@@ -24,7 +24,7 @@
 
 defined('MOODLE_INTERNAL') || die;
 
-require_once(dirname(__FILE__).'/lib.php');
+require_once(__DIR__.'/lib.php');
 require_once($CFG->libdir.'/filelib.php');
 
 /**
@@ -38,6 +38,16 @@ define('BOOK_NUM_NONE',     '0');
 define('BOOK_NUM_NUMBERS',  '1');
 define('BOOK_NUM_BULLETS',  '2');
 define('BOOK_NUM_INDENTED', '3');
+
+/**
+ * The following defines are used to define the navigation style used within a book.
+ * BOOK_LINK_TOCONLY    Only the table of contents is shown, in a side region.
+ * BOOK_LINK_IMAGE      Arrows link to previous/next/exit pages, in addition to the TOC.
+ * BOOK_LINK_TEXT       Page names and arrows link to previous/next/exit pages, in addition to the TOC.
+ */
+define ('BOOK_LINK_TOCONLY', '0');
+define ('BOOK_LINK_IMAGE', '1');
+define ('BOOK_LINK_TEXT', '2');
 
 /**
  * Preload book chapters and fix toc structure if necessary.
@@ -151,7 +161,7 @@ function book_get_chapter_title($chid, $chapters, $book, $context) {
 }
 
 /**
- * Add the book TOC sticky block to the 1st region available
+ * Add the book TOC sticky block to the default region
  *
  * @param array $chapters
  * @param stdClass $chapter
@@ -169,9 +179,8 @@ function book_add_fake_block($chapters, $chapter, $book, $cm, $edit) {
     $bc->attributes['class'] = 'block block_book_toc';
     $bc->content = $toc;
 
-    $regions = $PAGE->blocks->get_regions();
-    $firstregion = reset($regions);
-    $PAGE->blocks->add_fake_block($bc, $firstregion);
+    $defaultregion = $PAGE->blocks->get_default_region();
+    $PAGE->blocks->add_fake_block($bc, $defaultregion);
 }
 
 /**
@@ -214,7 +223,10 @@ function book_get_toc($chapters, $chapter, $book, $cm, $edit) {
         $i = 0;
         foreach ($chapters as $ch) {
             $i++;
-            $title = trim(format_string($ch->title, true, array('context'=>$context)));
+            $title = trim(format_string($ch->title, true, array('context' => $context)));
+            $titleunescaped = trim(format_string($ch->title, true, array('context' => $context, 'escape' => false)));
+            $titleout = $title;
+
             if (!$ch->subchapter) {
 
                 if ($first) {
@@ -230,12 +242,13 @@ function book_get_toc($chapters, $chapter, $book, $cm, $edit) {
                     $ns = 0;
                     if ($book->numbering == BOOK_NUM_NUMBERS) {
                         $title = "$nch $title";
+                        $titleout = $title;
                     }
                 } else {
                     if ($book->numbering == BOOK_NUM_NUMBERS) {
                         $title = "x $title";
                     }
-                    $title = html_writer::tag('span', $title, array('class' => 'dimmed_text'));
+                    $titleout = html_writer::tag('span', $title, array('class' => 'dimmed_text'));
                 }
             } else {
 
@@ -251,6 +264,7 @@ function book_get_toc($chapters, $chapter, $book, $cm, $edit) {
                     $ns++;
                     if ($book->numbering == BOOK_NUM_NUMBERS) {
                         $title = "$nch.$ns $title";
+                        $titleout = $title;
                     }
                 } else {
                     if ($book->numbering == BOOK_NUM_NUMBERS) {
@@ -260,35 +274,42 @@ function book_get_toc($chapters, $chapter, $book, $cm, $edit) {
                             $title = "x.x $title";
                         }
                     }
-                    $title = html_writer::tag('span', $title, array('class' => 'dimmed_text'));
+                    $titleout = html_writer::tag('span', $title, array('class' => 'dimmed_text'));
                 }
             }
 
             if ($ch->id == $chapter->id) {
-                $toc .= html_writer::tag('strong', $title);
+                $toc .= html_writer::tag('strong', $titleout);
             } else {
-                $toc .= html_writer::link(new moodle_url('view.php', array('id' => $cm->id, 'chapterid' => $ch->id)), $title, array('title' => s($title)));
+                $toc .= html_writer::link(new moodle_url('view.php', array('id' => $cm->id, 'chapterid' => $ch->id)), $titleout,
+                    array('title' => $titleunescaped));
             }
 
             $toc .= html_writer::start_tag('div', array('class' => 'action-list'));
             if ($i != 1) {
                 $toc .= html_writer::link(new moodle_url('move.php', array('id' => $cm->id, 'chapterid' => $ch->id, 'up' => '1', 'sesskey' => $USER->sesskey)),
-                                            $OUTPUT->pix_icon('t/up', get_string('up')), array('title' => get_string('up')));
+                        $OUTPUT->pix_icon('t/up', get_string('movechapterup', 'mod_book', $title)),
+                        array('title' => get_string('movechapterup', 'mod_book', $titleunescaped)));
             }
             if ($i != count($chapters)) {
                 $toc .= html_writer::link(new moodle_url('move.php', array('id' => $cm->id, 'chapterid' => $ch->id, 'up' => '0', 'sesskey' => $USER->sesskey)),
-                                            $OUTPUT->pix_icon('t/down', get_string('down')), array('title' => get_string('down')));
+                        $OUTPUT->pix_icon('t/down', get_string('movechapterdown', 'mod_book', $title)),
+                        array('title' => get_string('movechapterdown', 'mod_book', $titleunescaped)));
             }
             $toc .= html_writer::link(new moodle_url('edit.php', array('cmid' => $cm->id, 'id' => $ch->id)),
-                                        $OUTPUT->pix_icon('t/edit', get_string('edit')), array('title' => get_string('edit')));
+                    $OUTPUT->pix_icon('t/edit', get_string('editchapter', 'mod_book', $title)),
+                    array('title' => get_string('editchapter', 'mod_book', $titleunescaped)));
             $toc .= html_writer::link(new moodle_url('delete.php', array('id' => $cm->id, 'chapterid' => $ch->id, 'sesskey' => $USER->sesskey)),
-                                        $OUTPUT->pix_icon('t/delete', get_string('delete')), array('title' => get_string('delete')));
+                        $OUTPUT->pix_icon('t/delete', get_string('deletechapter', 'mod_book', $title)),
+                        array('title' => get_string('deletechapter', 'mod_book', $titleunescaped)));
             if ($ch->hidden) {
                 $toc .= html_writer::link(new moodle_url('show.php', array('id' => $cm->id, 'chapterid' => $ch->id, 'sesskey' => $USER->sesskey)),
-                                            $OUTPUT->pix_icon('t/show', get_string('show')), array('title' => get_string('show')));
+                        $OUTPUT->pix_icon('t/show', get_string('showchapter', 'mod_book', $title)),
+                        array('title' => get_string('showchapter', 'mod_book', $titleunescaped)));
             } else {
                 $toc .= html_writer::link(new moodle_url('show.php', array('id' => $cm->id, 'chapterid' => $ch->id, 'sesskey' => $USER->sesskey)),
-                                            $OUTPUT->pix_icon('t/hide', get_string('hide')), array('title' => get_string('hide')));
+                        $OUTPUT->pix_icon('t/hide', get_string('hidechapter', 'mod_book', $title)),
+                        array('title' => get_string('hidechapter', 'mod_book', $titleunescaped)));
             }
             $toc .= html_writer::link(new moodle_url('edit.php', array('cmid' => $cm->id, 'pagenum' => $ch->pagenum, 'subchapter' => $ch->subchapter)),
                                             $OUTPUT->pix_icon('add', get_string('addafter', 'mod_book'), 'mod_book'), array('title' => get_string('addafter', 'mod_book')));
@@ -310,6 +331,7 @@ function book_get_toc($chapters, $chapter, $book, $cm, $edit) {
         $toc .= html_writer::start_tag('ul');
         foreach ($chapters as $ch) {
             $title = trim(format_string($ch->title, true, array('context'=>$context)));
+            $titleunescaped = trim(format_string($ch->title, true, array('context' => $context, 'escape' => false)));
             if (!$ch->hidden) {
                 if (!$ch->subchapter) {
                     $nch++;
@@ -344,7 +366,9 @@ function book_get_toc($chapters, $chapter, $book, $cm, $edit) {
                 if ($ch->id == $chapter->id) {
                     $toc .= html_writer::tag('strong', $title);
                 } else {
-                    $toc .= html_writer::link(new moodle_url('view.php', array('id' => $cm->id, 'chapterid' => $ch->id)), $title, array('title' => s($title)));
+                    $toc .= html_writer::link(new moodle_url('view.php',
+                                              array('id' => $cm->id, 'chapterid' => $ch->id)),
+                                              $title, array('title' => s($titleunescaped)));
                 }
 
                 if (!$ch->subchapter) {

@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -38,10 +37,9 @@
  * Please do not forget to use upgrade_set_timeout()
  * before any action that may take longer time to finish.
  *
- * @package    mod
- * @subpackage folder
- * @copyright  2009 Petr Skoda  {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package   mod_folder
+ * @copyright 2009 Petr Skoda  {@link http://skodak.org}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
@@ -49,15 +47,31 @@ defined('MOODLE_INTERNAL') || die();
 function xmldb_folder_upgrade($oldversion) {
     global $CFG, $DB;
 
-    $dbman = $DB->get_manager();
+    $dbman = $DB->get_manager(); // Loads ddl manager and xmldb classes.
+
+    // Moodle v2.8.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Moodle v2.9.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Moodle v3.0.0 release upgrade line.
+    // Put any upgrade step following this.
 
 
-    // Moodle v2.2.0 release upgrade line
-    // Put any upgrade step following this
+    // Add showdownloadfolder option.
+    if ($oldversion < 2016020201) {
+        $table = new xmldb_table('folder');
+        $field = new xmldb_field('showdownloadfolder', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '1', 'showexpanded');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field, 'showdownloadfolder');
+        }
 
-    // Moodle v2.3.0 release upgrade line
-    // Put any upgrade step following this
+        upgrade_mod_savepoint(true, 2016020201, 'folder');
+    }
 
+    // Moodle v3.1.0 release upgrade line.
+    // Put any upgrade step following this.
 
     return true;
 }

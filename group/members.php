@@ -22,8 +22,8 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @package   core_group
  */
-require_once(dirname(__FILE__) . '/../config.php');
-require_once(dirname(__FILE__) . '/lib.php');
+require_once(__DIR__ . '/../config.php');
+require_once(__DIR__ . '/lib.php');
 require_once($CFG->dirroot . '/user/selector/lib.php');
 require_once($CFG->dirroot . '/course/lib.php');
 require_once($CFG->libdir . '/filelib.php');
@@ -99,25 +99,40 @@ $PAGE->set_heading($course->fullname);
 echo $OUTPUT->header();
 echo $OUTPUT->heading(get_string('adduserstogroup', 'group').": $groupname", 3);
 
-/// Print group info -  TODO: remove tables for layout here
-$groupinfotable = new html_table();
-$groupinfotable->attributes['class'] = 'groupinfobox';
-$picturecell = new html_table_cell();
-$picturecell->attributes['class'] = 'left side picture';
-$picturecell->text = print_group_picture($group, $course->id, true, true, false);
+// Store the rows we want to display in the group info.
+$groupinforow = array();
 
-$contentcell = new html_table_cell();
-$contentcell->attributes['class'] = 'content';
-
-$group->description = file_rewrite_pluginfile_urls($group->description, 'pluginfile.php', $context->id, 'group', 'description', $group->id);
-if (!isset($group->descriptionformat)) {
-    $group->descriptionformat = FORMAT_MOODLE;
+// Check if there is a picture to display.
+if (!empty($group->picture)) {
+    $picturecell = new html_table_cell();
+    $picturecell->attributes['class'] = 'left side picture';
+    $picturecell->text = print_group_picture($group, $course->id, true, true, false);
+    $groupinforow[] = $picturecell;
 }
-$options = new stdClass;
-$options->overflowdiv = true;
-$contentcell->text = format_text($group->description, $group->descriptionformat, $options);
-$groupinfotable->data[] = new html_table_row(array($picturecell, $contentcell));
-echo html_writer::table($groupinfotable);
+
+// Check if there is a description to display.
+$group->description = file_rewrite_pluginfile_urls($group->description, 'pluginfile.php', $context->id, 'group', 'description', $group->id);
+if (!empty($group->description)) {
+    if (!isset($group->descriptionformat)) {
+        $group->descriptionformat = FORMAT_MOODLE;
+    }
+
+    $options = new stdClass;
+    $options->overflowdiv = true;
+
+    $contentcell = new html_table_cell();
+    $contentcell->attributes['class'] = 'content';
+    $contentcell->text = format_text($group->description, $group->descriptionformat, $options);
+    $groupinforow[] = $contentcell;
+}
+
+// Check if we have something to show.
+if (!empty($groupinforow)) {
+    $groupinfotable = new html_table();
+    $groupinfotable->attributes['class'] = 'groupinfobox';
+    $groupinfotable->data[] = new html_table_row($groupinforow);
+    echo html_writer::table($groupinfotable);
+}
 
 /// Print the editing form
 ?>

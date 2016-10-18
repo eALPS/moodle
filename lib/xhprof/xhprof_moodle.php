@@ -23,13 +23,19 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-// need some stuff from xhprof
+// Need some stuff from xhprof.
 require_once($CFG->libdir . '/xhprof/xhprof_lib/utils/xhprof_lib.php');
 require_once($CFG->libdir . '/xhprof/xhprof_lib/utils/xhprof_runs.php');
-// need some stuff from moodle
-require_once($CFG->libdir.'/tablelib.php');
+// Need some stuff from moodle.
+require_once($CFG->libdir . '/tablelib.php');
+require_once($CFG->libdir . '/setuplib.php');
+require_once($CFG->libdir . '/filelib.php');
+require_once($CFG->libdir . '/phpunit/classes/util.php');
+require_once($CFG->dirroot . '/backup/util/xml/xml_writer.class.php');
+require_once($CFG->dirroot . '/backup/util/xml/output/xml_output.class.php');
+require_once($CFG->dirroot . '/backup/util/xml/output/file_xml_output.class.php');
 
-// TODO: Change the implementation below to proper profiling class
+// TODO: Change the implementation below to proper profiling class.
 
 /**
  * Returns if profiling is running, optionally setting it
@@ -64,7 +70,7 @@ function profiling_start() {
     global $CFG, $SESSION, $SCRIPT;
 
     // If profiling isn't available, nothing to start
-    if (!extension_loaded('xhprof') || !function_exists('xhprof_enable')) {
+    if (!extension_loaded('xhprof') && !extension_loaded('tideways')) {
         return false;
     }
 
@@ -141,7 +147,11 @@ function profiling_start() {
 
     // Arrived here, the script is going to be profiled, let's do it
     $ignore = array('call_user_func', 'call_user_func_array');
-    xhprof_enable(XHPROF_FLAGS_CPU + XHPROF_FLAGS_MEMORY, array('ignored_functions' =>  $ignore));
+    if (extension_loaded('tideways')) {
+        tideways_enable(TIDEWAYS_FLAGS_CPU + TIDEWAYS_FLAGS_MEMORY, array('ignored_functions' =>  $ignore));
+    } else {
+        xhprof_enable(XHPROF_FLAGS_CPU + XHPROF_FLAGS_MEMORY, array('ignored_functions' => $ignore));
+    }
     profiling_is_running(true);
 
     // Started, return true
@@ -155,7 +165,7 @@ function profiling_stop() {
     global $CFG, $DB, $SCRIPT;
 
     // If profiling isn't available, nothing to stop
-    if (!extension_loaded('xhprof') || !function_exists('xhprof_enable')) {
+    if (!extension_loaded('xhprof') && !extension_loaded('tideways')) {
         return false;
     }
 
@@ -174,7 +184,11 @@ function profiling_stop() {
 
     // Arrived here, profiling is running, stop and save everything
     profiling_is_running(false);
-    $data = xhprof_disable();
+    if (extension_loaded('tideways')) {
+        $data = tideways_disable();
+    } else {
+        $data = xhprof_disable();
+    }
 
     // We only save the run after ensuring the DB table exists
     // (this prevents problems with profiling runs enabled in
@@ -258,7 +272,14 @@ function profiling_urls($report, $runid, $runid2 = null) {
     return $url;
 }
 
-function profiling_print_run($run, $prevrunid = null) {
+/**
+ * Generate the output to print a profiling run including further actions you can then take.
+ *
+ * @param object $run The profiling run object we are going to display.
+ * @param array $prevreferences A list of run objects to list as comparison targets.
+ * @return string The output to display on the screen for this run.
+ */
+function profiling_print_run($run, $prevreferences = null) {
     global $CFG, $OUTPUT;
 
     $output = '';
@@ -288,18 +309,37 @@ function profiling_print_run($run, $prevrunid = null) {
        array(get_string('calls', 'tool_profiling'), $run->totalcalls),
        array(get_string('memory', 'tool_profiling'), format_float($run->totalmemory / 1024, 0) . ' KB'),
        array(get_string('markreferencerun', 'tool_profiling'), $referenceform));
-    $output = $OUTPUT->box(html_writer::table($table), 'generalbox boxwidthwide boxaligncenter profilingrunbox', 'profiling_summary', true);
+    $output = $OUTPUT->box(html_writer::table($table), 'generalbox boxwidthwide boxaligncenter profilingrunbox', 'profiling_summary');
     // Add link to details
     $strviewdetails = get_string('viewdetails', 'tool_profiling');
     $url = profiling_urls('run', $run->runid);
-    $output.=$OUTPUT->heading('<a href="' . $url . '" onclick="javascript:window.open(' . "'" . $url . "'" . ');' .
-                              'return false;"' . ' title="">' . $strviewdetails . '</a>', 3, 'main profilinglink');
-    // If there is one previous run marked as reference, add link to diff
-    if ($prevrunid) {
-        $strviewdiff = get_string('viewdiff', 'tool_profiling');
-        $url = 'index.php?runid=' . $run->runid . '&amp;runid2=' . $prevrunid . '&amp;listurl=' . urlencode($run->url);
-        $output.=$OUTPUT->heading('<a href="' . $url . '" title="">' . $strviewdiff . '</a>', 3, 'main profilinglink');
+    $output .= $OUTPUT->heading('<a href="' . $url . '" onclick="javascript:window.open(' . "'" . $url . "'" . ');' .
+                                'return false;"' . ' title="">' . $strviewdetails . '</a>', 3, 'main profilinglink');
+
+    // If there are previous run(s) marked as reference, add link to diff.
+    if ($prevreferences) {
+        $table = new html_table();
+        $table->align = array('left', 'left');
+        $table->head = array(get_string('date'), get_string('runid', 'tool_profiling'), get_string('comment', 'tool_profiling'));
+        $table->tablealign = 'center';
+        $table->attributes['class'] = 'flexible generaltable generalbox';
+        $table->colclasses = array('value', 'value', 'value');
+        $table->data = array();
+
+        $output .= $OUTPUT->heading(get_string('viewdiff', 'tool_profiling'), 3, 'main profilinglink');
+
+        foreach ($prevreferences as $reference) {
+            $url = 'index.php?runid=' . $run->runid . '&amp;runid2=' . $reference->runid . '&amp;listurl=' . urlencode($run->url);
+            $row = array(userdate($reference->timecreated), '<a href="' . $url . '" title="">'.$reference->runid.'</a>', $reference->runcomment);
+            $table->data[] = $row;
+        }
+        $output .= $OUTPUT->box(html_writer::table($table), 'profilingrunbox', 'profiling_diffs');
+
     }
+    // Add link to export this run.
+    $strexport = get_string('exportthis', 'tool_profiling');
+    $url = 'export.php?runid=' . $run->runid . '&amp;listurl=' . urlencode($run->url);
+    $output.=$OUTPUT->heading('<a href="' . $url . '" title="">' . $strexport . '</a>', 3, 'main profilinglink');
 
     return $output;
 }
@@ -344,7 +384,7 @@ function profiling_print_rundiff($run1, $run2) {
            format_float($run1->totalmemory / 1024, 0) . ' KB',
            format_float($run2->totalmemory / 1024, 0) . ' KB ' . $diffmemory),
        array(get_string('referencerun', 'tool_profiling'), $referencetext1, $referencetext2));
-    $output = $OUTPUT->box(html_writer::table($table), 'generalbox boxwidthwide boxaligncenter profilingrunbox', 'profiling_summary', true);
+    $output = $OUTPUT->box(html_writer::table($table), 'generalbox boxwidthwide boxaligncenter profilingrunbox', 'profiling_summary');
     // Add link to details
     $strviewdetails = get_string('viewdiffdetails', 'tool_profiling');
     $url = profiling_urls('diff', $run1->runid, $run2->runid);
@@ -360,9 +400,11 @@ function profiling_print_rundiff($run1, $run2) {
  * like deletion/export/import...
  */
 function profiling_list_controls($listurl) {
-    global $CFG, $OUTPUT;
+    global $CFG;
 
-    $output = '';
+    $output = '<p class="centerpara buttons">';
+    $output .= '&nbsp;<a href="import.php">[' . get_string('import', 'tool_profiling') . ']</a>';
+    $output .= '</p>';
 
     return $output;
 }
@@ -409,6 +451,340 @@ function profiling_get_difference($number1, $number2, $units = '', $factor = 1, 
 }
 
 /**
+ * Export profiling runs to a .mpr (moodle profile runs) file.
+ *
+ * This function gets an array of profiling runs (array of runids) and
+ * saves a .mpr file into destination for ulterior handling.
+ *
+ * Format of .mpr files:
+ *   mpr files are simple zip packages containing these files:
+ *     - moodle_profiling_runs.xml: Metadata about the information
+ *         exported. Contains some header information (version and
+ *         release of moodle, database, git hash - if available, date
+ *         of export...) and a list of all the runids included in the
+ *         export.
+ *    - runid.xml: One file per each run detailed in the main file,
+ *        containing the raw dump of the given runid in the profiling table.
+ *
+ * Possible improvement: Start storing some extra information in the
+ * profiling table for each run (moodle version, database, git hash...).
+ *
+ * @param array $runids list of runids to be exported.
+ * @param string $file filesystem fullpath to destination .mpr file.
+ * @return boolean the mpr file has been successfully exported (true) or no (false).
+ */
+function profiling_export_runs(array $runids, $file) {
+    global $CFG, $DB;
+
+    // Verify we have passed proper runids.
+    if (empty($runids)) {
+        return false;
+    }
+
+    // Verify all the passed runids do exist.
+    list ($insql, $inparams) = $DB->get_in_or_equal($runids);
+    $reccount = $DB->count_records_select('profiling', 'runid ' . $insql, $inparams);
+    if ($reccount != count($runids)) {
+        return false;
+    }
+
+    // Verify the $file path is writeable.
+    $base = dirname($file);
+    if (!is_writable($base)) {
+        return false;
+    }
+
+    // Create temp directory where the temp information will be generated.
+    $tmpdir = $base . '/' . md5(implode($runids) . time() . random_string(20));
+    mkdir($tmpdir);
+
+    // Generate the xml contents in the temp directory.
+    $status = profiling_export_generate($runids, $tmpdir);
+
+    // Package (zip) all the information into the final .mpr file.
+    if ($status) {
+        $status = profiling_export_package($file, $tmpdir);
+    }
+
+    // Process finished ok, clean and return.
+    fulldelete($tmpdir);
+    return $status;
+}
+
+/**
+ * Import a .mpr (moodle profile runs) file into moodle.
+ *
+ * See {@link profiling_export_runs()} for more details about the
+ * implementation of .mpr files.
+ *
+ * @param string $file filesystem fullpath to target .mpr file.
+ * @param string $commentprefix prefix to add to the comments of all the imported runs.
+ * @return boolean the mpr file has been successfully imported (true) or no (false).
+ */
+function profiling_import_runs($file, $commentprefix = '') {
+    global $DB;
+
+    // Any problem with the file or its directory, abort.
+    if (!file_exists($file) or !is_readable($file) or !is_writable(dirname($file))) {
+        return false;
+    }
+
+    // Unzip the file into temp directory.
+    $tmpdir = dirname($file) . '/' . time() . '_' . random_string(4);
+    $fp = get_file_packer('application/vnd.moodle.profiling');
+    $status = $fp->extract_to_pathname($file, $tmpdir);
+
+    // Look for master file and verify its format.
+    if ($status) {
+        $mfile = $tmpdir . '/moodle_profiling_runs.xml';
+        if (!file_exists($mfile) or !is_readable($mfile)) {
+            $status = false;
+        } else {
+            $mdom = new DOMDocument();
+            if (!$mdom->load($mfile)) {
+                $status = false;
+            } else {
+                $status = @$mdom->schemaValidateSource(profiling_get_import_main_schema());
+            }
+        }
+    }
+
+    // Verify all detail files exist and verify their format.
+    if ($status) {
+        $runs = $mdom->getElementsByTagName('run');
+        foreach ($runs as $run) {
+            $rfile = $tmpdir . '/' . clean_param($run->getAttribute('ref'), PARAM_FILE);
+            if (!file_exists($rfile) or !is_readable($rfile)) {
+                $status = false;
+            } else {
+                $rdom = new DOMDocument();
+                if (!$rdom->load($rfile)) {
+                    $status = false;
+                } else {
+                    $status = @$rdom->schemaValidateSource(profiling_get_import_run_schema());
+                }
+            }
+        }
+    }
+
+    // Everything looks ok, let's import all the runs.
+    if ($status) {
+        reset($runs);
+        foreach ($runs as $run) {
+            $rfile = $tmpdir . '/' . $run->getAttribute('ref');
+            $rdom = new DOMDocument();
+            $rdom->load($rfile);
+            $runarr = array();
+            $runarr['runid'] = clean_param($rdom->getElementsByTagName('runid')->item(0)->nodeValue, PARAM_ALPHANUMEXT);
+            $runarr['url'] = clean_param($rdom->getElementsByTagName('url')->item(0)->nodeValue, PARAM_CLEAN);
+            $runarr['runreference'] = clean_param($rdom->getElementsByTagName('runreference')->item(0)->nodeValue, PARAM_INT);
+            $runarr['runcomment'] = $commentprefix . clean_param($rdom->getElementsByTagName('runcomment')->item(0)->nodeValue, PARAM_CLEAN);
+            $runarr['timecreated'] = time(); // Now.
+            $runarr['totalexecutiontime'] = clean_param($rdom->getElementsByTagName('totalexecutiontime')->item(0)->nodeValue, PARAM_INT);
+            $runarr['totalcputime'] = clean_param($rdom->getElementsByTagName('totalcputime')->item(0)->nodeValue, PARAM_INT);
+            $runarr['totalcalls'] = clean_param($rdom->getElementsByTagName('totalcalls')->item(0)->nodeValue, PARAM_INT);
+            $runarr['totalmemory'] = clean_param($rdom->getElementsByTagName('totalmemory')->item(0)->nodeValue, PARAM_INT);
+            $runarr['data'] = clean_param($rdom->getElementsByTagName('data')->item(0)->nodeValue, PARAM_CLEAN);
+            // If the runid does not exist, insert it.
+            if (!$DB->record_exists('profiling', array('runid' => $runarr['runid']))) {
+                if (@gzuncompress(base64_decode($runarr['data'])) === false) {
+                    $runarr['data'] = base64_encode(gzcompress(base64_decode($runarr['data'])));
+                }
+                $DB->insert_record('profiling', $runarr);
+            } else {
+                return false;
+            }
+        }
+    }
+
+    // Clean the temp directory used for import.
+    remove_dir($tmpdir);
+
+    return $status;
+}
+
+/**
+ * Generate the mpr contents (xml files) in the temporal directory.
+ *
+ * @param array $runids list of runids to be generated.
+ * @param string $tmpdir filesystem fullpath of tmp generation.
+ * @return boolean the mpr contents have been generated (true) or no (false).
+ */
+function profiling_export_generate(array $runids, $tmpdir) {
+    global $CFG, $DB;
+
+    if (empty($CFG->release) || empty($CFG->version)) {
+        // Some scripts may not have included version.php.
+        include($CFG->dirroot.'/version.php');
+        $CFG->release = $release;
+        $CFG->version = $version;
+    }
+
+    // Calculate the header information to be sent to moodle_profiling_runs.xml.
+    $release = $CFG->release;
+    $version = $CFG->version;
+    $dbtype = $CFG->dbtype;
+    $githash = phpunit_util::get_git_hash();
+    $date = time();
+
+    // Create the xml output and writer for the main file.
+    $mainxo = new file_xml_output($tmpdir . '/moodle_profiling_runs.xml');
+    $mainxw = new xml_writer($mainxo);
+
+    // Output begins.
+    $mainxw->start();
+    $mainxw->begin_tag('moodle_profiling_runs');
+
+    // Send header information.
+    $mainxw->begin_tag('info');
+    $mainxw->full_tag('release', $release);
+    $mainxw->full_tag('version', $version);
+    $mainxw->full_tag('dbtype', $dbtype);
+    if ($githash) {
+        $mainxw->full_tag('githash', $githash);
+    }
+    $mainxw->full_tag('date', $date);
+    $mainxw->end_tag('info');
+
+    // Send information about runs.
+    $mainxw->begin_tag('runs');
+    foreach ($runids as $runid) {
+        // Get the run information from DB.
+        $run = $DB->get_record('profiling', array('runid' => $runid), '*', MUST_EXIST);
+        $attributes = array(
+                'id' => $run->id,
+                'ref' => $run->runid . '.xml');
+        $mainxw->full_tag('run', null, $attributes);
+        // Create the individual run file.
+        $runxo = new file_xml_output($tmpdir . '/' . $attributes['ref']);
+        $runxw = new xml_writer($runxo);
+        $runxw->start();
+        $runxw->begin_tag('moodle_profiling_run');
+        $runxw->full_tag('id', $run->id);
+        $runxw->full_tag('runid', $run->runid);
+        $runxw->full_tag('url', $run->url);
+        $runxw->full_tag('runreference', $run->runreference);
+        $runxw->full_tag('runcomment', $run->runcomment);
+        $runxw->full_tag('timecreated', $run->timecreated);
+        $runxw->full_tag('totalexecutiontime', $run->totalexecutiontime);
+        $runxw->full_tag('totalcputime', $run->totalcputime);
+        $runxw->full_tag('totalcalls', $run->totalcalls);
+        $runxw->full_tag('totalmemory', $run->totalmemory);
+        $runxw->full_tag('data', $run->data);
+        $runxw->end_tag('moodle_profiling_run');
+        $runxw->stop();
+    }
+    $mainxw->end_tag('runs');
+    $mainxw->end_tag('moodle_profiling_runs');
+    $mainxw->stop();
+
+    return true;
+}
+
+/**
+ * Package (zip) the mpr contents (xml files) in the final location.
+ *
+ * @param string $file filesystem fullpath to destination .mpr file.
+ * @param string $tmpdir filesystem fullpath of tmp generation.
+ * @return boolean the mpr contents have been generated (true) or no (false).
+ */
+function profiling_export_package($file, $tmpdir) {
+    // Get the list of files in $tmpdir.
+    $filestemp = get_directory_list($tmpdir, '', false, true, true);
+    $files = array();
+
+    // Add zip paths and fs paths to all them.
+    foreach ($filestemp as $filetemp) {
+        $files[$filetemp] = $tmpdir . '/' . $filetemp;
+    }
+
+    // Get the zip_packer.
+    $zippacker = get_file_packer('application/zip');
+
+    // Generate the packaged file.
+    $zippacker->archive_to_pathname($files, $file);
+
+    return true;
+}
+
+/**
+ * Return the xml schema for the main import file.
+ *
+ * @return string
+ *
+ */
+function profiling_get_import_main_schema() {
+    $schema = <<<EOS
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:element name="moodle_profiling_runs">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="info"/>
+        <xs:element ref="runs"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="info">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element type="xs:string" name="release"/>
+        <xs:element type="xs:decimal" name="version"/>
+        <xs:element type="xs:string" name="dbtype"/>
+        <xs:element type="xs:string" minOccurs="0" name="githash"/>
+        <xs:element type="xs:int" name="date"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="runs">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element maxOccurs="unbounded" ref="run"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="run">
+    <xs:complexType>
+      <xs:attribute type="xs:int" name="id"/>
+      <xs:attribute type="xs:string" name="ref"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
+EOS;
+    return $schema;
+}
+
+/**
+ * Return the xml schema for each individual run import file.
+ *
+ * @return string
+ *
+ */
+function profiling_get_import_run_schema() {
+    $schema = <<<EOS
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:element name="moodle_profiling_run">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element type="xs:int" name="id"/>
+        <xs:element type="xs:string" name="runid"/>
+        <xs:element type="xs:string" name="url"/>
+        <xs:element type="xs:int" name="runreference"/>
+        <xs:element type="xs:string" name="runcomment"/>
+        <xs:element type="xs:int" name="timecreated"/>
+        <xs:element type="xs:int" name="totalexecutiontime"/>
+        <xs:element type="xs:int" name="totalcputime"/>
+        <xs:element type="xs:int" name="totalcalls"/>
+        <xs:element type="xs:int" name="totalmemory"/>
+        <xs:element type="xs:string" name="data"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
+EOS;
+    return $schema;
+}
+/**
  * Custom implementation of iXHProfRuns
  *
  * This class is one implementation of the iXHProfRuns interface, in charge
@@ -453,7 +829,12 @@ class moodle_xhprofrun implements iXHProfRuns {
 
         $run_desc = $this->url . ($rec->runreference ? ' (R) ' : ' ') . ' - ' . s($rec->runcomment);
 
-        return unserialize(base64_decode($rec->data));
+        // Handle historical runs that aren't compressed.
+        if (@gzuncompress(base64_decode($rec->data)) === false) {
+            return unserialize(base64_decode($rec->data));
+        } else {
+            return unserialize(gzuncompress(base64_decode($rec->data)));
+        }
     }
 
     /**
@@ -463,7 +844,7 @@ class moodle_xhprofrun implements iXHProfRuns {
      * Note that $type is completely ignored
      */
     public function save_run($xhprof_data, $type, $run_id = null) {
-        global $DB;
+        global $DB, $CFG;
 
         if (is_null($this->url)) {
             xhprof_error("Warning: You must use the prepare_run() method before saving it");
@@ -482,7 +863,7 @@ class moodle_xhprofrun implements iXHProfRuns {
         $rec = new stdClass();
         $rec->runid = $this->runid;
         $rec->url = $this->url;
-        $rec->data = base64_encode(serialize($xhprof_data));
+        $rec->data = base64_encode(gzcompress(serialize($xhprof_data), 9));
         $rec->totalexecutiontime = $this->totalexecutiontime;
         $rec->totalcputime = $this->totalcputime;
         $rec->totalcalls = $this->totalcalls;
@@ -490,6 +871,21 @@ class moodle_xhprofrun implements iXHProfRuns {
         $rec->timecreated = $this->timecreated;
 
         $DB->insert_record('profiling', $rec);
+
+        if (PHPUNIT_TEST) {
+            // Calculate export variables.
+            $tempdir = 'profiling';
+            make_temp_directory($tempdir);
+            $runids = array($this->runid);
+            $filename = $this->runid . '.mpr';
+            $filepath = $CFG->tempdir . '/' . $tempdir . '/' . $filename;
+
+            // Generate the mpr file and send it.
+            if (profiling_export_runs($runids, $filepath)) {
+                fprintf(STDERR, "Profiling data saved to: ".$filepath."\n");
+            }
+        }
+
         return $this->runid;
     }
 

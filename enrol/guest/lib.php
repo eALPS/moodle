@@ -20,14 +20,19 @@
  * This plugin does not add any entries into the user_enrolments table,
  * the access control is granted on the fly via the tricks in require_login().
  *
- * @package    enrol
- * @subpackage guest
+ * @package    enrol_guest
  * @copyright  2010 Petr Skoda  {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
+/**
+ * Class enrol_guest_plugin
+ *
+ * @copyright  2010 Petr Skoda  {@link http://skodak.org}
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class enrol_guest_plugin extends enrol_plugin {
 
     /**
@@ -45,18 +50,35 @@ class enrol_guest_plugin extends enrol_plugin {
     public function get_info_icons(array $instances) {
         foreach ($instances as $instance) {
             if ($instance->password !== '') {
-                return array(new pix_icon('withpassword', get_string('pluginname', 'enrol_guest'), 'enrol_guest'));
+                return array(new pix_icon('withpassword', get_string('guestaccess_withpassword', 'enrol_guest'), 'enrol_guest'));
             } else {
-                return array(new pix_icon('withoutpassword', get_string('pluginname', 'enrol_guest'), 'enrol_guest'));
+                return array(new pix_icon('withoutpassword', get_string('guestaccess_withoutpassword', 'enrol_guest'), 'enrol_guest'));
             }
         }
     }
 
-    public function enrol_user(stdClass $instance, $userid, $roleid = NULL, $timestart = 0, $timeend = 0, $status = NULL) {
+    /**
+     * Enrol a user using a given enrolment instance.
+     *
+     * @param stdClass $instance
+     * @param int $userid
+     * @param null $roleid
+     * @param int $timestart
+     * @param int $timeend
+     * @param null $status
+     * @param null $recovergrades
+     */
+    public function enrol_user(stdClass $instance, $userid, $roleid = null, $timestart = 0, $timeend = 0, $status = null, $recovergrades = null) {
         // no real enrolments here!
         return;
     }
 
+    /**
+     * Enrol a user from a given enrolment instance.
+     *
+     * @param stdClass $instance
+     * @param int $userid
+     */
     public function unenrol_user(stdClass $instance, $userid) {
         // nothing to do, we never enrol here!
         return;
@@ -94,24 +116,24 @@ class enrol_guest_plugin extends enrol_plugin {
     }
 
     /**
-     * Returns link to page which may be used to add new instance of enrolment plugin in course.
+     * Returns true if the current user can add a new instance of enrolment plugin in course.
      * @param int $courseid
-     * @return moodle_url page url
+     * @return boolean
      */
-    public function get_newinstance_link($courseid) {
+    public function can_add_instance($courseid) {
         global $DB;
 
         $context = context_course::instance($courseid, MUST_EXIST);
 
         if (!has_capability('moodle/course:enrolconfig', $context) or !has_capability('enrol/guest:config', $context)) {
-            return NULL;
+            return false;
         }
 
         if ($DB->record_exists('enrol', array('courseid'=>$courseid, 'enrol'=>'guest'))) {
-            return NULL;
+            return false;
         }
 
-        return new moodle_url('/enrol/guest/addinstance.php', array('sesskey'=>sesskey(), 'id'=>$courseid));
+        return true;
     }
 
     /**
@@ -167,109 +189,6 @@ class enrol_guest_plugin extends enrol_plugin {
     }
 
     /**
-     * Adds enrol instance UI to course edit form
-     *
-     * @param object $instance enrol instance or null if does not exist yet
-     * @param MoodleQuickForm $mform
-     * @param object $data
-     * @param object $context context of existing course or parent category if course does not exist
-     * @return void
-     */
-    public function course_edit_form($instance, MoodleQuickForm $mform, $data, $context) {
-
-        $i = isset($instance->id) ? $instance->id : 0;
-
-        if (!$i and !$this->get_config('defaultenrol')) {
-            return;
-        }
-
-        $header = $this->get_instance_name($instance);
-        $config = has_capability('enrol/guest:config', $context);
-
-        $mform->addElement('header', 'enrol_guest_header_'.$i, $header);
-
-
-        $options = array(ENROL_INSTANCE_ENABLED  => get_string('yes'),
-                         ENROL_INSTANCE_DISABLED => get_string('no'));
-        $mform->addElement('select', 'enrol_guest_status_'.$i, get_string('status', 'enrol_guest'), $options);
-        $mform->addHelpButton('enrol_guest_status_'.$i, 'status', 'enrol_guest');
-        $mform->setDefault('enrol_guest_status_'.$i, $this->get_config('status'));
-        $mform->setAdvanced('enrol_guest_status_'.$i, $this->get_config('status_adv'));
-        if (!$config) {
-            $mform->hardFreeze('enrol_guest_status_'.$i);
-        }
-
-        $mform->addElement('passwordunmask', 'enrol_guest_password_'.$i, get_string('password', 'enrol_guest'));
-        $mform->addHelpButton('enrol_guest_password_'.$i, 'password', 'enrol_guest');
-        if (!$config) {
-            $mform->hardFreeze('enrol_guest_password_'.$i);
-        } else {
-            $mform->disabledIf('enrol_guest_password_'.$i, 'enrol_guest_status_'.$i, 'noteq', ENROL_INSTANCE_ENABLED);
-        }
-
-
-        // now add all values from enrol table
-        if ($instance) {
-            foreach($instance as $key=>$val) {
-                $data->{'enrol_guest_'.$key.'_'.$i} = $val;
-            }
-        }
-    }
-
-    /**
-     * Validates course edit form data
-     *
-     * @param object $instance enrol instance or null if does not exist yet
-     * @param array $data
-     * @param object $context context of existing course or parent category if course does not exist
-     * @return array errors array
-     */
-    public function course_edit_validation($instance, array $data, $context) {
-        $errors = array();
-
-        if (!has_capability('enrol/guest:config', $context)) {
-            // we are going to ignore the data later anyway, they would nto be able to fix the form anyway
-            return $errors;
-        }
-
-        $i = isset($instance->id) ? $instance->id : 0;
-
-        if (!isset($data['enrol_guest_status_'.$i])) {
-            return $errors;
-        }
-
-        $password = empty($data['enrol_guest_password_'.$i]) ? '' : $data['enrol_guest_password_'.$i];
-        $checkpassword = false;
-
-        if ($instance) {
-            if ($data['enrol_guest_status_'.$i] == ENROL_INSTANCE_ENABLED) {
-                if ($instance->password !== $password) {
-                    $checkpassword = true;
-                }
-            }
-        } else {
-            if ($data['enrol_guest_status_'.$i] == ENROL_INSTANCE_ENABLED) {
-                $checkpassword = true;
-            }
-        }
-
-        if ($checkpassword) {
-            $require = $this->get_config('requirepassword');
-            $policy  = $this->get_config('usepasswordpolicy');
-            if ($require and empty($password)) {
-                $errors['enrol_guest_password_'.$i] = get_string('required');
-            } else if ($policy) {
-                $errmsg = '';//prevent eclipse warning
-                if (!check_password_policy($password, $errmsg)) {
-                    $errors['enrol_guest_password_'.$i] = $errmsg;
-                }
-            }
-        }
-
-        return $errors;
-    }
-
-    /**
      * Called after updating/inserting course.
      *
      * @param bool $inserted true if course just inserted
@@ -280,57 +199,47 @@ class enrol_guest_plugin extends enrol_plugin {
     public function course_updated($inserted, $course, $data) {
         global $DB;
 
-        $context = context_course::instance($course->id);
-
-        if (has_capability('enrol/guest:config', $context)) {
-            if ($inserted) {
-                if (isset($data->enrol_guest_status_0)) {
-                    $fields = array('status'=>$data->enrol_guest_status_0);
-                    if ($fields['status'] == ENROL_INSTANCE_ENABLED) {
-                        $fields['password'] = $data->enrol_guest_password_0;
-                    } else {
-                        if ($this->get_config('requirepassword')) {
-                            $fields['password'] = generate_password(20);
-                        }
-                    }
-                    $this->add_instance($course, $fields);
+        if ($inserted) {
+            if (isset($data->enrol_guest_status_0)) {
+                $fields = array('status'=>$data->enrol_guest_status_0);
+                if ($fields['status'] == ENROL_INSTANCE_ENABLED) {
+                    $fields['password'] = $data->enrol_guest_password_0;
                 } else {
-                    if ($this->get_config('defaultenrol')) {
-                        $this->add_default_instance($course);
+                    if ($this->get_config('requirepassword')) {
+                        $fields['password'] = generate_password(20);
                     }
                 }
+                $this->add_instance($course, $fields);
             } else {
-                $instances = $DB->get_records('enrol', array('courseid'=>$course->id, 'enrol'=>'guest'));
-                foreach ($instances as $instance) {
-                    $i = $instance->id;
-
-                    if (isset($data->{'enrol_guest_status_'.$i})) {
-                        $reset = ($instance->status != $data->{'enrol_guest_status_'.$i});
-
-                        $instance->status       = $data->{'enrol_guest_status_'.$i};
-                        $instance->timemodified = time();
-                        if ($instance->status == ENROL_INSTANCE_ENABLED) {
-                            if ($instance->password !== $data->{'enrol_guest_password_'.$i}) {
-                                $reset = true;
-                            }
-                            $instance->password = $data->{'enrol_guest_password_'.$i};
-                        }
-                        $DB->update_record('enrol', $instance);
-
-                        if ($reset) {
-                            $context->mark_dirty();
-                        }
-                    }
+                if ($this->get_config('defaultenrol')) {
+                    $this->add_default_instance($course);
                 }
             }
 
         } else {
-            if ($inserted) {
-                if ($this->get_config('defaultenrol')) {
-                    $this->add_default_instance($course);
+            $instances = $DB->get_records('enrol', array('courseid'=>$course->id, 'enrol'=>'guest'));
+            foreach ($instances as $instance) {
+                $i = $instance->id;
+
+                if (isset($data->{'enrol_guest_status_'.$i})) {
+                    $reset = ($instance->status != $data->{'enrol_guest_status_'.$i});
+
+                    $instance->status       = $data->{'enrol_guest_status_'.$i};
+                    $instance->timemodified = time();
+                    if ($instance->status == ENROL_INSTANCE_ENABLED) {
+                        if ($instance->password !== $data->{'enrol_guest_password_'.$i}) {
+                            $reset = true;
+                        }
+                        $instance->password = $data->{'enrol_guest_password_'.$i};
+                    }
+                    $DB->update_record('enrol', $instance);
+                    \core\event\enrol_instance_updated::create_from_record($instance)->trigger();
+
+                    if ($reset) {
+                        $context = context_course::instance($course->id);
+                        $context->mark_dirty();
+                    }
                 }
-            } else {
-                // bad luck, user can not change anything
             }
         }
     }
@@ -384,4 +293,190 @@ class enrol_guest_plugin extends enrol_plugin {
         // No need to set mapping, we do not restore users or roles here.
         $step->set_mapping('enrol', $oldid, 0);
     }
+
+    /**
+     * Is it possible to delete enrol instance via standard UI?
+     *
+     * @param object $instance
+     * @return bool
+     */
+    public function can_delete_instance($instance) {
+        $context = context_course::instance($instance->courseid);
+        return has_capability('enrol/guest:config', $context);
+    }
+
+    /**
+     * Is it possible to hide/show enrol instance via standard UI?
+     *
+     * @param stdClass $instance
+     * @return bool
+     */
+    public function can_hide_show_instance($instance) {
+        $context = context_course::instance($instance->courseid);
+        if (!has_capability('enrol/guest:config', $context)) {
+            return false;
+        }
+
+        // If the instance is currently disabled, before it can be enabled, we must check whether the password meets the
+        // password policies.
+        if ($instance->status == ENROL_INSTANCE_DISABLED) {
+            if ($this->get_config('requirepassword')) {
+                if (empty($instance->password)) {
+                    return false;
+                }
+            }
+
+            // Only check the password if it is set.
+            if (!empty($instance->password) && $this->get_config('usepasswordpolicy')) {
+                if (!check_password_policy($instance->password, $errmsg)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Get default settings for enrol_guest.
+     *
+     * @return array
+     */
+    public function get_instance_defaults() {
+        $fields = array();
+        $fields['status']          = $this->get_config('status');
+        return $fields;
+    }
+
+    /**
+     * Return information for enrolment instance containing list of parameters required
+     * for enrolment, name of enrolment plugin etc.
+     *
+     * @param stdClass $instance enrolment instance
+     * @return stdClass instance info.
+     * @since Moodle 3.1
+     */
+    public function get_enrol_info(stdClass $instance) {
+
+        $instanceinfo = new stdClass();
+        $instanceinfo->id = $instance->id;
+        $instanceinfo->courseid = $instance->courseid;
+        $instanceinfo->type = $this->get_name();
+        $instanceinfo->name = $this->get_instance_name($instance);
+        $instanceinfo->status = $instance->status == ENROL_INSTANCE_ENABLED;
+
+        // Specifics enrolment method parameters.
+        $instanceinfo->requiredparam = new stdClass();
+        $instanceinfo->requiredparam->passwordrequired = !empty($instance->password);
+
+        // If the plugin is enabled, return the URL for obtaining more information.
+        if ($instanceinfo->status) {
+            $instanceinfo->wsfunction = 'enrol_guest_get_instance_info';
+        }
+        return $instanceinfo;
+    }
+
+    /**
+     * Return an array of valid options for the status.
+     *
+     * @return array
+     */
+    protected function get_status_options() {
+        $options = array(ENROL_INSTANCE_ENABLED  => get_string('yes'),
+                         ENROL_INSTANCE_DISABLED => get_string('no'));
+        return $options;
+    }
+
+    /**
+     * Add elements to the edit instance form.
+     *
+     * @param stdClass $instance
+     * @param MoodleQuickForm $mform
+     * @param context $context
+     * @return bool
+     */
+    public function edit_instance_form($instance, MoodleQuickForm $mform, $context) {
+        global $CFG;
+
+        $options = $this->get_status_options();
+        $mform->addElement('select', 'status', get_string('status', 'enrol_guest'), $options);
+        $mform->addHelpButton('status', 'status', 'enrol_guest');
+        $mform->setDefault('status', $this->get_config('status'));
+        $mform->setAdvanced('status', $this->get_config('status_adv'));
+
+        $mform->addElement('passwordunmask', 'password', get_string('password', 'enrol_guest'));
+        $mform->addHelpButton('password', 'password', 'enrol_guest');
+
+        // If we have a new instance and the password is required - make sure it is set. For existing
+        // instances we do not force the password to be required as it may have been set to empty before
+        // the password was required. We check in the validation function whether this check is required
+        // for existing instances.
+        if (empty($instance->id) && $this->get_config('requirepassword')) {
+            $mform->addRule('password', get_string('required'), 'required', null);
+        }
+    }
+
+    /**
+     * We are a good plugin and don't invent our own UI/validation code path.
+     *
+     * @return boolean
+     */
+    public function use_standard_editing_ui() {
+        return true;
+    }
+
+    /**
+     * Perform custom validation of the data used to edit the instance.
+     *
+     * @param array $data array of ("fieldname"=>value) of submitted data
+     * @param array $files array of uploaded files "element_name"=>tmp_file_path
+     * @param object $instance The instance loaded from the DB
+     * @param context $context The context of the instance we are editing
+     * @return array of "element_name"=>"error_description" if there are errors,
+     *         or an empty array if everything is OK.
+     * @return void
+     */
+    public function edit_instance_validation($data, $files, $instance, $context) {
+        $errors = array();
+
+        $checkpassword = false;
+
+        if ($data['id']) {
+            // Check the password if we are enabling the plugin again.
+            if (($instance->status == ENROL_INSTANCE_DISABLED) && ($data['status'] == ENROL_INSTANCE_ENABLED)) {
+                $checkpassword = true;
+            }
+
+            // Check the password if the instance is enabled and the password has changed.
+            if (($data['status'] == ENROL_INSTANCE_ENABLED) && ($instance->password !== $data['password'])) {
+                $checkpassword = true;
+            }
+        } else {
+            $checkpassword = true;
+        }
+
+        if ($checkpassword) {
+            $require = $this->get_config('requirepassword');
+            $policy  = $this->get_config('usepasswordpolicy');
+            if ($require && trim($data['password']) === '') {
+                $errors['password'] = get_string('required');
+            } else if (!empty($data['password']) && $policy) {
+                $errmsg = '';
+                if (!check_password_policy($data['password'], $errmsg)) {
+                    $errors['password'] = $errmsg;
+                }
+            }
+        }
+
+        $validstatus = array_keys($this->get_status_options());
+        $tovalidate = array(
+            'status' => $validstatus
+        );
+        $typeerrors = $this->validate_param_types($data, $tovalidate);
+        $errors = array_merge($errors, $typeerrors);
+
+        return $errors;
+    }
+
+
 }

@@ -36,7 +36,8 @@ defined('MOODLE_INTERNAL') || die();
 class core_question_bank_renderer extends plugin_renderer_base {
 
     /**
-     * Output the icon for a question type
+     * Output the icon for a question type.
+     *
      * @param string $qtype the question type.
      * @return string HTML fragment.
      */
@@ -45,5 +46,69 @@ class core_question_bank_renderer extends plugin_renderer_base {
         $namestr = $qtype->local_name();
 
         return $this->pix_icon('icon', $namestr, $qtype->plugin_name(), array('title' => $namestr));
+    }
+
+    /**
+     * Render a qbank_chooser.
+     *
+     * @param renderable $qbankchooser The chooser.
+     * @return string
+     */
+    public function render_qbank_chooser(renderable $qbankchooser) {
+        return $this->render_from_template('core_question/qbank_chooser', $qbankchooser->export_for_template($this));
+    }
+
+    /**
+     * Build the HTML for the question chooser javascript popup.
+     *
+     * @param array $real A set of real question types
+     * @param array $fake A set of fake question types
+     * @param object $course The course that will be displayed
+     * @param array $hiddenparams Any hidden parameters to add to the form
+     * @return string The composed HTML for the questionbank chooser
+     */
+    public function qbank_chooser($real, $fake, $course, $hiddenparams) {
+        debugging('Method core_question_bank_renderer::qbank_chooser() is deprecated, ' .
+            'see core_question_bank_renderer::render_qbank_chooser().', DEBUG_DEVELOPER);
+        return '';
+    }
+
+    /**
+     * Build the HTML for a specified set of question types.
+     *
+     * @param array $types A set of question types as used by the qbank_chooser_module function
+     * @return string The composed HTML for the module
+     */
+    protected function qbank_chooser_types($types) {
+        debugging('Method core_question_bank_renderer::qbank_chooser_types() is deprecated, ' .
+            'see core_question_bank_renderer::render_qbank_chooser().', DEBUG_DEVELOPER);
+        return '';
+    }
+
+    /**
+     * Return the HTML for the specified question type, adding any required classes.
+     *
+     * @param object $qtype An object containing the title, and link. An icon, and help text may optionally be specified.
+     * If the module contains subtypes in the types option, then these will also be displayed.
+     * @param array $classes Additional classes to add to the encompassing div element
+     * @return string The composed HTML for the question type
+     */
+    protected function qbank_chooser_qtype($qtype, $classes = array()) {
+        debugging('Method core_question_bank_renderer::qbank_chooser_qtype() is deprecated, ' .
+            'see core_question_bank_renderer::render_qbank_chooser().', DEBUG_DEVELOPER);
+        return '';
+    }
+
+    /**
+     * Return the title for the question bank chooser.
+     *
+     * @param string $title The language string identifier
+     * @param string $identifier The component identifier
+     * @return string The composed HTML for the title
+     */
+    protected function qbank_chooser_title($title, $identifier = null) {
+        debugging('Method core_question_bank_renderer::qbank_chooser_title() is deprecated, ' .
+            'see core_question_bank_renderer::render_qbank_chooser().', DEBUG_DEVELOPER);
+        return '';
     }
 }

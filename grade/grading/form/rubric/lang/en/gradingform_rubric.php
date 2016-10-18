@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -16,8 +15,9 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * @package    gradingform
- * @subpackage rubric
+ * Language file for plugin gradingform_rubric
+ *
+ * @package    gradingform_rubric
  * @copyright  2011 David Mudrak <david@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -29,23 +29,35 @@ $string['alwaysshowdefinition'] = 'Allow users to preview rubric used in the mod
 $string['backtoediting'] = 'Back to editing';
 $string['confirmdeletecriterion'] = 'Are you sure you want to delete this criterion?';
 $string['confirmdeletelevel'] = 'Are you sure you want to delete this level?';
+$string['criterion'] = 'Criterion {$a}';
 $string['criterionaddlevel'] = 'Add level';
 $string['criteriondelete'] = 'Delete criterion';
+$string['criterionduplicate'] = 'Duplicate criterion';
 $string['criterionempty'] = 'Click to edit criterion';
 $string['criterionmovedown'] = 'Move down';
 $string['criterionmoveup'] = 'Move up';
+$string['criterionremark'] = 'Remark for criterion {$a->description}: {$a->remark}';
 $string['definerubric'] = 'Define rubric';
 $string['description'] = 'Description';
-$string['enableremarks'] = 'Allow grader to add text remarks for each criteria';
+$string['enableremarks'] = 'Allow grader to add text remarks for each criterion';
 $string['err_mintwolevels'] = 'Each criterion must have at least two levels';
 $string['err_nocriteria'] = 'Rubric must contain at least one criterion';
 $string['err_nodefinition'] = 'Level definition can not be empty';
 $string['err_nodescription'] = 'Criterion description can not be empty';
-$string['err_scoreformat'] = 'Number of points for each level must be a valid non-negative number';
+$string['err_novariations'] = 'Criterion levels cannot all be worth the same number of points';
+$string['err_scoreformat'] = 'Number of points for each level must be a valid number';
 $string['err_totalscore'] = 'Maximum number of points possible when graded by the rubric must be more than zero';
 $string['gradingof'] = '{$a} grading';
-$string['leveldelete'] = 'Delete level';
+$string['level'] = 'Level {$a->definition}, {$a->score} points.';
+$string['leveldelete'] = 'Delete level {$a}';
+$string['leveldefinition'] = 'Level {$a} definition';
 $string['levelempty'] = 'Click to edit level';
+$string['levelsgroup'] = 'Levels group';
+$string['lockzeropoints'] = 'When converting rubric score to points/scale assume that minimum number of points is 0';
+$string['lockzeropoints_help'] = 'Locking the minimum number of points will allow to create rubrics without 0-levels. This may also mean that 0% grade on this rubric is not possible to achieve.<br />
+The maximum score in the rubric is always converted to the maximum grade.<br />
+When this setting is unchecked, the minimum possible score for this rubric will be converted to the minimum grade available in the module (which is zero unless the scale is used).<br />
+<a href="https://docs.moodle.org/en/Rubrics#Grade_calculation">Explanation of rubrics grade calculation</a>';
 $string['name'] = 'Name';
 $string['needregrademessage'] = 'The rubric definition was changed after this student had been graded. The student can not see this rubric until you check the rubric and update the grade.';
 $string['pluginname'] = 'Rubric';
@@ -59,14 +71,16 @@ $string['rubric'] = 'Rubric';
 $string['rubricmapping'] = 'Score to grade mapping rules';
 $string['rubricmappingexplained'] = 'The minimum possible score for this rubric is <b>{$a->minscore} points</b> and it will be converted to the minimum grade available in this module (which is zero unless the scale is used).
     The maximum score <b>{$a->maxscore} points</b> will be converted to the maximum grade.<br />
-    Intermediate scores will be converted respectively and rounded to the nearest available grade.<br />
-    If a scale is used instead of a grade, the score will be converted to the scale elements as if they were consecutive integers.';
+    Intermediate scores will be converted respectively.<br />
+    If a scale is used for grading, the score will be rounded and converted to the scale elements as if they were consecutive integers.<br><br>
+    You can change the method of grade calculation in the Rubic options section below.';
 $string['rubricnotcompleted'] = 'Please choose something for each criterion';
 $string['rubricoptions'] = 'Rubric options';
 $string['rubricstatus'] = 'Current rubric status';
 $string['save'] = 'Save';
 $string['saverubric'] = 'Save rubric and make it ready';
 $string['saverubricdraft'] = 'Save as draft';
+$string['scoreinputforlevel'] = 'Score input for level {$a}';
 $string['scorepostfix'] = '{$a}points';
 $string['showdescriptionstudent'] = 'Display rubric description to those being graded';
 $string['showdescriptionteacher'] = 'Display rubric description during evaluation';
@@ -76,3 +90,5 @@ $string['showscoreteacher'] = 'Display points for each level during evaluation';
 $string['sortlevelsasc'] = 'Sort order for levels:';
 $string['sortlevelsasc0'] = 'Descending by number of points';
 $string['sortlevelsasc1'] = 'Ascending by number of points';
+$string['zerolevelsabsent'] = 'Warning: The minimum possible score for this rubric is not 0; this can result in unexpected grades for the activity. To avoid this, each criterion should have a level with 0 points.<br>
+This warning may be ignored if a scale is used for grading, and the minimum levels in the rubric correspond to the minimum value of the scale.';

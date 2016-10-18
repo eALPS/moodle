@@ -25,6 +25,8 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+defined('MOODLE_INTERNAL') || die();
+
 /**
  * Generates the Database modules RSS Feed
  *
@@ -175,5 +177,17 @@
 
         $recs = $DB->get_records_sql($sql, null, 0, 1);//limit of 1. If we get even 1 back we have new stuff
         return ($recs && !empty($recs));
+    }
+
+    /**
+     * Given a database object, deletes all cached RSS files associated with it.
+     *
+     * @param stdClass $data
+     */
+    function data_rss_delete_file($data) {
+        global $CFG;
+        require_once("$CFG->libdir/rsslib.php");
+
+        rss_delete_file('mod_data', $data);
     }
 

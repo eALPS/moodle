@@ -24,6 +24,8 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+require_once($CFG->dirroot . '/mod/assign/locallib.php');
+
 /**
  * Define the complete choice structure for backup, with file and id annotations
  *
@@ -34,15 +36,33 @@ defined('MOODLE_INTERNAL') || die();
 class backup_assign_activity_structure_step extends backup_activity_structure_step {
 
     /**
+     * Annotate files from plugin configuration
+     * @param backup_nested_element $assign the backup structure of the activity
+     * @param string $subtype the plugin type to handle
+     * @return void
+     */
+    protected function annotate_plugin_config_files(backup_nested_element $assign, $subtype) {
+        $dummyassign = new assign(null, null, null);
+        $plugins = $dummyassign->load_plugins($subtype);
+        foreach ($plugins as $plugin) {
+            $component = $plugin->get_subtype() . '_' . $plugin->get_type();
+            $areas = $plugin->get_config_file_areas();
+            foreach ($areas as $area) {
+                $assign->annotate_files($component, $area, null);
+            }
+        }
+    }
+
+    /**
      * Define the structure for the assign activity
      * @return void
      */
     protected function define_structure() {
 
-        // To know if we are including userinfo
+        // To know if we are including userinfo.
         $userinfo = $this->get_setting_value('userinfo');
 
-        // Define each element separated
+        // Define each element separated.
         $assign = new backup_nested_element('assign', array('id'),
                                             array('name',
                                                   'intro',
@@ -51,6 +71,7 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
                                                   'submissiondrafts',
                                                   'sendnotifications',
                                                   'sendlatenotifications',
+                                                  'sendstudentnotifications',
                                                   'duedate',
                                                   'cutoffdate',
                                                   'allowsubmissionsfromdate',
@@ -62,7 +83,23 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
                                                   'requireallteammemberssubmit',
                                                   'teamsubmissiongroupingid',
                                                   'blindmarking',
-                                                  'revealidentities'));
+                                                  'revealidentities',
+                                                  'attemptreopenmethod',
+                                                  'maxattempts',
+                                                  'markingworkflow',
+                                                  'markingallocation',
+                                                  'preventsubmissionnotingroup'));
+
+        $userflags = new backup_nested_element('userflags');
+
+        $userflag = new backup_nested_element('userflag', array('id'),
+                                                array('userid',
+                                                      'assignment',
+                                                      'mailed',
+                                                      'locked',
+                                                      'extensionduedate',
+                                                      'workflowstate',
+                                                      'allocatedmarker'));
 
         $submissions = new backup_nested_element('submissions');
 
@@ -71,7 +108,9 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
                                                       'timecreated',
                                                       'timemodified',
                                                       'status',
-                                                      'groupid'));
+                                                      'groupid',
+                                                      'attemptnumber',
+                                                      'latest'));
 
         $grades = new backup_nested_element('grades');
 
@@ -81,9 +120,7 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
                                                  'timemodified',
                                                  'grader',
                                                  'grade',
-                                                 'locked',
-                                                 'mailed',
-                                                 'extensionduedate'));
+                                                 'attemptnumber'));
 
         $pluginconfigs = new backup_nested_element('plugin_configs');
 
@@ -93,8 +130,9 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
                                                          'name',
                                                          'value'));
 
-        // Build the tree
-
+        // Build the tree.
+        $assign->add_child($userflags);
+        $userflags->add_child($userflag);
         $assign->add_child($submissions);
         $submissions->add_child($submission);
         $assign->add_child($grades);
@@ -102,12 +140,15 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
         $assign->add_child($pluginconfigs);
         $pluginconfigs->add_child($pluginconfig);
 
-
         // Define sources.
         $assign->set_source_table('assign', array('id' => backup::VAR_ACTIVITYID));
-        $pluginconfig->set_source_table('assign_plugin_config', array('assignment' => backup::VAR_PARENTID));
+        $pluginconfig->set_source_table('assign_plugin_config',
+                                        array('assignment' => backup::VAR_PARENTID));
 
         if ($userinfo) {
+            $userflag->set_source_table('assign_user_flags',
+                                     array('assignment' => backup::VAR_PARENTID));
+
             $submission->set_source_table('assign_submission',
                                      array('assignment' => backup::VAR_PARENTID));
 
@@ -119,17 +160,23 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
             $this->add_subplugin_structure('assignfeedback', $grade, true);
         }
 
-        // Define id annotations
+        // Define id annotations.
+        $userflag->annotate_ids('user', 'userid');
+        $userflag->annotate_ids('user', 'allocatedmarker');
         $submission->annotate_ids('user', 'userid');
         $submission->annotate_ids('group', 'groupid');
         $grade->annotate_ids('user', 'userid');
         $grade->annotate_ids('user', 'grader');
         $assign->annotate_ids('grouping', 'teamsubmissiongroupingid');
 
-        // Define file annotations
-        $assign->annotate_files('mod_assign', 'intro', null); // This file area hasn't itemid
+        // Define file annotations.
+        // These file areas don't have an itemid.
+        $assign->annotate_files('mod_assign', 'intro', null);
+        $assign->annotate_files('mod_assign', 'introattachment', null);
+        $this->annotate_plugin_config_files($assign, 'assignsubmission');
+        $this->annotate_plugin_config_files($assign, 'assignfeedback');
 
-        // Return the root element (choice), wrapped into standard activity structure
+        // Return the root element (choice), wrapped into standard activity structure.
 
         return $this->prepare_activity_structure($assign);
     }

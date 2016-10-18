@@ -22,6 +22,8 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+defined('MOODLE_INTERNAL') || die();
+
 /**
  * upgrade this assignment instance - this function could be skipped but it will be needed later
  * @param int $oldversion The old version of the assign module
@@ -32,172 +34,171 @@ function xmldb_assign_upgrade($oldversion) {
 
     $dbman = $DB->get_manager();
 
-    if ($oldversion < 2012051700) {
+    if ($oldversion < 2014051201) {
 
-        // Define field to be added to assign.
-        $table = new xmldb_table('assign');
-        $field = new xmldb_field('sendlatenotifications', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0', 'sendnotifications');
+        // Cleanup bad database records where assignid is missing.
 
-        // Conditionally launch add field.
+        $DB->delete_records('assign_user_mapping', array('assignment'=>0));
+        // Assign savepoint reached.
+        upgrade_mod_savepoint(true, 2014051201, 'assign');
+    }
+
+    if ($oldversion < 2014072400) {
+
+        // Add "latest" column to submissions table to mark the latest attempt.
+        $table = new xmldb_table('assign_submission');
+        $field = new xmldb_field('latest', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0', 'attemptnumber');
+
+        // Conditionally launch add field latest.
         if (!$dbman->field_exists($table, $field)) {
             $dbman->add_field($table, $field);
         }
 
         // Assign savepoint reached.
-        upgrade_mod_savepoint(true, 2012051700, 'assign');
+        upgrade_mod_savepoint(true, 2014072400, 'assign');
     }
+    if ($oldversion < 2014072401) {
 
-    // Moodle v2.3.0 release upgrade line.
-    // Put any upgrade step following this.
+         // Define index latestattempt (not unique) to be added to assign_submission.
+        $table = new xmldb_table('assign_submission');
+        $index = new xmldb_index('latestattempt', XMLDB_INDEX_NOTUNIQUE, array('assignment', 'userid', 'groupid', 'latest'));
 
-    if ($oldversion < 2012071800) {
-
-        // Define field requiresubmissionstatement to be added to assign.
-        $table = new xmldb_table('assign');
-        $field = new xmldb_field('requiresubmissionstatement', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0', 'timemodified');
-
-        // Conditionally launch add field requiresubmissionstatement.
-
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
-
-        // Assign savepoint reached.
-        upgrade_mod_savepoint(true, 2012071800, 'assign');
-    }
-
-    if ($oldversion < 2012081600) {
-
-        // Define field to be added to assign.
-        $table = new xmldb_table('assign');
-        $field = new xmldb_field('completionsubmit', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0', 'timemodified');
-
-        // Conditionally launch add field.
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
-
-        // Assign savepoint reached.
-        upgrade_mod_savepoint(true, 2012081600, 'assign');
-    }
-
-    // Individual extension dates support.
-    if ($oldversion < 2012082100) {
-
-        // Define field cutoffdate to be added to assign.
-        $table = new xmldb_table('assign');
-        $field = new xmldb_field('cutoffdate', XMLDB_TYPE_INTEGER, '10', null,
-                                 XMLDB_NOTNULL, null, '0', 'completionsubmit');
-
-        // Conditionally launch add field cutoffdate.
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
-        // If prevent late is on - set cutoffdate to due date.
-
-        // Now remove the preventlatesubmissions column.
-        $field = new xmldb_field('preventlatesubmissions', XMLDB_TYPE_INTEGER, '2', null,
-                                 XMLDB_NOTNULL, null, '0', 'nosubmissions');
-        if ($dbman->field_exists($table, $field)) {
-            // Set the cutoffdate to the duedate if preventlatesubmissions was enabled.
-            $sql = 'UPDATE {assign} SET cutoffdate = duedate WHERE preventlatesubmissions = 1';
-            $DB->execute($sql);
-
-            $dbman->drop_field($table, $field);
-        }
-
-        // Define field extensionduedate to be added to assign_grades
-        $table = new xmldb_table('assign_grades');
-        $field = new xmldb_field('extensionduedate', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'mailed');
-
-        // Conditionally launch add field extensionduedate
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
-
-        // Assign savepoint reached.
-        upgrade_mod_savepoint(true, 2012082100, 'assign');
-    }
-
-    // Team assignment support.
-    if ($oldversion < 2012082300) {
-
-        // Define field to be added to assign.
-        $table = new xmldb_table('assign');
-        $field = new xmldb_field('teamsubmission', XMLDB_TYPE_INTEGER, '2', null,
-                                 XMLDB_NOTNULL, null, '0', 'cutoffdate');
-
-        // Conditionally launch add field.
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
-        $field = new xmldb_field('requireallteammemberssubmit', XMLDB_TYPE_INTEGER, '2', null,
-                                 XMLDB_NOTNULL, null, '0', 'teamsubmission');
-        // Conditionally launch add field.
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
-        $field = new xmldb_field('teamsubmissiongroupingid', XMLDB_TYPE_INTEGER, '10', null,
-                                 XMLDB_NOTNULL, null, '0', 'requireallteammemberssubmit');
-        // Conditionally launch add field.
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
-        $index = new xmldb_index('teamsubmissiongroupingid', XMLDB_INDEX_NOTUNIQUE, array('teamsubmissiongroupingid'));
-        // Conditionally launch add index.
+        // Conditionally launch add index latestattempt.
         if (!$dbman->index_exists($table, $index)) {
             $dbman->add_index($table, $index);
         }
-        $table = new xmldb_table('assign_submission');
-        $field = new xmldb_field('groupid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'status');
-        // Conditionally launch add field.
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
-        upgrade_mod_savepoint(true, 2012082300, 'assign');
+
+        // Assign savepoint reached.
+        upgrade_mod_savepoint(true, 2014072401, 'assign');
     }
-    if ($oldversion < 2012082400) {
+    if ($oldversion < 2014072405) {
 
-        // Define table assign_user_mapping to be created
-        $table = new xmldb_table('assign_user_mapping');
+        // Prevent running this multiple times.
 
-        // Adding fields to table assign_user_mapping
-        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
-        $table->add_field('assignment', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
-        $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $countsql = 'SELECT COUNT(id) FROM {assign_submission} WHERE latest = ?';
 
-        // Adding keys to table assign_user_mapping
-        $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
-        $table->add_key('assignment', XMLDB_KEY_FOREIGN, array('assignment'), 'assign', array('id'));
-        $table->add_key('user', XMLDB_KEY_FOREIGN, array('userid'), 'user', array('id'));
+        $count = $DB->count_records_sql($countsql, array(1));
+        if ($count == 0) {
 
-        // Conditionally launch create table for assign_user_mapping
-        if (!$dbman->table_exists($table)) {
-            $dbman->create_table($table);
+            // Mark the latest attempt for every submission in mod_assign.
+            $maxattemptsql = 'SELECT assignment, userid, groupid, max(attemptnumber) AS maxattempt
+                                FROM {assign_submission}
+                            GROUP BY assignment, groupid, userid';
+
+            $maxattemptidssql = 'SELECT souter.id
+                                   FROM {assign_submission} souter
+                                   JOIN (' . $maxattemptsql . ') sinner
+                                     ON souter.assignment = sinner.assignment
+                                    AND souter.userid = sinner.userid
+                                    AND souter.groupid = sinner.groupid
+                                    AND souter.attemptnumber = sinner.maxattempt';
+
+            // We need to avoid using "WHERE ... IN(SELECT ...)" clause with MySQL for performance reason.
+            // TODO MDL-29589 Remove this dbfamily exception when implemented.
+            if ($DB->get_dbfamily() === 'mysql') {
+                $params = array('latest' => 1);
+                $sql = 'UPDATE {assign_submission}
+                    INNER JOIN (' . $maxattemptidssql . ') souterouter ON souterouter.id = {assign_submission}.id
+                           SET latest = :latest';
+                $DB->execute($sql, $params);
+            } else {
+                $select = 'id IN(' . $maxattemptidssql . ')';
+                $DB->set_field_select('assign_submission', 'latest', 1, $select);
+            }
+
+            // Look for grade records with no submission record.
+            // This is when a teacher has marked a student before they submitted anything.
+            $records = $DB->get_records_sql('SELECT g.id, g.assignment, g.userid
+                                               FROM {assign_grades} g
+                                          LEFT JOIN {assign_submission} s
+                                                 ON s.assignment = g.assignment
+                                                AND s.userid = g.userid
+                                              WHERE s.id IS NULL');
+            $submissions = array();
+            foreach ($records as $record) {
+                $submission = new stdClass();
+                $submission->assignment = $record->assignment;
+                $submission->userid = $record->userid;
+                $submission->status = 'new';
+                $submission->groupid = 0;
+                $submission->latest = 1;
+                $submission->timecreated = time();
+                $submission->timemodified = time();
+                array_push($submissions, $submission);
+            }
+
+            $DB->insert_records('assign_submission', $submissions);
         }
 
-        // Define field blindmarking to be added to assign
-        $table = new xmldb_table('assign');
-        $field = new xmldb_field('blindmarking', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0', 'teamsubmissiongroupingid');
-
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
-
-        // Define field revealidentities to be added to assign
-        $table = new xmldb_table('assign');
-        $field = new xmldb_field('revealidentities', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0', 'blindmarking');
-
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
-
-        // assign savepoint reached
-        upgrade_mod_savepoint(true, 2012082400, 'assign');
+        // Assign savepoint reached.
+        upgrade_mod_savepoint(true, 2014072405, 'assign');
     }
 
+    // Moodle v2.8.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    if ($oldversion < 2014122600) {
+        // Delete any entries from the assign_user_flags and assign_user_mapping that are no longer required.
+        if ($DB->get_dbfamily() === 'mysql') {
+            $sql1 = "DELETE {assign_user_flags}
+                       FROM {assign_user_flags}
+                  LEFT JOIN {assign}
+                         ON {assign_user_flags}.assignment = {assign}.id
+                      WHERE {assign}.id IS NULL";
+
+            $sql2 = "DELETE {assign_user_mapping}
+                       FROM {assign_user_mapping}
+                  LEFT JOIN {assign}
+                         ON {assign_user_mapping}.assignment = {assign}.id
+                      WHERE {assign}.id IS NULL";
+        } else {
+            $sql1 = "DELETE FROM {assign_user_flags}
+                WHERE NOT EXISTS (
+                          SELECT 'x' FROM {assign}
+                           WHERE {assign_user_flags}.assignment = {assign}.id)";
+
+            $sql2 = "DELETE FROM {assign_user_mapping}
+                WHERE NOT EXISTS (
+                          SELECT 'x' FROM {assign}
+                           WHERE {assign_user_mapping}.assignment = {assign}.id)";
+        }
+
+        $DB->execute($sql1);
+        $DB->execute($sql2);
+
+        upgrade_mod_savepoint(true, 2014122600, 'assign');
+    }
+
+    if ($oldversion < 2015022300) {
+
+        // Define field preventsubmissionnotingroup to be added to assign.
+        $table = new xmldb_table('assign');
+        $field = new xmldb_field('preventsubmissionnotingroup',
+            XMLDB_TYPE_INTEGER,
+            '2',
+            null,
+            XMLDB_NOTNULL,
+            null,
+            '0',
+            'sendstudentnotifications');
+
+        // Conditionally launch add field preventsubmissionnotingroup.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Assign savepoint reached.
+        upgrade_mod_savepoint(true, 2015022300, 'assign');
+    }
+
+    // Moodle v2.9.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Moodle v3.0.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Moodle v3.1.0 release upgrade line.
+    // Put any upgrade step following this.
 
     return true;
 }
-
-

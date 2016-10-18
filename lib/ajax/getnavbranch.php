@@ -19,7 +19,7 @@
  * This file is used to deliver a branch from the navigation structure
  * in XML format back to a page from an AJAX call
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package core
  * @copyright 2009 Sam Hemelryk
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -28,9 +28,13 @@
 define('AJAX_SCRIPT', true);
 
 /** Include config */
-require_once(dirname(__FILE__) . '/../../config.php');
+require_once(__DIR__ . '/../../config.php');
 /** Include course lib for its functions */
 require_once($CFG->dirroot.'/course/lib.php');
+
+if (!empty($CFG->forcelogin)) {
+    require_login();
+}
 
 try {
     // Start buffer capture so that we can `remove` any errors
@@ -103,22 +107,25 @@ try {
         foreach ($branch->find_all_of_type(navigation_node::TYPE_CATEGORY) as $category) {
             $category->action = null;
         }
+        foreach ($branch->find_all_of_type(navigation_node::TYPE_MY_CATEGORY) as $category) {
+            $category->action = null;
+        }
     }
 
     // Stop buffering errors at this point
     $html = ob_get_contents();
     ob_end_clean();
 } catch (Exception $e) {
-    die('Error: '.$e->getMessage());
+    throw new coding_exception('Error: '.$e->getMessage());
 }
 
 // Check if the buffer contianed anything if it did ERROR!
 if (trim($html) !== '') {
-    die('Errors were encountered while producing the navigation branch'."\n\n\n".$html);
+    throw new coding_exception('Errors were encountered while producing the navigation branch'."\n\n\n".$html);
 }
 // Check that branch isn't empty... if it is ERROR!
-if (empty($branch) || $branch->nodetype !== navigation_node::NODETYPE_BRANCH) {
-    die('No further information available for this branch');
+if (empty($branch) || ($branch->nodetype !== navigation_node::NODETYPE_BRANCH && !$branch->isexpandable)) {
+    throw new coding_exception('No further information available for this branch');
 }
 
 // Prepare an XML converter for the branch

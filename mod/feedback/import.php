@@ -19,7 +19,7 @@
  *
  * @author Andreas Grabs
  * @license http://www.gnu.org/copyleft/gpl.html GNU Public License
- * @package feedback
+ * @package mod_feedback
  */
 
 require_once("../../config.php");
@@ -92,18 +92,19 @@ if ($choosefile) {
 $strfeedbacks = get_string("modulenameplural", "feedback");
 $strfeedback  = get_string("modulename", "feedback");
 
-$PAGE->set_heading(format_string($course->fullname));
-$PAGE->set_title(format_string($feedback->name));
+$PAGE->set_heading($course->fullname);
+$PAGE->set_title($feedback->name);
 echo $OUTPUT->header();
-
+echo $OUTPUT->heading(format_string($feedback->name));
 /// print the tabs
+$current_tab = 'templates';
 require('tabs.php');
 
 /// Print the main part of the page
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
-echo $OUTPUT->heading(get_string('import_questions', 'feedback'));
+echo $OUTPUT->heading(get_string('import_questions', 'feedback'), 3);
 
 if (isset($importerror->msg) AND is_array($importerror->msg)) {
     echo $OUTPUT->box_start('generalbox errorboxcontent boxaligncenter');
@@ -208,6 +209,10 @@ function feedback_import_loaded_data(&$data, $feedbackid) {
         $newitem->typ = $typ;
         $newitem->name = trim($item['#']['ITEMTEXT'][0]['#']);
         $newitem->label = trim($item['#']['ITEMLABEL'][0]['#']);
+        if ($typ === 'captcha' || $typ === 'label') {
+            $newitem->label = '';
+            $newitem->name = '';
+        }
         $newitem->options = trim($item['#']['OPTIONS'][0]['#']);
         $newitem->presentation = trim($item['#']['PRESENTATION'][0]['#']);
         //check old types of radio, check, and so on
@@ -284,6 +289,6 @@ function feedback_check_xml_utf8($text) {
     //encoding is given in $match[2]
     if (isset($match[0]) AND isset($match[1]) AND isset($match[2])) {
         $enc = $match[2];
-        return textlib::convert($text, $enc);
+        return core_text::convert($text, $enc);
     }
 }

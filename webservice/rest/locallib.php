@@ -120,7 +120,7 @@ class webservice_rest_server extends webservice_base_server {
             } else {
                 $response = '<?xml version="1.0" encoding="UTF-8" ?>'."\n";
                 $response .= '<RESPONSE>'."\n";
-                $response .= self::xmlize_result($this->returns, $this->function->returns_desc);
+                $response .= self::xmlize_result($validatedvalues, $this->function->returns_desc);
                 $response .= '</RESPONSE>'."\n";
             }
         }
@@ -184,6 +184,9 @@ class webservice_rest_server extends webservice_base_server {
         header('Expires: '. gmdate('D, d M Y H:i:s', 0) .' GMT');
         header('Pragma: no-cache');
         header('Accept-Ranges: none');
+        // Allow cross-origin requests only for Web Services.
+        // This allow to receive requests done by Web Workers or webapps in different domains.
+        header('Access-Control-Allow-Origin: *');
     }
 
     /**
@@ -221,7 +224,8 @@ class webservice_rest_server extends webservice_base_server {
         } else if ($desc instanceof external_single_structure) {
             $single = '<SINGLE>'."\n";
             foreach ($desc->keys as $key=>$subdesc) {
-                $single .= '<KEY name="'.$key.'">'.self::xmlize_result($returns[$key], $subdesc).'</KEY>'."\n";
+                $value = isset($returns[$key]) ? $returns[$key] : null;
+                $single .= '<KEY name="'.$key.'">'.self::xmlize_result($value, $subdesc).'</KEY>'."\n";
             }
             $single .= '</SINGLE>'."\n";
             return $single;

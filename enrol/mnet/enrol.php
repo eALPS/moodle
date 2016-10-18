@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -26,8 +25,7 @@
  * be a common name of a plugin library containing functions/methods callable
  * via MNet framework.
  *
- * @package    enrol
- * @subpackage mnet
+ * @package    enrol_mnet
  * @copyright  2010 David Mudrak <david@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -127,7 +125,7 @@ class enrol_mnet_mnetservice_enrol {
      */
     public function enrol_user(array $userdata, $courseid) {
         global $CFG, $DB;
-        require_once(dirname(__FILE__).'/lib.php');
+        require_once(__DIR__.'/lib.php');
 
         if (!$client = get_mnet_remote_client()) {
             die('Callable via XML-RPC only');

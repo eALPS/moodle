@@ -20,14 +20,15 @@ $focus = '';
 // now we'll deal with the case that the admin has submitted the form with changed settings
 if ($data = data_submitted() and confirm_sesskey()) {
     if (admin_write_settings($data)) {
-        $statusmsg = get_string('changessaved');
+        redirect($PAGE->url, get_string('changessaved'), null, \core\output\notification::NOTIFY_SUCCESS);
     }
-    $adminroot = admin_get_root(true); //reload tree
 
     if (!empty($adminroot->errors)) {
         $errormsg = get_string('errorwithsettings', 'admin');
         $firsterror = reset($adminroot->errors);
         $focus = $firsterror->id;
+    } else {
+        redirect($PAGE->url);
     }
 }
 
@@ -42,23 +43,6 @@ if ($errormsg !== '') {
     echo $OUTPUT->notification($statusmsg, 'notifysuccess');
 }
 
-$resultshtml = admin_search_settings_html($query); // case insensitive search only
-
-echo '<form action="search.php" method="post" id="adminsettings">';
-echo '<div>';
-echo '<input type="hidden" name="sesskey" value="'.sesskey().'" />';
-echo '<input type="hidden" name="query" value="'.s($query).'" />';
-echo '</div>';
-echo '<fieldset>';
-echo '<div class="clearer"><!-- --></div>';
-if ($resultshtml != '') {
-    echo $resultshtml;
-} else {
-    echo get_string('noresults','admin');
-}
-echo '</fieldset>';
-echo '</form>';
+echo admin_search_settings_html($query);
 
 echo $OUTPUT->footer();
-
-

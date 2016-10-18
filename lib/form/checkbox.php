@@ -26,6 +26,7 @@
  */
 
 require_once('HTML/QuickForm/checkbox.php');
+require_once('templatable_form_element.php');
 
 /**
  * HTML class for a checkbox type element
@@ -39,7 +40,9 @@ require_once('HTML/QuickForm/checkbox.php');
  * @copyright 2007 Jamie Pratt <me@jamiep.org>
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class MoodleQuickForm_checkbox extends HTML_QuickForm_checkbox{
+class MoodleQuickForm_checkbox extends HTML_QuickForm_checkbox implements templatable {
+    use templatable_form_element;
+
     /** @var string html for help button, if empty then no help */
     var $_helpbutton='';
 
@@ -52,8 +55,18 @@ class MoodleQuickForm_checkbox extends HTML_QuickForm_checkbox{
      * @param mixed $attributes (optional) Either a typical HTML attribute string
      *              or an associative array
      */
-    function MoodleQuickForm_checkbox($elementName=null, $elementLabel=null, $text='', $attributes=null) {
-        parent::HTML_QuickForm_checkbox($elementName, $elementLabel, $text, $attributes);
+    public function __construct($elementName=null, $elementLabel=null, $text='', $attributes=null) {
+        parent::__construct($elementName, $elementLabel, $text, $attributes);
+    }
+
+    /**
+     * Old syntax of class constructor. Deprecated in PHP7.
+     *
+     * @deprecated since Moodle 3.1
+     */
+    public function MoodleQuickForm_checkbox($elementName=null, $elementLabel=null, $text='', $attributes=null) {
+        debugging('Use of class name as constructor is deprecated', DEBUG_DEVELOPER);
+        self::__construct($elementName, $elementLabel, $text, $attributes);
     }
 
     /**

@@ -44,6 +44,12 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class cachestore_memcached extends cache_store implements cache_is_configurable {
+
+    /**
+     * The minimum required version of memcached in order to use this store.
+     */
+    const REQUIRED_VERSION = '2.0.0';
+
     /**
      * The name of the store
      * @var store
@@ -75,10 +81,54 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
     protected $isready = false;
 
     /**
+     * Set to true when this store instance has been initialised.
+     * @var bool
+     */
+    protected $isinitialised = false;
+
+    /**
      * The cache definition this store was initialised with.
      * @var cache_definition
      */
     protected $definition;
+
+    /**
+     * Set to true when this store is clustered.
+     * @var bool
+     */
+    protected $clustered = false;
+
+    /**
+     * Array of servers to set when in clustered mode.
+     * @var array
+     */
+    protected $setservers = array();
+
+    /**
+     * The an array of memcache connections for the set servers, once established.
+     * @var array
+     */
+    protected $setconnections = array();
+
+    /**
+     * The prefix to use on all keys.
+     * @var string
+     */
+    protected $prefix = '';
+
+    /**
+     * True if Memcached::deleteMulti can be used, false otherwise.
+     * This required extension version 2.0.0 or greater.
+     * @var bool
+     */
+    protected $candeletemulti = false;
+
+    /**
+     * True if the memcached server is shared, false otherwise.
+     * This required extension version 2.0.0 or greater.
+     * @var bool
+     */
+    protected $isshared = false;
 
     /**
      * Constructs the store instance.
@@ -121,27 +171,36 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
             }
             $this->servers[] = $server;
         }
+
+        $this->clustered = array_key_exists('clustered', $configuration) ? (bool)$configuration['clustered'] : false;
+
+        if ($this->clustered) {
+            if (!array_key_exists('setservers', $configuration) || (count($configuration['setservers']) < 1)) {
+                // Can't setup clustering without set servers.
+                return;
+            }
+            if (count($this->servers) !== 1) {
+                // Can only setup cluster with exactly 1 get server.
+                return;
+            }
+            foreach ($configuration['setservers'] as $server) {
+                // We do not use weights (3rd part) on these servers.
+                if (!is_array($server)) {
+                    $server = explode(':', $server, 3);
+                }
+                if (!array_key_exists(1, $server)) {
+                    $server[1] = 11211;
+                }
+                $this->setservers[] = $server;
+            }
+        }
+
         $this->options[Memcached::OPT_COMPRESSION] = $compression;
         $this->options[Memcached::OPT_SERIALIZER] = $serialiser;
-        $this->options[Memcached::OPT_PREFIX_KEY] = $prefix;
+        $this->options[Memcached::OPT_PREFIX_KEY] = $this->prefix = (string)$prefix;
         $this->options[Memcached::OPT_HASH] = $hashmethod;
         $this->options[Memcached::OPT_BUFFER_WRITES] = $bufferwrites;
 
-        $this->isready = true;
-    }
-
-    /**
-     * Initialises the cache.
-     *
-     * Once this has been done the cache is all set to be used.
-     *
-     * @param cache_definition $definition
-     */
-    public function initialise(cache_definition $definition) {
-        if ($this->is_initialised()) {
-            throw new coding_exception('This memcached instance has already been initialised.');
-        }
-        $this->definition = $definition;
         $this->connection = new Memcached(crc32($this->name));
         $servers = $this->connection->getServerList();
         if (empty($servers)) {
@@ -150,6 +209,44 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
             }
             $this->connection->addServers($this->servers);
         }
+
+        if ($this->clustered) {
+            foreach ($this->setservers as $setserver) {
+                // Since we will have a number of them with the same name, append server and port.
+                $connection = new Memcached(crc32($this->name.$setserver[0].$setserver[1]));
+                foreach ($this->options as $key => $value) {
+                    $connection->setOption($key, $value);
+                }
+                $connection->addServer($setserver[0], $setserver[1]);
+                $this->setconnections[] = $connection;
+            }
+        }
+
+        if (isset($configuration['isshared'])) {
+            $this->isshared = $configuration['isshared'];
+        }
+
+        $version = phpversion('memcached');
+        $this->candeletemulti = ($version && version_compare($version, self::REQUIRED_VERSION, '>='));
+
+        // Test the connection to the main connection.
+        $this->isready = @$this->connection->set("ping", 'ping', 1);
+    }
+
+    /**
+     * Initialises the cache.
+     *
+     * Once this has been done the cache is all set to be used.
+     *
+     * @throws coding_exception if the instance has already been initialised.
+     * @param cache_definition $definition
+     */
+    public function initialise(cache_definition $definition) {
+        if ($this->is_initialised()) {
+            throw new coding_exception('This memcached instance has already been initialised.');
+        }
+        $this->definition = $definition;
+        $this->isinitialised = true;
     }
 
     /**
@@ -158,7 +255,7 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
      * @return bool
      */
     public function is_initialised() {
-        return ($this->connection !== null);
+        return ($this->isinitialised);
     }
 
     /**
@@ -175,7 +272,7 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
      * @return bool
      */
     public static function are_requirements_met() {
-        return class_exists('Memcached');
+        return extension_loaded('memcached') && class_exists('Memcached');
     }
 
     /**
@@ -195,7 +292,18 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
      * @return int
      */
     public static function get_supported_features(array $configuration = array()) {
-        return self::SUPPORTS_NATIVE_TTL;
+        return self::SUPPORTS_NATIVE_TTL + self::DEREFERENCES_OBJECTS;
+    }
+
+    /**
+     * Returns false as this store does not support multiple identifiers.
+     * (This optional function is a performance optimisation; it must be
+     * consistent with the value from get_supported_features.)
+     *
+     * @return bool False
+     */
+    public function supports_multiple_identifiers() {
+        return false;
     }
 
     /**
@@ -205,7 +313,7 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
      * @return int
      */
     public static function get_supported_modes(array $configuration = array()) {
-        return self::MODE_APPLICATION + self::MODE_SESSION;
+        return self::MODE_APPLICATION;
     }
 
     /**
@@ -228,16 +336,19 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
      *      be set to false.
      */
     public function get_many($keys) {
+        $return = array();
         $result = $this->connection->getMulti($keys);
         if (!is_array($result)) {
             $result = array();
         }
         foreach ($keys as $key) {
             if (!array_key_exists($key, $result)) {
-                $result[$key] = false;
+                $return[$key] = false;
+            } else {
+                $return[$key] = $result[$key];
             }
         }
-        return $result;
+        return $return;
     }
 
     /**
@@ -248,6 +359,14 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
      * @return bool True if the operation was a success false otherwise.
      */
     public function set($key, $data) {
+        if ($this->clustered) {
+            $status = true;
+            foreach ($this->setconnections as $connection) {
+                $status = $connection->set($key, $data, $this->definition->get_ttl()) && $status;
+            }
+            return $status;
+        }
+
         return $this->connection->set($key, $data, $this->definition->get_ttl());
     }
 
@@ -264,7 +383,17 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
         foreach ($keyvaluearray as $pair) {
             $pairs[$pair['key']] = $pair['value'];
         }
-        if ($this->connection->setMulti($pairs, $this->definition->get_ttl())) {
+
+        $status = true;
+        if ($this->clustered) {
+            foreach ($this->setconnections as $connection) {
+                $status = $connection->setMulti($pairs, $this->definition->get_ttl()) && $status;
+            }
+        } else {
+            $status = $this->connection->setMulti($pairs, $this->definition->get_ttl());
+        }
+
+        if ($status) {
             return count($keyvaluearray);
         }
         return 0;
@@ -277,6 +406,14 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
      * @return bool Returns true if the operation was a success, false otherwise.
      */
     public function delete($key) {
+        if ($this->clustered) {
+            $status = true;
+            foreach ($this->setconnections as $connection) {
+                $status = $connection->delete($key) && $status;
+            }
+            return $status;
+        }
+
         return $this->connection->delete($key);
     }
 
@@ -287,9 +424,41 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
      * @return int The number of items successfully deleted.
      */
     public function delete_many(array $keys) {
+        if ($this->clustered) {
+            // Get the minimum deleted from any of the connections.
+            $count = count($keys);
+            foreach ($this->setconnections as $connection) {
+                $count = min($this->delete_many_connection($connection, $keys), $count);
+            }
+            return $count;
+        }
+
+        return $this->delete_many_connection($this->connection, $keys);
+    }
+
+    /**
+     * Deletes several keys from the cache in a single action for a specific connection.
+     *
+     * @param Memcached $connection The connection to work on.
+     * @param array $keys The keys to delete
+     * @return int The number of items successfully deleted.
+     */
+    protected function delete_many_connection(Memcached $connection, array $keys) {
         $count = 0;
+        if ($this->candeletemulti) {
+            // We can use deleteMulti, this is a bit faster yay!
+            $result = $connection->deleteMulti($keys);
+            foreach ($result as $key => $outcome) {
+                if ($outcome === true) {
+                    $count++;
+                }
+            }
+            return $count;
+        }
+
+        // They are running an older version of the php memcached extension.
         foreach ($keys as $key) {
-            if ($this->connection->delete($key)) {
+            if ($connection->delete($key)) {
                 $count++;
             }
         }
@@ -302,8 +471,56 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
      * @return boolean True on success. False otherwise.
      */
     public function purge() {
-        $this->connection->flush();
+        if ($this->isready) {
+            // Only use delete multi if we have the correct extension installed and if the memcached
+            // server is shared (flushing the cache is quicker otherwise).
+            $candeletemulti = ($this->candeletemulti && $this->isshared);
+
+            if ($this->clustered) {
+                foreach ($this->setconnections as $connection) {
+                    if ($candeletemulti) {
+                        $keys = self::get_prefixed_keys($connection, $this->prefix);
+                        $connection->deleteMulti($keys);
+                    } else {
+                        // Oh damn, this isn't multi-site safe.
+                        $connection->flush();
+                    }
+                }
+            } else if ($candeletemulti) {
+                $keys = self::get_prefixed_keys($this->connection, $this->prefix);
+                $this->connection->deleteMulti($keys);
+            } else {
+                // Oh damn, this isn't multi-site safe.
+                $this->connection->flush();
+            }
+        }
+        // It never fails. Ever.
         return true;
+    }
+
+    /**
+     * Returns all of the keys in the given connection that belong to this cache store instance.
+     *
+     * Requires php memcached extension version 2.0.0 or greater.
+     *
+     * @param Memcached $connection
+     * @param string $prefix
+     * @return array
+     */
+    protected static function get_prefixed_keys(Memcached $connection, $prefix) {
+        $connkeys = $connection->getAllKeys();
+        if (empty($connkeys)) {
+            return array();
+        }
+
+        $keys = array();
+        $start = strlen($prefix);
+        foreach ($connkeys as $key) {
+            if (strpos($key, $prefix) === 0) {
+                $keys[] = substr($key, $start);
+            }
+        }
+        return $keys;
     }
 
     /**
@@ -318,7 +535,7 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
             $options[Memcached::SERIALIZER_JSON] = get_string('serialiser_json', 'cachestore_memcached');
         }
         if (Memcached::HAVE_IGBINARY) {
-            $options[Memcached::SERIALIZER_IGBINARY] = get_string('serialiser_php', 'cachestore_memcached');
+            $options[Memcached::SERIALIZER_IGBINARY] = get_string('serialiser_igbinary', 'cachestore_memcached');
         }
         return $options;
     }
@@ -352,9 +569,41 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
         $lines = explode("\n", $data->servers);
         $servers = array();
         foreach ($lines as $line) {
-            $line = trim($line, ':');
+            // Trim surrounding colons and default whitespace.
+            $line = trim(trim($line), ":");
+            // Skip blank lines.
+            if ($line === '') {
+                continue;
+            }
             $servers[] = explode(':', $line, 3);
         }
+
+        $clustered = false;
+        $setservers = array();
+        if (isset($data->clustered)) {
+            $clustered = true;
+
+            $lines = explode("\n", $data->setservers);
+            foreach ($lines as $line) {
+                // Trim surrounding colons and default whitespace.
+                $line = trim(trim($line), ":");
+                if ($line === '') {
+                    continue;
+                }
+                $setserver = explode(':', $line, 3);
+                // We don't use weights, so display a debug message.
+                if (count($setserver) > 2) {
+                    debugging('Memcached Set Server '.$setserver[0].' has too many parameters.');
+                }
+                $setservers[] = $setserver;
+            }
+        }
+
+        $isshared = false;
+        if (isset($data->isshared)) {
+            $isshared = $data->isshared;
+        }
+
         return array(
             'servers' => $servers,
             'compression' => $data->compression,
@@ -362,6 +611,9 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
             'prefix' => $data->prefix,
             'hash' => $data->hash,
             'bufferwrites' => $data->bufferwrites,
+            'clustered' => $clustered,
+            'setservers' => $setservers,
+            'isshared' => $isshared
         );
     }
 
@@ -395,21 +647,50 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
         if (isset($config['bufferwrites'])) {
             $data['bufferwrites'] = (bool)$config['bufferwrites'];
         }
+        if (isset($config['clustered'])) {
+            $data['clustered'] = (bool)$config['clustered'];
+        }
+        if (!empty($config['setservers'])) {
+            $servers = array();
+            foreach ($config['setservers'] as $server) {
+                $servers[] = join(":", $server);
+            }
+            $data['setservers'] = join("\n", $servers);
+        }
+        if (isset($config['isshared'])) {
+            $data['isshared'] = $config['isshared'];
+        }
         $editform->set_data($data);
     }
 
     /**
      * Performs any necessary clean up when the store instance is being deleted.
      */
-    public function cleanup() {
-        $this->purge();
+    public function instance_deleted() {
+        if ($this->connection) {
+            $connection = $this->connection;
+        } else {
+            $connection = new Memcached(crc32($this->name));
+            $servers = $connection->getServerList();
+            if (empty($servers)) {
+                foreach ($this->options as $key => $value) {
+                    $connection->setOption($key, $value);
+                }
+                $connection->addServers($this->servers);
+            }
+        }
+        // We have to flush here to be sure we are completely cleaned up.
+        // Bad for performance but this is incredibly rare.
+        @$connection->flush();
+        unset($connection);
+        unset($this->connection);
     }
 
     /**
      * Generates an instance of the cache store that can be used for testing.
      *
      * @param cache_definition $definition
-     * @return false
+     * @return cachestore_memcached|false
      */
     public static function initialise_test_instance(cache_definition $definition) {
 
@@ -423,7 +704,7 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
         }
 
         $configuration = array();
-        $configuration['servers'] = $config->testservers;
+        $configuration['servers'] = explode("\n", $config->testservers);
         if (!empty($config->testcompression)) {
             $configuration['compression'] = $config->testcompression;
         }
@@ -439,6 +720,39 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
         if (!empty($config->testbufferwrites)) {
             $configuration['bufferwrites'] = $config->testbufferwrites;
         }
+        if (!empty($config->testclustered)) {
+            $configuration['clustered'] = $config->testclustered;
+        }
+        if (!empty($config->testsetservers)) {
+            $configuration['setservers'] = explode("\n", $config->testsetservers);
+        }
+        if (!empty($config->testname)) {
+            $name = $config->testname;
+        } else {
+            $name = 'Test memcached';
+        }
+
+        $store = new cachestore_memcached($name, $configuration);
+        $store->initialise($definition);
+
+        return $store;
+    }
+
+    /**
+     * Creates a test instance for unit tests if possible.
+     * @param cache_definition $definition
+     * @return bool|cachestore_memcached
+     */
+    public static function initialise_unit_test_instance(cache_definition $definition) {
+        if (!self::are_requirements_met()) {
+            return false;
+        }
+        if (!defined('TEST_CACHESTORE_MEMCACHED_TESTSERVERS')) {
+            return false;
+        }
+
+        $configuration = array();
+        $configuration['servers'] = explode("\n", TEST_CACHESTORE_MEMCACHED_TESTSERVERS);
 
         $store = new cachestore_memcached('Test memcached', $configuration);
         $store->initialise($definition);
@@ -452,5 +766,42 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
      */
     public function my_name() {
         return $this->name;
+    }
+
+    /**
+     * Used to notify of configuration conflicts.
+     *
+     * The warnings returned here will be displayed on the cache configuration screen.
+     *
+     * @return string[] Returns an array of warnings (strings)
+     */
+    public function get_warnings() {
+        global $CFG;
+        $warnings = array();
+        if (isset($CFG->session_memcached_save_path) && count($this->servers)) {
+            $bits = explode(':', $CFG->session_memcached_save_path, 3);
+            $host = array_shift($bits);
+            $port = (count($bits)) ? array_shift($bits) : '11211';
+
+            foreach ($this->servers as $server) {
+                if ((string)$server[0] === $host && (string)$server[1] === $port) {
+                    $warnings[] = get_string('sessionhandlerconflict', 'cachestore_memcached', $this->my_name());
+                    break;
+                }
+            }
+        }
+        return $warnings;
+    }
+
+    /**
+     * Returns true if this cache store instance is both suitable for testing, and ready for testing.
+     *
+     * Cache stores that support being used as the default store for unit and acceptance testing should
+     * override this function and return true if there requirements have been met.
+     *
+     * @return bool
+     */
+    public static function ready_to_be_used_for_testing() {
+        return defined('TEST_CACHESTORE_MEMCACHED_TESTSERVERS');
     }
 }

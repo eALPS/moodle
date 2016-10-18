@@ -22,9 +22,9 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require(dirname(__FILE__).'/../../../../config.php');
-require_once(dirname(__FILE__).'/locallib.php');
-require_once(dirname(__FILE__).'/import_form.php');
+require(__DIR__.'/../../../../config.php');
+require_once(__DIR__.'/locallib.php');
+require_once(__DIR__.'/import_form.php');
 
 $id        = required_param('id', PARAM_INT);           // Course Module ID
 $chapterid = optional_param('chapterid', 0, PARAM_INT); // Chapter ID
@@ -67,7 +67,8 @@ if ($mform->is_cancelled()) {
 
 } else if ($data = $mform->get_data()) {
     echo $OUTPUT->header();
-    echo $OUTPUT->heading(get_string('importingchapters', 'booktool_importhtml'));
+    echo $OUTPUT->heading($book->name);
+    echo $OUTPUT->heading(get_string('importingchapters', 'booktool_importhtml'), 3);
 
     // this is a bloody hack - children do not try this at home!
     $fs = get_file_storage();
@@ -84,7 +85,7 @@ if ($mform->is_cancelled()) {
 }
 
 echo $OUTPUT->header();
-echo $OUTPUT->heading(get_string('import', 'booktool_importhtml'));
+echo $OUTPUT->heading($book->name);
 
 $mform->display();
 

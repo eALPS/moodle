@@ -1,7 +1,25 @@
 <?php
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
  * Library of functions and constants for notes
+ *
+ * @package    core_notes
+ * @copyright  2007 onwards Yu Zhang
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 /**
@@ -34,7 +52,7 @@ define('NOTES_SHOW_FOOT', 0x04);
 function note_list($courseid=0, $userid=0, $state = '', $author = 0, $order='lastmodified DESC', $limitfrom=0, $limitnum=0) {
     global $DB;
 
-    // setup filters
+    // Setup filters.
     $selects = array();
     $params = array();
     if ($courseid) {
@@ -58,34 +76,34 @@ function note_list($courseid=0, $userid=0, $state = '', $author = 0, $order='las
 
     $select = implode(' AND ', $selects);
     $fields = 'id,courseid,userid,content,format,created,lastmodified,usermodified,publishstate';
-    // retrieve data
+
     return $DB->get_records_select('post', $select, $params, $order, $fields, $limitfrom, $limitnum);
 }
 
 /**
  * Retrieves a note object based on its id.
  *
- * @param int    $note_id id of the note to retrieve
- * @return note object
+ * @param int $noteid ID of the note to retrieve
+ * @return stdClass object
  */
-function note_load($note_id) {
+function note_load($noteid) {
     global $DB;
 
     $fields = 'id,courseid,userid,content,format,created,lastmodified,usermodified,publishstate';
-    return $DB->get_record('post', array('id'=>$note_id, 'module'=>'notes'), $fields);
+    return $DB->get_record('post', array('id' => $noteid, 'module' => 'notes'), $fields);
 }
 
 /**
  * Saves a note object. The note object is passed by reference and its fields (i.e. id)
  * might change during the save.
  *
- * @param note   $note object to save
+ * @param stdClass   $note object to save
  * @return boolean true if the object was saved; false otherwise
  */
 function note_save(&$note) {
     global $USER, $DB;
 
-    // setup & clean fields
+    // Setup & clean fields.
     $note->module       = 'notes';
     $note->lastmodified = time();
     $note->usermodified = $USER->id;
@@ -95,15 +113,38 @@ function note_save(&$note) {
     if (empty($note->publishstate)) {
         $note->publishstate = NOTES_STATE_PUBLIC;
     }
-    // save data
+    // Save data.
     if (empty($note->id)) {
-        // insert new note
+        // Insert new note.
         $note->created = $note->lastmodified;
         $id = $DB->insert_record('post', $note);
-        $note = $DB->get_record('post', array('id'=>$id));
+        $note = note_load($id);
+
+        // Trigger event.
+        $event = \core\event\note_created::create(array(
+            'objectid' => $note->id,
+            'courseid' => $note->courseid,
+            'relateduserid' => $note->userid,
+            'userid' => $note->usermodified,
+            'context' => context_course::instance($note->courseid),
+            'other' => array('publishstate' => $note->publishstate)
+        ));
+        $event->trigger();
     } else {
-        // update old note
+        // Update old note.
         $DB->update_record('post', $note);
+        $note = note_load($note->id);
+
+        // Trigger event.
+        $event = \core\event\note_updated::create(array(
+            'objectid' => $note->id,
+            'courseid' => $note->courseid,
+            'relateduserid' => $note->userid,
+            'userid' => $note->usermodified,
+            'context' => context_course::instance($note->courseid),
+            'other' => array('publishstate' => $note->publishstate)
+        ));
+        $event->trigger();
     }
     unset($note->module);
     return true;
@@ -112,13 +153,33 @@ function note_save(&$note) {
 /**
  * Deletes a note object based on its id.
  *
- * @param int    $note_id id of the note to delete
- * @return boolean true if the object was deleted; false otherwise
+ * @param int|object    $note id of the note to delete, or a note object which is to be deleted.
+ * @return boolean true always
  */
-function note_delete($noteid) {
+function note_delete($note) {
     global $DB;
+    if (is_int($note)) {
+        $noteid = $note;
+    } else {
+        $noteid = $note->id;
+    }
+    // Get the full record, note_load doesn't return everything.
+    $note = $DB->get_record('post', array('id' => $noteid), '*', MUST_EXIST);
+    $return = $DB->delete_records('post', array('id' => $note->id, 'module' => 'notes'));
 
-    return $DB->delete_records('post', array('id'=>$noteid, 'module'=>'notes'));
+    // Trigger event.
+    $event = \core\event\note_deleted::create(array(
+        'objectid' => $note->id,
+        'courseid' => $note->courseid,
+        'relateduserid' => $note->userid,
+        'userid' => $note->usermodified,
+        'context' => context_course::instance($note->courseid),
+        'other' => array('publishstate' => $note->publishstate)
+    ));
+    $event->add_record_snapshot('post', $note);
+    $event->trigger();
+
+    return $return;
 }
 
 /**
@@ -128,7 +189,7 @@ function note_delete($noteid) {
  * @return string corespondent state name
  */
 function note_get_state_name($state) {
-    // cache state names
+    // Cache state names.
     static $states;
     if (empty($states)) {
         $states = note_get_state_names();
@@ -162,11 +223,11 @@ function note_get_state_names() {
 function note_print($note, $detail = NOTES_SHOW_FULL) {
     global $CFG, $USER, $DB, $OUTPUT;
 
-    if (!$user = $DB->get_record('user', array('id'=>$note->userid))) {
+    if (!$user = $DB->get_record('user', array('id' => $note->userid))) {
         debugging("User $note->userid not found");
         return;
     }
-    if (!$author = $DB->get_record('user', array('id'=>$note->usermodified))) {
+    if (!$author = $DB->get_record('user', array('id' => $note->usermodified))) {
         debugging("User $note->usermodified not found");
         return;
     }
@@ -174,18 +235,19 @@ function note_print($note, $detail = NOTES_SHOW_FULL) {
     $systemcontext = context_system::instance();
 
     $authoring = new stdClass();
-    $authoring->name = '<a href="'.$CFG->wwwroot.'/user/view.php?id='.$author->id.'&amp;course='.$note->courseid.'">'.fullname($author).'</a>';
+    $authoring->name = '<a href="' . $CFG->wwwroot . '/user/view.php?id=' . $author->id .
+        '&amp;course='.$note->courseid . '">' . fullname($author) . '</a>';
     $authoring->date = userdate($note->lastmodified);
 
     echo '<div class="notepost '. $note->publishstate . 'notepost' .
         ($note->usermodified == $USER->id ? ' ownnotepost' : '')  .
-        '" id="note-'. $note->id .'">';
+        '" id="note-' . $note->id . '">';
 
-    // print note head (e.g. author, user refering to, etc)
+    // Print note head (e.g. author, user refering to, etc).
     if ($detail & NOTES_SHOW_HEAD) {
         echo '<div class="header">';
         echo '<div class="user">';
-        echo $OUTPUT->user_picture($user, array('courseid'=>$note->courseid));
+        echo $OUTPUT->user_picture($user, array('courseid' => $note->courseid));
         echo fullname($user) . '</div>';
         echo '<div class="info">' .
             get_string('bynameondate', 'notes', $authoring) .
@@ -193,20 +255,21 @@ function note_print($note, $detail = NOTES_SHOW_FULL) {
         echo '</div>';
     }
 
-    // print note content
+    // Print note content.
     if ($detail & NOTES_SHOW_BODY) {
         echo '<div class="content">';
-        echo format_text($note->content, $note->format, array('overflowdiv'=>true));
+        echo format_text($note->content, $note->format, array('overflowdiv' => true));
         echo '</div>';
     }
 
-    // print note options (e.g. delete, edit)
+    // Print note options (e.g. delete, edit).
     if ($detail & NOTES_SHOW_FOOT) {
         if (has_capability('moodle/notes:manage', $systemcontext) && $note->publishstate == NOTES_STATE_SITE ||
-            has_capability('moodle/notes:manage', $context) && ($note->publishstate == NOTES_STATE_PUBLIC || $note->usermodified == $USER->id)) {
+            has_capability('moodle/notes:manage', $context) &&
+            ($note->publishstate == NOTES_STATE_PUBLIC || $note->usermodified == $USER->id)) {
             echo '<div class="footer"><p>';
-            echo '<a href="'.$CFG->wwwroot.'/notes/edit.php?id='.$note->id. '">'. get_string('edit') .'</a> | ';
-            echo '<a href="'.$CFG->wwwroot.'/notes/delete.php?id='.$note->id. '">'. get_string('delete') .'</a>';
+            echo '<a href="' . $CFG->wwwroot . '/notes/edit.php?id=' . $note->id. '">' . get_string('edit') . '</a> | ';
+            echo '<a href="' . $CFG->wwwroot . '/notes/delete.php?id=' . $note->id. '">' . get_string('delete') . '</a>';
             echo '</p></div>';
         }
     }
@@ -221,7 +284,6 @@ function note_print($note, $detail = NOTES_SHOW_FULL) {
  */
 function note_print_list($notes, $detail = NOTES_SHOW_FULL) {
 
-    /// Start printing of the note
     echo '<div class="notelist">';
     foreach ($notes as $note) {
         note_print($note, $detail);
@@ -249,9 +311,11 @@ function note_print_notes($header, $addcourseid = 0, $viewnotes = true, $coursei
     }
     if ($addcourseid) {
         if ($userid) {
-           echo '<p><a href="'. $CFG->wwwroot .'/notes/edit.php?courseid=' . $addcourseid . '&amp;userid=' . $userid . '&amp;publishstate=' . $state . '">' . get_string('addnewnote', 'notes') . '</a></p>';
+            echo '<p><a href="' . $CFG->wwwroot . '/notes/edit.php?courseid=' . $addcourseid . '&amp;userid=' . $userid .
+                '&amp;publishstate=' . $state . '">' . get_string('addnewnote', 'notes') . '</a></p>';
         } else {
-           echo '<p><a href="'. $CFG->wwwroot .'/user/index.php?id=' . $addcourseid. '">' . get_string('addnewnoteselect', 'notes') . '</a></p>';
+            echo '<p><a href="' . $CFG->wwwroot . '/user/index.php?id=' . $addcourseid. '">' .
+                get_string('addnewnoteselect', 'notes') . '</a></p>';
         }
     }
     if ($viewnotes) {
@@ -263,7 +327,7 @@ function note_print_notes($header, $addcourseid = 0, $viewnotes = true, $coursei
         echo '<p>' . get_string('notesnotvisible', 'notes') . '</p>';
     }
     if ($header) {
-        echo '</div>';  // notesgroup
+        echo '</div>';  // The notesgroup div.
     }
 }
 
@@ -275,7 +339,7 @@ function note_print_notes($header, $addcourseid = 0, $viewnotes = true, $coursei
 function note_delete_all($courseid) {
     global $DB;
 
-    return $DB->delete_records('post', array('module'=>'notes', 'courseid'=>$courseid));
+    return $DB->delete_records('post', array('module' => 'notes', 'courseid' => $courseid));
 }
 
 /**
@@ -285,5 +349,63 @@ function note_delete_all($courseid) {
  * @param stdClass $currentcontext Current context of block
  */
 function note_page_type_list($pagetype, $parentcontext, $currentcontext) {
-    return array('notes-*'=>get_string('page-notes-x', 'notes'));
+    return array('notes-*' => get_string('page-notes-x', 'notes'));
+}
+
+/**
+ * Trigger notes viewed event
+ *
+ * @param  stdClass $context context object
+ * @param  int $userid  user id (the user we are viewing the notes)
+ * @since Moodle 2.9
+ */
+function note_view($context, $userid) {
+
+    $event = \core\event\notes_viewed::create(array(
+        'relateduserid' => $userid,
+        'context' => $context
+    ));
+    $event->trigger();
+}
+
+/**
+ * Add nodes to myprofile page.
+ *
+ * @param \core_user\output\myprofile\tree $tree Tree object
+ * @param stdClass $user user object
+ * @param bool $iscurrentuser
+ * @param stdClass $course Course object
+ *
+ * @return bool
+ */
+function core_notes_myprofile_navigation(core_user\output\myprofile\tree $tree, $user, $iscurrentuser, $course) {
+    global $CFG;
+
+    if (empty($CFG->enablenotes)) {
+        // Notes are disabled, nothing to do.
+        return false;
+    }
+
+    if (isguestuser($user)) {
+        // No notes for guest users.
+        return false;
+    }
+
+    $url = new moodle_url("/notes/index.php", array('user' => $user->id));
+    $title = get_string('notes', 'core_notes');
+    if (empty($course)) {
+        // Site level profile.
+        if (!has_capability('moodle/notes:view', context_system::instance())) {
+            // No cap, nothing to do.
+            return false;
+        }
+    } else {
+        if (!has_capability('moodle/notes:view', context_course::instance($course->id))) {
+            // No cap, nothing to do.
+            return false;
+        }
+        $url->param('course', $course->id);
+    }
+    $notesnode = new core_user\output\myprofile\node('miscellaneous', 'notes', $title, null, $url);
+    $tree->add_node($notesnode);
 }

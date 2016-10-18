@@ -22,7 +22,7 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once(dirname(__FILE__) . '/../../../config.php');
+require_once(__DIR__ . '/../../../config.php');
 require_once($CFG->libdir . '/adminlib.php');
 require_once($CFG->dirroot . '/'.$CFG->admin.'/tool/assignmentupgrade/locallib.php');
 
@@ -30,8 +30,11 @@ require_sesskey();
 
 $assignmentid = required_param('id', PARAM_INT);
 
-// admin_externalpage_setup calls require_login and checks moodle/site:config
-admin_externalpage_setup('assignmentupgrade', '', array(), tool_assignmentupgrade_url('upgradesingle', array('id' => $assignmentid)));
+// This calls require_login and checks moodle/site:config.
+admin_externalpage_setup('assignmentupgrade',
+                         '',
+                         array(),
+                         tool_assignmentupgrade_url('upgradesingle', array('id' => $assignmentid)));
 
 $PAGE->navbar->add(get_string('upgradesingle', 'tool_assignmentupgrade'));
 $renderer = $PAGE->get_renderer('tool_assignmentupgrade');

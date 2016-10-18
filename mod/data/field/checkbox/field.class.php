@@ -25,21 +25,39 @@
 class data_field_checkbox extends data_field_base {
 
     var $type = 'checkbox';
+    /**
+     * priority for globalsearch indexing
+     *
+     * @var int
+     */
+    protected static $priority = self::LOW_PRIORITY;
 
-    function display_add_field($recordid=0) {
-        global $CFG, $DB;
+    function display_add_field($recordid = 0, $formdata = null) {
+        global $CFG, $DB, $OUTPUT;
 
         $content = array();
 
-        if ($recordid) {
+        if ($formdata) {
+            $fieldname = 'field_' . $this->field->id;
+            $content = $formdata->$fieldname;
+        } else if ($recordid) {
             $content = $DB->get_field('data_content', 'content', array('fieldid'=>$this->field->id, 'recordid'=>$recordid));
             $content = explode('##', $content);
         } else {
             $content = array();
         }
 
-        $str = '<div title="'.s($this->field->description).'">';
-        $str .= '<fieldset><legend><span class="accesshide">'.$this->field->name.'</span></legend>';
+        $str = '<div title="' . s($this->field->description) . '">';
+        $str .= '<fieldset><legend><span class="accesshide">'.$this->field->name;
+        if ($this->field->required) {
+            $str .= '$nbsp;' . get_string('requiredelement', 'form');
+            $str .= '</span></legend>';
+            $image = html_writer::img($OUTPUT->pix_url('req'), get_string('requiredelement', 'form'),
+                                     array('class' => 'req', 'title' => get_string('requiredelement', 'form')));
+            $str .= html_writer::div($image, 'inline-req');
+        } else {
+            $str .= '</span></legend>';
+        }
 
         $i = 0;
         foreach (explode("\n", $this->field->param1) as $checkbox) {
@@ -49,7 +67,7 @@ class data_field_checkbox extends data_field_base {
             }
             $str .= '<input type="hidden" name="field_' . $this->field->id . '[]" value="" />';
             $str .= '<input type="checkbox" id="field_'.$this->field->id.'_'.$i.'" name="field_' . $this->field->id . '[]" ';
-            $str .= 'value="' . s($checkbox) . '" ';
+            $str .= 'value="' . s($checkbox) . '" class="mod-data-input" ';
 
             if (array_search($checkbox, $content) !== false) {
                 $str .= 'checked />';
@@ -85,6 +103,7 @@ class data_field_checkbox extends data_field_base {
             } else {
                 $str .= html_writer::checkbox('f_'.$this->field->id.'[]', s($checkbox), false, $checkbox);
             }
+            $str .= html_writer::empty_tag('br');
             $found = true;
         }
         if (!$found) {
@@ -164,7 +183,7 @@ class data_field_checkbox extends data_field_base {
         global $DB;
 
         if ($content = $DB->get_record('data_content', array('fieldid'=>$this->field->id, 'recordid'=>$recordid))) {
-            if (empty($content->content)) {
+            if (strval($content->content) === '') {
                 return false;
             }
 
@@ -211,5 +230,40 @@ class data_field_checkbox extends data_field_base {
         return implode('##', $vals);
     }
 
-}
+    /**
+     * Check whether any boxes in the checkbox where checked.
+     *
+     * @param mixed $value The submitted values
+     * @param mixed $name
+     * @return bool
+     */
+    function notemptyfield($value, $name) {
+        $found = false;
+        foreach ($value as $checkboxitem) {
+            if (strval($checkboxitem) !== '') {
+                $found = true;
+                break;
+            }
+        }
+        return $found;
+    }
 
+    /**
+     * Returns the presentable string value for a field content.
+     *
+     * The returned string should be plain text.
+     *
+     * @param stdClass $content
+     * @return string
+     */
+    public static function get_content_value($content) {
+        $arr = explode('##', $content->content);
+
+        $strvalue = '';
+        foreach ($arr as $a) {
+            $strvalue .= $a . ' ';
+        }
+
+        return trim($strvalue, "\r\n ");
+    }
+}

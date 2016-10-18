@@ -21,15 +21,14 @@
  * The allocation logic itself is delegated to allocators - subplugins in ./allocation
  * folder.
  *
- * @package    mod
- * @subpackage workshop
+ * @package    mod_workshop
  * @copyright  2009 David Mudrak <david.mudrak@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once(dirname(dirname(dirname(__FILE__))).'/config.php');
-require_once(dirname(__FILE__).'/locallib.php');
-require_once(dirname(__FILE__).'/allocation/lib.php');
+require(__DIR__.'/../../config.php');
+require_once(__DIR__.'/locallib.php');
+require_once(__DIR__.'/allocation/lib.php');
 
 $cmid       = required_param('cmid', PARAM_INT);                    // course module
 $method     = optional_param('method', 'manual', PARAM_ALPHA);      // method to use
@@ -57,6 +56,7 @@ $initresult = $allocator->init();
 //
 $output = $PAGE->get_renderer('mod_workshop');
 echo $output->header();
+echo $OUTPUT->heading(format_string($workshop->name));
 
 $allocators = workshop::installed_allocators();
 if (!empty($allocators)) {

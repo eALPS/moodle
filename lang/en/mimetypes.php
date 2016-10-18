@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -31,11 +30,12 @@
  *
  * @see       get_mimetypes_array()
  * @see       get_mimetype_description()
- * @package   mimetypes
+ * @package   core
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+$string['application/epub_zip'] = 'EPUB ebook';
 $string['application/msword'] = 'Word document';
 $string['application/pdf'] = 'PDF document';
 $string['application/vnd.moodle.backup'] = 'Moodle backup';
@@ -46,7 +46,6 @@ $string['application/vnd.openxmlformats-officedocument.presentationml.slideshow'
 $string['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'] = 'Excel spreadsheet';
 $string['application/vnd.openxmlformats-officedocument.spreadsheetml.template'] = 'Excel template';
 $string['application/vnd.openxmlformats-officedocument.wordprocessingml.document'] = 'Word document';
-$string['application/epub_zip'] = 'EPUB ebook';
 $string['archive'] = 'Archive ({$a->EXT})';
 $string['audio'] = 'Audio file ({$a->EXT})';
 $string['default'] = '{$a->mimetype}';
@@ -55,3 +54,5 @@ $string['image'] = 'Image ({$a->MIMETYPE2})';
 $string['text/html'] = 'HTML document';
 $string['text/plain'] = 'Text file';
 $string['text/rtf'] = 'RTF document';
+$string['text/vtt'] = 'Web Video Text Track';
+$string['video'] = 'Video file ({$a->EXT})';

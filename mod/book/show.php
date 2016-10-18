@@ -22,8 +22,8 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require(dirname(__FILE__).'/../../config.php');
-require_once(dirname(__FILE__).'/locallib.php');
+require(__DIR__.'/../../config.php');
+require_once(__DIR__.'/locallib.php');
 
 $id        = required_param('id', PARAM_INT);        // Course Module ID
 $chapterid = required_param('chapterid', PARAM_INT); // Chapter ID
@@ -47,25 +47,27 @@ $chapter->hidden = $chapter->hidden ? 0 : 1;
 
 // Update record.
 $DB->update_record('book_chapters', $chapter);
+\mod_book\event\chapter_updated::create_from_chapter($book, $context, $chapter)->trigger();
 
 // Change visibility of subchapters too.
 if (!$chapter->subchapter) {
-    $chapters = $DB->get_records('book_chapters', array('bookid'=>$book->id), 'pagenum', 'id, subchapter, hidden');
+    $chapters = $DB->get_recordset('book_chapters', array('bookid'=>$book->id), 'pagenum ASC');
     $found = 0;
     foreach ($chapters as $ch) {
         if ($ch->id == $chapter->id) {
             $found = 1;
+
         } else if ($found and $ch->subchapter) {
             $ch->hidden = $chapter->hidden;
             $DB->update_record('book_chapters', $ch);
+            \mod_book\event\chapter_updated::create_from_chapter($book, $context, $ch)->trigger();
+
         } else if ($found) {
             break;
         }
     }
+    $chapters->close();
 }
-
-add_to_log($course->id, 'course', 'update mod', '../mod/book/view.php?id='.$cm->id, 'book '.$book->id);
-add_to_log($course->id, 'book', 'update', 'view.php?id='.$cm->id, $book->id, $cm->id);
 
 book_preload_chapters($book); // fix structure
 $DB->set_field('book', 'revision', $book->revision+1, array('id'=>$book->id));

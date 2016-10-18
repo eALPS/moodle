@@ -17,8 +17,7 @@
 /**
  * List and modify users that are not enrolled but still have a role in course.
  *
- * @package    core
- * @subpackage enrol
+ * @package    core_enrol
  * @copyright  2010 Petr Skoda {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -36,7 +35,7 @@ $course = $DB->get_record('course', array('id'=>$id), '*', MUST_EXIST);
 $context = context_course::instance($course->id, MUST_EXIST);
 
 require_login($course);
-require_capability('moodle/role:assign', $context);
+require_capability('moodle/course:reviewotherusers', $context);
 
 if ($course->id == SITEID) {
     redirect("$CFG->wwwroot/");
@@ -47,9 +46,11 @@ $PAGE->set_pagelayout('admin');
 $manager = new course_enrolment_manager($PAGE, $course, $filter);
 $table = new course_enrolment_other_users_table($manager, $PAGE);
 $PAGE->set_url('/enrol/otherusers.php', $manager->get_url_params()+$table->get_url_params());
+navigation_node::override_active_url(new moodle_url('/enrol/otherusers.php', array('id' => $id)));
 
 $userdetails = array (
     'picture' => false,
+    'userfullnamedisplay' => false,
     'firstname' => get_string('firstname'),
     'lastname' => get_string('lastname'),
 );
@@ -60,7 +61,7 @@ foreach ($extrafields as $field) {
 
 $fields = array(
     'userdetails' => $userdetails,
-    'lastseen' => get_string('lastaccess'),
+    'lastaccess' => get_string('lastaccess'),
     'role' => get_string('roles', 'role')
 );
 
@@ -68,7 +69,7 @@ $fields = array(
 if (!has_capability('moodle/course:viewhiddenuserfields', $context)) {
     $hiddenfields = array_flip(explode(',', $CFG->hiddenuserfields));
     if (isset($hiddenfields['lastaccess'])) {
-        unset($fields['lastseen']);
+        unset($fields['lastaccess']);
     }
 }
 

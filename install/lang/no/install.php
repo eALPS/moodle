@@ -34,12 +34,14 @@ $string['admindirname'] = 'Adminmappe';
 $string['availablelangs'] = 'Tilgjengelige språkpakker';
 $string['chooselanguagehead'] = 'Velg et språk';
 $string['chooselanguagesub'] = 'Velg språk (bare for INSTALLASJONEN). Du vil kunne velge språk for nettsted og bruker på et skjermbilde senere.';
-$string['clialreadyinstalled'] = 'Filen config.php eksisterer allerede, vær vennlig å bruk admin/cli/upgrade.php hvis du vil oppgradere nettstedet ditt.';
+$string['clialreadyconfigured'] = 'Filen config.php finnes allerede. Vennligst bruk admin/cli/install_database.php hvis du vil installere denne portalen.';
+$string['clialreadyinstalled'] = 'Filen config.php eksisterer allerede. Vennligst bruk admin/cli/install_database.php hvis du vil oppgradere Moodle på denne portalen.';
 $string['cliinstallheader'] = 'Moodle {$a} kommandolinje installasjonsprogram';
 $string['databasehost'] = 'Databasevert';
 $string['databasename'] = 'Databasenavn';
 $string['databasetypehead'] = 'Velg databasedriver';
 $string['dataroot'] = 'Dataområde';
+$string['datarootpermission'] = 'Tillatelse for datakatalog';
 $string['dbprefix'] = 'Tabellprefix';
 $string['dirroot'] = 'Moodles filområde';
 $string['environmenthead'] = 'Sjekker "omgivelsene" dine...';
@@ -65,9 +67,11 @@ $string['pathsrodataroot'] = 'Dataroot katalog er ikke skrivbar.';
 $string['pathsroparentdataroot'] = 'Overordnet katalog ({$a->parent}) er ikke skrivbar. Datakatalogen ({$a->dataroot}) kan ikke opprettes av installasjonsprogrammet.';
 $string['pathssubadmindir'] = 'Noen ganske få webhoteller bruker  /admin som en egen url for å få tilgang til et kontrollpanel. Dessverre kommer det i konflikt med standard lokalisering av Moodle sine admin-sider. Du kan fikse dette ved å endre navn på admin-mappen og deretter oppgi dette navnet her. F.eks. <em>moodleadmin</em>.  Dette vil fikse adminlenkene i Moodle.';
 $string['pathssubdataroot'] = 'Du trenger et sted hvor Moodle kan lagre opplastede filer. Denne mappen må være med lese og skriverettigheter for webserver-brukeren (veldig ofte \'nobody\' eller \'apache\'), men denne mappen må IKKE være direkte tilgjengelig via web. Installasjonsprogrammet vil forsøke å opprette den om den ikke finnes fra før.';
-$string['pathssubdirroot'] = 'Full mappesti til moodleinstallasjonen.';
-$string['pathssubwwwroot'] = 'Full webadresse til der hvor Moodle skal vises. Det er ikke mulig å bruke Moodle med mer enn en adresse. Dersom portalen din har flere webadresser må du bruke videresending for til den webadressen du oppgir her. Dersom portalen din er tilgjengelig både fra intranett og internett, skal du oppgi den offentlige internettadressen her og sette opp DNS slik at intranettbrukerne også benytter denne offisielle adressen.
-Dersom adressen ikke er korrekt, vennligst endre URL i nettleseren slik at at installasjonen restartes med andre verdier.';
+$string['pathssubdirroot'] = '<p>Full mappesti til moodleinstallasjonen.</p>';
+$string['pathssubwwwroot'] = '<p>Full webadresse til der hvor Moodle skal vises, altså den addressen som brukere skriver inn i adresselinjen i nettlseren sin.</p>
+<p>Det er ikke mulig å bruke Moodle med mer enn en adresse. Dersom portalen din har flere webadresser bør du oppgi den enkleste av de her, og bruke videresending for  hver av de andre adressene.</p>
+<p>Dersom portalen din er tilgjengelig både fra intranett og internett, skal du oppgi den offentlige internettadressen her og sette opp DNS slik at intranettbrukerne også benytter denne offisielle adressen.</p>
+<p>Dersom adressen ikke er korrekt, vennligst endre URL i nettleseren slik at at installasjonen restartes med andre verdier.</p>';
 $string['pathsunsecuredataroot'] = 'Dataroot plassering er ikke sikker';
 $string['pathswrongadmindir'] = 'Adminkatalog finnes ikke';
 $string['phpextension'] = '{$a} PHP etternavn';
@@ -76,11 +80,11 @@ $string['phpversionhelp'] = '<p>Moodle trenger en PHP versjon minst 4.3.0 eller 
 <Du kjører nå versjon {$a}</p>
 <p>Du må oppgradere PHP eller flytte til en server med en nyere versjon av PHP!<br /> (I forhold til 5.0.x kan du også nedgradere til versjon 4.4.x)</p>';
 $string['welcomep10'] = '{$a->installername} ({$a->installerversion})';
-$string['welcomep20'] = 'Du ser denne siden fordi du nå med hell har installert og kjørt <strong>{$a->packname} {$a->packversion}</strong>pakke på datamaskinen din. Gratulerer!';
-$string['welcomep30'] = 'Denne versjonen av <strong>{$a->installername}</strong> inkluderer programmer for å lage et miljø som <strong>Moodle</strong> jobber i, nemlig:';
+$string['welcomep20'] = 'Du ser denne siden fordi du nå har fullført installeringen og kjøringen av pakken <strong>{$a->packname} {$a->packversion}</strong> på datamaskinen din. Gratulerer!';
+$string['welcomep30'] = 'Denne versjonen av <strong>{$a->installername}</strong> inneholder programmer for å lage et miljø som <strong>Moodle</strong> jobber i, nemlig:';
 $string['welcomep40'] = 'Denne pakken inkluderer også  <strong>Moodle {$a->moodlerelease} ({$a->moodleversion})</strong>.';
-$string['welcomep50'] = 'Bruken av alle applikasjoner i denne pakken er administrert av egne lisenser. Hele <strong>{$a->installername}</strong> pakken er <a href="http://www.opensource.org/docs/definition_plain.html">
-åpen kildekode</a> og er distribuert under  <a href="http://www.gnu.org/copyleft/gpl.html">GPL</a> lisensen.';
-$string['welcomep60'] = 'De følgende sidene vil vise deg gjennom noen enkle steg for å konfigurere og sette opp <strong>Moodle</strong> på datamaskinen din. Du kan akseptere standard innstillinger, eller, hvis du vil, justere dem etter egne behov.';
+$string['welcomep50'] = 'Bruken av alle applikasjoner i denne pakken er administrert av egne lisenser. Hele <strong>{$a->installername}</strong>-pakken er <a href="http://www.opensource.org/docs/definition_plain.html">
+åpen kildekode</a> og er distribuert under  <a href="http://www.gnu.org/copyleft/gpl.html">GPL</a>-lisensen.';
+$string['welcomep60'] = 'De følgende sidene vil vise deg gjennom noen enkle steg for å konfigurere og sette opp <strong>Moodle</strong> på datamaskinen din. Du kan godta standardinnstillingene, eller justere dem etter egne behov hvis du vil.';
 $string['welcomep70'] = 'Klikk på "Neste" knappen under for å fortsette med <strong>Moodle</strong>-installasjonen';
 $string['wwwroot'] = 'Web addresse';

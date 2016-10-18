@@ -24,7 +24,7 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require(dirname(dirname(dirname(dirname(__FILE__)))).'/config.php');
+require(__DIR__.'/../../../config.php');
 require_once($CFG->libdir.'/adminlib.php');
 require_once($CFG->dirroot.'/mnet/service/enrol/locallib.php');
 
@@ -40,7 +40,7 @@ if (!$service->is_available()) {
     die();
 }
 
-$roamingusers = get_users_by_capability(get_system_context(), 'moodle/site:mnetlogintoremote', 'u.id');
+$roamingusers = get_users_by_capability(context_system::instance(), 'moodle/site:mnetlogintoremote', 'u.id');
 if (empty($roamingusers)) {
     $capname = get_string('site:mnetlogintoremote', 'role');
     $url = new moodle_url('/admin/roles/manage.php');

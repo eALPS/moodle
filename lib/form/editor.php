@@ -30,6 +30,7 @@ global $CFG;
 require_once('HTML/QuickForm/element.php');
 require_once($CFG->dirroot.'/lib/filelib.php');
 require_once($CFG->dirroot.'/repository/lib.php');
+require_once('templatable_form_element.php');
 
 /**
  * Editor element
@@ -43,7 +44,11 @@ require_once($CFG->dirroot.'/repository/lib.php');
  * @todo      MDL-29421 element Freezing
  * @todo      MDL-29426 ajax format conversion
  */
-class MoodleQuickForm_editor extends HTML_QuickForm_element {
+class MoodleQuickForm_editor extends HTML_QuickForm_element implements templatable {
+    use templatable_form_element {
+        export_for_template as export_for_template_base;
+    }
+
     /** @var string html for help button, if empty then no help will icon will be dispalyed. */
     public $_helpbutton = '';
 
@@ -53,7 +58,7 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element {
     /** @var array options provided to initalize filepicker */
     protected $_options = array('subdirs' => 0, 'maxbytes' => 0, 'maxfiles' => 0, 'changeformat' => 0,
             'areamaxbytes' => FILE_AREA_MAX_BYTES_UNLIMITED, 'context' => null, 'noclean' => 0, 'trusttext' => 0,
-            'return_types' => 7);
+            'return_types' => 7, 'enable_filemanagement' => true);
     // $_options['return_types'] = FILE_INTERNAL | FILE_EXTERNAL | FILE_REFERENCE
 
     /** @var array values for editor */
@@ -68,7 +73,7 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element {
      *              or an associative array
      * @param array $options set of options to initalize filepicker
      */
-    function MoodleQuickForm_editor($elementName=null, $elementLabel=null, $attributes=null, $options=null) {
+    public function __construct($elementName=null, $elementLabel=null, $attributes=null, $options=null) {
         global $CFG, $PAGE;
 
         $options = (array)$options;
@@ -89,9 +94,41 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element {
             }
         }
         $this->_options['trusted'] = trusttext_trusted($this->_options['context']);
-        parent::HTML_QuickForm_element($elementName, $elementLabel, $attributes);
+        parent::__construct($elementName, $elementLabel, $attributes);
+
+        // Note: for some reason the code using this setting does not like bools.
+        $this->_options['subdirs'] = (int)($this->_options['subdirs'] == 1);
 
         editors_head_setup();
+    }
+
+    /**
+     * Old syntax of class constructor. Deprecated in PHP7.
+     *
+     * @deprecated since Moodle 3.1
+     */
+    public function MoodleQuickForm_editor($elementName=null, $elementLabel=null, $attributes=null, $options=null) {
+        debugging('Use of class name as constructor is deprecated', DEBUG_DEVELOPER);
+        self::__construct($elementName, $elementLabel, $attributes, $options);
+    }
+
+    /**
+     * Called by HTML_QuickForm whenever form event is made on this element
+     *
+     * @param string $event Name of event
+     * @param mixed $arg event arguments
+     * @param object $caller calling object
+     * @return bool
+     */
+    function onQuickFormEvent($event, $arg, &$caller)
+    {
+        switch ($event) {
+            case 'createElement':
+                $caller->setType($arg[0] . '[format]', PARAM_ALPHANUM);
+                $caller->setType($arg[0] . '[itemid]', PARAM_INT);
+                break;
+        }
+        return parent::onQuickFormEvent($event, $arg, $caller);
     }
 
     /**
@@ -205,7 +242,7 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element {
      * @param bool $allow true if sub directory can be created.
      */
     function setSubdirs($allow) {
-        $this->_options['subdirs'] = $allow;
+        $this->_options['subdirs'] = (int)($allow == 1);
     }
 
     /**
@@ -227,28 +264,10 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element {
     }
 
     /**
-     * Sets help button for editor
-     *
-     * @param mixed $_helpbuttonargs arguments to create help button
-     * @param string $function name of the callback function
-     * @deprecated since Moodle 2.0. Please do not call this function any more.
-     * @todo MDL-34508 this api will be removed.
-     * @see MoodleQuickForm::addHelpButton()
+     * @deprecated since Moodle 2.0
      */
     function setHelpButton($_helpbuttonargs, $function='_helpbutton') {
-        debugging('setHelpButton() is deprecated, please use $mform->addHelpButton() instead');
-        if (!is_array($_helpbuttonargs)) {
-            $_helpbuttonargs = array($_helpbuttonargs);
-        } else {
-            $_helpbuttonargs = $_helpbuttonargs;
-        }
-        //we do this to to return html instead of printing it
-        //without having to specify it in every call to make a button.
-        if ('_helpbutton' == $function){
-            $defaultargs = array('', '', 'moodle', true, false, '', true);
-            $_helpbuttonargs = $_helpbuttonargs + $defaultargs ;
-        }
-        $this->_helpbutton=call_user_func_array($function, $_helpbuttonargs);
+        throw new coding_exception('setHelpButton() can not be used any more, please see MoodleQuickForm::addHelpButton().');
     }
 
     /**
@@ -279,7 +298,7 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element {
      * @return string
      */
     function toHtml() {
-        global $CFG, $PAGE;
+        global $CFG, $PAGE, $OUTPUT;
         require_once($CFG->dirroot.'/repository/lib.php');
 
         if ($this->_flagFrozen) {
@@ -373,37 +392,42 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element {
         }
 
         // print text area - TODO: add on-the-fly switching, size configuration, etc.
+        $editor->set_text($text);
         $editor->use_editor($id, $this->_options, $fpoptions);
 
         $rows = empty($this->_attributes['rows']) ? 15 : $this->_attributes['rows'];
         $cols = empty($this->_attributes['cols']) ? 80 : $this->_attributes['cols'];
 
         //Apply editor validation if required field
-        $editorrules = '';
-        if (!is_null($this->getAttribute('onblur')) && !is_null($this->getAttribute('onchange'))) {
-            $editorrules = ' onblur="'.htmlspecialchars($this->getAttribute('onblur')).'" onchange="'.htmlspecialchars($this->getAttribute('onchange')).'"';
+        $context = [];
+        $context['rows'] = $rows;
+        $context['cols'] = $cols;
+        $context['frozen'] = $this->_flagFrozen;
+        foreach ($this->getAttributes() as $name => $value) {
+            $context[$name] = $value;
         }
-        $str .= '<div><textarea id="'.$id.'" name="'.$elname.'[text]" rows="'.$rows.'" cols="'.$cols.'"'.$editorrules.'>';
-        $str .= s($text);
-        $str .= '</textarea></div>';
+        $context['hasformats'] = count($formats) > 1;
+        $context['formats'] = [];
+        foreach ($formats as $formatvalue => $formattext) {
+            $context['formats'][] = ['value' => $formatvalue, 'text' => $formattext, 'selected' => ($formatvalue == $format)];
+        }
+        $context['id'] = $id;
+        $context['value'] = $text;
+        $context['format'] = $format;
 
-        $str .= '<div>';
-        if (count($formats)>1) {
-            $str .= html_writer::label(get_string('format'), 'menu'. $elname. 'format', false, array('class' => 'accesshide'));
-            $str .= html_writer::select($formats, $elname.'[format]', $format, false, array('id' => 'menu'. $elname. 'format'));
-        } else {
-            $keys = array_keys($formats);
-            $str .= html_writer::empty_tag('input',
-                    array('name'=>$elname.'[format]', 'type'=> 'hidden', 'value' => array_pop($keys)));
+        if (!is_null($this->getAttribute('onblur')) && !is_null($this->getAttribute('onchange'))) {
+            $context['changelistener'] = true;
         }
-        $str .= '</div>';
+
+        $str .= $OUTPUT->render_from_template('core_form/editor_textarea', $context);
 
         // during moodle installation, user area doesn't exist
         // so we need to disable filepicker here.
         if (!during_initial_install() && empty($CFG->adminsetuppending)) {
             // 0 means no files, -1 unlimited
             if ($maxfiles != 0 ) {
-                $str .= '<input type="hidden" name="'.$elname.'[itemid]" value="'.$draftitemid.'" />';
+                $str .= html_writer::empty_tag('input', array('type' => 'hidden', 'name' => $elname.'[itemid]',
+                        'value' => $draftitemid));
 
                 // used by non js editor only
                 $editorurl = new moodle_url("$CFG->wwwroot/repository/draftfiles_manager.php", array(
@@ -428,6 +452,12 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element {
         $str .= '</div>';
 
         return $str;
+    }
+
+    public function export_for_template(renderer_base $output) {
+        $context = $this->export_for_template_base($output);
+        $context['html'] = $this->toHtml();
+        return $context;
     }
 
     /**

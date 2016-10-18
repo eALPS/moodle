@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,8 +17,7 @@
 /**
  * Keeps track of upgrades to the enrol_mnet plugin
  *
- * @package    enrol
- * @subpackage mnet
+ * @package    enrol_mnet
  * @copyright  2010 David Mudrak <david@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -27,14 +25,19 @@
 defined('MOODLE_INTERNAL') || die();
 
 function xmldb_enrol_mnet_upgrade($oldversion) {
-    global $CFG, $DB;
+    global $CFG;
 
-    $dbman = $DB->get_manager();
+    // Moodle v2.8.0 release upgrade line.
+    // Put any upgrade step following this.
 
+    // Moodle v2.9.0 release upgrade line.
+    // Put any upgrade step following this.
 
-    // Moodle v2.3.0 release upgrade line
-    // Put any upgrade step following this
+    // Moodle v3.0.0 release upgrade line.
+    // Put any upgrade step following this.
 
+    // Moodle v3.1.0 release upgrade line.
+    // Put any upgrade step following this.
 
     return true;
 }

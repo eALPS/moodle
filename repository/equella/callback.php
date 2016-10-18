@@ -17,12 +17,12 @@
 /**
  * Callback for equella repository.
  *
- * @since 2.3
+ * @since Moodle 2.3
  * @package   repository_equella
  * @copyright 2012 Dongsheng Cai {@link http://dongsheng.org}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-require_once(dirname(dirname(dirname(__FILE__))).'/config.php');
+require(__DIR__.'/../../config.php');
 $json = required_param('tlelinks', PARAM_RAW);
 
 require_login();
@@ -36,7 +36,11 @@ if (isset($info->url)) {
 }
 
 $filename = '';
-if (isset($info->name)) {
+// Use $info->filename if exists, $info->name is a display name,
+// it may not have extension
+if (isset($info->filename)) {
+    $filename  = s(clean_param($info->filename, PARAM_FILE));
+} else if (isset($info->name)) {
     $filename  = s(clean_param($info->name, PARAM_FILE));
 }
 
@@ -55,7 +59,7 @@ if (isset($info->license)) {
     $license = s(clean_param($info->license, PARAM_ALPHAEXT));
 }
 
-$source = base64_encode(serialize((object)array('url'=>$url,'filename'=>$filename)));
+$source = base64_encode(json_encode(array('url'=>$url,'filename'=>$filename)));
 
 $js =<<<EOD
 <html>

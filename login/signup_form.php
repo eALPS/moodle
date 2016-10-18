@@ -28,6 +28,7 @@ defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->libdir.'/formslib.php');
 require_once($CFG->dirroot.'/user/profile/lib.php');
+require_once($CFG->dirroot . '/user/editlib.php');
 
 class login_signup_form extends moodleform {
     function definition() {
@@ -35,50 +36,45 @@ class login_signup_form extends moodleform {
 
         $mform = $this->_form;
 
-        $mform->addElement('header', '', get_string('createuserandpass'), '');
+        $mform->addElement('header', 'createuserandpass', get_string('createuserandpass'), '');
 
 
         $mform->addElement('text', 'username', get_string('username'), 'maxlength="100" size="12"');
-        $mform->setType('username', PARAM_NOTAGS);
-        $mform->addRule('username', get_string('missingusername'), 'required', null, 'server');
+        $mform->setType('username', PARAM_RAW);
+        $mform->addRule('username', get_string('missingusername'), 'required', null, 'client');
 
         if (!empty($CFG->passwordpolicy)){
             $mform->addElement('static', 'passwordpolicyinfo', '', print_password_policy());
         }
         $mform->addElement('passwordunmask', 'password', get_string('password'), 'maxlength="32" size="12"');
-        $mform->setType('password', PARAM_RAW);
-        $mform->addRule('password', get_string('missingpassword'), 'required', null, 'server');
+        $mform->setType('password', core_user::get_property_type('password'));
+        $mform->addRule('password', get_string('missingpassword'), 'required', null, 'client');
 
-        $mform->addElement('header', '', get_string('supplyinfo'),'');
+        $mform->addElement('header', 'supplyinfo', get_string('supplyinfo'),'');
 
         $mform->addElement('text', 'email', get_string('email'), 'maxlength="100" size="25"');
-        $mform->setType('email', PARAM_NOTAGS);
-        $mform->addRule('email', get_string('missingemail'), 'required', null, 'server');
+        $mform->setType('email', core_user::get_property_type('email'));
+        $mform->addRule('email', get_string('missingemail'), 'required', null, 'client');
+        $mform->setForceLtr('email');
 
         $mform->addElement('text', 'email2', get_string('emailagain'), 'maxlength="100" size="25"');
-        $mform->setType('email2', PARAM_NOTAGS);
-        $mform->addRule('email2', get_string('missingemail'), 'required', null, 'server');
+        $mform->setType('email2', core_user::get_property_type('email'));
+        $mform->addRule('email2', get_string('missingemail'), 'required', null, 'client');
+        $mform->setForceLtr('email2');
 
-        $nameordercheck = new stdClass();
-        $nameordercheck->firstname = 'a';
-        $nameordercheck->lastname  = 'b';
-        if (fullname($nameordercheck) == 'b a' ) {  // See MDL-4325
-            $mform->addElement('text', 'lastname',  get_string('lastname'),  'maxlength="100" size="30"');
-            $mform->addElement('text', 'firstname', get_string('firstname'), 'maxlength="100" size="30"');
-        } else {
-            $mform->addElement('text', 'firstname', get_string('firstname'), 'maxlength="100" size="30"');
-            $mform->addElement('text', 'lastname',  get_string('lastname'),  'maxlength="100" size="30"');
+        $namefields = useredit_get_required_name_fields();
+        foreach ($namefields as $field) {
+            $mform->addElement('text', $field, get_string($field), 'maxlength="100" size="30"');
+            $mform->setType($field, core_user::get_property_type('firstname'));
+            $stringid = 'missing' . $field;
+            if (!get_string_manager()->string_exists($stringid, 'moodle')) {
+                $stringid = 'required';
+            }
+            $mform->addRule($field, get_string($stringid), 'required', null, 'client');
         }
 
-        $mform->setType('firstname', PARAM_TEXT);
-        $mform->addRule('firstname', get_string('missingfirstname'), 'required', null, 'server');
-
-        $mform->setType('lastname', PARAM_TEXT);
-        $mform->addRule('lastname', get_string('missinglastname'), 'required', null, 'server');
-
         $mform->addElement('text', 'city', get_string('city'), 'maxlength="120" size="20"');
-        $mform->setType('city', PARAM_TEXT);
-        $mform->addRule('city', get_string('missingcity'), 'required', null, 'server');
+        $mform->setType('city', core_user::get_property_type('city'));
         if (!empty($CFG->defaultcity)) {
             $mform->setDefault('city', $CFG->defaultcity);
         }
@@ -87,7 +83,6 @@ class login_signup_form extends moodleform {
         $default_country[''] = get_string('selectacountry');
         $country = array_merge($default_country, $country);
         $mform->addElement('select', 'country', get_string('country'), $country);
-        $mform->addRule('country', get_string('missingcountry'), 'required', null, 'server');
 
         if( !empty($CFG->country) ){
             $mform->setDefault('country', $CFG->country);
@@ -95,18 +90,20 @@ class login_signup_form extends moodleform {
             $mform->setDefault('country', '');
         }
 
-        if ($this->signup_captcha_enabled()) {
-            $mform->addElement('recaptcha', 'recaptcha_element', get_string('recaptcha', 'auth'), array('https' => $CFG->loginhttps));
-            $mform->addHelpButton('recaptcha_element', 'recaptcha', 'auth');
-        }
-
         profile_signup_fields($mform);
 
+        if (signup_captcha_enabled()) {
+            $mform->addElement('recaptcha', 'recaptcha_element', get_string('security_question', 'auth'), array('https' => $CFG->loginhttps));
+            $mform->addHelpButton('recaptcha_element', 'recaptcha', 'auth');
+            $mform->closeHeaderBefore('recaptcha_element');
+        }
+
         if (!empty($CFG->sitepolicy)) {
-            $mform->addElement('header', '', get_string('policyagreement'), '');
+            $mform->addElement('header', 'policyagreement', get_string('policyagreement'), '');
+            $mform->setExpanded('policyagreement');
             $mform->addElement('static', 'policylink', '', '<a href="'.$CFG->sitepolicy.'" onclick="this.target=\'_blank\'">'.get_String('policyagreementclick').'</a>');
             $mform->addElement('checkbox', 'policyagreed', get_string('policyaccept'));
-            $mform->addRule('policyagreed', get_string('policyagree'), 'required', null, 'server');
+            $mform->addRule('policyagreed', get_string('policyagree'), 'required', null, 'client');
         }
 
         // buttons
@@ -117,60 +114,17 @@ class login_signup_form extends moodleform {
     function definition_after_data(){
         $mform = $this->_form;
         $mform->applyFilter('username', 'trim');
+
+        // Trim required name fields.
+        foreach (useredit_get_required_name_fields() as $field) {
+            $mform->applyFilter($field, 'trim');
+        }
     }
 
     function validation($data, $files) {
-        global $CFG, $DB;
         $errors = parent::validation($data, $files);
 
-        $authplugin = get_auth_plugin($CFG->registerauth);
-
-        if ($DB->record_exists('user', array('username'=>$data['username'], 'mnethostid'=>$CFG->mnet_localhost_id))) {
-            $errors['username'] = get_string('usernameexists');
-        } else {
-            //check allowed characters
-            if ($data['username'] !== textlib::strtolower($data['username'])) {
-                $errors['username'] = get_string('usernamelowercase');
-            } else {
-                if ($data['username'] !== clean_param($data['username'], PARAM_USERNAME)) {
-                    $errors['username'] = get_string('invalidusername');
-                }
-
-            }
-        }
-
-        //check if user exists in external db
-        //TODO: maybe we should check all enabled plugins instead
-        if ($authplugin->user_exists($data['username'])) {
-            $errors['username'] = get_string('usernameexists');
-        }
-
-
-        if (! validate_email($data['email'])) {
-            $errors['email'] = get_string('invalidemail');
-
-        } else if ($DB->record_exists('user', array('email'=>$data['email']))) {
-            $errors['email'] = get_string('emailexists').' <a href="forgot_password.php">'.get_string('newpassword').'?</a>';
-        }
-        if (empty($data['email2'])) {
-            $errors['email2'] = get_string('missingemail');
-
-        } else if ($data['email2'] != $data['email']) {
-            $errors['email2'] = get_string('invalidemail');
-        }
-        if (!isset($errors['email'])) {
-            if ($err = email_is_not_allowed($data['email'])) {
-                $errors['email'] = $err;
-            }
-
-        }
-
-        $errmsg = '';
-        if (!check_password_policy($data['password'], $errmsg)) {
-            $errors['password'] = $errmsg;
-        }
-
-        if ($this->signup_captcha_enabled()) {
+        if (signup_captcha_enabled()) {
             $recaptcha_element = $this->_form->getElement('recaptcha_element');
             if (!empty($this->_form->_submitValues['recaptcha_challenge_field'])) {
                 $challenge_field = $this->_form->_submitValues['recaptcha_challenge_field'];
@@ -182,22 +136,10 @@ class login_signup_form extends moodleform {
                 $errors['recaptcha'] = get_string('missingrecaptchachallengefield');
             }
         }
-        // Validate customisable profile fields. (profile_validation expects an object as the parameter with userid set)
-        $dataobject = (object)$data;
-        $dataobject->id = 0;
-        $errors += profile_validation($dataobject, $files);
+
+        $errors += signup_validate_data($data, $files);
 
         return $errors;
 
     }
-
-    /**
-     * Returns whether or not the captcha element is enabled, and the admin settings fulfil its requirements.
-     * @return bool
-     */
-    function signup_captcha_enabled() {
-        global $CFG;
-        return !empty($CFG->recaptchapublickey) && !empty($CFG->recaptchaprivatekey) && get_config('auth/email', 'recaptcha');
-    }
-
 }

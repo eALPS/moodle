@@ -16,7 +16,7 @@
 // along with Moodle. If not, see <http://www.gnu.org/licenses/>.
 
 require_once('../../config.php');
-require_once(dirname(__FILE__) . '/create_form.php');
+require_once(__DIR__ . '/create_form.php');
 require_once($CFG->dirroot . '/mod/wiki/lib.php');
 require_once($CFG->dirroot . '/mod/wiki/locallib.php');
 require_once($CFG->dirroot . '/mod/wiki/pagelib.php');
@@ -46,20 +46,20 @@ if (!empty($swid)) {
     $subwiki = wiki_get_subwiki($swid);
 
     if (!$wiki = wiki_get_wiki($subwiki->wikiid)) {
-        print_error('invalidwikiid', 'wiki');
+        print_error('incorrectwikiid', 'wiki');
     }
 
 } else {
     $subwiki = wiki_get_subwiki_by_group($wid, $group, $uid);
 
     if (!$wiki = wiki_get_wiki($wid)) {
-        print_error('invalidwikiid', 'wiki');
+        print_error('incorrectwikiid', 'wiki');
     }
 
 }
 
 if (!$cm = get_coursemodule_from_instance('wiki', $wiki->id)) {
-    print_error('invalidcoursemoduleid', 'wiki');
+    print_error('invalidcoursemodule');
 }
 
 $groups = new stdClass();
@@ -107,18 +107,16 @@ $wikipage->set_action($action);
 switch ($action) {
 case 'create':
     $newpageid = $wikipage->create_page($title);
-    add_to_log($course->id, 'wiki', 'add page', "view.php?pageid=".$newpageid, $newpageid, $cm->id);
     redirect($CFG->wwwroot . '/mod/wiki/edit.php?pageid='.$newpageid);
     break;
 case 'new':
-    if ((int)$wiki->forceformat == 1 && !empty($title)) {
+    // Go straight to editing if we know the page title and we're in force format mode.
+    if ((int)$wiki->forceformat == 1 && $title != get_string('newpage', 'wiki')) {
         $newpageid = $wikipage->create_page($title);
-        add_to_log($course->id, 'wiki', 'add page', "view.php?pageid=".$newpageid, $newpageid, $cm->id);
         redirect($CFG->wwwroot . '/mod/wiki/edit.php?pageid='.$newpageid);
     } else {
-        // create link from moodle navigation block without pagetitle
         $wikipage->print_header();
-        // new page without page title
+        // Create a new page.
         $wikipage->print_content($title);
     }
     $wikipage->print_footer();

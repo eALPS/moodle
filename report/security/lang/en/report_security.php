@@ -31,7 +31,7 @@ Please note that this measure does not improve security of the server significan
 $string['check_configrw_name'] = 'Writable config.php';
 $string['check_configrw_ok'] = 'config.php can not be modified by PHP scripts.';
 $string['check_configrw_warning'] = 'PHP scripts may modify config.php.';
-$string['check_cookiesecure_details'] = '<p>If you enable https communication it is recommended that you also enable secure cookies. You should also add permanent redirection from http to https.</p>';
+$string['check_cookiesecure_details'] = '<p>If you enable https communication it is recommended that you also enable secure cookies. You should also add permanent redirection from http to https. Ideally also serve HSTS headers well.</p>';
 $string['check_cookiesecure_error'] = 'Please enable secure cookies';
 $string['check_cookiesecure_name'] = 'Secure cookies';
 $string['check_cookiesecure_ok'] = 'Secure cookies enabled.';
@@ -61,11 +61,6 @@ $string['check_frontpagerole_error'] = 'Incorrectly defined frontpage role "{$a}
 $string['check_frontpagerole_name'] = 'Frontpage role';
 $string['check_frontpagerole_notset'] = 'Frontpage role is not set.';
 $string['check_frontpagerole_ok'] = 'Frontpage role definition is OK.';
-$string['check_globals_details'] = '<p>Register globals is considered to be a highly insecure PHP setting.</p>
-<p><code>register_globals=off</code> must be set in PHP configuration. This setting is controlled by editing your <code>php.ini</code>, Apache/IIS configuration or <code>.htaccess</code> file.</p>';
-$string['check_globals_error'] = 'Register globals MUST be disabled. Please fix the server PHP settings immediately!';
-$string['check_globals_name'] = 'Register globals';
-$string['check_globals_ok'] = 'Register globals are disabled.';
 $string['check_google_details'] = '<p>The Open to Google setting enables search engines to enter courses with guest access. There is no point in enabling this setting if guest login is not allowed.</p>';
 $string['check_google_error'] = 'Search engine access is allowed but guest access is disabled.';
 $string['check_google_info'] = 'Search engines may enter as guests.';
@@ -85,7 +80,7 @@ $string['check_noauth_details'] = '<p>The <em>No authentication</em> plugin is n
 $string['check_noauth_error'] = 'The No authentication plugin cannot be used on production sites.';
 $string['check_noauth_name'] = 'No authentication';
 $string['check_noauth_ok'] = 'No authentication plugin is disabled.';
-$string['check_openprofiles_details'] = '<p>Open user profiles can be abused by spammers. It is recommended that either <code>Force users to login for profiles</code> or <code>Force users to login</code> are enabled.</p>';
+$string['check_openprofiles_details'] = 'Open user profiles can be abused by spammers. It is recommended that either <code>Force users to log in for profiles</code> or <code>Force users to log in</code> are enabled.';
 $string['check_openprofiles_error'] = 'Anyone can may view user profiles without logging in.';
 $string['check_openprofiles_name'] = 'Open user profiles';
 $string['check_openprofiles_ok'] = 'Login is required before viewing user profiles.';
@@ -94,15 +89,6 @@ Do not make the requirements too strict though, as this can result in users not 
 $string['check_passwordpolicy_error'] = 'Password policy not set.';
 $string['check_passwordpolicy_name'] = 'Password policy';
 $string['check_passwordpolicy_ok'] = 'Password policy enabled.';
-$string['check_passwordsaltmain_details'] = '<p>Setting a password salt greatly reduces the risk of password theft.</p>
-<p>To set a password salt, add the following line to your config.php file:</p>
-<code>$CFG->passwordsaltmain = \'some long random string here with lots of characters\';</code>
-<p>The random string of characters should be a mix of letters, numbers and other characters. A string length of at least 40 characters is recommended.</p>
-<p>Please refer to the <a href="{$a}" target="_blank">password salting documentation</a> if you wish to change the password salt. Once set, do NOT delete your password salt otherwise you will no longer be able to login to your site!</p>';
-$string['check_passwordsaltmain_name'] = 'Password salt';
-$string['check_passwordsaltmain_ok'] = 'Password salt is OK';
-$string['check_passwordsaltmain_warning'] = 'No password salt has been set';
-$string['check_passwordsaltmain_weak'] = 'Password salt is weak';
 $string['check_riskadmin_detailsok'] = '<p>Please verify the following list of system administrators:</p>{$a}';
 $string['check_riskadmin_detailswarning'] = '<p>Please verify the following list of system administrators:</p>{$a->admins}
 <p>It is recommended to assign administrator role in the system context only. The following users have (unsupported) admin role assignments in other contexts:</p>{$a->unsupported}';
@@ -130,6 +116,10 @@ $string['check_unsecuredataroot_error'] = 'Your dataroot directory <code>{$a}</c
 $string['check_unsecuredataroot_name'] = 'Insecure dataroot';
 $string['check_unsecuredataroot_ok'] = 'Dataroot directory must not be accessible via the web.';
 $string['check_unsecuredataroot_warning'] = 'Your dataroot directory <code>{$a}</code> is in the wrong location and might be exposed to the web.';
+$string['check_webcron_details'] = '<p>Running the cron from a web browser can expose privileged information to anonymous users. It is recommended to only run the cron from the command line or set a cron password for remote access.</p>';
+$string['check_webcron_warning'] = 'Anonymous users can access cron.';
+$string['check_webcron_name'] = 'Web cron';
+$string['check_webcron_ok'] = 'Anonymous users can not access cron.';
 $string['issue'] = 'Issue';
 $string['pluginname'] = 'Security overview';
 $string['security:view'] = 'View security report';

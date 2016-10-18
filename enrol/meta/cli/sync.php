@@ -23,15 +23,14 @@
  *   - you need to change the "www-data" to match the apache user account
  *   - use "su" if "sudo" not available
  *
- * @package    enrol
- * @subpackage meta
+ * @package    enrol_meta
  * @copyright  2011 Petr Skoda {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 define('CLI_SCRIPT', true);
 
-require(dirname(dirname(dirname(dirname(__FILE__)))).'/config.php');
+require(__DIR__.'/../../../config.php');
 require_once($CFG->libdir.'/clilib.php');
 require_once("$CFG->dirroot/enrol/meta/locallib.php");
 

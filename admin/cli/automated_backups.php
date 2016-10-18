@@ -28,7 +28,7 @@
 
 define('CLI_SCRIPT', true);
 
-require(dirname(dirname(dirname(__FILE__))).'/config.php');
+require(__DIR__.'/../../config.php');
 require_once($CFG->libdir.'/clilib.php');      // cli only functions
 require_once($CFG->libdir.'/cronlib.php');
 
@@ -75,8 +75,7 @@ if (!empty($CFG->showcronsql)) {
     $DB->set_debug(true);
 }
 if (!empty($CFG->showcrondebugging)) {
-    $CFG->debug = DEBUG_DEVELOPER;
-    $CFG->debugdisplay = true;
+    set_debugging(DEBUG_DEVELOPER, true);
 }
 
 $starttime = microtime();

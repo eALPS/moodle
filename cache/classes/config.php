@@ -72,6 +72,12 @@ class cache_config {
     protected $configlocks = array();
 
     /**
+     * The site identifier used when the cache config was last saved.
+     * @var string
+     */
+    protected $siteidentifier = null;
+
+    /**
      * Please use cache_config::instance to get an instance of the cache config that is ready to be used.
      */
     public function __construct() {
@@ -94,8 +100,8 @@ class cache_config {
      * @return bool True if it exists
      */
     public static function config_file_exists() {
-        // Allow for late static binding.
-        return file_exists(self::get_config_file_path());
+        // Allow for late static binding by using static.
+        return file_exists(static::get_config_file_path());
     }
 
     /**
@@ -138,6 +144,12 @@ class cache_config {
         $this->configmodemappings = array();
         $this->configdefinitionmappings = array();
         $this->configlockmappings = array();
+
+        $siteidentifier = 'unknown';
+        if (array_key_exists('siteidentifier', $configuration)) {
+            $siteidentifier = $configuration['siteidentifier'];
+        }
+        $this->siteidentifier = $siteidentifier;
 
         // Filter the lock instances.
         $defaultlock = null;
@@ -219,6 +231,29 @@ class cache_config {
                 // Invalid cache mode used for the definition.
                 continue;
             }
+            if ($conf['mode'] === cache_store::MODE_SESSION || $conf['mode'] === cache_store::MODE_REQUEST) {
+                // We force this for session and request caches.
+                // They are only allowed to use the default as we don't want people changing them.
+                $conf['sharingoptions'] = cache_definition::SHARING_DEFAULT;
+                $conf['selectedsharingoption'] = cache_definition::SHARING_DEFAULT;
+                $conf['userinputsharingkey'] = '';
+            } else {
+                // Default the sharing option as it was added for 2.5.
+                // This can be removed sometime after 2.5 is the minimum version someone can upgrade from.
+                if (!isset($conf['sharingoptions'])) {
+                    $conf['sharingoptions'] = cache_definition::SHARING_DEFAULTOPTIONS;
+                }
+                // Default the selected sharing option as it was added for 2.5.
+                // This can be removed sometime after 2.5 is the minimum version someone can upgrade from.
+                if (!isset($conf['selectedsharingoption'])) {
+                    $conf['selectedsharingoption'] = cache_definition::SHARING_DEFAULT;
+                }
+                // Default the user input sharing key as it was added for 2.5.
+                // This can be removed sometime after 2.5 is the minimum version someone can upgrade from.
+                if (!isset($conf['userinputsharingkey'])) {
+                    $conf['userinputsharingkey'] = '';
+                }
+            }
             $this->configdefinitions[$id] = $conf;
         }
 
@@ -272,6 +307,14 @@ class cache_config {
     }
 
     /**
+     * Returns the site identifier used by the cache API.
+     * @return string
+     */
+    public function get_site_identifier() {
+        return $this->siteidentifier;
+    }
+
+    /**
      * Includes the configuration file and makes sure it contains the expected bits.
      *
      * You need to ensure that the config file exists before this is called.
@@ -281,12 +324,17 @@ class cache_config {
      */
     protected function include_configuration() {
         $configuration = array();
-        $cachefile = self::get_config_file_path();
+        // We need to allow for late static bindings to allow for class path mudling happending for unit tests.
+        $cachefile = static::get_config_file_path();
 
         if (!file_exists($cachefile)) {
             throw new cache_exception('Default cache config could not be found. It should have already been created by now.');
         }
-        include($cachefile);
+
+        if (!include($cachefile)) {
+            throw new cache_exception('Unable to load the cache configuration file');
+        }
+
         if (!is_array($configuration)) {
             throw new cache_exception('Invalid cache configuration file');
         }
@@ -353,10 +401,18 @@ class cache_config {
      * @param string $storename
      * @return array Associative array of definitions, id=>definition
      */
-    public static function get_definitions_by_store($storename) {
+    public function get_definitions_by_store($storename) {
         $definitions = array();
 
-        $config = cache_config::instance();
+        // This function was accidentally made static at some stage in the past.
+        // It was converted to an instance method but to be backwards compatible
+        // we must step around this in code.
+        if (!isset($this)) {
+            $config = cache_config::instance();
+        } else {
+            $config = $this;
+        }
+
         $stores = $config->get_all_stores();
         if (!array_key_exists($storename, $stores)) {
             // The store does not exist.
@@ -521,6 +577,16 @@ class cache_config {
                 return $this->configlocks[$lock];
             }
         }
+        return $this->get_default_lock();
+    }
+
+    /**
+     * Gets the default lock instance.
+     *
+     * @return array
+     * @throws cache_exception
+     */
+    public function get_default_lock() {
         foreach ($this->configlocks as $lockconf) {
             if (!empty($lockconf['default'])) {
                 return $lockconf;

@@ -49,21 +49,25 @@ class MoodleQuickForm_hidden extends HTML_QuickForm_hidden{
      * @param mixed  $attributes (optional) Either a typical HTML attribute string
      *               or an associative array
      */
-    function MoodleQuickForm_hidden($elementName=null, $value='', $attributes=null) {
-        parent::HTML_QuickForm_hidden($elementName, $value, $attributes);
+    public function __construct($elementName=null, $value='', $attributes=null) {
+        parent::__construct($elementName, $value, $attributes);
     }
 
     /**
-     * set html for help button
+     * Old syntax of class constructor. Deprecated in PHP7.
      *
-     * @param array $helpbuttonargs array of arguments to make a help button
-     * @param string $function function name to call to get html
-     * @deprecated since Moodle 2.0. Please do not call this function any more.
-     * @todo MDL-34508 this api will be removed.
-     * @see MoodleQuickForm::addHelpButton()
+     * @deprecated since Moodle 3.1
+     */
+    public function MoodleQuickForm_hidden($elementName=null, $value='', $attributes=null) {
+        debugging('Use of class name as constructor is deprecated', DEBUG_DEVELOPER);
+        return self::__construct($elementName, $value, $attributes);
+    }
+
+    /**
+     * @deprecated since Moodle 2.0
      */
     function setHelpButton($helpbuttonargs, $function='helpbutton'){
-        debugging('setHelpButton() is deprecated, please use $mform->addHelpButton() instead');
+        throw new coding_exception('setHelpButton() can not be used any more, please see MoodleQuickForm::addHelpButton().');
     }
 
     /**

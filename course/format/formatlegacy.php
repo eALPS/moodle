@@ -147,7 +147,6 @@ class format_legacy extends format_base {
      *
      * The returned object's property (boolean)capable indicates that
      * the course format supports Moodle course ajax features.
-     * The property (array)testedbrowsers can be used as a parameter for {@link ajaxenabled()}.
      *
      * @return stdClass
      */
@@ -161,9 +160,6 @@ class format_legacy extends format_base {
             $formatsupport = $featurefunction();
             if (isset($formatsupport->capable)) {
                 $ajaxsupport->capable = $formatsupport->capable;
-            }
-            if (is_array($formatsupport->testedbrowsers)) {
-                $ajaxsupport->testedbrowsers = $formatsupport->testedbrowsers;
             }
         }
         return $ajaxsupport;
@@ -336,6 +332,7 @@ class format_legacy extends format_base {
      * @return bool whether there were any changes to the options values
      */
     public function update_course_format_options($data, $oldcourse = null) {
+        global $DB;
         if ($oldcourse !== null) {
             $data = (array)$data;
             $oldcourse = (array)$oldcourse;

@@ -1,6 +1,6 @@
 <?php
 /*
-Copyright (c) 2002-2003, Michael Bretterklieber <michael@bretterklieber.com>
+Copyright (c) 2002-2010, Michael Bretterklieber <michael@bretterklieber.com>
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -85,10 +85,16 @@ class Crypt_CHAP extends PEAR
      * Generates a random challenge
      * @return void
      */
+    public function __construct()
+    {
+        parent::__construct();
+        $this->generateChallenge();
+    }
+
     function Crypt_CHAP()
     {
-        $this->PEAR();
-        $this->generateChallenge();
+        debugging('Use of class name as constructor is deprecated', DEBUG_DEVELOPER);
+        self::__construct();
     }
 
     /**
@@ -101,7 +107,6 @@ class Crypt_CHAP extends PEAR
     function generateChallenge($varname = 'challenge', $size = 8)
     {
         $this->$varname = '';
-        mt_srand(hexdec(substr(md5(microtime()), -8)) & 0x7fffffff);
         for ($i = 0; $i < $size; $i++) {
             $this->$varname .= pack('C', 1 + mt_rand() % 255);
         }
@@ -149,7 +154,7 @@ class Crypt_CHAP_MD5 extends Crypt_CHAP
  * Generate MS-CHAPv1 Packets. MS-CHAP doesen't use the plaintext password, it uses the
  * NT-HASH wich is stored in the SAM-Database or in the smbpasswd, if you are using samba.
  * The NT-HASH is MD4(str2unicode(plaintextpass)).
- * You need the mhash extension for this class.
+ * You need the hash extension for this class.
  *
  * @package Crypt_CHAP
  */
@@ -165,13 +170,19 @@ class Crypt_CHAP_MSv1 extends Crypt_CHAP
     /**
      * Constructor
      *
-     * Loads the mhash extension
+     * Loads the hash extension
      * @return void
      */
+    public function __construct()
+    {
+        parent::__construct();
+        $this->loadExtension('hash');
+    }
+
     function Crypt_CHAP_MSv1()
     {
-        $this->Crypt_CHAP();
-        $this->loadExtension('mhash');
+        debugging('Use of class name as constructor is deprecated', DEBUG_DEVELOPER);
+        self::__construct();
     }
 
     /**
@@ -183,9 +194,9 @@ class Crypt_CHAP_MSv1 extends Crypt_CHAP
     function ntPasswordHash($password = null)
     {
         if (isset($password)) {
-            return mhash(MHASH_MD4, $this->str2unicode($password));
+            return pack('H*',hash('md4', $this->str2unicode($password)));
         } else {
-            return mhash(MHASH_MD4, $this->str2unicode($this->password));
+            return pack('H*',hash('md4', $this->str2unicode($this->password)));
         }
     }
 
@@ -416,9 +427,9 @@ class Crypt_CHAP_MSv2 extends Crypt_CHAP_MSv1
      * Generates the 16 Bytes peer and authentication challenge
      * @return void
      */
-    function Crypt_CHAP_MSv2()
+    public function __construct()
     {
-        $this->Crypt_CHAP_MSv1();
+        parent::__construct();
         $this->generateChallenge('peerChallenge', 16);
         $this->generateChallenge('authChallenge', 16);
     }
@@ -432,7 +443,7 @@ class Crypt_CHAP_MSv2 extends Crypt_CHAP_MSv1
      */
     function ntPasswordHashHash($nthash)
     {
-        return mhash(MHASH_MD4, $nthash);
+        return pack('H*',hash('md4', $nthash));
     }
 
     /**
@@ -444,7 +455,7 @@ class Crypt_CHAP_MSv2 extends Crypt_CHAP_MSv1
      */
     function challengeHash()
     {
-        return substr(mhash(MHASH_SHA1, $this->peerChallenge . $this->authChallenge . $this->username), 0, 8);
+        return substr(pack('H*',hash('sha1', $this->peerChallenge . $this->authChallenge . $this->username)), 0, 8);
     }
 
     /**

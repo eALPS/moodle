@@ -22,7 +22,7 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once(dirname(__FILE__) . '/../../config.php');
+require_once(__DIR__ . '/../../config.php');
 require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 
 // Look for old-style URLs, such as may be in the logs, and redirect them to startattemtp.php.
@@ -87,9 +87,15 @@ if ($accessmanager->is_preflight_check_required($attemptobj->get_attemptid())) {
     redirect($attemptobj->start_attempt_url(null, $page));
 }
 
-add_to_log($attemptobj->get_courseid(), 'quiz', 'continue attempt',
-        'review.php?attempt=' . $attemptobj->get_attemptid(),
-        $attemptobj->get_quizid(), $attemptobj->get_cmid());
+// Set up auto-save if required.
+$autosaveperiod = get_config('quiz', 'autosaveperiod');
+if ($autosaveperiod) {
+    $PAGE->requires->yui_module('moodle-mod_quiz-autosave',
+            'M.mod_quiz.autosave.init', array($autosaveperiod));
+}
+
+// Log this page view.
+$attemptobj->fire_attempt_viewed_event();
 
 // Get the list of questions needed by this page.
 $slots = $attemptobj->get_slots($page);
@@ -99,13 +105,9 @@ if (empty($slots)) {
     throw new moodle_quiz_exception($attemptobj->get_quizobj(), 'noquestionsfound');
 }
 
-// Update attempt page.
-if ($attemptobj->get_currentpage() != $page) {
-    if ($attemptobj->get_navigation_method() == QUIZ_NAVMETHOD_SEQ && $attemptobj->get_currentpage() > $page) {
-        // Prevent out of sequence access.
-        redirect($attemptobj->start_attempt_url(null, $attemptobj->get_currentpage()));
-    }
-    $DB->set_field('quiz_attempts', 'currentpage', $page, array('id' => $attemptid));
+// Update attempt page, redirecting the user if $page is not valid.
+if (!$attemptobj->set_currentpage($page)) {
+    redirect($attemptobj->start_attempt_url(null, $attemptobj->get_currentpage()));
 }
 
 // Initialise the JavaScript.
@@ -119,7 +121,7 @@ $PAGE->blocks->add_fake_block($navbc, reset($regions));
 
 $title = get_string('attempt', 'quiz', $attemptobj->get_attempt_number());
 $headtags = $attemptobj->get_html_head_contributions($page);
-$PAGE->set_title(format_string($attemptobj->get_quiz_name()));
+$PAGE->set_title($attemptobj->get_quiz_name());
 $PAGE->set_heading($attemptobj->get_course()->fullname);
 
 if ($attemptobj->is_last_page($page)) {

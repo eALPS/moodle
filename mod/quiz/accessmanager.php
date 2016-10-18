@@ -17,10 +17,9 @@
 /**
  * Classes to enforce the various access rules that can apply to a quiz.
  *
- * @package    mod
- * @subpackage quiz
- * @copyright  2009 Tim Hunt
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package   mod_quiz
+ * @copyright 2009 Tim Hunt
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 
@@ -31,8 +30,9 @@ defined('MOODLE_INTERNAL') || die();
  * This class keeps track of the various access rules that apply to a particular
  * quiz, with convinient methods for seeing whether access is allowed.
  *
- * @copyright  2009 Tim Hunt
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @copyright 2009 Tim Hunt
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @since     Moodle 2.2
  */
 class quiz_access_manager {
     /** @var quiz the quiz settings object. */
@@ -90,7 +90,7 @@ class quiz_access_manager {
      * @return array of all the installed rule class names.
      */
     protected static function get_rule_classes() {
-        return get_plugin_list_with_class('quizaccess', '', 'rule.php');
+        return core_component::get_plugin_list_with_class('quizaccess', '', 'rule.php');
     }
 
     /**
@@ -124,18 +124,53 @@ class quiz_access_manager {
     }
 
     /**
+     * Validate the data from any form fields added using {@link add_settings_form_fields()}.
+     * @param array $errors the errors found so far.
+     * @param array $data the submitted form data.
+     * @param array $files information about any uploaded files.
+     * @param mod_quiz_mod_form $quizform the quiz form object.
+     * @return array $errors the updated $errors array.
+     */
+    public static function validate_settings_form_fields(array $errors,
+            array $data, $files, mod_quiz_mod_form $quizform) {
+
+        foreach (self::get_rule_classes() as $rule) {
+            $errors = $rule::validate_settings_form_fields($errors, $data, $files, $quizform);
+        }
+
+        return $errors;
+    }
+
+    /**
      * Save any submitted settings when the quiz settings form is submitted.
      *
-     * Note that the standard plugins do not use this mechanism, becuase all their
+     * Note that the standard plugins do not use this mechanism because their
      * settings are stored in the quiz table.
      *
      * @param object $quiz the data from the quiz form, including $quiz->id
-     *      which is the is of the quiz being saved.
+     *      which is the id of the quiz being saved.
      */
     public static function save_settings($quiz) {
 
         foreach (self::get_rule_classes() as $rule) {
             $rule::save_settings($quiz);
+        }
+    }
+
+    /**
+     * Delete any rule-specific settings when the quiz is deleted.
+     *
+     * Note that the standard plugins do not use this mechanism because their
+     * settings are stored in the quiz table.
+     *
+     * @param object $quiz the data from the database, including $quiz->id
+     *      which is the id of the quiz being deleted.
+     * @since Moodle 2.7.1, 2.6.4, 2.5.7
+     */
+    public static function delete_settings($quiz) {
+
+        foreach (self::get_rule_classes() as $rule) {
+            $rule::delete_settings($quiz);
         }
     }
 
@@ -333,9 +368,16 @@ class quiz_access_manager {
      * @return mod_quiz_preflight_check_form the form.
      */
     public function get_preflight_check_form(moodle_url $url, $attemptid) {
+        // This form normally wants POST submissins. However, it also needs to
+        // accept GET submissions. Since formslib is strict, we have to detect
+        // which case we are in, and set the form property appropriately.
+        $method = 'post';
+        if (!empty($_GET['_qf__mod_quiz_preflight_check_form'])) {
+            $method = 'get';
+        }
         return new mod_quiz_preflight_check_form($url->out_omit_querystring(),
                 array('rules' => $this->rules, 'quizobj' => $this->quizobj,
-                      'attemptid' => $attemptid, 'hidden' => $url->params()));
+                      'attemptid' => $attemptid, 'hidden' => $url->params()), $method);
     }
 
     /**
@@ -496,5 +538,25 @@ class quiz_access_manager {
             return $output->review_link($this->quizobj->review_url($attempt->id),
                     $this->attempt_must_be_in_popup(), $this->get_popup_options());
         }
+    }
+
+    /**
+     * Run the preflight checks using the given data in all the rules supporting them.
+     *
+     * @param array $data passed data for validation
+     * @param array $files un-used, Moodle seems to not support it anymore
+     * @param int|null $attemptid the id of the current attempt, if there is one,
+     *      otherwise null.
+     * @return array of errors, empty array means no erros
+     * @since  Moodle 3.1
+     */
+    public function validate_preflight_check($data, $files, $attemptid) {
+        $errors = array();
+        foreach ($this->rules as $rule) {
+            if ($rule->is_preflight_check_required($attemptid)) {
+                $errors = $rule->validate_preflight_check($data, $files, $errors, $attemptid);
+            }
+        }
+        return $errors;
     }
 }

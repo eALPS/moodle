@@ -4,15 +4,12 @@
     require_once("lib.php");
 
     $id         = required_param('id', PARAM_INT);   //moduleid
-    $format     = optional_param('format', CHOICE_PUBLISH_NAMES, PARAM_INT);
     $download   = optional_param('download', '', PARAM_ALPHA);
-    $action     = optional_param('action', '', PARAM_ALPHA);
-    $attemptids = optional_param_array('attemptid', array(), PARAM_INT); //get array of responses to delete.
+    $action     = optional_param('action', '', PARAM_ALPHANUMEXT);
+    $attemptids = optional_param_array('attemptid', array(), PARAM_INT); // Get array of responses to delete or modify.
+    $userids    = optional_param_array('userid', array(), PARAM_INT); // Get array of users whose choices need to be modified.
 
     $url = new moodle_url('/mod/choice/report.php', array('id'=>$id));
-    if ($format !== CHOICE_PUBLISH_NAMES) {
-        $url->param('format', $format);
-    }
     if ($download !== '') {
         $url->param('download', $download);
     }
@@ -43,11 +40,27 @@
     $strchoices = get_string("modulenameplural", "choice");
     $strresponses = get_string("responses", "choice");
 
-    add_to_log($course->id, "choice", "report", "report.php?id=$cm->id", "$choice->id",$cm->id);
+    $eventdata = array();
+    $eventdata['objectid'] = $choice->id;
+    $eventdata['context'] = $context;
+    $eventdata['courseid'] = $course->id;
+    $eventdata['other']['content'] = 'choicereportcontentviewed';
 
-    if (data_submitted() && $action == 'delete' && has_capability('mod/choice:deleteresponses',$context) && confirm_sesskey()) {
-        choice_delete_responses($attemptids, $choice, $cm, $course); //delete responses.
-        redirect("report.php?id=$cm->id");
+    $event = \mod_choice\event\report_viewed::create($eventdata);
+    $event->trigger();
+
+    if (data_submitted() && has_capability('mod/choice:deleteresponses', $context) && confirm_sesskey()) {
+        if ($action === 'delete') {
+            // Delete responses of other users.
+            choice_delete_responses($attemptids, $choice, $cm, $course);
+            redirect("report.php?id=$cm->id");
+        }
+        if (preg_match('/^choose_(\d+)$/', $action, $actionmatch)) {
+            // Modify responses of other users.
+            $newoptionid = (int)$actionmatch[1];
+            choice_modify_responses($userids, $attemptids, $newoptionid, $choice, $cm, $course);
+            redirect("report.php?id=$cm->id");
+        }
     }
 
     if (!$download) {
@@ -55,6 +68,7 @@
         $PAGE->set_title(format_string($choice->name).": $strresponses");
         $PAGE->set_heading($course->fullname);
         echo $OUTPUT->header();
+        echo $OUTPUT->heading($choice->name, 2, null);
         /// Check to see if groups are being used in this choice
         $groupmode = groups_get_activity_groupmode($cm);
         if ($groupmode) {
@@ -63,8 +77,23 @@
         }
     } else {
         $groupmode = groups_get_activity_groupmode($cm);
+
+        // Trigger the report downloaded event.
+        $eventdata = array();
+        $eventdata['context'] = $context;
+        $eventdata['courseid'] = $course->id;
+        $eventdata['other']['content'] = 'choicereportcontentviewed';
+        $eventdata['other']['format'] = $download;
+        $eventdata['other']['choiceid'] = $choice->id;
+        $event = \mod_choice\event\report_downloaded::create($eventdata);
+        $event->trigger();
+
     }
-    $users = choice_get_response_data($choice, $cm, $groupmode);
+
+    // Check if we want to include responses from inactive users.
+    $onlyactive = $choice->includeinactive ? false : true;
+
+    $users = choice_get_response_data($choice, $cm, $groupmode, $onlyactive);
 
     if ($download == "ods" && has_capability('mod/choice:downloadresponses', $context)) {
         require_once("$CFG->libdir/odslib.class.php");
@@ -76,7 +105,7 @@
     /// Send HTTP headers
         $workbook->send($filename);
     /// Creating the first worksheet
-        $myxls =& $workbook->add_worksheet($strresponses);
+        $myxls = $workbook->add_worksheet($strresponses);
 
     /// Print names of all the fields
         $myxls->write_string(0,0,get_string("lastname"));
@@ -129,7 +158,7 @@
     /// Send HTTP headers
         $workbook->send($filename);
     /// Creating the first worksheet
-        $myxls =& $workbook->add_worksheet($strresponses);
+        $myxls = $workbook->add_worksheet($strresponses);
 
     /// Print names of all the fields
         $myxls->write_string(0,0,get_string("lastname"));
@@ -182,7 +211,7 @@
 
         /// Print names of all the fields
 
-        echo get_string("firstname")."\t".get_string("lastname") . "\t". get_string("idnumber") . "\t";
+        echo get_string("lastname")."\t".get_string("firstname") . "\t". get_string("idnumber") . "\t";
         echo get_string("group"). "\t";
         echo get_string("choice","choice"). "\n";
 
@@ -215,15 +244,11 @@
         }
         exit;
     }
-    // Show those who haven't answered the question.
-    if (!empty($choice->showunanswered)) {
-        $choice->option[0] = get_string('notanswered', 'choice');
-        $choice->maxanswers[0] = 0;
-    }
-
+    // Always show those who haven't answered the question.
+    $choice->showunanswered = 1;
     $results = prepare_choice_show_results($choice, $course, $cm, $users);
     $renderer = $PAGE->get_renderer('mod_choice');
-    echo $renderer->display_result($results, has_capability('mod/choice:readresponses', $context));
+    echo $renderer->display_result($results, true);
 
    //now give links for downloading spreadsheets.
     if (!empty($users) && has_capability('mod/choice:downloadresponses',$context)) {

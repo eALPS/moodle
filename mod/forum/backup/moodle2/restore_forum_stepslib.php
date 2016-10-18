@@ -16,10 +16,10 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * @package moodlecore
+ * @package    mod_forum
  * @subpackage backup-moodle2
- * @copyright 2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @copyright  2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 /**
@@ -40,8 +40,10 @@ class restore_forum_activity_structure_step extends restore_activity_structure_s
         if ($userinfo) {
             $paths[] = new restore_path_element('forum_discussion', '/activity/forum/discussions/discussion');
             $paths[] = new restore_path_element('forum_post', '/activity/forum/discussions/discussion/posts/post');
+            $paths[] = new restore_path_element('forum_discussion_sub', '/activity/forum/discussions/discussion/discussion_subs/discussion_sub');
             $paths[] = new restore_path_element('forum_rating', '/activity/forum/discussions/discussion/posts/post/ratings/rating');
             $paths[] = new restore_path_element('forum_subscription', '/activity/forum/subscriptions/subscription');
+            $paths[] = new restore_path_element('forum_digest', '/activity/forum/digests/digest');
             $paths[] = new restore_path_element('forum_read', '/activity/forum/readposts/read');
             $paths[] = new restore_path_element('forum_track', '/activity/forum/trackedprefs/track');
         }
@@ -147,6 +149,34 @@ class restore_forum_activity_structure_step extends restore_activity_structure_s
         $data->userid = $this->get_mappingid('user', $data->userid);
 
         $newitemid = $DB->insert_record('forum_subscriptions', $data);
+        $this->set_mapping('forum_subscription', $oldid, $newitemid, true);
+
+    }
+
+    protected function process_forum_discussion_sub($data) {
+        global $DB;
+
+        $data = (object)$data;
+        $oldid = $data->id;
+
+        $data->discussion = $this->get_new_parentid('forum_discussion');
+        $data->forum = $this->get_new_parentid('forum');
+        $data->userid = $this->get_mappingid('user', $data->userid);
+
+        $newitemid = $DB->insert_record('forum_discussion_subs', $data);
+        $this->set_mapping('forum_discussion_sub', $oldid, $newitemid, true);
+    }
+
+    protected function process_forum_digest($data) {
+        global $DB;
+
+        $data = (object)$data;
+        $oldid = $data->id;
+
+        $data->forum = $this->get_new_parentid('forum');
+        $data->userid = $this->get_mappingid('user', $data->userid);
+
+        $newitemid = $DB->insert_record('forum_digests', $data);
     }
 
     protected function process_forum_read($data) {
@@ -176,10 +206,16 @@ class restore_forum_activity_structure_step extends restore_activity_structure_s
     }
 
     protected function after_execute() {
-        global $DB;
-
         // Add forum related files, no need to match by itemname (just internally handled context)
         $this->add_related_files('mod_forum', 'intro', null);
+
+        // Add post related files, matching by itemname = 'forum_post'
+        $this->add_related_files('mod_forum', 'post', 'forum_post');
+        $this->add_related_files('mod_forum', 'attachment', 'forum_post');
+    }
+
+    protected function after_restore() {
+        global $DB;
 
         // If the forum is of type 'single' and no discussion has been ignited
         // (non-userinfo backup/restore) create the discussion here, using forum
@@ -188,7 +224,7 @@ class restore_forum_activity_structure_step extends restore_activity_structure_s
         $forumrec = $DB->get_record('forum', array('id' => $forumid));
         if ($forumrec->type == 'single' && !$DB->record_exists('forum_discussions', array('forum' => $forumid))) {
             // Create single discussion/lead post from forum data
-            $sd = new stdclass();
+            $sd = new stdClass();
             $sd->course   = $forumrec->course;
             $sd->forum    = $forumrec->id;
             $sd->name     = $forumrec->name;
@@ -197,22 +233,18 @@ class restore_forum_activity_structure_step extends restore_activity_structure_s
             $sd->messageformat = $forumrec->introformat;
             $sd->messagetrust  = true;
             $sd->mailnow  = false;
-            $sdid = forum_add_discussion($sd, null, $sillybyrefvar, $this->task->get_userid());
+            $sdid = forum_add_discussion($sd, null, null, $this->task->get_userid());
             // Mark the post as mailed
             $DB->set_field ('forum_posts','mailed', '1', array('discussion' => $sdid));
             // Copy all the files from mod_foum/intro to mod_forum/post
             $fs = get_file_storage();
             $files = $fs->get_area_files($this->task->get_contextid(), 'mod_forum', 'intro');
             foreach ($files as $file) {
-                $newfilerecord = new stdclass();
+                $newfilerecord = new stdClass();
                 $newfilerecord->filearea = 'post';
                 $newfilerecord->itemid   = $DB->get_field('forum_discussions', 'firstpost', array('id' => $sdid));
                 $fs->create_file_from_storedfile($newfilerecord, $file);
             }
         }
-
-        // Add post related files, matching by itemname = 'forum_post'
-        $this->add_related_files('mod_forum', 'post', 'forum_post');
-        $this->add_related_files('mod_forum', 'attachment', 'forum_post');
     }
 }

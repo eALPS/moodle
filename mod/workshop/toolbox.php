@@ -18,14 +18,13 @@
 /**
  * Various workshop maintainance utilities
  *
- * @package    mod
- * @subpackage workshop
+ * @package    mod_workshop
  * @copyright  2010 David Mudrak <david.mudrak@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once(dirname(dirname(dirname(__FILE__))).'/config.php');
-require_once(dirname(__FILE__).'/locallib.php');
+require(__DIR__.'/../../config.php');
+require_once(__DIR__.'/locallib.php');
 
 $id         = required_param('id', PARAM_INT); // course_module ID
 $tool       = required_param('tool', PARAM_ALPHA);
@@ -38,18 +37,26 @@ require_login($course, false, $cm);
 $workshop = new workshop($workshop, $cm, $course);
 require_sesskey();
 
+$params = array(
+    'context' => $workshop->context,
+    'courseid' => $course->id,
+    'other' => array('workshopid' => $workshop->id)
+);
+
 switch ($tool) {
 case 'clearaggregatedgrades':
     require_capability('mod/workshop:overridegrades', $workshop->context);
-    $workshop->log('update clear aggregated grades');
     $workshop->clear_submission_grades();
     $workshop->clear_grading_grades();
+    $event = \mod_workshop\event\assessment_evaluations_reset::create($params);
+    $event->trigger();
     break;
 
 case 'clearassessments':
     require_capability('mod/workshop:overridegrades', $workshop->context);
-    $workshop->log('update clear assessments');
     $workshop->clear_assessments();
+    $event = \mod_workshop\event\assessments_reset::create($params);
+    $event->trigger();
     break;
 }
 

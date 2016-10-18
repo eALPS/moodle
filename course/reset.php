@@ -37,6 +37,7 @@ if (!$course = $DB->get_record('course', array('id'=>$id))) {
 }
 
 $PAGE->set_url('/course/reset.php', array('id'=>$id));
+$PAGE->set_pagelayout('admin');
 
 require_login($course);
 require_capability('moodle/course:reset', context_course::instance($course->id));
@@ -70,9 +71,10 @@ if ($mform->is_cancelled()) {
         echo $OUTPUT->heading($strresetcourse);
 
         $data->reset_start_date_old = $course->startdate;
+        $data->reset_end_date_old = $course->enddate;
         $status = reset_course_userdata($data);
 
-        $data = array();;
+        $data = array();
         foreach ($status as $item) {
             $line = array();
             $line[] = $item['component'];

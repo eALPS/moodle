@@ -86,7 +86,7 @@ class qtype_calculatedmulti_walkthrough_test extends qbehaviour_walkthrough_test
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_contains_validation_error_expectation(),
                 new question_pattern_expectation('/' .
-                        preg_quote(get_string('invalidnumber', 'qtype_numerical') . '/')),
+                        preg_quote(get_string('invalidnumber', 'qtype_numerical'), '/') . '/'),
                 $this->get_does_not_contain_try_again_button_expectation(),
                 $this->get_no_hint_visible_expectation());
 
@@ -98,7 +98,7 @@ class qtype_calculatedmulti_walkthrough_test extends qbehaviour_walkthrough_test
         $this->check_current_mark(3);
         $this->check_current_output(
                 $this->get_contains_mark_summary(3),
-                $this->get_contains_submit_button_expectation(false),
+                $this->get_does_not_contain_submit_button_expectation(),
                 $this->get_contains_correct_expectation(),
                 $this->get_does_not_contain_validation_error_expectation(),
                 $this->get_no_hint_visible_expectation());

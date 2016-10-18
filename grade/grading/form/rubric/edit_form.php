@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,8 +17,7 @@
 /**
  * The form used at the rubric editor page is defined here
  *
- * @package    gradingform
- * @subpackage rubric
+ * @package    gradingform_rubric
  * @copyright  2011 Marina Glancy <marina@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -27,11 +25,15 @@
 defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot.'/lib/formslib.php');
-require_once(dirname(__FILE__).'/rubriceditor.php');
+require_once(__DIR__.'/rubriceditor.php');
 MoodleQuickForm::registerElementType('rubriceditor', $CFG->dirroot.'/grade/grading/form/rubric/rubriceditor.php', 'MoodleQuickForm_rubriceditor');
 
 /**
  * Defines the rubric edit form
+ *
+ * @package    gradingform_rubric
+ * @copyright  2011 Marina Glancy <marina@moodle.com>
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class gradingform_rubric_editrubric extends moodleform {
 
@@ -45,10 +47,11 @@ class gradingform_rubric_editrubric extends moodleform {
         $form->setType('areaid', PARAM_INT);
 
         $form->addElement('hidden', 'returnurl');
+        $form->setType('returnurl', PARAM_LOCALURL);
 
         // name
-        $form->addElement('text', 'name', get_string('name', 'gradingform_rubric'), array('size'=>52));
-        $form->addRule('name', get_string('required'), 'required');
+        $form->addElement('text', 'name', get_string('name', 'gradingform_rubric'), array('size' => 52, 'aria-required' => 'true'));
+        $form->addRule('name', get_string('required'), 'required', null, 'client');
         $form->setType('name', PARAM_TEXT);
 
         // description
@@ -65,7 +68,6 @@ class gradingform_rubric_editrubric extends moodleform {
         // rubric editor
         $element = $form->addElement('rubriceditor', 'rubric', get_string('rubric', 'gradingform_rubric'));
         $form->setType('rubric', PARAM_RAW);
-        //$element->freeze(); // TODO freeze rubric editor if needed
 
         $buttonarray = array();
         $buttonarray[] = &$form->createElement('submit', 'saverubric', get_string('saverubric', 'gradingform_rubric'));
@@ -175,7 +177,7 @@ class gradingform_rubric_editrubric extends moodleform {
         }
 
         // freeze form elements and pass the values in hidden fields
-        // TODO description_editor does not freeze the normal way!
+        // TODO MDL-29421 description_editor does not freeze the normal way, uncomment below when fixed
         $form = $this->_form;
         foreach (array('rubric', 'name'/*, 'description_editor'*/) as $fieldname) {
             $el =& $form->getElement($fieldname);

@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,13 +17,13 @@
 /**
  * Script to let a user edit the properties of a particular RSS feed.
  *
- * @package   moodlecore
+ * @package   block_rss_client
  * @copyright 2009 Tim Hunt
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 
-require_once(dirname(__FILE__) . '/../../config.php');
+require_once(__DIR__ . '/../../config.php');
 require_once($CFG->libdir . '/formslib.php');
 require_once($CFG->libdir .'/simplepie/moodle_simplepie.php');
 
@@ -37,7 +36,7 @@ class feed_edit_form extends moodleform {
     function __construct($actionurl, $isadding, $caneditshared) {
         $this->isadding = $isadding;
         $this->caneditshared = $caneditshared;
-        parent::moodleform($actionurl);
+        parent::__construct($actionurl);
     }
 
     function definition() {
@@ -90,7 +89,7 @@ class feed_edit_form extends moodleform {
         $rss->init();
 
         if ($rss->error()) {
-            $errors['url'] = get_string('errorloadingfeed', 'block_rss_client', $rss->error());
+            $errors['url'] = get_string('couldnotfindloadrssfeed', 'block_rss_client');
         } else {
             $this->title = $rss->get_title();
             $this->description = $rss->get_description();
@@ -177,7 +176,7 @@ if ($returnurl) {
 $managefeeds = new moodle_url('/blocks/rss_client/managefeeds.php', $urlparams);
 
 $PAGE->set_url('/blocks/rss_client/editfeed.php', $urlparams);
-$PAGE->set_pagelayout('base');
+$PAGE->set_pagelayout('admin');
 
 if ($rssid) {
     $isadding = false;
@@ -218,10 +217,9 @@ if ($mform->is_cancelled()) {
     $PAGE->set_title($strtitle);
     $PAGE->set_heading($strtitle);
 
-    $settingsurl = new moodle_url('/admin/settings.php?section=blocksettingrss_client');
     $PAGE->navbar->add(get_string('blocks'));
-    $PAGE->navbar->add(get_string('pluginname', 'block_rss_client'), $settingsurl);
-    $PAGE->navbar->add(get_string('managefeeds', 'block_rss_client'));
+    $PAGE->navbar->add(get_string('pluginname', 'block_rss_client'));
+    $PAGE->navbar->add(get_string('managefeeds', 'block_rss_client'), $managefeeds );
     $PAGE->navbar->add($strtitle);
 
     echo $OUTPUT->header();

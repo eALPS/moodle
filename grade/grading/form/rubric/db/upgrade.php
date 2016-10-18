@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -16,8 +15,9 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * @package    gradingform
- * @subpackage rubric
+ * This file keeps track of upgrades to plugin gradingform_rubric
+ *
+ * @package    gradingform_rubric
  * @copyright  2011 David Mudrak <david@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -31,16 +31,19 @@ defined('MOODLE_INTERNAL') || die();
  * @return bool true
  */
 function xmldb_gradingform_rubric_upgrade($oldversion) {
-    global $CFG, $DB, $OUTPUT;
+    global $CFG;
 
-    $dbman = $DB->get_manager();
+    // Moodle v2.8.0 release upgrade line.
+    // Put any upgrade step following this.
 
-    // Moodle v2.2.0 release upgrade line
-    // Put any upgrade step following this
+    // Moodle v2.9.0 release upgrade line.
+    // Put any upgrade step following this.
 
-    // Moodle v2.3.0 release upgrade line
-    // Put any upgrade step following this
+    // Moodle v3.0.0 release upgrade line.
+    // Put any upgrade step following this.
 
+    // Moodle v3.1.0 release upgrade line.
+    // Put any upgrade step following this.
 
     return true;
 }

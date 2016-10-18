@@ -25,6 +25,13 @@
  */
 
 require('../config.php');
+require_once($CFG->dirroot . '/user/editlib.php');
+
+// Try to prevent searching for sites that allow sign-up.
+if (!isset($CFG->additionalhtmlhead)) {
+    $CFG->additionalhtmlhead = '';
+}
+$CFG->additionalhtmlhead .= '<meta name="robots" content="noindex" />';
 
 if (empty($CFG->registerauth)) {
     print_error('notlocalisederrormessage', 'error', '', 'Sorry, you may not use this page.');
@@ -41,19 +48,30 @@ $PAGE->https_required();
 $PAGE->set_url('/login/signup.php');
 $PAGE->set_context(context_system::instance());
 
+// Override wanted URL, we do not want to end up here again if user clicks "Login".
+$SESSION->wantsurl = $CFG->wwwroot . '/';
+
+if (isloggedin() and !isguestuser()) {
+    // Prevent signing up when already logged in.
+    echo $OUTPUT->header();
+    echo $OUTPUT->box_start();
+    $logout = new single_button(new moodle_url($CFG->httpswwwroot . '/login/logout.php',
+        array('sesskey' => sesskey(), 'loginpage' => 1)), get_string('logout'), 'post');
+    $continue = new single_button(new moodle_url('/'), get_string('cancel'), 'get');
+    echo $OUTPUT->confirm(get_string('cannotsignup', 'error', fullname($USER)), $logout, $continue);
+    echo $OUTPUT->box_end();
+    echo $OUTPUT->footer();
+    exit;
+}
+
 $mform_signup = $authplugin->signup_form();
 
 if ($mform_signup->is_cancelled()) {
     redirect(get_login_url());
 
 } else if ($user = $mform_signup->get_data()) {
-    $user->confirmed   = 0;
-    $user->lang        = current_language();
-    $user->firstaccess = time();
-    $user->timecreated = time();
-    $user->mnethostid  = $CFG->mnet_localhost_id;
-    $user->secret      = random_string(15);
-    $user->auth        = $CFG->registerauth;
+    // Add missing required fields.
+    $user = signup_setup_new_user($user);
 
     $authplugin->user_signup($user, true); // prints notice and link to login/index.php
     exit; //never reached
@@ -73,5 +91,6 @@ $PAGE->set_title($newaccount);
 $PAGE->set_heading($SITE->fullname);
 
 echo $OUTPUT->header();
+echo $OUTPUT->heading($newaccount);
 $mform_signup->display();
 echo $OUTPUT->footer();

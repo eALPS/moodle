@@ -25,19 +25,28 @@
 class data_field_menu extends data_field_base {
 
     var $type = 'menu';
+    /**
+     * priority for globalsearch indexing
+     *
+     * @var int
+     */
+    protected static $priority = self::HIGH_PRIORITY;
 
-    function display_add_field($recordid=0) {
+    function display_add_field($recordid = 0, $formdata = null) {
         global $DB, $OUTPUT;
 
-        if ($recordid){
+        if ($formdata) {
+            $fieldname = 'field_' . $this->field->id;
+            $content = $formdata->$fieldname;
+        } else if ($recordid) {
             $content = $DB->get_field('data_content', 'content', array('fieldid'=>$this->field->id, 'recordid'=>$recordid));
             $content = trim($content);
         } else {
             $content = '';
         }
+        $str = '<div title="' . s($this->field->description) . '">';
 
-        $str = '<div title="'.s($this->field->description).'">';
-
+        $options = array();
         $rawoptions = explode("\n",$this->field->param1);
         foreach ($rawoptions as $option) {
             $option = trim($option);
@@ -46,8 +55,16 @@ class data_field_menu extends data_field_base {
             }
         }
 
-        $str .= html_writer::label(get_string('menuchoose', 'data'), 'field_'.$this->field->id, false, array('class' => 'accesshide'));
-        $str .= html_writer::select($options, 'field_'.$this->field->id, $content, array(''=>get_string('menuchoose', 'data')), array('id'=>'field_'.$this->field->id));
+        $str .= '<label for="' . 'field_' . $this->field->id . '">';
+        $str .= html_writer::span($this->field->name, 'accesshide');
+        if ($this->field->required) {
+            $image = html_writer::img($OUTPUT->pix_url('req'), get_string('requiredelement', 'form'),
+                                     array('class' => 'req', 'title' => get_string('requiredelement', 'form')));
+            $str .= html_writer::div($image, 'inline-req');
+        }
+        $str .= '</label>';
+        $str .= html_writer::select($options, 'field_'.$this->field->id, $content, array('' => get_string('menuchoose', 'data')),
+                                    array('id' => 'field_'.$this->field->id, 'class' => 'mod-data-input'));
 
         $str .= '</div>';
 
@@ -86,7 +103,8 @@ class data_field_menu extends data_field_base {
             return '';
         }
 
-        $return = html_writer::label(get_string('namemenu', 'data'), 'menuf_'. $this->field->id, false, array('class' => 'accesshide'));
+        $return = html_writer::label(get_string('fieldtypelabel', "datafield_" . $this->type),
+            'menuf_' . $this->field->id, false, array('class' => 'accesshide'));
         $return .= html_writer::select($options, 'f_'.$this->field->id, $content);
         return $return;
     }
@@ -106,6 +124,15 @@ class data_field_menu extends data_field_base {
         return array(" ({$tablealias}.fieldid = {$this->field->id} AND $varcharcontent = :$name) ", array($name=>$value));
     }
 
+    /**
+     * Check if a field from an add form is empty
+     *
+     * @param mixed $value
+     * @param mixed $name
+     * @return bool
+     */
+    function notemptyfield($value, $name) {
+        return strval($value) !== '';
+    }
+
 }
-
-

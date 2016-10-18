@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -16,8 +15,9 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * @package    gradingform
- * @subpackage rubric
+ * File contains definition of class MoodleQuickForm_rubriceditor
+ *
+ * @package    gradingform_rubric
  * @copyright  2011 Marina Glancy
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -26,27 +26,58 @@ defined('MOODLE_INTERNAL') || die();
 
 require_once("HTML/QuickForm/input.php");
 
+/**
+ * Form element for handling rubric editor
+ *
+ * The rubric editor is defined as a separate form element. This allows us to render
+ * criteria, levels and buttons using the rubric's own renderer. Also, the required
+ * Javascript library is included, which processes, on the client, buttons needed
+ * for reordering, adding and deleting criteria.
+ *
+ * If Javascript is disabled when one of those special buttons is pressed, the form
+ * element is not validated and, instead of submitting the form, we process button presses.
+ *
+ * @package    gradingform_rubric
+ * @copyright  2011 Marina Glancy
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class MoodleQuickForm_rubriceditor extends HTML_QuickForm_input {
-    /** help message */
+    /** @var string help message */
     public $_helpbutton = '';
-    /** stores the result of the last validation: null - undefined, false - no errors, string - error(s) text */
+    /** @var string|bool stores the result of the last validation: null - undefined, false - no errors, string - error(s) text */
     protected $validationerrors = null;
-    /** if element has already been validated **/
+    /** @var bool if element has already been validated **/
     protected $wasvalidated = false;
-    /** If non-submit (JS) button was pressed: null - unknown, true/false - button was/wasn't pressed */
+    /** @var bool If non-submit (JS) button was pressed: null - unknown, true/false - button was/wasn't pressed */
     protected $nonjsbuttonpressed = false;
-    /** Message to display in front of the editor (that there exist grades on this rubric being edited) */
+    /** @var bool Message to display in front of the editor (that there exist grades on this rubric being edited) */
     protected $regradeconfirmation = false;
 
-    function MoodleQuickForm_rubriceditor($elementName=null, $elementLabel=null, $attributes=null) {
-        parent::HTML_QuickForm_input($elementName, $elementLabel, $attributes);
+    /**
+     * Constructor for rubric editor
+     *
+     * @param string $elementName
+     * @param string $elementLabel
+     * @param array $attributes
+     */
+    public function __construct($elementName=null, $elementLabel=null, $attributes=null) {
+        parent::__construct($elementName, $elementLabel, $attributes);
+    }
+
+    /**
+     * Old syntax of class constructor. Deprecated in PHP7.
+     *
+     * @deprecated since Moodle 3.1
+     */
+    public function MoodleQuickForm_rubriceditor($elementName=null, $elementLabel=null, $attributes=null) {
+        debugging('Use of class name as constructor is deprecated', DEBUG_DEVELOPER);
+        self::__construct($elementName, $elementLabel, $attributes);
     }
 
     /**
      * get html for help button
      *
-     * @access   public
-     * @return  string html for help button
+     * @return string html for help button
      */
     public function getHelpButton() {
         return $this->_helpbutton;
@@ -85,9 +116,10 @@ class MoodleQuickForm_rubriceditor extends HTML_QuickForm_input {
         if (!$this->_flagFrozen) {
             $mode = gradingform_rubric_controller::DISPLAY_EDIT_FULL;
             $module = array('name'=>'gradingform_rubriceditor', 'fullpath'=>'/grade/grading/form/rubric/js/rubriceditor.js',
+                'requires' => array('base', 'dom', 'event', 'event-touch', 'escape'),
                 'strings' => array(array('confirmdeletecriterion', 'gradingform_rubric'), array('confirmdeletelevel', 'gradingform_rubric'),
                     array('criterionempty', 'gradingform_rubric'), array('levelempty', 'gradingform_rubric')
-                    ));
+                ));
             $PAGE->requires->js_init_call('M.gradingform_rubriceditor.init', array(
                 array('name' => $this->getName(),
                     'criteriontemplate' => $renderer->criterion_template($mode, $data['options'], $this->getName()),
@@ -109,7 +141,7 @@ class MoodleQuickForm_rubriceditor extends HTML_QuickForm_input {
             $html .= $renderer->display_regrade_confirmation($this->getName(), $this->regradeconfirmation, $data['regrade']);
         }
         if ($this->validationerrors) {
-            $html .= $renderer->notification($this->validationerrors, 'error');
+            $html .= html_writer::div($renderer->notification($this->validationerrors));
         }
         $html .= $renderer->display_rubric($data['criteria'], $data['options'], $mode, $this->getName());
         return $html;
@@ -165,6 +197,7 @@ class MoodleQuickForm_rubriceditor extends HTML_QuickForm_input {
         // iterate through criteria
         $lastaction = null;
         $lastid = null;
+        $overallminscore = $overallmaxscore = 0;
         foreach ($value['criteria'] as $id => $criterion) {
             if ($id == 'addcriterion') {
                 $id = $this->get_next_id(array_keys($value['criteria']));
@@ -189,7 +222,7 @@ class MoodleQuickForm_rubriceditor extends HTML_QuickForm_input {
                 $this->nonjsbuttonpressed = true;
             }
             $levels = array();
-            $maxscore = null;
+            $minscore = $maxscore = null;
             if (array_key_exists('levels', $criterion)) {
                 foreach ($criterion['levels'] as $levelid => $level) {
                     if ($levelid == 'addlevel') {
@@ -199,27 +232,30 @@ class MoodleQuickForm_rubriceditor extends HTML_QuickForm_input {
                             'score' => 0,
                         );
                         foreach ($criterion['levels'] as $lastlevel) {
-                            if ($level['score'] < $lastlevel['score'] + 1) {
-                                $level['score'] = $lastlevel['score'] + 1;
+                            if (isset($lastlevel['score'])) {
+                                $level['score'] = max($level['score'], ceil(unformat_float($lastlevel['score'])) + 1);
                             }
                         }
                         $this->nonjsbuttonpressed = true;
                     }
                     if (!array_key_exists('delete', $level)) {
+                        $score = unformat_float($level['score'], true);
                         if ($withvalidation) {
                             if (!strlen(trim($level['definition']))) {
                                 $errors['err_nodefinition'] = 1;
                                 $level['error_definition'] = true;
                             }
-                            if (!preg_match('#^[\+]?\d*$#', trim($level['score'])) && !preg_match('#^[\+]?\d*[\.,]\d+$#', trim($level['score']))) {
-                                // TODO why we can't allow negative score for rubric?
+                            if ($score === null || $score === false) {
                                 $errors['err_scoreformat'] = 1;
                                 $level['error_score'] = true;
                             }
                         }
                         $levels[$levelid] = $level;
-                        if ($maxscore === null || (float)$level['score'] > $maxscore) {
-                            $maxscore = (float)$level['score'];
+                        if ($minscore === null || $score < $minscore) {
+                            $minscore = $score;
+                        }
+                        if ($maxscore === null || $score > $maxscore) {
+                            $maxscore = $score;
                         }
                     } else {
                         $this->nonjsbuttonpressed = true;
@@ -237,6 +273,8 @@ class MoodleQuickForm_rubriceditor extends HTML_QuickForm_input {
                     $errors['err_nodescription'] = 1;
                     $criterion['error_description'] = true;
                 }
+                $overallmaxscore += $maxscore;
+                $overallminscore += $minscore;
             }
             if (array_key_exists('moveup', $criterion) || $lastaction == 'movedown') {
                 unset($criterion['moveup']);
@@ -276,6 +314,11 @@ class MoodleQuickForm_rubriceditor extends HTML_QuickForm_input {
 
         // create validation error string (if needed)
         if ($withvalidation) {
+            if (!$return['options']['lockzeropoints']) {
+                if ($overallminscore == $overallmaxscore) {
+                    $errors['err_novariations'] = 1;
+                }
+            }
             if (count($errors)) {
                 $rv = array();
                 foreach ($errors as $error => $v) {
@@ -339,8 +382,8 @@ class MoodleQuickForm_rubriceditor extends HTML_QuickForm_input {
 
     /**
      * Prepares the data for saving
-     * @see prepare_data()
      *
+     * @see prepare_data()
      * @param array $submitValues
      * @param boolean $assoc
      * @return array

@@ -37,7 +37,7 @@ defined('MOODLE_INTERNAL') || die();
  * @package core
  * @category output
  */
-class component_action {
+class component_action implements templatable {
 
     /**
      * @var string $event The DOM event that will trigger this action when caught
@@ -75,6 +75,21 @@ class component_action {
             }
         }
     }
+
+    /**
+     * Export for template.
+     *
+     * @param renderer_base $output The renderer.
+     * @return stdClass
+     */
+    public function export_for_template(renderer_base $output) {
+        $args = !empty($this->jsfunctionargs) ? json_encode($this->jsfunctionargs) : false;
+        return (object) [
+            'event' => $this->event,
+            'jsfunction' => $this->jsfunction,
+            'jsfunctionargs' => $args,
+        ];
+    }
 }
 
 
@@ -93,13 +108,19 @@ class confirm_action extends component_action {
      *
      * @param string $message The message to display to the user when they are shown
      *    the confirm dialogue.
-     * @param string $callback The method to call when the user confirms the action.
+     * @param string $callback Deprecated since 2.7
      * @param string $continuelabel The string to use for he continue button
      * @param string $cancellabel The string to use for the cancel button
      */
     public function __construct($message, $callback = null, $continuelabel = null, $cancellabel = null) {
+        if ($callback !== null) {
+            debugging('The callback argument to new confirm_action() has been deprecated.' .
+                    ' If you need to use a callback, please write Javascript to use moodle-core-notification-confirmation ' .
+                    'and attach to the provided events.',
+                    DEBUG_DEVELOPER);
+        }
         parent::__construct('click', 'M.util.show_confirm_dialog', array(
-                'message' => $message, 'callback' => $callback,
+                'message' => $message,
                 'continuelabel' => $continuelabel, 'cancellabel' => $cancellabel));
     }
 }

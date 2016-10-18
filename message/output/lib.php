@@ -92,6 +92,26 @@ abstract class message_output {
     public function get_default_messaging_settings() {
         return MESSAGE_PERMITTED;
     }
+
+    /**
+     * Returns true if message can be sent to fake/internal user as well.
+     * If message_output support message to be sent to fake user, then it should return true, like email.
+     *
+     * @return bool
+     */
+    public function can_send_to_any_users() {
+        return false;
+    }
+
+    /**
+     * Returns true if this processor has configurable message preferences. This is
+     * distinct from notification preferences.
+     *
+     * @return bool
+     */
+    public function has_message_preferences() {
+        return true;
+    }
 }
 
 

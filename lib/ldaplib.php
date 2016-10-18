@@ -64,7 +64,7 @@ function ldap_getdefaults() {
                         'rfc2307' => 'posixaccount',
                         'rfc2307bis' => 'posixaccount',
                         'samba' => 'sambasamaccount',
-                        'ad' => 'user',
+                        'ad' => '(samaccounttype=805306368)',
                         'default' => '*'
                         );
     $default['user_attribute'] = array(
@@ -74,6 +74,14 @@ function ldap_getdefaults() {
                         'samba' => 'uid',
                         'ad' => 'cn',
                         'default' => 'cn'
+                        );
+    $default['suspended_attribute'] = array(
+                        'edir' => '',
+                        'rfc2307' => '',
+                        'rfc2307bis' => '',
+                        'samba' => '',
+                        'ad' => '',
+                        'default' => ''
                         );
     $default['memberattribute'] = array(
                         'edir' => 'member',
@@ -163,9 +171,10 @@ function ldap_isgroupmember($ldapconnection, $userid, $group_dns, $member_attrib
  * @param string $bind_pw the password for the binding user. Ignored for anonymous bindings.
  * @param boolean $opt_deref whether to set LDAP_OPT_DEREF on this connection or not.
  * @param string &$debuginfo the debugging information in case the connection fails.
+ * @param boolean $start_tls whether to use LDAP with TLS (not to be confused with LDAP+SSL)
  * @return mixed connection result or false.
  */
-function ldap_connect_moodle($host_url, $ldap_version, $user_type, $bind_dn, $bind_pw, $opt_deref, &$debuginfo) {
+function ldap_connect_moodle($host_url, $ldap_version, $user_type, $bind_dn, $bind_pw, $opt_deref, &$debuginfo, $start_tls=false) {
     if (empty($host_url) || empty($ldap_version) || empty($user_type)) {
         $debuginfo = 'No LDAP Host URL, Version or User Type specified in your LDAP settings';
         return false;
@@ -192,6 +201,11 @@ function ldap_connect_moodle($host_url, $ldap_version, $user_type, $bind_dn, $bi
 
         if (!empty($opt_deref)) {
             ldap_set_option($connresult, LDAP_OPT_DEREF, $opt_deref);
+        }
+
+        if ($start_tls && (!ldap_start_tls($connresult))) {
+            $debuginfo .= "Server: '$server', Connection: '$connresult', STARTTLS failed.\n";
+            continue;
         }
 
         if (!empty($bind_dn)) {
@@ -241,13 +255,17 @@ function ldap_find_userdn($ldapconnection, $username, $contexts, $objectclass, $
         }
 
         if ($search_sub) {
-            $ldap_result = ldap_search($ldapconnection, $context,
-                                       '(&'.$objectclass.'('.$search_attrib.'='.ldap_filter_addslashes($username).'))',
-                                       array($search_attrib));
+            $ldap_result = @ldap_search($ldapconnection, $context,
+                                        '(&'.$objectclass.'('.$search_attrib.'='.ldap_filter_addslashes($username).'))',
+                                        array($search_attrib));
         } else {
-            $ldap_result = ldap_list($ldapconnection, $context,
-                                     '(&'.$objectclass.'('.$search_attrib.'='.ldap_filter_addslashes($username).'))',
-                                     array($search_attrib));
+            $ldap_result = @ldap_list($ldapconnection, $context,
+                                      '(&'.$objectclass.'('.$search_attrib.'='.ldap_filter_addslashes($username).'))',
+                                      array($search_attrib));
+        }
+
+        if (!$ldap_result) {
+            continue; // Not found in this context.
         }
 
         $entry = ldap_first_entry($ldapconnection, $ldap_result);
@@ -258,6 +276,42 @@ function ldap_find_userdn($ldapconnection, $username, $contexts, $objectclass, $
     }
 
     return $ldap_user_dn;
+}
+
+/**
+ * Normalise the supplied objectclass filter.
+ *
+ * This normalisation is a rudimentary attempt to format the objectclass filter correctly.
+ *
+ * @param string $objectclass The objectclass to normalise
+ * @param string $default The default objectclass value to use if no objectclass was supplied
+ * @return string The normalised objectclass.
+ */
+function ldap_normalise_objectclass($objectclass, $default = '*') {
+    if (empty($objectclass)) {
+        // Can't send empty filter.
+        $return = sprintf('(objectClass=%s)', $default);
+    } else if (stripos($objectclass, 'objectClass=') === 0) {
+        // Value is 'objectClass=some-string-here', so just add () around the value (filter _must_ have them).
+        $return = sprintf('(%s)', $objectclass);
+    } else if (stripos($objectclass, '(') !== 0) {
+        // Value is 'some-string-not-starting-with-left-parentheses', which is assumed to be the objectClass matching value.
+        // Build a valid filter using the value it.
+        $return = sprintf('(objectClass=%s)', $objectclass);
+    } else {
+        // There is an additional possible value '(some-string-here)', that can be used to specify any valid filter
+        // string, to select subsets of users based on any criteria.
+        //
+        // For example, we could select the users whose objectClass is 'user' and have the 'enabledMoodleUser'
+        // attribute, with something like:
+        //
+        // (&(objectClass=user)(enabledMoodleUser=1))
+        //
+        // In this particular case we don't need to do anything, so leave $this->config->objectclass as is.
+        $return = $objectclass;
+    }
+
+    return $return;
 }
 
 /**
@@ -317,6 +371,9 @@ if(!defined('LDAP_DN_SPECIAL_CHARS_QUOTED_NUM')) {
 if(!defined('LDAP_DN_SPECIAL_CHARS_QUOTED_ALPHA')) {
     define('LDAP_DN_SPECIAL_CHARS_QUOTED_ALPHA', 2);
 }
+if(!defined('LDAP_DN_SPECIAL_CHARS_QUOTED_ALPHA_REGEX')) {
+    define('LDAP_DN_SPECIAL_CHARS_QUOTED_ALPHA_REGEX', 3);
+}
 
 /**
  * The order of the special characters in these arrays _IS IMPORTANT_.
@@ -324,22 +381,36 @@ if(!defined('LDAP_DN_SPECIAL_CHARS_QUOTED_ALPHA')) {
  * Otherwise we'll double replace '\' with '\5C' which is Bad(tm)
  */
 function ldap_get_dn_special_chars() {
-    return array (
+    static $specialchars = null;
+
+    if ($specialchars !== null) {
+        return $specialchars;
+    }
+
+    $specialchars = array (
         LDAP_DN_SPECIAL_CHARS              => array('\\',  ' ',   '"',   '#',   '+',   ',',   ';',   '<',   '=',   '>',   "\0"),
         LDAP_DN_SPECIAL_CHARS_QUOTED_NUM   => array('\\5c','\\20','\\22','\\23','\\2b','\\2c','\\3b','\\3c','\\3d','\\3e','\\00'),
-        LDAP_DN_SPECIAL_CHARS_QUOTED_ALPHA => array('\\\\','\\ ', '\\"', '\\#', '\\+', '\\,', '\\;', '\\<', '\\>', '\\=', '\\00'),
+        LDAP_DN_SPECIAL_CHARS_QUOTED_ALPHA => array('\\\\','\\ ', '\\"', '\\#', '\\+', '\\,', '\\;', '\\<', '\\=', '\\>', '\\00'),
         );
+    $alpharegex = implode('|', array_map (function ($expr) { return preg_quote($expr); },
+                                          $specialchars[LDAP_DN_SPECIAL_CHARS_QUOTED_ALPHA]));
+    $specialchars[LDAP_DN_SPECIAL_CHARS_QUOTED_ALPHA_REGEX] = $alpharegex;
+
+    return $specialchars;
 }
 
 /**
- * Quote control characters in distinguished names used in LDAP - See RFC 4514/2253
+ * Quote control characters in AttributeValue parts of a RelativeDistinguishedName
+ * used in LDAP distinguished names - See RFC 4514/2253
  *
- * @param string The text to quote
- * @return string The text quoted
+ * @param string the AttributeValue to quote
+ * @return string the AttributeValue quoted
  */
 function ldap_addslashes($text) {
     $special_dn_chars = ldap_get_dn_special_chars();
 
+    // Use the preferred/universal quotation method: ESC HEX HEX
+    // (i.e., the 'numerically' quoted characters)
     $text = str_replace ($special_dn_chars[LDAP_DN_SPECIAL_CHARS],
                          $special_dn_chars[LDAP_DN_SPECIAL_CHARS_QUOTED_NUM],
                          $text);
@@ -347,44 +418,48 @@ function ldap_addslashes($text) {
 }
 
 /**
- * Unquote control characters in distinguished names used in LDAP - See RFC 4514/2253
+ * Unquote control characters in AttributeValue parts of a RelativeDistinguishedName
+ * used in LDAP distinguished names - See RFC 4514/2253
  *
- * @param string The text quoted
- * @return string The text unquoted
+ * @param string the AttributeValue quoted
+ * @return string the AttributeValue unquoted
  */
 function ldap_stripslashes($text) {
-    $special_dn_chars = ldap_get_dn_special_chars();
+    $specialchars = ldap_get_dn_special_chars();
 
-    // First unquote the simply backslashed special characters. If we
-    // do it the other way, we remove too many slashes.
-    $text = str_replace($special_dn_chars[LDAP_DN_SPECIAL_CHARS_QUOTED_ALPHA],
-                        $special_dn_chars[LDAP_DN_SPECIAL_CHARS],
-                        $text);
-
-    // Next unquote the 'numerically' quoted characters. We don't use
-    // LDAP_DN_SPECIAL_CHARS_QUOTED_NUM because the standard allows us
-    // to quote any character with this encoding, not just the special
+    // We can't unquote in two steps, as we end up unquoting too much in certain cases. So
+    // we need to build a regexp containing both the 'numerically' and 'alphabetically'
+    // quoted characters. We don't use LDAP_DN_SPECIAL_CHARS_QUOTED_NUM because the
+    // standard allows us to quote any character with this encoding, not just the special
     // ones.
-    $text = preg_replace('/\\\([0-9A-Fa-f]{2})/e', "chr(hexdec('\\1'))", $text);
+    // @TODO: This still misses some special (and rarely used) cases, but we need
+    // a full state machine to handle them.
+    $quoted = '/(\\\\[0-9A-Fa-f]{2}|' . $specialchars[LDAP_DN_SPECIAL_CHARS_QUOTED_ALPHA_REGEX] . ')/';
+    $text = preg_replace_callback($quoted,
+                                  function ($match) use ($specialchars) {
+                                      if (ctype_xdigit(ltrim($match[1], '\\'))) {
+                                          return chr(hexdec($match[1]));
+                                      } else {
+                                          return str_replace($specialchars[LDAP_DN_SPECIAL_CHARS_QUOTED_ALPHA],
+                                                             $specialchars[LDAP_DN_SPECIAL_CHARS],
+                                                             $match[1]);
+                                      }
+                                  },
+                                  $text);
 
     return $text;
 }
 
 
 /**
- * Check if PHP supports LDAP paged results and we can use them (we have to use LDAP
- * version 3, otherwise the server doesn't use them).
+ * Check if we use LDAP version 3, otherwise the server cannot use them.
  *
  * @param ldapversion integer The LDAP protocol version we use.
  *
  * @return boolean true is paged results can be used, false otherwise.
  */
 function ldap_paged_results_supported($ldapversion) {
-
-    if (((int)$ldapversion === 3) &&
-        function_exists('ldap_control_paged_result') &&
-        function_exists('ldap_control_paged_result_response')) {
-
+    if ((int)$ldapversion === 3) {
         return true;
     }
 

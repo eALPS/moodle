@@ -30,75 +30,489 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+/* === Functions that needs to be kept longer in deprecated lib than normal time period === */
+
 /**
- * Unsupported session id rewriting.
- * @deprecated
- * @param string $buffer
+ * Add an entry to the legacy log table.
+ *
+ * @deprecated since 2.7 use new events instead
+ *
+ * @param    int     $courseid  The course id
+ * @param    string  $module  The module name  e.g. forum, journal, resource, course, user etc
+ * @param    string  $action  'view', 'update', 'add' or 'delete', possibly followed by another word to clarify.
+ * @param    string  $url     The file and parameters used to see the results of the action
+ * @param    string  $info    Additional description information
+ * @param    int     $cm      The course_module->id if there is one
+ * @param    int|stdClass $user If log regards $user other than $USER
+ * @return void
  */
-function sid_ob_rewrite($buffer) {
-    throw new coding_exception('$CFG->usesid support was removed completely and can not be used.');
+function add_to_log($courseid, $module, $action, $url='', $info='', $cm=0, $user=0) {
+    debugging('add_to_log() has been deprecated, please rewrite your code to the new events API', DEBUG_DEVELOPER);
+
+    // This is a nasty hack that allows us to put all the legacy stuff into legacy storage,
+    // this way we may move all the legacy settings there too.
+    $manager = get_log_manager();
+    if (method_exists($manager, 'legacy_add_to_log')) {
+        $manager->legacy_add_to_log($courseid, $module, $action, $url, $info, $cm, $user);
+    }
 }
 
 /**
- * Insert or update log display entry. Entry may already exist.
- * $module, $action must be unique
+ * Function to call all event handlers when triggering an event
+ *
+ * @deprecated since 2.6
+ *
+ * @param string $eventname name of the event
+ * @param mixed $eventdata event data object
+ * @return int number of failed events
+ */
+function events_trigger($eventname, $eventdata) {
+    debugging('events_trigger() is deprecated, please use new events instead', DEBUG_DEVELOPER);
+    return events_trigger_legacy($eventname, $eventdata);
+}
+
+/**
+ * List all core subsystems and their location
+ *
+ * This is a whitelist of components that are part of the core and their
+ * language strings are defined in /lang/en/<<subsystem>>.php. If a given
+ * plugin is not listed here and it does not have proper plugintype prefix,
+ * then it is considered as course activity module.
+ *
+ * The location is optionally dirroot relative path. NULL means there is no special
+ * directory for this subsystem. If the location is set, the subsystem's
+ * renderer.php is expected to be there.
+ *
+ * @deprecated since 2.6, use core_component::get_core_subsystems()
+ *
+ * @param bool $fullpaths false means relative paths from dirroot, use true for performance reasons
+ * @return array of (string)name => (string|null)location
+ */
+function get_core_subsystems($fullpaths = false) {
+    global $CFG;
+
+    // NOTE: do not add any other debugging here, keep forever.
+
+    $subsystems = core_component::get_core_subsystems();
+
+    if ($fullpaths) {
+        return $subsystems;
+    }
+
+    debugging('Short paths are deprecated when using get_core_subsystems(), please fix the code to use fullpaths instead.', DEBUG_DEVELOPER);
+
+    $dlength = strlen($CFG->dirroot);
+
+    foreach ($subsystems as $k => $v) {
+        if ($v === null) {
+            continue;
+        }
+        $subsystems[$k] = substr($v, $dlength+1);
+    }
+
+    return $subsystems;
+}
+
+/**
+ * Lists all plugin types.
+ *
+ * @deprecated since 2.6, use core_component::get_plugin_types()
+ *
+ * @param bool $fullpaths false means relative paths from dirroot
+ * @return array Array of strings - name=>location
+ */
+function get_plugin_types($fullpaths = true) {
+    global $CFG;
+
+    // NOTE: do not add any other debugging here, keep forever.
+
+    $types = core_component::get_plugin_types();
+
+    if ($fullpaths) {
+        return $types;
+    }
+
+    debugging('Short paths are deprecated when using get_plugin_types(), please fix the code to use fullpaths instead.', DEBUG_DEVELOPER);
+
+    $dlength = strlen($CFG->dirroot);
+
+    foreach ($types as $k => $v) {
+        if ($k === 'theme') {
+            $types[$k] = 'theme';
+            continue;
+        }
+        $types[$k] = substr($v, $dlength+1);
+    }
+
+    return $types;
+}
+
+/**
+ * Use when listing real plugins of one type.
+ *
+ * @deprecated since 2.6, use core_component::get_plugin_list()
+ *
+ * @param string $plugintype type of plugin
+ * @return array name=>fulllocation pairs of plugins of given type
+ */
+function get_plugin_list($plugintype) {
+
+    // NOTE: do not add any other debugging here, keep forever.
+
+    if ($plugintype === '') {
+        $plugintype = 'mod';
+    }
+
+    return core_component::get_plugin_list($plugintype);
+}
+
+/**
+ * Get a list of all the plugins of a given type that define a certain class
+ * in a certain file. The plugin component names and class names are returned.
+ *
+ * @deprecated since 2.6, use core_component::get_plugin_list_with_class()
+ *
+ * @param string $plugintype the type of plugin, e.g. 'mod' or 'report'.
+ * @param string $class the part of the name of the class after the
+ *      frankenstyle prefix. e.g 'thing' if you are looking for classes with
+ *      names like report_courselist_thing. If you are looking for classes with
+ *      the same name as the plugin name (e.g. qtype_multichoice) then pass ''.
+ * @param string $file the name of file within the plugin that defines the class.
+ * @return array with frankenstyle plugin names as keys (e.g. 'report_courselist', 'mod_forum')
+ *      and the class names as values (e.g. 'report_courselist_thing', 'qtype_multichoice').
+ */
+function get_plugin_list_with_class($plugintype, $class, $file) {
+
+    // NOTE: do not add any other debugging here, keep forever.
+
+    return core_component::get_plugin_list_with_class($plugintype, $class, $file);
+}
+
+/**
+ * Returns the exact absolute path to plugin directory.
+ *
+ * @deprecated since 2.6, use core_component::get_plugin_directory()
+ *
+ * @param string $plugintype type of plugin
+ * @param string $name name of the plugin
+ * @return string full path to plugin directory; NULL if not found
+ */
+function get_plugin_directory($plugintype, $name) {
+
+    // NOTE: do not add any other debugging here, keep forever.
+
+    if ($plugintype === '') {
+        $plugintype = 'mod';
+    }
+
+    return core_component::get_plugin_directory($plugintype, $name);
+}
+
+/**
+ * Normalize the component name using the "frankenstyle" names.
+ *
+ * @deprecated since 2.6, use core_component::normalize_component()
+ *
+ * @param string $component
+ * @return array as (string)$type => (string)$plugin
+ */
+function normalize_component($component) {
+
+    // NOTE: do not add any other debugging here, keep forever.
+
+    return core_component::normalize_component($component);
+}
+
+/**
+ * Return exact absolute path to a plugin directory.
+ *
+ * @deprecated since 2.6, use core_component::normalize_component()
+ *
+ * @param string $component name such as 'moodle', 'mod_forum'
+ * @return string full path to component directory; NULL if not found
+ */
+function get_component_directory($component) {
+
+    // NOTE: do not add any other debugging here, keep forever.
+
+    return core_component::get_component_directory($component);
+}
+
+/**
+ * Get the context instance as an object. This function will create the
+ * context instance if it does not exist yet.
+ *
+ * @deprecated since 2.2, use context_course::instance() or other relevant class instead
+ * @todo This will be deleted in Moodle 2.8, refer MDL-34472
+ * @param integer $contextlevel The context level, for example CONTEXT_COURSE, or CONTEXT_MODULE.
+ * @param integer $instance The instance id. For $level = CONTEXT_COURSE, this would be $course->id,
+ *      for $level = CONTEXT_MODULE, this would be $cm->id. And so on. Defaults to 0
+ * @param int $strictness IGNORE_MISSING means compatible mode, false returned if record not found, debug message if more found;
+ *      MUST_EXIST means throw exception if no record or multiple records found
+ * @return context The context object.
+ */
+function get_context_instance($contextlevel, $instance = 0, $strictness = IGNORE_MISSING) {
+
+    debugging('get_context_instance() is deprecated, please use context_xxxx::instance() instead.', DEBUG_DEVELOPER);
+
+    $instances = (array)$instance;
+    $contexts = array();
+
+    $classname = context_helper::get_class_for_level($contextlevel);
+
+    // we do not load multiple contexts any more, PAGE should be responsible for any preloading
+    foreach ($instances as $inst) {
+        $contexts[$inst] = $classname::instance($inst, $strictness);
+    }
+
+    if (is_array($instance)) {
+        return $contexts;
+    } else {
+        return $contexts[$instance];
+    }
+}
+/* === End of long term deprecated api list === */
+
+/**
+ * Adds a file upload to the log table so that clam can resolve the filename to the user later if necessary
+ *
+ * @deprecated since 2.7 - use new file picker instead
+ *
+ */
+function clam_log_upload($newfilepath, $course=null, $nourl=false) {
+    throw new coding_exception('clam_log_upload() can not be used any more, please use file picker instead');
+}
+
+/**
+ * This function logs to error_log and to the log table that an infected file has been found and what's happened to it.
+ *
+ * @deprecated since 2.7 - use new file picker instead
+ *
+ */
+function clam_log_infected($oldfilepath='', $newfilepath='', $userid=0) {
+    throw new coding_exception('clam_log_infected() can not be used any more, please use file picker instead');
+}
+
+/**
+ * Some of the modules allow moving attachments (glossary), in which case we need to hunt down an original log and change the path.
+ *
+ * @deprecated since 2.7 - use new file picker instead
+ *
+ */
+function clam_change_log($oldpath, $newpath, $update=true) {
+    throw new coding_exception('clam_change_log() can not be used any more, please use file picker instead');
+}
+
+/**
+ * Replaces the given file with a string.
+ *
+ * @deprecated since 2.7 - infected files are now deleted in file picker
+ *
+ */
+function clam_replace_infected_file($file) {
+    throw new coding_exception('clam_replace_infected_file() can not be used any more, please use file picker instead');
+}
+
+/**
+ * Deals with an infected file - either moves it to a quarantinedir
+ * (specified in CFG->quarantinedir) or deletes it.
+ *
+ * If moving it fails, it deletes it.
+ *
+ * @deprecated since 2.7
+ */
+function clam_handle_infected_file($file, $userid=0, $basiconly=false) {
+    throw new coding_exception('clam_handle_infected_file() can not be used any more, please use file picker instead');
+}
+
+/**
+ * If $CFG->runclamonupload is set, we scan a given file. (called from {@link preprocess_files()})
+ *
+ * @deprecated since 2.7
+ */
+function clam_scan_moodle_file(&$file, $course) {
+    throw new coding_exception('clam_scan_moodle_file() can not be used any more, please use file picker instead');
+}
+
+
+/**
+ * Checks whether the password compatibility library will work with the current
+ * version of PHP. This cannot be done using PHP version numbers since the fix
+ * has been backported to earlier versions in some distributions.
+ *
+ * See https://github.com/ircmaxell/password_compat/issues/10 for more details.
+ *
+ * @deprecated since 2.7 PHP 5.4.x should be always compatible.
+ *
+ */
+function password_compat_not_supported() {
+    throw new coding_exception('Do not use password_compat_not_supported() - bcrypt is now always available');
+}
+
+/**
+ * Factory method that was returning moodle_session object.
+ *
+ * @deprecated since 2.6
+ */
+function session_get_instance() {
+    throw new coding_exception('session_get_instance() is removed, use \core\session\manager instead');
+}
+
+/**
+ * Returns true if legacy session used.
+ *
+ * @deprecated since 2.6
+ */
+function session_is_legacy() {
+    throw new coding_exception('session_is_legacy() is removed, do not use any more');
+}
+
+/**
+ * Terminates all sessions, auth hooks are not executed.
+ *
+ * @deprecated since 2.6
+ */
+function session_kill_all() {
+    throw new coding_exception('session_kill_all() is removed, use \core\session\manager::kill_all_sessions() instead');
+}
+
+/**
+ * Mark session as accessed, prevents timeouts.
+ *
+ * @deprecated since 2.6
+ */
+function session_touch($sid) {
+    throw new coding_exception('session_touch() is removed, use \core\session\manager::touch_session() instead');
+}
+
+/**
+ * Terminates one sessions, auth hooks are not executed.
+ *
+ * @deprecated since 2.6
+ */
+function session_kill($sid) {
+    throw new coding_exception('session_kill() is removed, use \core\session\manager::kill_session() instead');
+}
+
+/**
+ * Terminates all sessions of one user, auth hooks are not executed.
+ *
+ * @deprecated since 2.6
+ */
+function session_kill_user($userid) {
+    throw new coding_exception('session_kill_user() is removed, use \core\session\manager::kill_user_sessions() instead');
+}
+
+/**
+ * Setup $USER object - called during login, loginas, etc.
+ *
+ * Call sync_user_enrolments() manually after log-in, or log-in-as.
+ *
+ * @deprecated since 2.6
+ */
+function session_set_user($user) {
+    throw new coding_exception('session_set_user() is removed, use \core\session\manager::set_user() instead');
+}
+
+/**
+ * Is current $USER logged-in-as somebody else?
+ * @deprecated since 2.6
+ */
+function session_is_loggedinas() {
+    throw new coding_exception('session_is_loggedinas() is removed, use \core\session\manager::is_loggedinas() instead');
+}
+
+/**
+ * Returns the $USER object ignoring current login-as session
+ * @deprecated since 2.6
+ */
+function session_get_realuser() {
+    throw new coding_exception('session_get_realuser() is removed, use \core\session\manager::get_realuser() instead');
+}
+
+/**
+ * Login as another user - no security checks here.
+ * @deprecated since 2.6
+ */
+function session_loginas($userid, $context) {
+    throw new coding_exception('session_loginas() is removed, use \core\session\manager::loginas() instead');
+}
+
+/**
+ * Minify JavaScript files.
+ *
+ * @deprecated since 2.6
+ */
+function js_minify($files) {
+    throw new coding_exception('js_minify() is removed, use core_minify::js_files() or core_minify::js() instead.');
+}
+
+/**
+ * Minify CSS files.
+ *
+ * @deprecated since 2.6
+ */
+function css_minify_css($files) {
+    throw new coding_exception('css_minify_css() is removed, use core_minify::css_files() or core_minify::css() instead.');
+}
+
+// === Deprecated before 2.6.0 ===
+
+/**
+ * Hack to find out the GD version by parsing phpinfo output
+ *
  * @deprecated
- *
- * @param string $module
- * @param string $action
- * @param string $mtable
- * @param string $field
- * @return void
- *
+ */
+function check_gd_version() {
+    throw new coding_exception('check_gd_version() is removed, GD extension is always available now');
+}
+
+/**
+ * Not used any more, the account lockout handling is now
+ * part of authenticate_user_login().
+ * @deprecated
+ */
+function update_login_count() {
+    throw new coding_exception('update_login_count() is removed, all calls need to be removed');
+}
+
+/**
+ * Not used any more, replaced by proper account lockout.
+ * @deprecated
+ */
+function reset_login_count() {
+    throw new coding_exception('reset_login_count() is removed, all calls need to be removed');
+}
+
+/**
+ * @deprecated
  */
 function update_log_display_entry($module, $action, $mtable, $field) {
-    global $DB;
 
-    debugging('The update_log_display_entry() is deprecated, please use db/log.php description file instead.');
+    throw new coding_exception('The update_log_display_entry() is removed, please use db/log.php description file instead.');
 }
 
 /**
- * Given some text in HTML format, this function will pass it
- * through any filters that have been configured for this context.
- *
- * @deprecated use the text formatting in a standard way instead,
+ * @deprecated use the text formatting in a standard way instead (http://docs.moodle.org/dev/Output_functions)
  *             this was abused mostly for embedding of attachments
- *
- * @param string $text The text to be passed through format filters
- * @param int $courseid The current course.
- * @return string the filtered string.
  */
 function filter_text($text, $courseid = NULL) {
-    global $CFG, $COURSE;
-
-    if (!$courseid) {
-        $courseid = $COURSE->id;
-    }
-
-    if (!$context = context_course::instance($courseid, IGNORE_MISSING)) {
-        return $text;
-    }
-
-    return filter_manager::instance()->filter_text($text, $context);
+    throw new coding_exception('filter_text() can not be used anymore, use format_text(), format_string() etc instead.');
 }
 
 /**
- * This function indicates that current page requires the https
- * when $CFG->loginhttps enabled.
- *
- * By using this function properly, we can ensure 100% https-ized pages
- * at our entire discretion (login, forgot_password, change_password)
  * @deprecated use $PAGE->https_required() instead
  */
 function httpsrequired() {
-    global $PAGE;
-    $PAGE->https_required();
+    throw new coding_exception('httpsrequired() can not be used any more use $PAGE->https_required() instead.');
 }
 
 /**
  * Given a physical path to a file, returns the URL through which it can be reached in Moodle.
  *
- * @deprecated use moodle_url factory methods instead
+ * @deprecated since 3.1 - replacement legacy file API methods can be found on the moodle_url class, for example:
+ * The moodle_url::make_legacyfile_url() method can be used to generate a legacy course file url. To generate
+ * course module file.php url the moodle_url::make_file_url() should be used.
  *
  * @param string $path Physical path to a file
  * @param array $options associative array of GET variables to append to the URL
@@ -106,6 +520,7 @@ function httpsrequired() {
  * @return string URL to file
  */
 function get_file_url($path, $options=null, $type='coursefile') {
+    debugging('Function get_file_url() is deprecated, please use moodle_url factory methods instead.', DEBUG_DEVELOPER);
     global $CFG;
 
     $path = str_replace('//', '/', $path);
@@ -155,422 +570,31 @@ function get_file_url($path, $options=null, $type='coursefile') {
 }
 
 /**
- * If there has been an error uploading a file, print the appropriate error message
- * Numerical constants used as constant definitions not added until PHP version 4.2.0
- * @deprecated removed - use new file api
- */
-function print_file_upload_error($filearray = '', $returnerror = false) {
-    throw new coding_exception('print_file_upload_error() can not be used any more, please use new file API');
-}
-
-/**
- * Handy function for resolving file conflicts
- * @deprecated removed - use new file api
- */
-
-function resolve_filename_collisions($destination,$files,$format='%s_%d.%s') {
-    throw new coding_exception('resolve_filename_collisions() can not be used any more, please use new file API');
-}
-
-/**
- * Checks a file name for any conflicts
- * @deprecated removed - use new file api
- */
-function check_potential_filename($destination,$filename,$files) {
-    throw new coding_exception('check_potential_filename() can not be used any more, please use new file API');
-}
-
-/**
- * This function prints out a number of upload form elements.
- * @deprecated removed - use new file api
- */
-function upload_print_form_fragment($numfiles=1, $names=null, $descriptions=null, $uselabels=false, $labelnames=null, $coursebytes=0, $modbytes=0, $return=false) {
-    throw new coding_exception('upload_print_form_fragment() can not be used any more, please use new file API');
-}
-
-/**
- * Return the authentication plugin title
- *
- * @param string $authtype plugin type
- * @return string
- */
-function auth_get_plugin_title($authtype) {
-    debugging('Function auth_get_plugin_title() is deprecated, please use standard get_string("pluginname", "auth_'.$authtype.'")!');
-    return get_string('pluginname', "auth_{$authtype}");
-}
-
-
-
-/**
- * Enrol someone without using the default role in a course
- * @deprecated
- */
-function enrol_into_course($course, $user, $enrol) {
-    error('Function enrol_into_course() was removed, please use new enrol plugins instead!');
-}
-
-/**
- * Returns a role object that is the default role for new enrolments in a given course
- *
- * @deprecated
- * @param object $course
- * @return object returns a role or NULL if none set
- */
-function get_default_course_role($course) {
-    debugging('Function get_default_course_role() is deprecated, please use individual enrol plugin settings instead!');
-
-    $student = get_archetype_roles('student');
-    $student = reset($student);
-
-    return $student;
-}
-
-/**
- * Extremely slow enrolled courses query.
- * @deprecated
- */
-function get_my_courses($userid, $sort='visible DESC,sortorder ASC', $fields=NULL, $doanything=false,$limit=0) {
-    error('Function get_my_courses() was removed, please use new enrol_get_my_courses() or enrol_get_users_courses()!');
-}
-
-/**
- * Was returning list of translations, use new string_manager instead
- *
- * @deprecated
- * @param bool $refreshcache force refreshing of lang cache
- * @param bool $returnall ignore langlist, return all languages available
- * @return array An associative array with contents in the form of LanguageCode => LanguageName
- */
-function get_list_of_languages($refreshcache=false, $returnall=false) {
-    debugging('get_list_of_languages() is deprecated, please use get_string_manager()->get_list_of_translations() instead.');
-    if ($refreshcache) {
-        get_string_manager()->reset_caches();
-    }
-    return get_string_manager()->get_list_of_translations($returnall);
-}
-
-/**
- * Returns a list of currencies in the current language
- * @deprecated
- * @return array
- */
-function get_list_of_currencies() {
-    debugging('get_list_of_currencies() is deprecated, please use get_string_manager()->get_list_of_currencies() instead.');
-    return get_string_manager()->get_list_of_currencies();
-}
-
-/**
- * Returns a list of all enabled country names in the current translation
- * @deprecated
- * @return array two-letter country code => translated name.
- */
-function get_list_of_countries() {
-    debugging('get_list_of_countries() is deprecated, please use get_string_manager()->get_list_of_countries() instead.');
-    return get_string_manager()->get_list_of_countries(false);
-}
-
-/**
- * @deprecated
- */
-function isteacher() {
-    error('Function isteacher() was removed, please use capabilities instead!');
-}
-
-/**
- * @deprecated
- */
-function isteacherinanycourse() {
-    throw new coding_Exception('Function isteacherinanycourse() was removed, please use capabilities instead!');
-}
-
-/**
- * @deprecated
- */
-function get_guest() {
-    throw new coding_Exception('Function get_guest() was removed, please use capabilities instead!');
-}
-
-/**
- * @deprecated
- */
-function isguest() {
-    throw new coding_Exception('Function isguest() was removed, please use capabilities instead!');
-}
-
-/**
- * @deprecated
- */
-function get_teacher() {
-    throw new coding_Exception('Function get_teacher() was removed, please use capabilities instead!');
-}
-
-/**
- * Return all course participant for a given course
- *
- * @deprecated
- * @param integer $courseid
- * @return array of user
+ * @deprecated use get_enrolled_users($context) instead.
  */
 function get_course_participants($courseid) {
-    return get_enrolled_users(context_course::instance($courseid));
+    throw new coding_exception('get_course_participants() can not be used any more, use get_enrolled_users() instead.');
 }
 
 /**
- * Return true if the user is a participant for a given course
- *
- * @deprecated
- * @param integer $userid
- * @param integer $courseid
- * @return boolean
+ * @deprecated use is_enrolled($context, $userid) instead.
  */
 function is_course_participant($userid, $courseid) {
-    return is_enrolled(context_course::instance($courseid), $userid);
+    throw new coding_exception('is_course_participant() can not be used any more, use is_enrolled() instead.');
 }
 
 /**
- * Searches logs to find all enrolments since a certain date
- *
- * used to print recent activity
- *
- * @global object
- * @uses CONTEXT_COURSE
- * @param int $courseid The course in question.
- * @param int $timestart The date to check forward of
- * @return object|false  {@link $USER} records or false if error.
+ * @deprecated
  */
 function get_recent_enrolments($courseid, $timestart) {
-    global $DB;
-
-    $context = context_course::instance($courseid);
-
-    $sql = "SELECT u.id, u.firstname, u.lastname, MAX(l.time)
-              FROM {user} u, {role_assignments} ra, {log} l
-             WHERE l.time > ?
-                   AND l.course = ?
-                   AND l.module = 'course'
-                   AND l.action = 'enrol'
-                   AND ".$DB->sql_cast_char2int('l.info')." = u.id
-                   AND u.id = ra.userid
-                   AND ra.contextid ".get_related_contexts_string($context)."
-          GROUP BY u.id, u.firstname, u.lastname
-          ORDER BY MAX(l.time) ASC";
-    $params = array($timestart, $courseid);
-    return $DB->get_records_sql($sql, $params);
-}
-
-
-/**
- * Turn the ctx* fields in an objectlike record into a context subobject
- * This allows us to SELECT from major tables JOINing with
- * context at no cost, saving a ton of context lookups...
- *
- * Use context_instance_preload() instead.
- *
- * @deprecated since 2.0
- * @param object $rec
- * @return object
- */
-function make_context_subobj($rec) {
-    throw new coding_Exception('make_context_subobj() was removed, use new context preloading');
+    throw new coding_exception('get_recent_enrolments() is removed as it returned inaccurate results.');
 }
 
 /**
- * Do some basic, quick checks to see whether $rec->context looks like a valid context object.
- *
- * Use context_instance_preload() instead.
- *
- * @deprecated since 2.0
- * @param object $rec a think that has a context, for example a course,
- *      course category, course modules, etc.
- * @param int $contextlevel the type of thing $rec is, one of the CONTEXT_... constants.
- * @return bool whether $rec->context looks like the correct context object
- *      for this thing.
- */
-function is_context_subobj_valid($rec, $contextlevel) {
-    throw new coding_Exception('is_context_subobj_valid() was removed, use new context preloading');
-}
-
-/**
- * Ensure that $rec->context is present and correct before you continue
- *
- * When you have a record (for example a $category, $course, $user or $cm that may,
- * or may not, have come from a place that does make_context_subobj, you can use
- * this method to ensure that $rec->context is present and correct before you continue.
- *
- * Use context_instance_preload() instead.
- *
- * @deprecated since 2.0
- * @param object $rec a thing that has an associated context.
- * @param integer $contextlevel the type of thing $rec is, one of the CONTEXT_... constants.
- */
-function ensure_context_subobj_present(&$rec, $contextlevel) {
-    throw new coding_Exception('ensure_context_subobj_present() was removed, use new context preloading');
-}
-
-########### FROM weblib.php ##########################################################################
-
-
-/**
- * Print a message in a standard themed box.
- * This old function used to implement boxes using tables.  Now it uses a DIV, but the old
- * parameters remain.  If possible, $align, $width and $color should not be defined at all.
- * Preferably just use print_box() in weblib.php
- *
- * @deprecated
- * @param string $message The message to display
- * @param string $align alignment of the box, not the text (default center, left, right).
- * @param string $width width of the box, including units %, for example '100%'.
- * @param string $color background colour of the box, for example '#eee'.
- * @param int $padding padding in pixels, specified without units.
- * @param string $class space-separated class names.
- * @param string $id space-separated id names.
- * @param boolean $return return as string or just print it
- * @return string|void Depending on $return
- */
-function print_simple_box($message, $align='', $width='', $color='', $padding=5, $class='generalbox', $id='', $return=false) {
-    $output = '';
-    $output .= print_simple_box_start($align, $width, $color, $padding, $class, $id, true);
-    $output .= $message;
-    $output .= print_simple_box_end(true);
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-
-
-/**
- * This old function used to implement boxes using tables.  Now it uses a DIV, but the old
- * parameters remain.  If possible, $align, $width and $color should not be defined at all.
- * Even better, please use print_box_start() in weblib.php
- *
- * @param string $align alignment of the box, not the text (default center, left, right).   DEPRECATED
- * @param string $width width of the box, including % units, for example '100%'.            DEPRECATED
- * @param string $color background colour of the box, for example '#eee'.                   DEPRECATED
- * @param int $padding padding in pixels, specified without units.                          OBSOLETE
- * @param string $class space-separated class names.
- * @param string $id space-separated id names.
- * @param boolean $return return as string or just print it
- * @return string|void Depending on $return
- */
-function print_simple_box_start($align='', $width='', $color='', $padding=5, $class='generalbox', $id='', $return=false) {
-    debugging('print_simple_box(_start/_end) is deprecated. Please use $OUTPUT->box(_start/_end) instead', DEBUG_DEVELOPER);
-
-    $output = '';
-
-    $divclasses = 'box '.$class.' '.$class.'content';
-    $divstyles  = '';
-
-    if ($align) {
-        $divclasses .= ' boxalign'.$align;    // Implement alignment using a class
-    }
-    if ($width) {    // Hopefully we can eliminate these in calls to this function (inline styles are bad)
-        if (substr($width, -1, 1) == '%') {    // Width is a % value
-            $width = (int) substr($width, 0, -1);    // Extract just the number
-            if ($width < 40) {
-                $divclasses .= ' boxwidthnarrow';    // Approx 30% depending on theme
-            } else if ($width > 60) {
-                $divclasses .= ' boxwidthwide';      // Approx 80% depending on theme
-            } else {
-                $divclasses .= ' boxwidthnormal';    // Approx 50% depending on theme
-            }
-        } else {
-            $divstyles  .= ' width:'.$width.';';     // Last resort
-        }
-    }
-    if ($color) {    // Hopefully we can eliminate these in calls to this function (inline styles are bad)
-        $divstyles  .= ' background:'.$color.';';
-    }
-    if ($divstyles) {
-        $divstyles = ' style="'.$divstyles.'"';
-    }
-
-    if ($id) {
-        $id = ' id="'.$id.'"';
-    }
-
-    $output .= '<div'.$id.$divstyles.' class="'.$divclasses.'">';
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-
-/**
- * Print the end portion of a standard themed box.
- * Preferably just use print_box_end() in weblib.php
- *
- * @param boolean $return return as string or just print it
- * @return string|void Depending on $return
- */
-function print_simple_box_end($return=false) {
-    $output = '</div>';
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Given some text this function converted any URLs it found into HTML links
- *
- * This core function has been replaced with filter_urltolink since Moodle 2.0
- *
- * @param string $text Passed in by reference. The string to be searched for urls.
- */
-function convert_urls_into_links($text) {
-    debugging('convert_urls_into_links() has been deprecated and replaced by a new filter');
-}
-
-/**
- * Used to be called from help.php to inject a list of smilies into the
- * emoticons help file.
- *
- * @return string HTML
- */
-function get_emoticons_list_for_help_file() {
-    debugging('get_emoticons_list_for_help_file() has been deprecated, see the new emoticon_manager API');
-    return '';
-}
-
-/**
- * Was used to replace all known smileys in the text with image equivalents
- *
- * This core function has been replaced with filter_emoticon since Moodle 2.0
- */
-function replace_smilies(&$text) {
-    debugging('replace_smilies() has been deprecated and replaced with the new filter_emoticon');
-}
-
-/**
- * deprecated - use clean_param($string, PARAM_FILE); instead
- * Check for bad characters ?
- *
- * @todo Finish documenting this function - more detail needed in description as well as details on arguments
- *
- * @param string $string ?
- * @param int $allowdots ?
- * @return bool
+ * @deprecated use clean_param($string, PARAM_FILE) instead.
  */
 function detect_munged_arguments($string, $allowdots=1) {
-    if (substr_count($string, '..') > $allowdots) {   // Sometimes we allow dots in references
-        return true;
-    }
-    if (preg_match('/[\|\`]/', $string)) {  // check for other bad characters
-        return true;
-    }
-    if (empty($string) or $string == '/') {
-        return true;
-    }
-
-    return false;
+    throw new coding_exception('detect_munged_arguments() can not be used any more, please use clean_param(,PARAM_FILE) instead.');
 }
 
 
@@ -584,11 +608,13 @@ function detect_munged_arguments($string, $allowdots=1) {
  * @param string $zipfile The zip file to unzip
  * @param string $destination The location to unzip to
  * @param bool $showstatus_ignored Unused
+ * @deprecated since 2.0 MDL-15919
  */
 function unzip_file($zipfile, $destination = '', $showstatus_ignored = true) {
-    global $CFG;
+    debugging(__FUNCTION__ . '() is deprecated. '
+            . 'Please use the application/zip file_packer implementation instead.', DEBUG_DEVELOPER);
 
-    //Extract everything from zipfile
+    // Extract everything from zipfile.
     $path_parts = pathinfo(cleardoubleslashes($zipfile));
     $zippath = $path_parts["dirname"];       //The path of the zip file
     $zipfilename = $path_parts["basename"];  //The name of the zip file
@@ -650,11 +676,14 @@ function unzip_file($zipfile, $destination = '', $showstatus_ignored = true) {
  * @param array $originalfiles Files to zip
  * @param string $destination The destination path
  * @return bool Outcome
+ *
+ * @deprecated since 2.0 MDL-15919
  */
-function zip_files ($originalfiles, $destination) {
-    global $CFG;
+function zip_files($originalfiles, $destination) {
+    debugging(__FUNCTION__ . '() is deprecated. '
+            . 'Please use the application/zip file_packer implementation instead.', DEBUG_DEVELOPER);
 
-    //Extract everything from destination
+    // Extract everything from destination.
     $path_parts = pathinfo(cleardoubleslashes($destination));
     $destpath = $path_parts["dirname"];       //The path of the zip file
     $destfilename = $path_parts["basename"];  //The name of the zip file
@@ -715,29 +744,11 @@ function zip_files ($originalfiles, $destination) {
     return $packer->archive_to_pathname($zipfiles, $destpath . '/' . $destfilename);
 }
 
-/////////////////////////////////////////////////////////////
-/// Old functions not used anymore - candidates for removal
-/////////////////////////////////////////////////////////////
-
-
-/** various deprecated groups function **/
-
-
 /**
- * Get the IDs for the user's groups in the given course.
- *
- * @global object
- * @param int $courseid The course being examined - the 'course' table id field.
- * @return array|bool An _array_ of groupids, or false
- * (Was return $groupids[0] - consequences!)
+ * @deprecated use groups_get_all_groups() instead.
  */
 function mygroupid($courseid) {
-    global $USER;
-    if ($groups = groups_get_all_groups($courseid, $USER->id)) {
-        return array_keys($groups);
-    } else {
-        return false;
-    }
+    throw new coding_exception('mygroupid() can not be used any more, please use groups_get_all_groups() instead.');
 }
 
 
@@ -746,12 +757,16 @@ function mygroupid($courseid) {
  *
  * Could be false, SEPARATEGROUPS or VISIBLEGROUPS    (<-- Martin)
  *
+ * @deprecated since Moodle 2.0 MDL-14617 - please do not use this function any more.
+ * @todo MDL-50273 This will be deleted in Moodle 3.2.
+ *
  * @param object $course Course Object
  * @param object $cm Course Manager Object
  * @return mixed $course->groupmode
  */
 function groupmode($course, $cm=null) {
 
+    debugging('groupmode() is deprecated, please use groups_get_* instead', DEBUG_DEVELOPER);
     if (isset($cm->groupmode) && empty($course->groupmodeforce)) {
         return $cm->groupmode;
     }
@@ -764,6 +779,10 @@ function groupmode($course, $cm=null) {
  * Sets currentgroup[$courseid] in the session variable appropriately.
  * Does not do any permission checking.
  *
+ * @deprecated Since year 2006 - please do not use this function any more.
+ * @todo MDL-50273 This will be deleted in Moodle 3.2.
+ *
+ * @global object
  * @global object
  * @param int $courseid The course being examined - relates to id field in
  * 'course' table.
@@ -772,12 +791,16 @@ function groupmode($course, $cm=null) {
  */
 function set_current_group($courseid, $groupid) {
     global $SESSION;
+
+    debugging('set_current_group() is deprecated, please use $SESSION->currentgroup[$courseid] instead', DEBUG_DEVELOPER);
     return $SESSION->currentgroup[$courseid] = $groupid;
 }
 
-
 /**
  * Gets the current group - either from the session variable or from the database.
+ *
+ * @deprecated Since year 2006 - please do not use this function any more.
+ * @todo MDL-50273 This will be deleted in Moodle 3.2.
  *
  * @global object
  * @param int $courseid The course being examined - relates to id field in
@@ -789,6 +812,7 @@ function set_current_group($courseid, $groupid) {
 function get_current_group($courseid, $full = false) {
     global $SESSION;
 
+    debugging('get_current_group() is deprecated, please use groups_get_* instead', DEBUG_DEVELOPER);
     if (isset($SESSION->currentgroup[$courseid])) {
         if ($full) {
             return groups_get_group($SESSION->currentgroup[$courseid]);
@@ -815,338 +839,94 @@ function get_current_group($courseid, $full = false) {
     }
 }
 
+/**
+ * @deprecated Since Moodle 2.8
+ */
+function groups_filter_users_by_course_module_visible($cm, $users) {
+    throw new coding_exception('groups_filter_users_by_course_module_visible() is removed. ' .
+            'Replace with a call to \core_availability\info_module::filter_user_list(), ' .
+            'which does basically the same thing but includes other restrictions such ' .
+            'as profile restrictions.');
+}
 
 /**
- * Inndicates fatal error. This function was originally printing the
- * error message directly, since 2.0 it is throwing exception instead.
- * The error printing is handled in default exception handler.
- *
- * Old method, don't call directly in new code - use print_error instead.
- *
- * @param string $message The message to display to the user about the error.
- * @param string $link The url where the user will be prompted to continue. If no url is provided the user will be directed to the site index page.
- * @return void, always throws moodle_exception
+ * @deprecated Since Moodle 2.8
+ */
+function groups_course_module_visible($cm, $userid=null) {
+    throw new coding_exception('groups_course_module_visible() is removed, use $cm->uservisible to decide whether the current
+        user can ' . 'access an activity.', DEBUG_DEVELOPER);
+}
+
+/**
+ * @deprecated since 2.0
  */
 function error($message, $link='') {
-    throw new moodle_exception('notlocalisederrormessage', 'error', $link, $message, 'error() is a deprecated function, please call print_error() instead of error()');
+    throw new coding_exception('notlocalisederrormessage', 'error', $link, $message, 'error() is a removed, please call
+            print_error() instead of error()');
 }
 
-
-//////////////////////////
-/// removed functions ////
-//////////////////////////
-
-/**
- * @deprecated
- * @param mixed $name
- * @param mixed $editorhidebuttons
- * @param mixed $id
- * @return void Throws an error and does nothing
- */
-function use_html_editor($name='', $editorhidebuttons='', $id='') {
-    error('use_html_editor() not available anymore');
-}
-
-/**
- * The old method that was used to include JavaScript libraries.
- * Please use $PAGE->requires->js_module() instead.
- *
- * @param mixed $lib The library or libraries to load (a string or array of strings)
- *      There are three way to specify the library:
- *      1. a shorname like 'yui_yahoo'. This translates into a call to $PAGE->requires->yui2_lib('yahoo');
- *      2. the path to the library relative to wwwroot, for example 'lib/javascript-static.js'
- *      3. (legacy) a full URL like $CFG->wwwroot . '/lib/javascript-static.js'.
- *      2. and 3. lead to a call $PAGE->requires->js('/lib/javascript-static.js').
- */
-function require_js($lib) {
-    throw new coding_exception('require_js() was removed, use new JS api');
-}
-
-/**
- * Makes an upload directory for a particular module.
- *
- * This function has been deprecated by the file API changes in Moodle 2.0.
- *
- * @deprecated
- * @param int $courseid The id of the course in question - maps to id field of 'course' table.
- * @return string|false Returns full path to directory if successful, false if not
- */
-function make_mod_upload_directory($courseid) {
-    throw new coding_exception('make_mod_upload_directory has been deprecated by the file API changes in Moodle 2.0.');
-}
-
-/**
- * Used to be used for setting up the theme. No longer used by core code, and
- * should not have been used elsewhere.
- *
- * The theme is now automatically initialised before it is first used. If you really need
- * to force this to happen, just reference $PAGE->theme.
- *
- * To force a particular theme on a particular page, you can use $PAGE->force_theme(...).
- * However, I can't think of any valid reason to do that outside the theme selector UI.
- *
- * @deprecated
- * @param string $theme The theme to use defaults to current theme
- * @param array $params An array of parameters to use
- */
-function theme_setup($theme = '', $params=NULL) {
-    throw new coding_exception('The function theme_setup is no longer required, and should no longer be used. ' .
-            'The current theme gets initialised automatically before it is first used.');
-}
 
 /**
  * @deprecated use $PAGE->theme->name instead.
- * @return string the name of the current theme.
  */
 function current_theme() {
-    global $PAGE;
-    // TODO, uncomment this once we have eliminated all references to current_theme in core code.
-    // debugging('current_theme is deprecated, use $PAGE->theme->name instead', DEBUG_DEVELOPER);
-    return $PAGE->theme->name;
+    throw new coding_exception('current_theme() can not be used any more, please use $PAGE->theme->name instead');
 }
 
 /**
- * Prints some red text using echo
- *
  * @deprecated
- * @param string $error The text to be displayed in red
  */
 function formerr($error) {
-    debugging('formerr() has been deprecated. Please change your code to use $OUTPUT->error_text($string).');
-    global $OUTPUT;
-    echo $OUTPUT->error_text($error);
+    throw new coding_exception('formerr() is removed. Please change your code to use $OUTPUT->error_text($string).');
 }
 
 /**
- * Return the markup for the destination of the 'Skip to main content' links.
- * Accessibility improvement for keyboard-only users.
- *
- * Used in course formats, /index.php and /course/index.php
- *
  * @deprecated use $OUTPUT->skip_link_target() in instead.
- * @return string HTML element.
  */
 function skip_main_destination() {
-    global $OUTPUT;
-    return $OUTPUT->skip_link_target();
+    throw new coding_exception('skip_main_destination() can not be used any more, please use $OUTPUT->skip_link_target() instead.');
 }
 
 /**
- * Prints a string in a specified size  (retained for backward compatibility)
- *
- * @deprecated
- * @param string $text The text to be displayed
- * @param int $size The size to set the font for text display.
- * @param bool $return If set to true output is returned rather than echoed Default false
- * @return string|void String if return is true
- */
-function print_headline($text, $size=2, $return=false) {
-    global $OUTPUT;
-    debugging('print_headline() has been deprecated. Please change your code to use $OUTPUT->heading().');
-    $output = $OUTPUT->heading($text, $size);
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Prints text in a format for use in headings.
- *
- * @deprecated
- * @param string $text The text to be displayed
- * @param string $deprecated No longer used. (Use to do alignment.)
- * @param int $size The size to set the font for text display.
- * @param string $class
- * @param bool $return If set to true output is returned rather than echoed, default false
- * @param string $id The id to use in the element
- * @return string|void String if return=true nothing otherwise
- */
-function print_heading($text, $deprecated = '', $size = 2, $class = 'main', $return = false, $id = '') {
-    global $OUTPUT;
-    debugging('print_heading() has been deprecated. Please change your code to use $OUTPUT->heading().');
-    if (!empty($deprecated)) {
-        debugging('Use of deprecated align attribute of print_heading. ' .
-                'Please do not specify styling in PHP code like that.', DEBUG_DEVELOPER);
-    }
-    $output = $OUTPUT->heading($text, $size, $class, $id);
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Output a standard heading block
- *
- * @deprecated
- * @param string $heading The text to write into the heading
- * @param string $class An additional Class Attr to use for the heading
- * @param bool $return If set to true output is returned rather than echoed, default false
- * @return string|void HTML String if return=true nothing otherwise
- */
-function print_heading_block($heading, $class='', $return=false) {
-    global $OUTPUT;
-    debugging('print_heading_with_block() has been deprecated. Please change your code to use $OUTPUT->heading().');
-    $output = $OUTPUT->heading($heading, 2, 'headingblock header ' . renderer_base::prepare_classes($class));
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Print a message in a standard themed box.
- * Replaces print_simple_box (see deprecatedlib.php)
- *
- * @deprecated
- * @param string $message, the content of the box
- * @param string $classes, space-separated class names.
- * @param string $ids
- * @param boolean $return, return as string or just print it
- * @return string|void mixed string or void
- */
-function print_box($message, $classes='generalbox', $ids='', $return=false) {
-    global $OUTPUT;
-    debugging('print_box() has been deprecated. Please change your code to use $OUTPUT->box().');
-    $output = $OUTPUT->box($message, $classes, $ids);
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Starts a box using divs
- * Replaces print_simple_box_start (see deprecatedlib.php)
- *
- * @deprecated
- * @param string $classes, space-separated class names.
- * @param string $ids
- * @param boolean $return, return as string or just print it
- * @return string|void  string or void
- */
-function print_box_start($classes='generalbox', $ids='', $return=false) {
-    global $OUTPUT;
-    debugging('print_box_start() has been deprecated. Please change your code to use $OUTPUT->box_start().');
-    $output = $OUTPUT->box_start($classes, $ids);
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Simple function to end a box (see above)
- * Replaces print_simple_box_end (see deprecatedlib.php)
- *
- * @deprecated
- * @param boolean $return, return as string or just print it
- * @return string|void Depending on value of return
- */
-function print_box_end($return=false) {
-    global $OUTPUT;
-    debugging('print_box_end() has been deprecated. Please change your code to use $OUTPUT->box_end().');
-    $output = $OUTPUT->box_end();
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Print a message in a standard themed container.
- *
- * @deprecated
- * @param string $message, the content of the container
- * @param boolean $clearfix clear both sides
- * @param string $classes, space-separated class names.
- * @param string $idbase
- * @param boolean $return, return as string or just print it
- * @return string|void Depending on value of $return
+ * @deprecated use $OUTPUT->container() instead.
  */
 function print_container($message, $clearfix=false, $classes='', $idbase='', $return=false) {
-    global $OUTPUT;
-    if ($clearfix) {
-        $classes .= ' clearfix';
-    }
-    $output = $OUTPUT->container($message, $classes, $idbase);
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
+    throw new coding_exception('print_container() can not be used any more. Please use $OUTPUT->container() instead.');
 }
 
 /**
- * Starts a container using divs
- *
- * @deprecated
- * @param boolean $clearfix clear both sides
- * @param string $classes, space-separated class names.
- * @param string $idbase
- * @param boolean $return, return as string or just print it
- * @return string|void Based on value of $return
+ * @deprecated use $OUTPUT->container_start() instead.
  */
 function print_container_start($clearfix=false, $classes='', $idbase='', $return=false) {
-    global $OUTPUT;
-    if ($clearfix) {
-        $classes .= ' clearfix';
-    }
-    $output = $OUTPUT->container_start($classes, $idbase);
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
+    throw new coding_exception('print_container_start() can not be used any more. Please use $OUTPUT->container_start() instead.');
 }
 
 /**
- * Deprecated, now handled automatically in themes
- */
-function check_theme_arrows() {
-    debugging('check_theme_arrows() has been deprecated, do not use it anymore, it is now automatic.');
-}
-
-/**
- * Simple function to end a container (see above)
- *
- * @deprecated
- * @param boolean $return, return as string or just print it
- * @return string|void Based on $return
+ * @deprecated use $OUTPUT->container_end() instead.
  */
 function print_container_end($return=false) {
-    global $OUTPUT;
-    $output = $OUTPUT->container_end();
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
+    throw new coding_exception('print_container_end() can not be used any more. Please use $OUTPUT->container_end() instead.');
 }
 
 /**
  * Print a bold message in an optional color.
  *
- * @deprecated use $OUTPUT->notification instead.
+ * @deprecated since Moodle 2.0 MDL-19077 - use $OUTPUT->notification instead.
+ * @todo MDL-50469 This will be deleted in Moodle 3.3.
  * @param string $message The message to print out
- * @param string $style Optional style to display message text in
+ * @param string $classes Optional style to display message text in
  * @param string $align Alignment option
  * @param bool $return whether to return an output string or echo now
  * @return string|bool Depending on $result
  */
-function notify($message, $classes = 'notifyproblem', $align = 'center', $return = false) {
+function notify($message, $classes = 'error', $align = 'center', $return = false) {
     global $OUTPUT;
 
+    debugging('notify() is deprecated, please use $OUTPUT->notification() instead', DEBUG_DEVELOPER);
+
     if ($classes == 'green') {
-        debugging('Use of deprecated class name "green" in notify. Please change to "notifysuccess".', DEBUG_DEVELOPER);
-        $classes = 'notifysuccess'; // Backward compatible with old color system
+        debugging('Use of deprecated class name "green" in notify. Please change to "success".', DEBUG_DEVELOPER);
+        $classes = 'success'; // Backward compatible with old color system.
     }
 
     $output = $OUTPUT->notification($message, $classes);
@@ -1158,637 +938,37 @@ function notify($message, $classes = 'notifyproblem', $align = 'center', $return
 }
 
 /**
- * Print a continue button that goes to a particular URL.
- *
- * @deprecated since Moodle 2.0
- *
- * @param string $link The url to create a link to.
- * @param bool $return If set to true output is returned rather than echoed, default false
- * @return string|void HTML String if return=true nothing otherwise
+ * @deprecated use $OUTPUT->continue_button() instead.
  */
 function print_continue($link, $return = false) {
-    global $CFG, $OUTPUT;
-
-    if ($link == '') {
-        if (!empty($_SERVER['HTTP_REFERER'])) {
-            $link = $_SERVER['HTTP_REFERER'];
-            $link = str_replace('&', '&amp;', $link); // make it valid XHTML
-        } else {
-            $link = $CFG->wwwroot .'/';
-        }
-    }
-
-    $output = $OUTPUT->continue_button($link);
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
+    throw new coding_exception('print_continue() can not be used any more. Please use $OUTPUT->continue_button() instead.');
 }
 
 /**
- * Print a standard header
- *
- * @param string  $title Appears at the top of the window
- * @param string  $heading Appears at the top of the page
- * @param string  $navigation Array of $navlinks arrays (keys: name, link, type) for use as breadcrumbs links
- * @param string  $focus Indicates form element to get cursor focus on load eg  inputform.password
- * @param string  $meta Meta tags to be added to the header
- * @param boolean $cache Should this page be cacheable?
- * @param string  $button HTML code for a button (usually for module editing)
- * @param string  $menu HTML code for a popup menu
- * @param boolean $usexml use XML for this page
- * @param string  $bodytags This text will be included verbatim in the <body> tag (useful for onload() etc)
- * @param bool    $return If true, return the visible elements of the header instead of echoing them.
- * @return string|void If return=true then string else void
+ * @deprecated use $PAGE methods instead.
  */
 function print_header($title='', $heading='', $navigation='', $focus='',
                       $meta='', $cache=true, $button='&nbsp;', $menu=null,
                       $usexml=false, $bodytags='', $return=false) {
-    global $PAGE, $OUTPUT;
 
-    $PAGE->set_title($title);
-    $PAGE->set_heading($heading);
-    $PAGE->set_cacheable($cache);
-    if ($button == '') {
-        $button = '&nbsp;';
-    }
-    $PAGE->set_button($button);
-    $PAGE->set_headingmenu($menu);
-
-    // TODO $menu
-
-    if ($meta) {
-        throw new coding_exception('The $meta parameter to print_header is no longer supported. '.
-                'You should be able to do everything you want with $PAGE->requires and other such mechanisms.');
-    }
-    if ($usexml) {
-        throw new coding_exception('The $usexml parameter to print_header is no longer supported.');
-    }
-    if ($bodytags) {
-        throw new coding_exception('The $bodytags parameter to print_header is no longer supported.');
-    }
-
-    $output = $OUTPUT->header();
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
+    throw new coding_exception('print_header() can not be used any more. Please use $PAGE methods instead.');
 }
 
 /**
- * This version of print_header is simpler because the course name does not have to be
- * provided explicitly in the strings. It can be used on the site page as in courses
- * Eventually all print_header could be replaced by print_header_simple
- *
- * @deprecated since Moodle 2.0
- * @param string $title Appears at the top of the window
- * @param string $heading Appears at the top of the page
- * @param string $navigation Premade navigation string (for use as breadcrumbs links)
- * @param string $focus Indicates form element to get cursor focus on load eg  inputform.password
- * @param string $meta Meta tags to be added to the header
- * @param boolean $cache Should this page be cacheable?
- * @param string $button HTML code for a button (usually for module editing)
- * @param string $menu HTML code for a popup menu
- * @param boolean $usexml use XML for this page
- * @param string $bodytags This text will be included verbatim in the <body> tag (useful for onload() etc)
- * @param bool   $return If true, return the visible elements of the header instead of echoing them.
- * @return string|void If $return=true the return string else nothing
+ * @deprecated use $PAGE methods instead.
  */
 function print_header_simple($title='', $heading='', $navigation='', $focus='', $meta='',
                        $cache=true, $button='&nbsp;', $menu='', $usexml=false, $bodytags='', $return=false) {
 
-    global $COURSE, $CFG, $PAGE, $OUTPUT;
-
-    if ($meta) {
-        throw new coding_exception('The $meta parameter to print_header is no longer supported. '.
-                'You should be able to do everything you want with $PAGE->requires and other such mechanisms.');
-    }
-    if ($usexml) {
-        throw new coding_exception('The $usexml parameter to print_header is no longer supported.');
-    }
-    if ($bodytags) {
-        throw new coding_exception('The $bodytags parameter to print_header is no longer supported.');
-    }
-
-    $PAGE->set_title($title);
-    $PAGE->set_heading($heading);
-    $PAGE->set_cacheable(true);
-    $PAGE->set_button($button);
-
-    $output = $OUTPUT->header();
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-function print_footer($course = NULL, $usercourse = NULL, $return = false) {
-    global $PAGE, $OUTPUT;
-    debugging('print_footer() has been deprecated. Please change your code to use $OUTPUT->footer().');
-    // TODO check arguments.
-    if (is_string($course)) {
-        debugging("Magic values like 'home', 'empty' passed to print_footer no longer have any effect. " .
-                'To achieve a similar effect, call $PAGE->set_pagelayout before you call print_header.', DEBUG_DEVELOPER);
-    } else if (!empty($course->id) && $course->id != $PAGE->course->id) {
-        throw new coding_exception('The $course object you passed to print_footer does not match $PAGE->course.');
-    }
-    if (!is_null($usercourse)) {
-        debugging('The second parameter ($usercourse) to print_footer is no longer supported. ' .
-                '(I did not think it was being used anywhere.)', DEBUG_DEVELOPER);
-    }
-    $output = $OUTPUT->footer();
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
+    throw new coding_exception('print_header_simple() can not be used any more. Please use $PAGE methods instead.');
 }
 
 /**
- * Returns text to be displayed to the user which reflects their login status
- *
- * @global object
- * @global object
- * @global object
- * @global object
- * @uses CONTEXT_COURSE
- * @param course $course {@link $COURSE} object containing course information
- * @param user $user {@link $USER} object containing user information
- * @return string HTML
- */
-function user_login_string($course='ignored', $user='ignored') {
-    debugging('user_login_info() has been deprecated. User login info is now handled via themes layouts.');
-    return '';
-}
-
-/**
- * Prints a nice side block with an optional header.  The content can either
- * be a block of HTML or a list of text with optional icons.
- *
- * @todo Finish documenting this function. Show example of various attributes, etc.
- *
- * @static int $block_id Increments for each call to the function
- * @param string $heading HTML for the heading. Can include full HTML or just
- *   plain text - plain text will automatically be enclosed in the appropriate
- *   heading tags.
- * @param string $content HTML for the content
- * @param array $list an alternative to $content, it you want a list of things with optional icons.
- * @param array $icons optional icons for the things in $list.
- * @param string $footer Extra HTML content that gets output at the end, inside a &lt;div class="footer">
- * @param array $attributes an array of attribute => value pairs that are put on the
- * outer div of this block. If there is a class attribute ' block' gets appended to it. If there isn't
- * already a class, class='block' is used.
- * @param string $title Plain text title, as embedded in the $heading.
- * @deprecated
+ * @deprecated use $OUTPUT->block() instead.
  */
 function print_side_block($heading='', $content='', $list=NULL, $icons=NULL, $footer='', $attributes = array(), $title='') {
-    global $OUTPUT;
-
-    // We don't use $heading, becuse it often contains HTML that we don't want.
-    // However, sometimes $title is not set, but $heading is.
-    if (empty($title)) {
-        $title = strip_tags($heading);
-    }
-
-    // Render list contents to HTML if required.
-    if (empty($content) && $list) {
-        $content = $OUTPUT->list_block_contents($icons, $list);
-    }
-
-    $bc = new block_contents();
-    $bc->content = $content;
-    $bc->footer = $footer;
-    $bc->title = $title;
-
-    if (isset($attributes['id'])) {
-        $bc->id = $attributes['id'];
-        unset($attributes['id']);
-    }
-    $bc->attributes = $attributes;
-
-    echo $OUTPUT->block($bc, BLOCK_POS_LEFT); // POS LEFT may be wrong, but no way to get a better guess here.
+    throw new coding_exception('print_side_block() can not be used any more, please use $OUTPUT->block() instead.');
 }
-
-/**
- * Starts a nice side block with an optional header.
- *
- * @todo Finish documenting this function
- *
- * @global object
- * @global object
- * @param string $heading HTML for the heading. Can include full HTML or just
- *   plain text - plain text will automatically be enclosed in the appropriate
- *   heading tags.
- * @param array $attributes HTML attributes to apply if possible
- * @deprecated
- */
-function print_side_block_start($heading='', $attributes = array()) {
-    throw new coding_exception('print_side_block_start has been deprecated. Please change your code to use $OUTPUT->block().');
-}
-
-/**
- * Print table ending tags for a side block box.
- *
- * @global object
- * @global object
- * @param array $attributes HTML attributes to apply if possible [id]
- * @param string $title
- * @deprecated
- */
-function print_side_block_end($attributes = array(), $title='') {
-    throw new coding_exception('print_side_block_end has been deprecated. Please change your code to use $OUTPUT->block().');
-}
-
-/**
- * This was used by old code to see whether a block region had anything in it,
- * and hence wether that region should be printed.
- *
- * We don't ever want old code to print blocks, so we now always return false.
- * The function only exists to avoid fatal errors in old code.
- *
- * @deprecated since Moodle 2.0. always returns false.
- *
- * @param object $blockmanager
- * @param string $region
- * @return bool
- */
-function blocks_have_content(&$blockmanager, $region) {
-    debugging('The function blocks_have_content should no longer be used. Blocks are now printed by the theme.');
-    return false;
-}
-
-/**
- * This was used by old code to print the blocks in a region.
- *
- * We don't ever want old code to print blocks, so this is now a no-op.
- * The function only exists to avoid fatal errors in old code.
- *
- * @deprecated since Moodle 2.0. does nothing.
- *
- * @param object $page
- * @param object $blockmanager
- * @param string $region
- */
-function blocks_print_group($page, $blockmanager, $region) {
-    debugging('The function blocks_print_group should no longer be used. Blocks are now printed by the theme.');
-}
-
-/**
- * This used to be the old entry point for anyone that wants to use blocks.
- * Since we don't want people people dealing with blocks this way any more,
- * just return a suitable empty array.
- *
- * @deprecated since Moodle 2.0.
- *
- * @param object $page
- * @return array
- */
-function blocks_setup(&$page, $pinned = BLOCKS_PINNED_FALSE) {
-    debugging('The function blocks_print_group should no longer be used. Blocks are now printed by the theme.');
-    return array(BLOCK_POS_LEFT => array(), BLOCK_POS_RIGHT => array());
-}
-
-/**
- * This iterates over an array of blocks and calculates the preferred width
- * Parameter passed by reference for speed; it's not modified.
- *
- * @deprecated since Moodle 2.0. Layout is now controlled by the theme.
- *
- * @param mixed $instances
- */
-function blocks_preferred_width($instances) {
-    debugging('The function blocks_print_group should no longer be used. Blocks are now printed by the theme.');
-    $width = 210;
-}
-
-/**
- * @deprecated since Moodle 2.0. See the replacements in blocklib.php.
- *
- * @param object $page The page object
- * @param object $blockmanager The block manager object
- * @param string $blockaction One of [config, add, delete]
- * @param int|object $instanceorid The instance id or a block_instance object
- * @param bool $pinned
- * @param bool $redirect To redirect or not to that is the question but you should stick with true
- */
-function blocks_execute_action($page, &$blockmanager, $blockaction, $instanceorid, $pinned=false, $redirect=true) {
-    throw new coding_exception('blocks_execute_action is no longer used. The way blocks work has been changed. See the new code in blocklib.php.');
-}
-
-/**
- * You can use this to get the blocks to respond to URL actions without much hassle
- *
- * @deprecated since Moodle 2.0. Blocks have been changed. {@link block_manager::process_url_actions} is the closest replacement.
- *
- * @param object $PAGE
- * @param object $blockmanager
- * @param bool $pinned
- */
-function blocks_execute_url_action(&$PAGE, &$blockmanager,$pinned=false) {
-    throw new coding_exception('blocks_execute_url_action is no longer used. It has been replaced by methods of block_manager.');
-}
-
-/**
- * This shouldn't be used externally at all, it's here for use by blocks_execute_action()
- * in order to reduce code repetition.
- *
- * @deprecated since Moodle 2.0. See the replacements in blocklib.php.
- *
- * @param $instance
- * @param $newpos
- * @param string|int $newweight
- * @param bool $pinned
- */
-function blocks_execute_repositioning(&$instance, $newpos, $newweight, $pinned=false) {
-    throw new coding_exception('blocks_execute_repositioning is no longer used. The way blocks work has been changed. See the new code in blocklib.php.');
-}
-
-
-/**
- * Moves a block to the new position (column) and weight (sort order).
- *
- * @deprecated since Moodle 2.0. See the replacements in blocklib.php.
- *
- * @param object $instance The block instance to be moved.
- * @param string $destpos BLOCK_POS_LEFT or BLOCK_POS_RIGHT. The destination column.
- * @param string $destweight The destination sort order. If NULL, we add to the end
- *                    of the destination column.
- * @param bool $pinned Are we moving pinned blocks? We can only move pinned blocks
- *                to a new position withing the pinned list. Likewise, we
- *                can only moved non-pinned blocks to a new position within
- *                the non-pinned list.
- * @return boolean success or failure
- */
-function blocks_move_block($page, &$instance, $destpos, $destweight=NULL, $pinned=false) {
-    throw new coding_exception('blocks_move_block is no longer used. The way blocks work has been changed. See the new code in blocklib.php.');
-}
-
-/**
- * Print a nicely formatted table.
- *
- * @deprecated since Moodle 2.0
- *
- * @param array $table is an object with several properties.
- */
-function print_table($table, $return=false) {
-    global $OUTPUT;
-    // TODO MDL-19755 turn debugging on once we migrate the current core code to use the new API
-    debugging('print_table() has been deprecated. Please change your code to use html_writer::table().');
-    $newtable = new html_table();
-    foreach ($table as $property => $value) {
-        if (property_exists($newtable, $property)) {
-            $newtable->{$property} = $value;
-        }
-    }
-    if (isset($table->class)) {
-        $newtable->attributes['class'] = $table->class;
-    }
-    if (isset($table->rowclass) && is_array($table->rowclass)) {
-        debugging('rowclass[] has been deprecated for html_table and should be replaced by rowclasses[]. please fix the code.');
-        $newtable->rowclasses = $table->rowclass;
-    }
-    $output = html_writer::table($newtable);
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-        return true;
-    }
-}
-
-/**
- * Creates and displays (or returns) a link to a popup window
- *
- * @deprecated since Moodle 2.0
- *
- * @param string $url Web link. Either relative to $CFG->wwwroot, or a full URL.
- * @param string $name Name to be assigned to the popup window (this is used by
- *   client-side scripts to "talk" to the popup window)
- * @param string $linkname Text to be displayed as web link
- * @param int $height Height to assign to popup window
- * @param int $width Height to assign to popup window
- * @param string $title Text to be displayed as popup page title
- * @param string $options List of additional options for popup window
- * @param bool $return If true, return as a string, otherwise print
- * @param string $id id added to the element
- * @param string $class class added to the element
- * @return string html code to display a link to a popup window.
- */
-function link_to_popup_window ($url, $name=null, $linkname=null, $height=400, $width=500, $title=null, $options=null, $return=false) {
-    debugging('link_to_popup_window() has been removed. Please change your code to use $OUTPUT->action_link(). Please note popups are discouraged for accessibility reasons');
-
-    return html_writer::link($url, $name);
-}
-
-/**
- * Creates and displays (or returns) a buttons to a popup window.
- *
- * @deprecated since Moodle 2.0
- *
- * @param string $url Web link. Either relative to $CFG->wwwroot, or a full URL.
- * @param string $name Name to be assigned to the popup window (this is used by
- *   client-side scripts to "talk" to the popup window)
- * @param string $linkname Text to be displayed as web link
- * @param int $height Height to assign to popup window
- * @param int $width Height to assign to popup window
- * @param string $title Text to be displayed as popup page title
- * @param string $options List of additional options for popup window
- * @param bool $return If true, return as a string, otherwise print
- * @param string $id id added to the element
- * @param string $class class added to the element
- * @return string html code to display a link to a popup window.
- */
-function button_to_popup_window ($url, $name=null, $linkname=null,
-                                 $height=400, $width=500, $title=null, $options=null, $return=false,
-                                 $id=null, $class=null) {
-    global $OUTPUT;
-
-    debugging('button_to_popup_window() has been deprecated. Please change your code to use $OUTPUT->single_button().');
-
-    if ($options == 'none') {
-        $options = null;
-    }
-
-    if (empty($linkname)) {
-        throw new coding_exception('A link must have a descriptive text value! See $OUTPUT->action_link() for usage.');
-    }
-
-    // Create a single_button object
-    $form = new single_button($url, $linkname, 'post');
-    $form->button->title = $title;
-    $form->button->id = $id;
-
-    // Parse the $options string
-    $popupparams = array();
-    if (!empty($options)) {
-        $optionsarray = explode(',', $options);
-        foreach ($optionsarray as $option) {
-            if (strstr($option, '=')) {
-                $parts = explode('=', $option);
-                if ($parts[1] == '0') {
-                    $popupparams[$parts[0]] = false;
-                } else {
-                    $popupparams[$parts[0]] = $parts[1];
-                }
-            } else {
-                $popupparams[$option] = true;
-            }
-        }
-    }
-
-    if (!empty($height)) {
-        $popupparams['height'] = $height;
-    }
-    if (!empty($width)) {
-        $popupparams['width'] = $width;
-    }
-
-    $form->button->add_action(new popup_action('click', $url, $name, $popupparams));
-    $output = $OUTPUT->render($form);
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Print a self contained form with a single submit button.
- *
- * @deprecated since Moodle 2.0
- *
- * @param string $link used as the action attribute on the form, so the URL that will be hit if the button is clicked.
- * @param array $options these become hidden form fields, so these options get passed to the script at $link.
- * @param string $label the caption that appears on the button.
- * @param string $method HTTP method used on the request of the button is clicked. 'get' or 'post'.
- * @param string $notusedanymore no longer used.
- * @param boolean $return if false, output the form directly, otherwise return the HTML as a string.
- * @param string $tooltip a tooltip to add to the button as a title attribute.
- * @param boolean $disabled if true, the button will be disabled.
- * @param string $jsconfirmmessage if not empty then display a confirm dialogue with this string as the question.
- * @param string $formid The id attribute to use for the form
- * @return string|void Depending on the $return paramter.
- */
-function print_single_button($link, $options, $label='OK', $method='get', $notusedanymore='',
-        $return=false, $tooltip='', $disabled = false, $jsconfirmmessage='', $formid = '') {
-    global $OUTPUT;
-
-    debugging('print_single_button() has been deprecated. Please change your code to use $OUTPUT->single_button().');
-
-    // Cast $options to array
-    $options = (array) $options;
-
-    $button = new single_button(new moodle_url($link, $options), $label, $method, array('disabled'=>$disabled, 'title'=>$tooltip, 'id'=>$formid));
-
-    if ($jsconfirmmessage) {
-        $button->button->add_confirm_action($jsconfirmmessage);
-    }
-
-    $output = $OUTPUT->render($button);
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Print a spacer image with the option of including a line break.
- *
- * @deprecated since Moodle 2.0
- *
- * @global object
- * @param int $height The height in pixels to make the spacer
- * @param int $width The width in pixels to make the spacer
- * @param boolean $br If set to true a BR is written after the spacer
- */
-function print_spacer($height=1, $width=1, $br=true, $return=false) {
-    global $CFG, $OUTPUT;
-
-    debugging('print_spacer() has been deprecated. Please change your code to use $OUTPUT->spacer().');
-
-    $output = $OUTPUT->spacer(array('height'=>$height, 'width'=>$width, 'br'=>$br));
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Given the path to a picture file in a course, or a URL,
- * this function includes the picture in the page.
- *
- * @deprecated since Moodle 2.0
- */
-function print_file_picture($path, $courseid=0, $height='', $width='', $link='', $return=false) {
-    throw new coding_exception('print_file_picture() has been deprecated since Moodle 2.0. Please use $OUTPUT->action_icon() instead.');
-}
-
-/**
- * Print the specified user's avatar.
- *
- * @deprecated since Moodle 2.0
- *
- * @global object
- * @global object
- * @param mixed $user Should be a $user object with at least fields id, picture, imagealt, firstname, lastname, email
- *      If any of these are missing, or if a userid is passed, the the database is queried. Avoid this
- *      if at all possible, particularly for reports. It is very bad for performance.
- * @param int $courseid The course id. Used when constructing the link to the user's profile.
- * @param boolean $picture The picture to print. By default (or if NULL is passed) $user->picture is used.
- * @param int $size Size in pixels. Special values are (true/1 = 100px) and (false/0 = 35px) for backward compatibility
- * @param boolean $return If false print picture to current page, otherwise return the output as string
- * @param boolean $link enclose printed image in a link the user's profile (default true).
- * @param string $target link target attribute. Makes the profile open in a popup window.
- * @param boolean $alttext add non-blank alt-text to the image. (Default true, set to false for purely
- *      decorative images, or where the username will be printed anyway.)
- * @return string|void String or nothing, depending on $return.
- */
-function print_user_picture($user, $courseid, $picture=NULL, $size=0, $return=false, $link=true, $target='', $alttext=true) {
-    global $OUTPUT;
-
-    debugging('print_user_picture() has been deprecated. Please change your code to use $OUTPUT->user_picture($user, array(\'courseid\'=>$courseid).');
-
-    if (!is_object($user)) {
-        $userid = $user;
-        $user = new stdClass();
-        $user->id = $userid;
-    }
-
-    if (empty($user->picture) and $picture) {
-        $user->picture = $picture;
-    }
-
-    $options = array('size'=>$size, 'link'=>$link, 'alttext'=>$alttext, 'courseid'=>$courseid, 'popup'=>!empty($target));
-
-    $output = $OUTPUT->user_picture($user, $options);
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Print a png image.
- *
- * @deprecated since Moodle 2.0: no replacement
- *
- */
-function print_png() {
-    throw new coding_exception('print_png() has been deprecated since Moodle 2.0. Please use $OUTPUT->pix_icon() instead.');
-}
-
 
 /**
  * Prints a basic textarea field.
@@ -1798,7 +978,7 @@ function print_png() {
  * When using this function, you should
  *
  * @global object
- * @param bool $usehtmleditor Enables the use of the htmleditor for this field.
+ * @param bool $unused No longer used.
  * @param int $rows Number of rows to display  (minimum of 10 when $height is non-null)
  * @param int $cols Number of columns to display (minimum of 65 when $width is non-null)
  * @param null $width (Deprecated) Width of the element; if a value is passed, the minimum value for $cols will be 65. Value is otherwise ignored.
@@ -1810,7 +990,7 @@ function print_png() {
  * @param string $id CSS ID to add to the textarea element.
  * @return string|void depending on the value of $return
  */
-function print_textarea($usehtmleditor, $rows, $cols, $width, $height, $name, $value='', $obsolete=0, $return=false, $id='') {
+function print_textarea($unused, $rows, $cols, $width, $height, $name, $value='', $obsolete=0, $return=false, $id='') {
     /// $width and height are legacy fields and no longer used as pixels like they used to be.
     /// However, you can set them to zero to override the mincols and minrows values below.
 
@@ -1827,29 +1007,20 @@ function print_textarea($usehtmleditor, $rows, $cols, $width, $height, $name, $v
         $id = 'edit-'.$name;
     }
 
-    if ($usehtmleditor) {
-        if ($height && ($rows < $minrows)) {
-            $rows = $minrows;
-        }
-        if ($width && ($cols < $mincols)) {
-            $cols = $mincols;
-        }
+    if ($height && ($rows < $minrows)) {
+        $rows = $minrows;
+    }
+    if ($width && ($cols < $mincols)) {
+        $cols = $mincols;
     }
 
-    if ($usehtmleditor) {
-        editors_head_setup();
-        $editor = editors_get_preferred_editor(FORMAT_HTML);
-        $editor->use_editor($id, array('legacy'=>true));
-    } else {
-        $editorclass = '';
-    }
+    editors_head_setup();
+    $editor = editors_get_preferred_editor(FORMAT_HTML);
+    $editor->set_text($value);
+    $editor->use_editor($id, array('legacy'=>true));
 
-    $str .= "\n".'<textarea class="form-textarea" id="'. $id .'" name="'. $name .'" rows="'. $rows .'" cols="'. $cols .'">'."\n";
-    if ($usehtmleditor) {
-        $str .= htmlspecialchars($value); // needed for editing of cleaned text!
-    } else {
-        $str .= s($value);
-    }
+    $str .= "\n".'<textarea class="form-textarea" id="'. $id .'" name="'. $name .'" rows="'. $rows .'" cols="'. $cols .'" spellcheck="true">'."\n";
+    $str .= htmlspecialchars($value); // needed for editing of cleaned text!
     $str .= '</textarea>'."\n";
 
     if ($return) {
@@ -1858,105 +1029,13 @@ function print_textarea($usehtmleditor, $rows, $cols, $width, $height, $name, $v
     echo $str;
 }
 
-
-/**
- * Print a help button.
- *
- * @deprecated since Moodle 2.0
- *
- * @param string $page  The keyword that defines a help page
- * @param string $title The title of links, rollover tips, alt tags etc
- *           'Help with' (or the language equivalent) will be prefixed and '...' will be stripped.
- * @param string $module Which module is the page defined in
- * @param mixed $image Use a help image for the link?  (true/false/"both")
- * @param boolean $linktext If true, display the title next to the help icon.
- * @param string $text If defined then this text is used in the page, and
- *           the $page variable is ignored. DEPRECATED!
- * @param boolean $return If true then the output is returned as a string, if false it is printed to the current page.
- * @param string $imagetext The full text for the helpbutton icon. If empty use default help.gif
- * @return string|void Depending on value of $return
- */
-function helpbutton($page, $title, $module='moodle', $image=true, $linktext=false, $text='', $return=false, $imagetext='') {
-    debugging('helpbutton() has been deprecated. Please change your code to use $OUTPUT->help_icon().');
-
-    global $OUTPUT;
-
-    $output = $OUTPUT->old_help_icon($page, $title, $module, $linktext);
-
-    // hide image with CSS if needed
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Print a help button.
- *
- * Prints a special help button that is a link to the "live" emoticon popup
- *
- * @todo Finish documenting this function
- *
- * @global object
- * @global object
- * @param string $form ?
- * @param string $field ?
- * @param boolean $return If true then the output is returned as a string, if false it is printed to the current page.
- * @return string|void Depending on value of $return
- */
-function emoticonhelpbutton($form, $field, $return = false) {
-    /// TODO: MDL-21215
-
-    debugging('emoticonhelpbutton() was removed, new text editors will implement this feature');
-}
-
-/**
- * Returns a string of html with an image of a help icon linked to a help page on a number of help topics.
- * Should be used only with htmleditor or textarea.
- *
- * @global object
- * @global object
- * @param mixed $helptopics variable amount of params accepted. Each param may be a string or an array of arguments for
- *                  helpbutton.
- * @return string Link to help button
- */
-function editorhelpbutton(){
-    return '';
-
-    /// TODO: MDL-21215
-}
-
-/**
- * Print a help button.
- *
- * Prints a special help button for html editors (htmlarea in this case)
- *
- * @todo Write code into this function! detect current editor and print correct info
- * @global object
- * @return string Only returns an empty string at the moment
- */
-function editorshortcutshelpbutton() {
-    /// TODO: MDL-21215
-
-    global $CFG;
-    //TODO: detect current editor and print correct info
-/*    $imagetext = '<img src="' . $CFG->httpswwwroot . '/lib/editor/htmlarea/images/kbhelp.gif" alt="'.
-        get_string('editorshortcutkeys').'" class="iconkbhelp" />';
-
-    return helpbutton('editorshortcuts', get_string('editorshortcutkeys'), 'moodle', true, false, '', true, $imagetext);*/
-    return '';
-}
-
-
 /**
  * Returns an image of an up or down arrow, used for column sorting. To avoid unnecessary DB accesses, please
  * provide this function with the language strings for sortasc and sortdesc.
  *
- * @deprecated since Moodle 2.0
+ * @deprecated use $OUTPUT->arrow() instead.
+ * @todo final deprecation of this function once MDL-45448 is resolved
  *
- * TODO migrate to outputlib
  * If no sort string is associated with the direction, an arrow with no alt text will be printed/returned.
  *
  * @global object
@@ -1967,9 +1046,9 @@ function editorshortcutshelpbutton() {
  *
  */
 function print_arrow($direction='up', $strsort=null, $return=false) {
-    // debugging('print_arrow() has been deprecated. Please change your code to use $OUTPUT->arrow().');
-
     global $OUTPUT;
+
+    debugging('print_arrow() is deprecated. Please use $OUTPUT->arrow() instead.', DEBUG_DEVELOPER);
 
     if (!in_array($direction, array('up', 'down', 'right', 'left', 'move'))) {
         return null;
@@ -2008,566 +1087,34 @@ function print_arrow($direction='up', $strsort=null, $return=false) {
 }
 
 /**
- * Returns a string containing a link to the user documentation.
- * Also contains an icon by default. Shown to teachers and admin only.
- *
  * @deprecated since Moodle 2.0
- *
- * @global object
- * @param string $path The page link after doc root and language, no leading slash.
- * @param string $text The text to be displayed for the link
- * @param string $iconpath The path to the icon to be displayed
- * @return string Either the link or an empty string
- */
-function doc_link($path='', $text='', $iconpath='ignored') {
-    global $CFG, $OUTPUT;
-
-    debugging('doc_link() has been deprecated. Please change your code to use $OUTPUT->doc_link().');
-
-    if (empty($CFG->docroot)) {
-        return '';
-    }
-
-    return $OUTPUT->doc_link($path, $text);
-}
-
-/**
- * Prints a single paging bar to provide access to other pages  (usually in a search)
- *
- * @deprecated since Moodle 2.0
- *
- * @param int $totalcount Thetotal number of entries available to be paged through
- * @param int $page The page you are currently viewing
- * @param int $perpage The number of entries that should be shown per page
- * @param mixed $baseurl If this  is a string then it is the url which will be appended with $pagevar, an equals sign and the page number.
- *                          If this is a moodle_url object then the pagevar param will be replaced by the page no, for each page.
- * @param string $pagevar This is the variable name that you use for the page number in your code (ie. 'tablepage', 'blogpage', etc)
- * @param bool $nocurr do not display the current page as a link (dropped, link is never displayed for the current page)
- * @param bool $return whether to return an output string or echo now
- * @return bool|string depending on $result
- */
-function print_paging_bar($totalcount, $page, $perpage, $baseurl, $pagevar='page',$nocurr=false, $return=false) {
-    global $OUTPUT;
-
-    debugging('print_paging_bar() has been deprecated. Please change your code to use $OUTPUT->render($pagingbar).');
-
-    if (empty($nocurr)) {
-        debugging('the feature of parameter $nocurr has been removed from the paging_bar');
-    }
-
-    $pagingbar = new paging_bar($totalcount, $page, $perpage, $baseurl);
-    $pagingbar->pagevar = $pagevar;
-    $output = $OUTPUT->render($pagingbar);
-
-    if ($return) {
-        return $output;
-    }
-
-    echo $output;
-    return true;
-}
-
-/**
- * Print a message along with "Yes" and "No" links for the user to continue.
- *
- * @deprecated since Moodle 2.0
- *
- * @global object
- * @param string $message The text to display
- * @param string $linkyes The link to take the user to if they choose "Yes"
- * @param string $linkno The link to take the user to if they choose "No"
- * @param string $optionyes The yes option to show on the notice
- * @param string $optionsno The no option to show
- * @param string $methodyes Form action method to use if yes [post, get]
- * @param string $methodno Form action method to use if no [post, get]
- * @return void Output is echo'd
- */
-function notice_yesno($message, $linkyes, $linkno, $optionsyes=NULL, $optionsno=NULL, $methodyes='post', $methodno='post') {
-
-    debugging('notice_yesno() has been deprecated. Please change your code to use $OUTPUT->confirm($message, $buttoncontinue, $buttoncancel).');
-
-    global $OUTPUT;
-
-    $buttoncontinue = new single_button(new moodle_url($linkyes, $optionsyes), get_string('yes'), $methodyes);
-    $buttoncancel   = new single_button(new moodle_url($linkno, $optionsno), get_string('no'), $methodno);
-
-    echo $OUTPUT->confirm($message, $buttoncontinue, $buttoncancel);
-}
-
-/**
- * Prints a scale menu (as part of an existing form) including help button
- * @deprecated since Moodle 2.0
- */
-function print_scale_menu() {
-    throw new coding_exception('print_scale_menu() has been deprecated since the Jurassic period. Get with the times!.');
-}
-
-/**
- * Given an array of values, output the HTML for a select element with those options.
- *
- * @deprecated since Moodle 2.0
- *
- * Normally, you only need to use the first few parameters.
- *
- * @param array $options The options to offer. An array of the form
- *      $options[{value}] = {text displayed for that option};
- * @param string $name the name of this form control, as in &lt;select name="..." ...
- * @param string $selected the option to select initially, default none.
- * @param string $nothing The label for the 'nothing is selected' option. Defaults to get_string('choose').
- *      Set this to '' if you don't want a 'nothing is selected' option.
- * @param string $script if not '', then this is added to the &lt;select> element as an onchange handler.
- * @param string $nothingvalue The value corresponding to the $nothing option. Defaults to 0.
- * @param boolean $return if false (the default) the the output is printed directly, If true, the
- *      generated HTML is returned as a string.
- * @param boolean $disabled if true, the select is generated in a disabled state. Default, false.
- * @param int $tabindex if give, sets the tabindex attribute on the &lt;select> element. Default none.
- * @param string $id value to use for the id attribute of the &lt;select> element. If none is given,
- *      then a suitable one is constructed.
- * @param mixed $listbox if false, display as a dropdown menu. If true, display as a list box.
- *      By default, the list box will have a number of rows equal to min(10, count($options)), but if
- *      $listbox is an integer, that number is used for size instead.
- * @param boolean $multiple if true, enable multiple selections, else only 1 item can be selected. Used
- *      when $listbox display is enabled
- * @param string $class value to use for the class attribute of the &lt;select> element. If none is given,
- *      then a suitable one is constructed.
- * @return string|void If $return=true returns string, else echo's and returns void
  */
 function choose_from_menu ($options, $name, $selected='', $nothing='choose', $script='',
                            $nothingvalue='0', $return=false, $disabled=false, $tabindex=0,
                            $id='', $listbox=false, $multiple=false, $class='') {
+    throw new coding_exception('choose_from_menu() is removed. Please change your code to use html_writer::select().');
 
-    global $OUTPUT;
-    debugging('choose_from_menu() has been deprecated. Please change your code to use html_writer::select().');
-
-    if ($script) {
-        debugging('The $script parameter has been deprecated. You must use component_actions instead', DEBUG_DEVELOPER);
-    }
-    $attributes = array();
-    $attributes['disabled'] = $disabled ? 'disabled' : null;
-    $attributes['tabindex'] = $tabindex ? $tabindex : null;
-    $attributes['multiple'] = $multiple ? $multiple : null;
-    $attributes['class'] = $class ? $class : null;
-    $attributes['id'] = $id ? $id : null;
-
-    $output = html_writer::select($options, $name, $selected, array($nothingvalue=>$nothing), $attributes);
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
 }
 
 /**
- * Choose value 0 or 1 from a menu with options 'No' and 'Yes'.
- * Other options like choose_from_menu.
- *
- * @deprecated since Moodle 2.0
- *
- * Calls {@link choose_from_menu()} with preset arguments
- * @see choose_from_menu()
- *
- * @param string $name the name of this form control, as in &lt;select name="..." ...
- * @param string $selected the option to select initially, default none.
- * @param string $script if not '', then this is added to the &lt;select> element as an onchange handler.
- * @param boolean $return Whether this function should return a string or output it (defaults to false)
- * @param boolean $disabled (defaults to false)
- * @param int $tabindex
- * @return string|void If $return=true returns string, else echo's and returns void
- */
-function choose_from_menu_yesno($name, $selected, $script = '', $return = false, $disabled = false, $tabindex = 0) {
-    debugging('choose_from_menu_yesno() has been deprecated. Please change your code to use html_writer.');
-    global $OUTPUT;
-
-    if ($script) {
-        debugging('The $script parameter has been deprecated. You must use component_actions instead', DEBUG_DEVELOPER);
-    }
-
-    $output = html_writer::select_yes_no($name, $selected, array('disabled'=>($disabled ? 'disabled' : null), 'tabindex'=>$tabindex));
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Just like choose_from_menu, but takes a nested array (2 levels) and makes a dropdown menu
- * including option headings with the first level.
- *
- * @deprecated since Moodle 2.0
- *
- * This function is very similar to {@link choose_from_menu_yesno()}
- * and {@link choose_from_menu()}
- *
- * @todo Add datatype handling to make sure $options is an array
- *
- * @param array $options An array of objects to choose from
- * @param string $name The XHTML field name
- * @param string $selected The value to select by default
- * @param string $nothing The label for the 'nothing is selected' option.
- *                        Defaults to get_string('choose').
- * @param string $script If not '', then this is added to the &lt;select> element
- *                       as an onchange handler.
- * @param string $nothingvalue The value for the first `nothing` option if $nothing is set
- * @param bool $return Whether this function should return a string or output
- *                     it (defaults to false)
- * @param bool $disabled Is the field disabled by default
- * @param int|string $tabindex Override the tabindex attribute [numeric]
- * @return string|void If $return=true returns string, else echo's and returns void
- */
-function choose_from_menu_nested($options,$name,$selected='',$nothing='choose',$script = '',
-                                 $nothingvalue=0,$return=false,$disabled=false,$tabindex=0) {
-
-    debugging('choose_from_menu_nested() has been removed. Please change your code to use html_writer::select().');
-    global $OUTPUT;
-}
-
-/**
- * Prints a help button about a scale
- *
- * @deprecated since Moodle 2.0
- *
- * @global object
- * @param id $courseid
- * @param object $scale
- * @param boolean $return If set to true returns rather than echo's
- * @return string|bool Depending on value of $return
+ * @deprecated use $OUTPUT->help_icon_scale($courseid, $scale) instead.
  */
 function print_scale_menu_helpbutton($courseid, $scale, $return=false) {
-    // debugging('print_scale_menu_helpbutton() has been deprecated. Please change your code to use $OUTPUT->help_scale($courseid, $scale).');
-    global $OUTPUT;
-
-    $output = $OUTPUT->help_icon_scale($courseid, $scale);
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-
-/**
- * Prints time limit value selector
- *
- * @deprecated since Moodle 2.0
- *
- * Uses {@link choose_from_menu()} to generate HTML
- * @see choose_from_menu()
- *
- * @global object
- * @param int $timelimit default
- * @param string $unit
- * @param string $name
- * @param boolean $return If set to true returns rather than echo's
- * @return string|bool Depending on value of $return
- */
-function print_timer_selector($timelimit = 0, $unit = '', $name = 'timelimit', $return=false) {
-    throw new coding_exception('print_timer_selector is completely removed. Please use html_writer instead');
+    throw new coding_exception('print_scale_menu_helpbutton() can not be used any more. '.
+        'Please use $OUTPUT->help_icon_scale($courseid, $scale) instead.');
 }
 
 /**
- * Prints form items with the names $hour and $minute
- *
- * @deprecated since Moodle 2.0
- *
- * @param string $hour  fieldname
- * @param string $minute  fieldname
- * @param int $currenttime A default timestamp in GMT
- * @param int $step minute spacing
- * @param boolean $return If set to true returns rather than echo's
- * @return string|bool Depending on value of $return
- */
-function print_time_selector($hour, $minute, $currenttime=0, $step=5, $return=false) {
-    debugging('print_time_selector() has been deprecated. Please change your code to use html_writer.');
-
-    $hourselector = html_writer::select_time('hours', $hour, $currenttime);
-    $minuteselector = html_writer::select_time('minutes', $minute, $currenttime, $step);
-
-    $output = $hourselector . $$minuteselector;
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Prints form items with the names $day, $month and $year
- *
- * @deprecated since Moodle 2.0
- *
- * @param string $day   fieldname
- * @param string $month  fieldname
- * @param string $year  fieldname
- * @param int $currenttime A default timestamp in GMT
- * @param boolean $return If set to true returns rather than echo's
- * @return string|bool Depending on value of $return
- */
-function print_date_selector($day, $month, $year, $currenttime=0, $return=false) {
-    debugging('print_date_selector() has been deprecated. Please change your code to use html_writer.');
-
-    $dayselector = html_writer::select_time('days', $day, $currenttime);
-    $monthselector = html_writer::select_time('months', $month, $currenttime);
-    $yearselector = html_writer::select_time('years', $year, $currenttime);
-
-    $output = $dayselector . $monthselector . $yearselector;
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Implements a complete little form with a dropdown menu.
- *
- * @deprecated since Moodle 2.0
- *
- * When JavaScript is on selecting an option from the dropdown automatically
- * submits the form (while avoiding the usual acessibility problems with this appoach).
- * With JavaScript off, a 'Go' button is printed.
- *
- * @global object
- * @global object
- * @param string $baseurl The target URL up to the point of the variable that changes
- * @param array $options A list of value-label pairs for the popup list
- * @param string $formid id for the control. Must be unique on the page. Used in the HTML.
- * @param string $selected The option that is initially selected
- * @param string $nothing The label for the "no choice" option
- * @param string $help The name of a help page if help is required
- * @param string $helptext The name of the label for the help button
- * @param boolean $return Indicates whether the function should return the HTML
- *         as a string or echo it directly to the page being rendered
- * @param string $targetwindow The name of the target page to open the linked page in.
- * @param string $selectlabel Text to place in a [label] element - preferred for accessibility.
- * @param array $optionsextra an array with the same keys as $options. The values are added within the corresponding <option ...> tag.
- * @param string $submitvalue Optional label for the 'Go' button. Defaults to get_string('go').
- * @param boolean $disabled If true, the menu will be displayed disabled.
- * @param boolean $showbutton If true, the button will always be shown even if JavaScript is available
- * @return string|void If $return=true returns string, else echo's and returns void
- */
-function popup_form($baseurl, $options, $formid, $selected='', $nothing='choose', $help='', $helptext='', $return=false,
-    $targetwindow='self', $selectlabel='', $optionsextra=NULL, $submitvalue='', $disabled=false, $showbutton=false) {
-    global $OUTPUT, $CFG;
-
-    debugging('popup_form() has been deprecated. Please change your code to use $OUTPUT->single_select() or $OUTPUT->url_select().');
-
-    if (empty($options)) {
-        return '';
-    }
-
-    $urls = array();
-
-    foreach ($options as $value=>$label) {
-        $url = $baseurl.$value;
-        $url = str_replace($CFG->wwwroot, '', $url);
-        $url = str_replace('&amp;', '&', $url);
-        $urls[$url] = $label;
-        if ($selected == $value) {
-            $active = $url;
-        }
-    }
-
-    $nothing = $nothing ? array(''=>$nothing) : null;
-
-    $select = new url_select($urls, $active, $nothing, $formid);
-    $select->disabled = $disabled;
-
-    $select->set_label($selectlabel);
-    $select->set_old_help_icon($help, $helptext);
-
-    $output = $OUTPUT->render($select);
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Prints a simple button to close a window
- *
- * @deprecated since Moodle 2.0
- *
- * @global object
- * @param string $name Name of the window to close
- * @param boolean $return whether this function should return a string or output it.
- * @param boolean $reloadopener if true, clicking the button will also reload
- *      the page that opend this popup window.
- * @return string|void if $return is true, void otherwise
- */
-function close_window_button($name='closewindow', $return=false, $reloadopener = false) {
-    global $OUTPUT;
-
-    debugging('close_window_button() has been deprecated. Please change your code to use $OUTPUT->close_window_button().');
-    $output = $OUTPUT->close_window_button(get_string($name));
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Given an array of values, creates a group of radio buttons to be part of a form
- *
- * @deprecated since Moodle 2.0
- *
- * @staticvar int $idcounter
- * @param array  $options  An array of value-label pairs for the radio group (values as keys)
- * @param string $name     Name of the radiogroup (unique in the form)
- * @param string $checked  The value that is already checked
- * @param bool $return Whether this function should return a string or output
- *                     it (defaults to false)
- * @return string|void If $return=true returns string, else echo's and returns void
- */
-function choose_from_radio ($options, $name, $checked='', $return=false) {
-    debugging('choose_from_radio() has been removed. Please change your code to use html_writer.');
-}
-
-/**
- * Display an standard html checkbox with an optional label
- *
- * @deprecated since Moodle 2.0
- *
- * @staticvar int $idcounter
- * @param string $name    The name of the checkbox
- * @param string $value   The valus that the checkbox will pass when checked
- * @param bool $checked The flag to tell the checkbox initial state
- * @param string $label   The label to be showed near the checkbox
- * @param string $alt     The info to be inserted in the alt tag
- * @param string $script If not '', then this is added to the checkbox element
- *                       as an onchange handler.
- * @param bool $return Whether this function should return a string or output
- *                     it (defaults to false)
- * @return string|void If $return=true returns string, else echo's and returns void
+ * @deprecated use html_writer::checkbox() instead.
  */
 function print_checkbox($name, $value, $checked = true, $label = '', $alt = '', $script='', $return=false) {
-
-    // debugging('print_checkbox() has been deprecated. Please change your code to use html_writer::checkbox().');
-    global $OUTPUT;
-
-    if (!empty($script)) {
-        debugging('The use of the $script param in print_checkbox has not been migrated into html_writer::checkbox().', DEBUG_DEVELOPER);
-    }
-
-    $output = html_writer::checkbox($name, $value, $checked, $label);
-
-    if (empty($return)) {
-        echo $output;
-    } else {
-        return $output;
-    }
-
+    throw new coding_exception('print_checkbox() can not be used any more. Please use html_writer::checkbox() instead.');
 }
-
-
-/**
- * Display an standard html text field with an optional label
- *
- * @deprecated since Moodle 2.0
- *
- * @param string $name    The name of the text field
- * @param string $value   The value of the text field
- * @param string $alt     The info to be inserted in the alt tag
- * @param int $size Sets the size attribute of the field. Defaults to 50
- * @param int $maxlength Sets the maxlength attribute of the field. Not set by default
- * @param bool $return Whether this function should return a string or output
- *                     it (defaults to false)
- * @return string|void If $return=true returns string, else echo's and returns void
- */
-function print_textfield($name, $value, $alt = '', $size=50, $maxlength=0, $return=false) {
-    debugging('print_textfield() has been deprecated. Please use mforms or html_writer.');
-
-    if ($alt === '') {
-        $alt = null;
-    }
-
-    $style = "width: {$size}px;";
-    $attributes = array('type'=>'text', 'name'=>$name, 'alt'=>$alt, 'style'=>$style, 'value'=>$value);
-    if ($maxlength) {
-        $attributes['maxlength'] = $maxlength;
-    }
-
-    $output = html_writer::empty_tag('input', $attributes);
-
-    if (empty($return)) {
-        echo $output;
-    } else {
-        return $output;
-    }
-}
-
-
-/**
- * Centered heading with attached help button (same title text)
- * and optional icon attached
- *
- * @deprecated since Moodle 2.0
- *
- * @param string $text The text to be displayed
- * @param string $helppage The help page to link to
- * @param string $module The module whose help should be linked to
- * @param string $icon Image to display if needed
- * @param bool $return If set to true output is returned rather than echoed, default false
- * @return string|void String if return=true nothing otherwise
- */
-function print_heading_with_help($text, $helppage, $module='moodle', $icon=false, $return=false) {
-
-    debugging('print_heading_with_help() has been deprecated. Please change your code to use $OUTPUT->heading().');
-
-    global $OUTPUT;
-
-    // Extract the src from $icon if it exists
-    if (preg_match('/src="([^"]*)"/', $icon, $matches)) {
-        $icon = $matches[1];
-        $icon = new moodle_url($icon);
-    } else {
-        $icon = '';
-    }
-
-    $output = $OUTPUT->heading_with_help($text, $helppage, $module, $icon);
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
-}
-
-/**
- * Returns a turn edit on/off button for course in a self contained form.
- * Used to be an icon, but it's now a simple form button
- * @deprecated since Moodle 2.0
- */
-function update_mymoodle_icon() {
-    throw new coding_exception('update_mymoodle_icon() has been completely deprecated.');
-}
-
-/**
- * Returns a turn edit on/off button for tag in a self contained form.
- * @deprecated since Moodle 2.0
- * @param string $tagid The ID attribute
- * @return string
- */
-function update_tag_button($tagid) {
-    global $OUTPUT;
-    debugging('update_tag_button() has been deprecated. Please change your code to use $OUTPUT->edit_button(moodle_url).');
-    return $OUTPUT->edit_button(new moodle_url('/tag/index.php', array('id' => $tagid)));
-}
-
 
 /**
  * Prints the 'update this xxx' button that appears on module pages.
  *
- * @deprecated since Moodle 2.0
+ * @deprecated since Moodle 3.2
  *
  * @param string $cmid the course_module id.
  * @param string $ignored not used any more. (Used to be courseid.)
@@ -2577,9 +1124,9 @@ function update_tag_button($tagid) {
 function update_module_button($cmid, $ignored, $string) {
     global $CFG, $OUTPUT;
 
-    // debugging('update_module_button() has been deprecated. Please change your code to use $OUTPUT->update_module_button().');
-
-    //NOTE: DO NOT call new output method because it needs the module name we do not have here!
+    debugging('update_module_button() has been deprecated and should not be used anymore. Activity modules should not add the ' .
+        'edit module button, the link is already available in the Administration block. Themes can choose to display the link ' .
+        'in the buttons row consistently for all module types.', DEBUG_DEVELOPER);
 
     if (has_capability('moodle/course:manageactivities', context_module::instance($cmid))) {
         $string = get_string('updatethis', '', $string);
@@ -2592,337 +1139,84 @@ function update_module_button($cmid, $ignored, $string) {
 }
 
 /**
- * Prints the editing button on search results listing
- * For bulk move courses to another category
- * @deprecated since Moodle 2.0
- */
-function update_categories_search_button($search,$page,$perpage) {
-    throw new coding_exception('update_categories_search_button() has been completely deprecated.');
-}
-
-/**
- * Prints a summary of a user in a nice little box.
- * @deprecated since Moodle 2.0
- */
-function print_user($user, $course, $messageselect=false, $return=false) {
-    throw new coding_exception('print_user() has been completely deprecated. See user/index.php for new usage.');
-}
-
-/**
- * Returns a turn edit on/off button for course in a self contained form.
- * Used to be an icon, but it's now a simple form button
- *
- * Note that the caller is responsible for capchecks.
- *
- * @global object
- * @global object
- * @param int $courseid The course  to update by id as found in 'course' table
- * @return string
- */
-function update_course_icon($courseid) {
-    global $CFG, $OUTPUT;
-
-    debugging('update_course_button() has been deprecated. Please change your code to use $OUTPUT->edit_button(moodle_url).');
-
-    return $OUTPUT->edit_button(new moodle_url('/course/view.php', array('id' => $courseid)));
-}
-
-/**
- * Prints breadcrumb trail of links, called in theme/-/header.html
- *
- * This function has now been deprecated please use output's navbar method instead
- * as shown below
- *
- * <code php>
- * echo $OUTPUT->navbar();
- * </code>
- *
- * @deprecated since 2.0
- * @param mixed $navigation deprecated
- * @param string $separator OBSOLETE, and now deprecated
- * @param boolean $return False to echo the breadcrumb string (default), true to return it.
- * @return string|void String or null, depending on $return.
+ * @deprecated use $OUTPUT->navbar() instead
  */
 function print_navigation ($navigation, $separator=0, $return=false) {
-    global $OUTPUT,$PAGE;
-
-    # debugging('print_navigation has been deprecated please update your theme to use $OUTPUT->navbar() instead', DEBUG_DEVELOPER);
-
-    $output = $OUTPUT->navbar();
-
-    if ($return) {
-        return $output;
-    } else {
-        echo $output;
-    }
+    throw new coding_exception('print_navigation() can not be used any more, please update use $OUTPUT->navbar() instead.');
 }
 
 /**
- * This function will build the navigation string to be used by print_header
- * and others.
- *
- * It automatically generates the site and course level (if appropriate) links.
- *
- * If you pass in a $cm object, the method will also generate the activity (e.g. 'Forums')
- * and activityinstances (e.g. 'General Developer Forum') navigation levels.
- *
- * If you want to add any further navigation links after the ones this function generates,
- * the pass an array of extra link arrays like this:
- * array(
- *     array('name' => $linktext1, 'link' => $url1, 'type' => $linktype1),
- *     array('name' => $linktext2, 'link' => $url2, 'type' => $linktype2)
- * )
- * The normal case is to just add one further link, for example 'Editing forum' after
- * 'General Developer Forum', with no link.
- * To do that, you need to pass
- * array(array('name' => $linktext, 'link' => '', 'type' => 'title'))
- * However, becuase this is a very common case, you can use a shortcut syntax, and just
- * pass the string 'Editing forum', instead of an array as $extranavlinks.
- *
- * At the moment, the link types only have limited significance. Type 'activity' is
- * recognised in order to implement the $CFG->hideactivitytypenavlink feature. Types
- * that are known to appear are 'home', 'course', 'activity', 'activityinstance' and 'title'.
- * This really needs to be documented better. In the mean time, try to be consistent, it will
- * enable people to customise the navigation more in future.
- *
- * When passing a $cm object, the fields used are $cm->modname, $cm->name and $cm->course.
- * If you get the $cm object using the function get_coursemodule_from_instance or
- * get_coursemodule_from_id (as recommended) then this will be done for you automatically.
- * If you don't have $cm->modname or $cm->name, this fuction will attempt to find them using
- * the $cm->module and $cm->instance fields, but this takes extra database queries, so a
- * warning is printed in developer debug mode.
- *
- * @deprecated since 2.0
- * @param mixed $extranavlinks - Normally an array of arrays, keys: name, link, type. If you
- *      only want one extra item with no link, you can pass a string instead. If you don't want
- *      any extra links, pass an empty string.
- * @param mixed $cm deprecated
- * @return array Navigation array
+ * @deprecated Please use $PAGE->navabar methods instead.
  */
 function build_navigation($extranavlinks, $cm = null) {
-    global $CFG, $COURSE, $DB, $SITE, $PAGE;
-
-    if (is_array($extranavlinks) && count($extranavlinks)>0) {
-        # debugging('build_navigation() has been deprecated, please replace with $PAGE->navbar methods', DEBUG_DEVELOPER);
-        foreach ($extranavlinks as $nav) {
-            if (array_key_exists('name', $nav)) {
-                if (array_key_exists('link', $nav) && !empty($nav['link'])) {
-                    $link = $nav['link'];
-                } else {
-                    $link = null;
-                }
-                $PAGE->navbar->add($nav['name'],$link);
-            }
-        }
-    }
-
-    return(array('newnav' => true, 'navlinks' => array()));
+    throw new coding_exception('build_navigation() can not be used any more, please use $PAGE->navbar methods instead.');
 }
 
 /**
- * Returns a small popup menu of course activity modules
- *
- * Given a course and a (current) coursemodule
- * his function returns a small popup menu with all the
- * course activity modules in it, as a navigation menu
- * The data is taken from the serialised array stored in
- * the course record
- *
- * @global object
- * @global object
- * @global object
- * @global object
- * @uses CONTEXT_COURSE
- * @param object $course A {@link $COURSE} object.
- * @param object $cm A {@link $COURSE} object.
- * @param string $targetwindow The target window attribute to us
- * @return string
+ * @deprecated not relevant with global navigation in Moodle 2.x+
  */
 function navmenu($course, $cm=NULL, $targetwindow='self') {
-    // This function has been deprecated with the creation of the global nav in
-    // moodle 2.0
-
-    return '';
-}
-
-/**
- * Returns a little popup menu for switching roles
- *
- * @deprecated in Moodle 2.0
- * @param int $courseid The course  to update by id as found in 'course' table
- * @return string
- */
-function switchroles_form($courseid) {
-    debugging('switchroles_form() has been deprecated and replaced by an item in the global settings block');
-    return '';
-}
-
-/**
- * Print header for admin page
- * @deprecated since Moodle 20. Please use normal $OUTPUT->header() instead
- * @param string $focus focus element
- */
-function admin_externalpage_print_header($focus='') {
-    global $OUTPUT;
-
-    debugging('admin_externalpage_print_header is deprecated. Please $OUTPUT->header() instead.', DEBUG_DEVELOPER);
-
-    echo $OUTPUT->header();
-}
-
-/**
- * @deprecated since Moodle 1.9. Please use normal $OUTPUT->footer() instead
- */
-function admin_externalpage_print_footer() {
-// TODO Still 103 referernces in core code. Don't do debugging output yet.
-    debugging('admin_externalpage_print_footer is deprecated. Please $OUTPUT->footer() instead.', DEBUG_DEVELOPER);
-    global $OUTPUT;
-    echo $OUTPUT->footer();
+    throw new coding_exception('navmenu() can not be used any more, it is no longer relevant with global navigation.');
 }
 
 /// CALENDAR MANAGEMENT  ////////////////////////////////////////////////////////////////
 
 
 /**
- * Call this function to add an event to the calendar table and to call any calendar plugins
- *
- * @param object $event An object representing an event from the calendar table.
- * The event will be identified by the id field. The object event should include the following:
- *  <ul>
- *    <li><b>$event->name</b> - Name for the event
- *    <li><b>$event->description</b> - Description of the event (defaults to '')
- *    <li><b>$event->format</b> - Format for the description (using formatting types defined at the top of weblib.php)
- *    <li><b>$event->courseid</b> - The id of the course this event belongs to (0 = all courses)
- *    <li><b>$event->groupid</b> - The id of the group this event belongs to (0 = no group)
- *    <li><b>$event->userid</b> - The id of the user this event belongs to (0 = no user)
- *    <li><b>$event->modulename</b> - Name of the module that creates this event
- *    <li><b>$event->instance</b> - Instance of the module that owns this event
- *    <li><b>$event->eventtype</b> - The type info together with the module info could
- *             be used by calendar plugins to decide how to display event
- *    <li><b>$event->timestart</b>- Timestamp for start of event
- *    <li><b>$event->timeduration</b> - Duration (defaults to zero)
- *    <li><b>$event->visible</b> - 0 if the event should be hidden (e.g. because the activity that created it is hidden)
- *  </ul>
- * @return int|false The id number of the resulting record or false if failed
+ * @deprecated please use calendar_event::create() instead.
  */
- function add_event($event) {
-    global $CFG;
-    require_once($CFG->dirroot.'/calendar/lib.php');
-    $event = calendar_event::create($event);
-    if ($event !== false) {
-        return $event->id;
-    }
-    return false;
+function add_event($event) {
+    throw new coding_exception('add_event() can not be used any more, please use calendar_event::create() instead.');
 }
 
 /**
- * Call this function to update an event in the calendar table
- * the event will be identified by the id field of the $event object.
- *
- * @param object $event An object representing an event from the calendar table. The event will be identified by the id field.
- * @return bool Success
+ * @deprecated please calendar_event->update() instead.
  */
 function update_event($event) {
-    global $CFG;
-    require_once($CFG->dirroot.'/calendar/lib.php');
-    $event = (object)$event;
-    $calendarevent = calendar_event::load($event->id);
-    return $calendarevent->update($event);
+    throw new coding_exception('update_event() is removed, please use calendar_event->update() instead.');
 }
 
 /**
- * Call this function to delete the event with id $id from calendar table.
- *
- * @param int $id The id of an event from the 'event' table.
- * @return bool
+ * @deprecated please use calendar_event->delete() instead.
  */
 function delete_event($id) {
-    global $CFG;
-    require_once($CFG->dirroot.'/calendar/lib.php');
-    $event = calendar_event::load($id);
-    return $event->delete();
+    throw new coding_exception('delete_event() can not be used any more, please use '.
+        'calendar_event->delete() instead.');
 }
 
 /**
- * Call this function to hide an event in the calendar table
- * the event will be identified by the id field of the $event object.
- *
- * @param object $event An object representing an event from the calendar table. The event will be identified by the id field.
- * @return true
+ * @deprecated please use calendar_event->toggle_visibility(false) instead.
  */
 function hide_event($event) {
-    global $CFG;
-    require_once($CFG->dirroot.'/calendar/lib.php');
-    $event = new calendar_event($event);
-    return $event->toggle_visibility(false);
+    throw new coding_exception('hide_event() can not be used any more, please use '.
+        'calendar_event->toggle_visibility(false) instead.');
 }
 
 /**
- * Call this function to unhide an event in the calendar table
- * the event will be identified by the id field of the $event object.
- *
- * @param object $event An object representing an event from the calendar table. The event will be identified by the id field.
- * @return true
+ * @deprecated please use calendar_event->toggle_visibility(true) instead.
  */
 function show_event($event) {
-    global $CFG;
-    require_once($CFG->dirroot.'/calendar/lib.php');
-    $event = new calendar_event($event);
-    return $event->toggle_visibility(true);
+    throw new coding_exception('show_event() can not be used any more, please use '.
+        'calendar_event->toggle_visibility(true) instead.');
 }
 
 /**
- * Converts string to lowercase using most compatible function available.
- *
- * @deprecated Use textlib::strtolower($text) instead.
- *
- * @param string $string The string to convert to all lowercase characters.
- * @param string $encoding The encoding on the string.
- * @return string
- */
-function moodle_strtolower($string, $encoding='') {
-
-    debugging('moodle_strtolower() is deprecated. Please use textlib::strtolower() instead.', DEBUG_DEVELOPER);
-
-    //If not specified use utf8
-    if (empty($encoding)) {
-        $encoding = 'UTF-8';
-    }
-    //Use text services
-    return textlib::strtolower($string, $encoding);
-}
-
-/**
- * Original singleton helper function, please use static methods instead,
- * ex: textlib::convert()
- *
- * @deprecated since Moodle 2.2 use textlib::xxxx() instead
- * @see textlib
- * @return textlib instance
+ * @deprecated since Moodle 2.2 use core_text::xxxx() instead.
+ * @see core_text
  */
 function textlib_get_instance() {
-
-    debugging('textlib_get_instance() is deprecated. Please use static calling textlib::functioname() instead.', DEBUG_DEVELOPER);
-
-    return new textlib();
+    throw new coding_exception('textlib_get_instance() can not be used any more, please use '.
+        'core_text::functioname() instead.');
 }
 
 /**
- * Gets the generic section name for a courses section
- *
- * The global function is deprecated. Each course format can define their own generic section name
- *
  * @deprecated since 2.4
  * @see get_section_name()
  * @see format_base::get_section_name()
- *
- * @param string $format Course format ID e.g. 'weeks' $course->format
- * @param stdClass $section Section object from database
- * @return Display name that the course format prefers, e.g. "Week 2"
+
  */
 function get_generic_section_name($format, stdClass $section) {
-    debugging('get_generic_section_name() is deprecated. Please use appropriate functionality from class format_base', DEBUG_DEVELOPER);
-    return get_string('sectionname', "format_$format") . ' ' . $section->section;
+    throw new coding_exception('get_generic_section_name() is deprecated. Please use appropriate functionality from class format_base');
 }
 
 /**
@@ -2947,33 +1241,21 @@ function get_generic_section_name($format, stdClass $section) {
  * {@link course_modinfo::get_section_info()}
  *
  * @deprecated since 2.4
- *
- * @param int $courseid
- * @return array Array of section_info objects
  */
 function get_all_sections($courseid) {
-    global $DB;
-    debugging('get_all_sections() is deprecated. See phpdocs for this function', DEBUG_DEVELOPER);
-    return get_fast_modinfo($courseid)->get_section_info_all();
+
+    throw new coding_exception('get_all_sections() is removed. See phpdocs for this function');
 }
 
 /**
- * Given a full mod object with section and course already defined, adds this module to that section.
- *
  * This function is deprecated, please use {@link course_add_cm_to_section()}
  * Note that course_add_cm_to_section() also updates field course_modules.section and
  * calls rebuild_course_cache()
  *
  * @deprecated since 2.4
- *
- * @param object $mod
- * @param int $beforemod An existing ID which we will insert the new module before
- * @return int The course_sections ID where the mod is inserted
  */
 function add_mod_to_section($mod, $beforemod = null) {
-    debugging('Function add_mod_to_section() is deprecated, please use course_add_cm_to_section()', DEBUG_DEVELOPER);
-    global $DB;
-    return course_add_cm_to_section($mod->course, $mod->coursemodule, $mod->section, $beforemod);
+    throw new coding_exception('Function add_mod_to_section() is removed, please use course_add_cm_to_section()');
 }
 
 /**
@@ -2993,22 +1275,9 @@ function add_mod_to_section($mod, $beforemod = null) {
  * </code>
  *
  * @deprecated since 2.4
- *
- * @param int $courseid id of the course to get info about
- * @param array $mods (return) list of course modules
- * @param array $modnames (return) list of names of all module types installed and available
- * @param array $modnamesplural (return) list of names of all module types installed and available in the plural form
- * @param array $modnamesused (return) list of names of all module types used in the course
  */
 function get_all_mods($courseid, &$mods, &$modnames, &$modnamesplural, &$modnamesused) {
-    debugging('Function get_all_mods() is deprecated. Use get_fast_modinfo() and get_module_types_names() instead. See phpdocs for details', DEBUG_DEVELOPER);
-
-    global $COURSE;
-    $modnames      = get_module_types_names();
-    $modnamesplural= get_module_types_names(true);
-    $modinfo = get_fast_modinfo($courseid);
-    $mods = $modinfo->get_cms();
-    $modnamesused = $modinfo->get_used_module_names();
+    throw new coding_exception('Function get_all_mods() is removed. Use get_fast_modinfo() and get_module_types_names() instead. See phpdocs for details');
 }
 
 /**
@@ -3022,46 +1291,4330 @@ function get_all_mods($courseid, &$mods, &$modnames, &$modnamesplural, &$modname
  * @see course_create_sections_if_missing()
  * @see get_fast_modinfo()
  * @deprecated since 2.4
- *
- * @param int $section relative section number (field course_sections.section)
- * @param int $courseid
- * @return stdClass record from table {course_sections}
  */
 function get_course_section($section, $courseid) {
-    global $DB;
-    debugging('Function get_course_section() is deprecated. Please use course_create_sections_if_missing() and get_fast_modinfo() instead.', DEBUG_DEVELOPER);
-
-    if ($cw = $DB->get_record("course_sections", array("section"=>$section, "course"=>$courseid))) {
-        return $cw;
-    }
-    $cw = new stdClass();
-    $cw->course   = $courseid;
-    $cw->section  = $section;
-    $cw->summary  = "";
-    $cw->summaryformat = FORMAT_HTML;
-    $cw->sequence = "";
-    $id = $DB->insert_record("course_sections", $cw);
-    rebuild_course_cache($courseid, true);
-    return $DB->get_record("course_sections", array("id"=>$id));
+    throw new coding_exception('Function get_course_section() is removed. Please use course_create_sections_if_missing() and get_fast_modinfo() instead.');
 }
 
 /**
- * Return the start and end date of the week in Weekly course format
- *
- * It is not recommended to use this function outside of format_weeks plugin
- *
  * @deprecated since 2.4
  * @see format_weeks::get_section_dates()
- *
- * @param stdClass $section The course_section entry from the DB
- * @param stdClass $course The course entry from DB
- * @return stdClass property start for startdate, property end for enddate
  */
 function format_weeks_get_section_dates($section, $course) {
-    debugging('Function format_weeks_get_section_dates() is deprecated. It is not recommended to'.
-            ' use it outside of format_weeks plugin', DEBUG_DEVELOPER);
-    if (isset($course->format) && $course->format === 'weeks') {
-        return course_get_format($course)->get_section_dates($section);
+    throw new coding_exception('Function format_weeks_get_section_dates() is removed. It is not recommended to'.
+            ' use it outside of format_weeks plugin');
+}
+
+/**
+ * Deprecated. Instead of:
+ * list($content, $name) = get_print_section_cm_text($cm, $course);
+ * use:
+ * $content = $cm->get_formatted_content(array('overflowdiv' => true, 'noclean' => true));
+ * $name = $cm->get_formatted_name();
+ *
+ * @deprecated since 2.5
+ * @see cm_info::get_formatted_content()
+ * @see cm_info::get_formatted_name()
+ */
+function get_print_section_cm_text(cm_info $cm, $course) {
+    throw new coding_exception('Function get_print_section_cm_text() is removed. Please use '.
+            'cm_info::get_formatted_content() and cm_info::get_formatted_name()');
+}
+
+/**
+ * Deprecated. Please use:
+ * $courserenderer = $PAGE->get_renderer('core', 'course');
+ * $output = $courserenderer->course_section_add_cm_control($course, $section, $sectionreturn,
+ *    array('inblock' => $vertical));
+ * echo $output;
+ *
+ * @deprecated since 2.5
+ * @see core_course_renderer::course_section_add_cm_control()
+ */
+function print_section_add_menus($course, $section, $modnames = null, $vertical=false, $return=false, $sectionreturn=null) {
+    throw new coding_exception('Function print_section_add_menus() is removed. Please use course renderer '.
+            'function course_section_add_cm_control()');
+}
+
+/**
+ * Deprecated. Please use:
+ * $courserenderer = $PAGE->get_renderer('core', 'course');
+ * $actions = course_get_cm_edit_actions($mod, $indent, $section);
+ * return ' ' . $courserenderer->course_section_cm_edit_actions($actions);
+ *
+ * @deprecated since 2.5
+ * @see course_get_cm_edit_actions()
+ * @see core_course_renderer->course_section_cm_edit_actions()
+ */
+function make_editing_buttons(stdClass $mod, $absolute_ignored = true, $moveselect = true, $indent=-1, $section=null) {
+    throw new coding_exception('Function make_editing_buttons() is removed, please see PHPdocs in '.
+            'lib/deprecatedlib.php on how to replace it');
+}
+
+/**
+ * Deprecated. Please use:
+ * $courserenderer = $PAGE->get_renderer('core', 'course');
+ * echo $courserenderer->course_section_cm_list($course, $section, $sectionreturn,
+ *     array('hidecompletion' => $hidecompletion));
+ *
+ * @deprecated since 2.5
+ * @see core_course_renderer::course_section_cm_list()
+ */
+function print_section($course, $section, $mods, $modnamesused, $absolute=false, $width="100%", $hidecompletion=false, $sectionreturn=null) {
+    throw new coding_exception('Function print_section() is removed. Please use course renderer function '.
+            'course_section_cm_list() instead.');
+}
+
+/**
+ * @deprecated since 2.5
+ */
+function print_overview($courses, array $remote_courses=array()) {
+    throw new coding_exception('Function print_overview() is removed. Use block course_overview to display this information');
+}
+
+/**
+ * @deprecated since 2.5
+ */
+function print_recent_activity($course) {
+    throw new coding_exception('Function print_recent_activity() is removed. It is not recommended to'.
+            ' use it outside of block_recent_activity');
+}
+
+/**
+ * @deprecated since 2.5
+ */
+function delete_course_module($id) {
+    throw new coding_exception('Function delete_course_module() is removed. Please use course_delete_module() instead.');
+}
+
+/**
+ * @deprecated since 2.5
+ */
+function update_category_button($categoryid = 0) {
+    throw new coding_exception('Function update_category_button() is removed. Pages to view '.
+            'and edit courses are now separate and no longer depend on editing mode.');
+}
+
+/**
+ * This function is deprecated! For list of categories use
+ * coursecat::make_all_categories($requiredcapability, $excludeid, $separator)
+ * For parents of one particular category use
+ * coursecat::get($id)->get_parents()
+ *
+ * @deprecated since 2.5
+ */
+function make_categories_list(&$list, &$parents, $requiredcapability = '',
+        $excludeid = 0, $category = NULL, $path = "") {
+    throw new coding_exception('Global function make_categories_list() is removed. Please use '.
+            'coursecat::make_categories_list() and coursecat::get_parents()');
+}
+
+/**
+ * @deprecated since 2.5
+ */
+function category_delete_move($category, $newparentid, $showfeedback=true) {
+    throw new coding_exception('Function category_delete_move() is removed. Please use coursecat::delete_move() instead.');
+}
+
+/**
+ * @deprecated since 2.5
+ */
+function category_delete_full($category, $showfeedback=true) {
+    throw new coding_exception('Function category_delete_full() is removed. Please use coursecat::delete_full() instead.');
+}
+
+/**
+ * This function is deprecated. Please use
+ * $coursecat = coursecat::get($category->id);
+ * if ($coursecat->can_change_parent($newparentcat->id)) {
+ *     $coursecat->change_parent($newparentcat->id);
+ * }
+ *
+ * Alternatively you can use
+ * $coursecat->update(array('parent' => $newparentcat->id));
+ *
+ * @see coursecat::change_parent()
+ * @see coursecat::update()
+ * @deprecated since 2.5
+ */
+function move_category($category, $newparentcat) {
+    throw new coding_exception('Function move_category() is removed. Please use coursecat::change_parent() instead.');
+}
+
+/**
+ * This function is deprecated. Please use
+ * coursecat::get($category->id)->hide();
+ *
+ * @see coursecat::hide()
+ * @deprecated since 2.5
+ */
+function course_category_hide($category) {
+    throw new coding_exception('Function course_category_hide() is removed. Please use coursecat::hide() instead.');
+}
+
+/**
+ * This function is deprecated. Please use
+ * coursecat::get($category->id)->show();
+ *
+ * @see coursecat::show()
+ * @deprecated since 2.5
+ */
+function course_category_show($category) {
+    throw new coding_exception('Function course_category_show() is removed. Please use coursecat::show() instead.');
+}
+
+/**
+ * This function is deprecated.
+ * To get the category with the specified it please use:
+ * coursecat::get($catid, IGNORE_MISSING);
+ * or
+ * coursecat::get($catid, MUST_EXIST);
+ *
+ * To get the first available category please use
+ * coursecat::get_default();
+ *
+ * @deprecated since 2.5
+ */
+function get_course_category($catid=0) {
+    throw new coding_exception('Function get_course_category() is removed. Please use coursecat::get(), see phpdocs for more details');
+}
+
+/**
+ * This function is deprecated. It is replaced with the method create() in class coursecat.
+ * {@link coursecat::create()} also verifies the data, fixes sortorder and logs the action
+ *
+ * @deprecated since 2.5
+ */
+function create_course_category($category) {
+    throw new coding_exception('Function create_course_category() is removed. Please use coursecat::create(), see phpdocs for more details');
+}
+
+/**
+ * This function is deprecated.
+ *
+ * To get visible children categories of the given category use:
+ * coursecat::get($categoryid)->get_children();
+ * This function will return the array or coursecat objects, on each of them
+ * you can call get_children() again
+ *
+ * @see coursecat::get()
+ * @see coursecat::get_children()
+ *
+ * @deprecated since 2.5
+ */
+function get_all_subcategories($catid) {
+    throw new coding_exception('Function get_all_subcategories() is removed. Please use appropriate methods() of coursecat
+            class. See phpdocs for more details');
+}
+
+/**
+ * This function is deprecated. Please use functions in class coursecat:
+ * - coursecat::get($parentid)->has_children()
+ * tells if the category has children (visible or not to the current user)
+ *
+ * - coursecat::get($parentid)->get_children()
+ * returns an array of coursecat objects, each of them represents a children category visible
+ * to the current user (i.e. visible=1 or user has capability to view hidden categories)
+ *
+ * - coursecat::get($parentid)->get_children_count()
+ * returns number of children categories visible to the current user
+ *
+ * - coursecat::count_all()
+ * returns total count of all categories in the system (both visible and not)
+ *
+ * - coursecat::get_default()
+ * returns the first category (usually to be used if count_all() == 1)
+ *
+ * @deprecated since 2.5
+ */
+function get_child_categories($parentid) {
+    throw new coding_exception('Function get_child_categories() is removed. Use coursecat::get_children() or see phpdocs for
+            more details.');
+}
+
+/**
+ *
+ * @deprecated since 2.5
+ *
+ * This function is deprecated. Use appropriate functions from class coursecat.
+ * Examples:
+ *
+ * coursecat::get($categoryid)->get_children()
+ * - returns all children of the specified category as instances of class
+ * coursecat, which means on each of them method get_children() can be called again.
+ * Only categories visible to the current user are returned.
+ *
+ * coursecat::get(0)->get_children()
+ * - returns all top-level categories visible to the current user.
+ *
+ * Sort fields can be specified, see phpdocs to {@link coursecat::get_children()}
+ *
+ * coursecat::make_categories_list()
+ * - returns an array of all categories id/names in the system.
+ * Also only returns categories visible to current user and can additionally be
+ * filetered by capability, see phpdocs to {@link coursecat::make_categories_list()}
+ *
+ * make_categories_options()
+ * - Returns full course categories tree to be used in html_writer::select()
+ *
+ * Also see functions {@link coursecat::get_children_count()}, {@link coursecat::count_all()},
+ * {@link coursecat::get_default()}
+ */
+function get_categories($parent='none', $sort=NULL, $shallow=true) {
+    throw new coding_exception('Function get_categories() is removed. Please use coursecat::get_children() or see phpdocs for other alternatives');
+}
+
+/**
+* This function is deprecated, please use course renderer:
+* $renderer = $PAGE->get_renderer('core', 'course');
+* echo $renderer->course_search_form($value, $format);
+*
+* @deprecated since 2.5
+*/
+function print_course_search($value="", $return=false, $format="plain") {
+    throw new coding_exception('Function print_course_search() is removed, please use course renderer');
+}
+
+/**
+ * This function is deprecated, please use:
+ * $renderer = $PAGE->get_renderer('core', 'course');
+ * echo $renderer->frontpage_my_courses()
+ *
+ * @deprecated since 2.5
+ */
+function print_my_moodle() {
+    throw new coding_exception('Function print_my_moodle() is removed, please use course renderer function frontpage_my_courses()');
+}
+
+/**
+ * This function is deprecated, it is replaced with protected function
+ * {@link core_course_renderer::frontpage_remote_course()}
+ * It is only used from function {@link core_course_renderer::frontpage_my_courses()}
+ *
+ * @deprecated since 2.5
+ */
+function print_remote_course($course, $width="100%") {
+    throw new coding_exception('Function print_remote_course() is removed, please use course renderer');
+}
+
+/**
+ * This function is deprecated, it is replaced with protected function
+ * {@link core_course_renderer::frontpage_remote_host()}
+ * It is only used from function {@link core_course_renderer::frontpage_my_courses()}
+ *
+ * @deprecated since 2.5
+ */
+function print_remote_host($host, $width="100%") {
+    throw new coding_exception('Function print_remote_host() is removed, please use course renderer');
+}
+
+/**
+ * @deprecated since 2.5
+ *
+ * See http://docs.moodle.org/dev/Courses_lists_upgrade_to_2.5
+ */
+function print_whole_category_list($category=NULL, $displaylist=NULL, $parentslist=NULL, $depth=-1, $showcourses = true, $categorycourses=NULL) {
+    throw new coding_exception('Function print_whole_category_list() is removed, please use course renderer');
+}
+
+/**
+ * @deprecated since 2.5
+ */
+function print_category_info($category, $depth = 0, $showcourses = false, array $courses = null) {
+    throw new coding_exception('Function print_category_info() is removed, please use course renderer');
+}
+
+/**
+ * @deprecated since 2.5
+ *
+ * This function is not used any more in moodle core and course renderer does not have render function for it.
+ * Combo list on the front page is displayed as:
+ * $renderer = $PAGE->get_renderer('core', 'course');
+ * echo $renderer->frontpage_combo_list()
+ *
+ * The new class {@link coursecat} stores the information about course category tree
+ * To get children categories use:
+ * coursecat::get($id)->get_children()
+ * To get list of courses use:
+ * coursecat::get($id)->get_courses()
+ *
+ * See http://docs.moodle.org/dev/Courses_lists_upgrade_to_2.5
+ */
+function get_course_category_tree($id = 0, $depth = 0) {
+    throw new coding_exception('Function get_course_category_tree() is removed, please use course renderer or coursecat class,
+            see function phpdocs for more info');
+}
+
+/**
+ * @deprecated since 2.5
+ *
+ * To print a generic list of courses use:
+ * $renderer = $PAGE->get_renderer('core', 'course');
+ * echo $renderer->courses_list($courses);
+ *
+ * To print list of all courses:
+ * $renderer = $PAGE->get_renderer('core', 'course');
+ * echo $renderer->frontpage_available_courses();
+ *
+ * To print list of courses inside category:
+ * $renderer = $PAGE->get_renderer('core', 'course');
+ * echo $renderer->course_category($category); // this will also print subcategories
+ */
+function print_courses($category) {
+    throw new coding_exception('Function print_courses() is removed, please use course renderer');
+}
+
+/**
+ * @deprecated since 2.5
+ *
+ * Please use course renderer to display a course information box.
+ * $renderer = $PAGE->get_renderer('core', 'course');
+ * echo $renderer->courses_list($courses); // will print list of courses
+ * echo $renderer->course_info_box($course); // will print one course wrapped in div.generalbox
+ */
+function print_course($course, $highlightterms = '') {
+    throw new coding_exception('Function print_course() is removed, please use course renderer');
+}
+
+/**
+ * @deprecated since 2.5
+ *
+ * This function is not used any more in moodle core and course renderer does not have render function for it.
+ * Combo list on the front page is displayed as:
+ * $renderer = $PAGE->get_renderer('core', 'course');
+ * echo $renderer->frontpage_combo_list()
+ *
+ * The new class {@link coursecat} stores the information about course category tree
+ * To get children categories use:
+ * coursecat::get($id)->get_children()
+ * To get list of courses use:
+ * coursecat::get($id)->get_courses()
+ */
+function get_category_courses_array($categoryid = 0) {
+    throw new coding_exception('Function get_category_courses_array() is removed, please use methods of coursecat class');
+}
+
+/**
+ * @deprecated since 2.5
+ */
+function get_category_courses_array_recursively(array &$flattened, $category) {
+    throw new coding_exception('Function get_category_courses_array_recursively() is removed, please use methods of coursecat class', DEBUG_DEVELOPER);
+}
+
+/**
+ * @deprecated since Moodle 2.5 MDL-27814 - please do not use this function any more.
+ */
+function blog_get_context_url($context=null) {
+    throw new coding_exception('Function  blog_get_context_url() is removed, getting params from context is not reliable for blogs.');
+}
+
+/**
+ * @deprecated since 2.5
+ *
+ * To get list of all courses with course contacts ('managers') use
+ * coursecat::get(0)->get_courses(array('recursive' => true, 'coursecontacts' => true));
+ *
+ * To get list of courses inside particular category use
+ * coursecat::get($id)->get_courses(array('coursecontacts' => true));
+ *
+ * Additionally you can specify sort order, offset and maximum number of courses,
+ * see {@link coursecat::get_courses()}
+ */
+function get_courses_wmanagers($categoryid=0, $sort="c.sortorder ASC", $fields=array()) {
+    throw new coding_exception('Function get_courses_wmanagers() is removed, please use coursecat::get_courses()');
+}
+
+/**
+ * @deprecated since 2.5
+ */
+function convert_tree_to_html($tree, $row=0) {
+    throw new coding_exception('Function convert_tree_to_html() is removed. Consider using class tabtree and core_renderer::render_tabtree()');
+}
+
+/**
+ * @deprecated since 2.5
+ */
+function convert_tabrows_to_tree($tabrows, $selected, $inactive, $activated) {
+    throw new coding_exception('Function convert_tabrows_to_tree() is removed. Consider using class tabtree');
+}
+
+/**
+ * @deprecated since 2.5 - do not use, the textrotate.js will work it out automatically
+ */
+function can_use_rotated_text() {
+    debugging('can_use_rotated_text() is removed. JS feature detection is used automatically.');
+}
+
+/**
+ * @deprecated since Moodle 2.2 MDL-35009 - please do not use this function any more.
+ * @see context::instance_by_id($id)
+ */
+function get_context_instance_by_id($id, $strictness = IGNORE_MISSING) {
+    throw new coding_exception('get_context_instance_by_id() is now removed, please use context::instance_by_id($id) instead.');
+}
+
+/**
+ * Returns system context or null if can not be created yet.
+ *
+ * @see context_system::instance()
+ * @deprecated since 2.2
+ * @param bool $cache use caching
+ * @return context system context (null if context table not created yet)
+ */
+function get_system_context($cache = true) {
+    debugging('get_system_context() is deprecated, please use context_system::instance() instead.', DEBUG_DEVELOPER);
+    return context_system::instance(0, IGNORE_MISSING, $cache);
+}
+
+/**
+ * @see context::get_parent_context_ids()
+ * @deprecated since 2.2, use $context->get_parent_context_ids() instead
+ */
+function get_parent_contexts(context $context, $includeself = false) {
+    throw new coding_exception('get_parent_contexts() is removed, please use $context->get_parent_context_ids() instead.');
+}
+
+/**
+ * @deprecated since Moodle 2.2
+ * @see context::get_parent_context()
+ */
+function get_parent_contextid(context $context) {
+    throw new coding_exception('get_parent_contextid() is removed, please use $context->get_parent_context() instead.');
+}
+
+/**
+ * @see context::get_child_contexts()
+ * @deprecated since 2.2
+ */
+function get_child_contexts(context $context) {
+    throw new coding_exception('get_child_contexts() is removed, please use $context->get_child_contexts() instead.');
+}
+
+/**
+ * @see context_helper::create_instances()
+ * @deprecated since 2.2
+ */
+function create_contexts($contextlevel = null, $buildpaths = true) {
+    throw new coding_exception('create_contexts() is removed, please use context_helper::create_instances() instead.');
+}
+
+/**
+ * @see context_helper::cleanup_instances()
+ * @deprecated since 2.2
+ */
+function cleanup_contexts() {
+    throw new coding_exception('cleanup_contexts() is removed, please use context_helper::cleanup_instances() instead.');
+}
+
+/**
+ * Populate context.path and context.depth where missing.
+ *
+ * @deprecated since 2.2
+ */
+function build_context_path($force = false) {
+    throw new coding_exception('build_context_path() is removed, please use context_helper::build_all_paths() instead.');
+}
+
+/**
+ * @deprecated since 2.2
+ */
+function rebuild_contexts(array $fixcontexts) {
+    throw new coding_exception('rebuild_contexts() is removed, please use $context->reset_paths(true) instead.');
+}
+
+/**
+ * @deprecated since Moodle 2.2
+ * @see context_helper::preload_course()
+ */
+function preload_course_contexts($courseid) {
+    throw new coding_exception('preload_course_contexts() is removed, please use context_helper::preload_course() instead.');
+}
+
+/**
+ * @deprecated since Moodle 2.2
+ * @see context::update_moved()
+ */
+function context_moved(context $context, context $newparent) {
+    throw new coding_exception('context_moved() is removed, please use context::update_moved() instead.');
+}
+
+/**
+ * @see context::get_capabilities()
+ * @deprecated since 2.2
+ */
+function fetch_context_capabilities(context $context) {
+    throw new coding_exception('fetch_context_capabilities() is removed, please use $context->get_capabilities() instead.');
+}
+
+/**
+ * @deprecated since 2.2
+ * @see context_helper::preload_from_record()
+ */
+function context_instance_preload(stdClass $rec) {
+    throw new coding_exception('context_instance_preload() is removed, please use context_helper::preload_from_record() instead.');
+}
+
+/**
+ * Returns context level name
+ *
+ * @deprecated since 2.2
+ * @see context_helper::get_level_name()
+ */
+function get_contextlevel_name($contextlevel) {
+    throw new coding_exception('get_contextlevel_name() is removed, please use context_helper::get_level_name() instead.');
+}
+
+/**
+ * @deprecated since 2.2
+ * @see context::get_context_name()
+ */
+function print_context_name(context $context, $withprefix = true, $short = false) {
+    throw new coding_exception('print_context_name() is removed, please use $context->get_context_name() instead.');
+}
+
+/**
+ * @deprecated since 2.2, use $context->mark_dirty() instead
+ * @see context::mark_dirty()
+ */
+function mark_context_dirty($path) {
+    throw new coding_exception('mark_context_dirty() is removed, please use $context->mark_dirty() instead.');
+}
+
+/**
+ * @deprecated since Moodle 2.2
+ * @see context_helper::delete_instance() or context::delete_content()
+ */
+function delete_context($contextlevel, $instanceid, $deleterecord = true) {
+    if ($deleterecord) {
+        throw new coding_exception('delete_context() is removed, please use context_helper::delete_instance() instead.');
+    } else {
+        throw new coding_exception('delete_context() is removed, please use $context->delete_content() instead.');
+    }
+}
+
+/**
+ * @deprecated since 2.2
+ * @see context::get_url()
+ */
+function get_context_url(context $context) {
+    throw new coding_exception('get_context_url() is removed, please use $context->get_url() instead.');
+}
+
+/**
+ * @deprecated since 2.2
+ * @see context::get_course_context()
+ */
+function get_course_context(context $context) {
+    throw new coding_exception('get_course_context() is removed, please use $context->get_course_context(true) instead.');
+}
+
+/**
+ * @deprecated since 2.2
+ * @see enrol_get_users_courses()
+ */
+function get_user_courses_bycap($userid, $cap, $accessdata_ignored, $doanything_ignored, $sort = 'c.sortorder ASC', $fields = null, $limit_ignored = 0) {
+
+    throw new coding_exception('get_user_courses_bycap() is removed, please use enrol_get_users_courses() instead.');
+}
+
+/**
+ * @deprecated since Moodle 2.2
+ */
+function get_role_context_caps($roleid, context $context) {
+    throw new coding_exception('get_role_context_caps() is removed, it is really slow. Don\'t use it.');
+}
+
+/**
+ * @see context::get_course_context()
+ * @deprecated since 2.2
+ */
+function get_courseid_from_context(context $context) {
+    throw new coding_exception('get_courseid_from_context() is removed, please use $context->get_course_context(false) instead.');
+}
+
+/**
+ * If you are using this methid, you should have something like this:
+ *
+ *    list($ctxselect, $ctxjoin) = context_instance_preload_sql('c.id', CONTEXT_COURSE, 'ctx');
+ *
+ * To prevent the use of this deprecated function, replace the line above with something similar to this:
+ *
+ *    $ctxselect = ', ' . context_helper::get_preload_record_columns_sql('ctx');
+ *                                                                        ^
+ *    $ctxjoin = "LEFT JOIN {context} ctx ON (ctx.instanceid = c.id AND ctx.contextlevel = :contextlevel)";
+ *                                    ^       ^                ^        ^
+ *    $params = array('contextlevel' => CONTEXT_COURSE);
+ *                                      ^
+ * @see context_helper:;get_preload_record_columns_sql()
+ * @deprecated since 2.2
+ */
+function context_instance_preload_sql($joinon, $contextlevel, $tablealias) {
+    throw new coding_exception('context_instance_preload_sql() is removed, please use context_helper::get_preload_record_columns_sql() instead.');
+}
+
+/**
+ * @deprecated since 2.2
+ * @see context::get_parent_context_ids()
+ */
+function get_related_contexts_string(context $context) {
+    throw new coding_exception('get_related_contexts_string() is removed, please use $context->get_parent_context_ids(true) instead.');
+}
+
+/**
+ * @deprecated since 2.6
+ * @see core_component::get_plugin_list_with_file()
+ */
+function get_plugin_list_with_file($plugintype, $file, $include = false) {
+    throw new coding_exception('get_plugin_list_with_file() is removed, please use core_component::get_plugin_list_with_file() instead.');
+}
+
+/**
+ * @deprecated since 2.6
+ */
+function check_browser_operating_system($brand) {
+    throw new coding_exception('check_browser_operating_system is removed, please update your code to use core_useragent instead.');
+}
+
+/**
+ * @deprecated since 2.6
+ */
+function check_browser_version($brand, $version = null) {
+    throw new coding_exception('check_browser_version is removed, please update your code to use core_useragent instead.');
+}
+
+/**
+ * @deprecated since 2.6
+ */
+function get_device_type() {
+    throw new coding_exception('get_device_type is removed, please update your code to use core_useragent instead.');
+}
+
+/**
+ * @deprecated since 2.6
+ */
+function get_device_type_list($incusertypes = true) {
+    throw new coding_exception('get_device_type_list is removed, please update your code to use core_useragent instead.');
+}
+
+/**
+ * @deprecated since 2.6
+ */
+function get_selected_theme_for_device_type($devicetype = null) {
+    throw new coding_exception('get_selected_theme_for_device_type is removed, please update your code to use core_useragent instead.');
+}
+
+/**
+ * @deprecated since 2.6
+ */
+function get_device_cfg_var_name($devicetype = null) {
+    throw new coding_exception('get_device_cfg_var_name is removed, please update your code to use core_useragent instead.');
+}
+
+/**
+ * @deprecated since 2.6
+ */
+function set_user_device_type($newdevice) {
+    throw new coding_exception('set_user_device_type is removed, please update your code to use core_useragent instead.');
+}
+
+/**
+ * @deprecated since 2.6
+ */
+function get_user_device_type() {
+    throw new coding_exception('get_user_device_type is removed, please update your code to use core_useragent instead.');
+}
+
+/**
+ * @deprecated since 2.6
+ */
+function get_browser_version_classes() {
+    throw new coding_exception('get_browser_version_classes is removed, please update your code to use core_useragent instead.');
+}
+
+/**
+ * @deprecated since Moodle 2.6
+ * @see core_user::get_support_user()
+ */
+function generate_email_supportuser() {
+    throw new coding_exception('generate_email_supportuser is removed, please use core_user::get_support_user');
+}
+
+/**
+ * @deprecated since Moodle 2.6
+ */
+function badges_get_issued_badge_info($hash) {
+    throw new coding_exception('Function badges_get_issued_badge_info() is removed. Please use core_badges_assertion class and methods to generate badge assertion.');
+}
+
+/**
+ * @deprecated since 2.6
+ */
+function can_use_html_editor() {
+    throw new coding_exception('can_use_html_editor is removed, please update your code to assume it returns true.');
+}
+
+
+/**
+ * @deprecated since Moodle 2.7, use {@link user_count_login_failures()} instead.
+ */
+function count_login_failures($mode, $username, $lastlogin) {
+    throw new coding_exception('count_login_failures() can not be used any more, please use user_count_login_failures().');
+}
+
+/**
+ * @deprecated since 2.7 MDL-33099/MDL-44088 - please do not use this function any more.
+ */
+function ajaxenabled(array $browsers = null) {
+    throw new coding_exception('ajaxenabled() can not be used anymore. Update your code to work with JS at all times.');
+}
+
+/**
+ * @deprecated Since Moodle 2.7 MDL-44070
+ */
+function coursemodule_visible_for_user($cm, $userid=0) {
+    throw new coding_exception('coursemodule_visible_for_user() can not be used any more,
+            please use \core_availability\info_module::is_user_visible()');
+}
+
+/**
+ * @deprecated since Moodle 2.8 MDL-36014, MDL-35618 this functionality is removed
+ */
+function enrol_cohort_get_cohorts(course_enrolment_manager $manager) {
+    throw new coding_exception('Function enrol_cohort_get_cohorts() is removed, use enrol_cohort_search_cohorts() or '.
+        'cohort_get_available_cohorts() instead');
+}
+
+/**
+ * This function is deprecated, use {@link cohort_can_view_cohort()} instead since it also
+ * takes into account current context
+ *
+ * @deprecated since Moodle 2.8 MDL-36014 please use cohort_can_view_cohort()
+ */
+function enrol_cohort_can_view_cohort($cohortid) {
+    throw new coding_exception('Function enrol_cohort_can_view_cohort() is removed, use cohort_can_view_cohort() instead');
+}
+
+/**
+ * It is advisable to use {@link cohort_get_available_cohorts()} instead.
+ *
+ * @deprecated since Moodle 2.8 MDL-36014 use cohort_get_available_cohorts() instead
+ */
+function cohort_get_visible_list($course, $onlyenrolled=true) {
+    throw new coding_exception('Function cohort_get_visible_list() is removed. Please use function cohort_get_available_cohorts() ".
+        "that correctly checks capabilities.');
+}
+
+/**
+ * @deprecated since Moodle 2.8 MDL-35618 this functionality is removed
+ */
+function enrol_cohort_enrol_all_users(course_enrolment_manager $manager, $cohortid, $roleid) {
+    throw new coding_exception('enrol_cohort_enrol_all_users() is removed. This functionality is moved to enrol_manual.');
+}
+
+/**
+ * @deprecated since Moodle 2.8 MDL-35618 this functionality is removed
+ */
+function enrol_cohort_search_cohorts(course_enrolment_manager $manager, $offset = 0, $limit = 25, $search = '') {
+    throw new coding_exception('enrol_cohort_search_cohorts() is removed. This functionality is moved to enrol_manual.');
+}
+
+/* === Apis deprecated in since Moodle 2.9 === */
+
+/**
+ * Is $USER one of the supplied users?
+ *
+ * $user2 will be null if viewing a user's recent conversations
+ *
+ * @deprecated since Moodle 2.9 MDL-49371 - please do not use this function any more.
+ */
+function message_current_user_is_involved($user1, $user2) {
+    throw new coding_exception('message_current_user_is_involved() can not be used any more.');
+}
+
+/**
+ * Print badges on user profile page.
+ *
+ * @deprecated since Moodle 2.9 MDL-45898 - please do not use this function any more.
+ */
+function profile_display_badges($userid, $courseid = 0) {
+    throw new coding_exception('profile_display_badges() can not be used any more.');
+}
+
+/**
+ * Adds user preferences elements to user edit form.
+ *
+ * @deprecated since Moodle 2.9 MDL-45774 - Please do not use this function any more.
+ */
+function useredit_shared_definition_preferences($user, &$mform, $editoroptions = null, $filemanageroptions = null) {
+    throw new coding_exception('useredit_shared_definition_preferences() can not be used any more.');
+}
+
+
+/**
+ * Convert region timezone to php supported timezone
+ *
+ * @deprecated since Moodle 2.9
+ */
+function calendar_normalize_tz($tz) {
+    throw new coding_exception('calendar_normalize_tz() can not be used any more, please use core_date::normalise_timezone() instead.');
+}
+
+/**
+ * Returns a float which represents the user's timezone difference from GMT in hours
+ * Checks various settings and picks the most dominant of those which have a value
+ * @deprecated since Moodle 2.9
+ */
+function get_user_timezone_offset($tz = 99) {
+    throw new coding_exception('get_user_timezone_offset() can not be used any more, please use standard PHP DateTimeZone class instead');
+
+}
+
+/**
+ * Returns an int which represents the systems's timezone difference from GMT in seconds
+ * @deprecated since Moodle 2.9
+ */
+function get_timezone_offset($tz) {
+    throw new coding_exception('get_timezone_offset() can not be used any more, please use standard PHP DateTimeZone class instead');
+}
+
+/**
+ * Returns a list of timezones in the current language.
+ * @deprecated since Moodle 2.9
+ */
+function get_list_of_timezones() {
+    throw new coding_exception('get_list_of_timezones() can not be used any more, please use core_date::get_list_of_timezones() instead');
+}
+
+/**
+ * Previous internal API, it was not supposed to be used anywhere.
+ * @deprecated since Moodle 2.9
+ */
+function update_timezone_records($timezones) {
+    throw new coding_exception('update_timezone_records() can not be used any more, please use standard PHP DateTime class instead');
+}
+
+/**
+ * Previous internal API, it was not supposed to be used anywhere.
+ * @deprecated since Moodle 2.9
+ */
+function calculate_user_dst_table($fromyear = null, $toyear = null, $strtimezone = null) {
+    throw new coding_exception('calculate_user_dst_table() can not be used any more, please use standard PHP DateTime class instead');
+}
+
+/**
+ * Previous internal API, it was not supposed to be used anywhere.
+ * @deprecated since Moodle 2.9
+ */
+function dst_changes_for_year($year, $timezone) {
+    throw new coding_exception('dst_changes_for_year() can not be used any more, please use standard DateTime class instead');
+}
+
+/**
+ * Previous internal API, it was not supposed to be used anywhere.
+ * @deprecated since Moodle 2.9
+ */
+function get_timezone_record($timezonename) {
+    throw new coding_exception('get_timezone_record() can not be used any more, please use standard PHP DateTime class instead');
+}
+
+/* === Apis deprecated since Moodle 3.0 === */
+/**
+ * Returns the URL of the HTTP_REFERER, less the querystring portion if required.
+ *
+ * @deprecated since Moodle 3.0 MDL-49360 - please do not use this function any more.
+ * @todo MDL-50265 Remove this function in Moodle 3.4.
+ * @param boolean $stripquery if true, also removes the query part of the url.
+ * @return string The resulting referer or empty string.
+ */
+function get_referer($stripquery = true) {
+    debugging('get_referer() is deprecated. Please use get_local_referer() instead.', DEBUG_DEVELOPER);
+    if (isset($_SERVER['HTTP_REFERER'])) {
+        if ($stripquery) {
+            return strip_querystring($_SERVER['HTTP_REFERER']);
+        } else {
+            return $_SERVER['HTTP_REFERER'];
+        }
+    } else {
+        return '';
+    }
+}
+
+/**
+ * Checks if current user is a web crawler.
+ *
+ * This list can not be made complete, this is not a security
+ * restriction, we make the list only to help these sites
+ * especially when automatic guest login is disabled.
+ *
+ * If admin needs security they should enable forcelogin
+ * and disable guest access!!
+ *
+ * @return bool
+ * @deprecated since Moodle 3.0 use \core_useragent::is_web_crawler instead.
+ */
+function is_web_crawler() {
+    debugging('is_web_crawler() has been deprecated, please use core_useragent::is_web_crawler() instead.', DEBUG_DEVELOPER);
+    return core_useragent::is_web_crawler();
+}
+
+/**
+ * Update user's course completion statuses
+ *
+ * First update all criteria completions, then aggregate all criteria completions
+ * and update overall course completions.
+ *
+ * @deprecated since Moodle 3.0 MDL-50287 - please do not use this function any more.
+ * @todo Remove this function in Moodle 3.2 MDL-51226.
+ */
+function completion_cron() {
+    global $CFG;
+    require_once($CFG->dirroot.'/completion/cron.php');
+
+    debugging('completion_cron() is deprecated. Functionality has been moved to scheduled tasks.', DEBUG_DEVELOPER);
+    completion_cron_mark_started();
+
+    completion_cron_criteria();
+
+    completion_cron_completions();
+}
+
+/**
+ * Returns an ordered array of tags associated with visible courses
+ * (boosted replacement of get_all_tags() allowing association with user and tagtype).
+ *
+ * @deprecated since 3.0
+ * @package  core_tag
+ * @category tag
+ * @param    int      $courseid A course id. Passing 0 will return all distinct tags for all visible courses
+ * @param    int      $userid   (optional) the user id, a default of 0 will return all users tags for the course
+ * @param    string   $tagtype  (optional) The type of tag, empty string returns all types. Currently (Moodle 2.2) there are two
+ *                              types of tags which are used within Moodle, they are 'official' and 'default'.
+ * @param    int      $numtags  (optional) number of tags to display, default of 80 is set in the block, 0 returns all
+ * @param    string   $unused   (optional) was selected sorting, moved to tag_print_cloud()
+ * @return   array
+ */
+function coursetag_get_tags($courseid, $userid=0, $tagtype='', $numtags=0, $unused = '') {
+    debugging('Function coursetag_get_tags() is deprecated. Userid is no longer used for tagging courses.', DEBUG_DEVELOPER);
+
+    global $CFG, $DB;
+
+    // get visible course ids
+    $courselist = array();
+    if ($courseid === 0) {
+        if ($courses = $DB->get_records_select('course', 'visible=1 AND category>0', null, '', 'id')) {
+            foreach ($courses as $key => $value) {
+                $courselist[] = $key;
+            }
+        }
+    }
+
+    // get tags from the db ordered by highest count first
+    $params = array();
+    $sql = "SELECT id as tkey, name, id, isstandard, rawname, f.timemodified, flag, count
+              FROM {tag} t,
+                 (SELECT tagid, MAX(timemodified) as timemodified, COUNT(id) as count
+                    FROM {tag_instance}
+                   WHERE itemtype = 'course' ";
+
+    if ($courseid > 0) {
+        $sql .= "    AND itemid = :courseid ";
+        $params['courseid'] = $courseid;
+    } else {
+        if (!empty($courselist)) {
+            list($usql, $uparams) = $DB->get_in_or_equal($courselist, SQL_PARAMS_NAMED);
+            $sql .= "AND itemid $usql ";
+            $params = $params + $uparams;
+        }
+    }
+
+    if ($userid > 0) {
+        $sql .= "    AND tiuserid = :userid ";
+        $params['userid'] = $userid;
+    }
+
+    $sql .= "   GROUP BY tagid) f
+             WHERE t.id = f.tagid ";
+    if ($tagtype != '') {
+        $sql .= "AND isstandard = :isstandard ";
+        $params['isstandard'] = ($tagtype === 'official') ? 1 : 0;
+    }
+    $sql .= "ORDER BY count DESC, name ASC";
+
+    // limit the number of tags for output
+    if ($numtags == 0) {
+        $tags = $DB->get_records_sql($sql, $params);
+    } else {
+        $tags = $DB->get_records_sql($sql, $params, 0, $numtags);
+    }
+
+    // prepare the return
+    $return = array();
+    if ($tags) {
+        // avoid print_tag_cloud()'s ksort upsetting ordering by setting the key here
+        foreach ($tags as $value) {
+            $return[] = $value;
+        }
+    }
+
+    return $return;
+
+}
+
+/**
+ * Returns an ordered array of tags
+ * (replaces popular_tags_count() allowing sorting).
+ *
+ * @deprecated since 3.0
+ * @package  core_tag
+ * @category tag
+ * @param    string $unused (optional) was selected sorting - moved to tag_print_cloud()
+ * @param    int    $numtags (optional) number of tags to display, default of 20 is set in the block, 0 returns all
+ * @return   array
+ */
+function coursetag_get_all_tags($unused='', $numtags=0) {
+    debugging('Function coursetag_get_all_tag() is deprecated. Userid is no longer used for tagging courses.', DEBUG_DEVELOPER);
+
+    global $CFG, $DB;
+
+    // note that this selects all tags except for courses that are not visible
+    $sql = "SELECT id, name, isstandard, rawname, f.timemodified, flag, count
+        FROM {tag} t,
+        (SELECT tagid, MAX(timemodified) as timemodified, COUNT(id) as count
+            FROM {tag_instance} WHERE tagid NOT IN
+                (SELECT tagid FROM {tag_instance} ti, {course} c
+                WHERE c.visible = 0
+                AND ti.itemtype = 'course'
+                AND ti.itemid = c.id)
+        GROUP BY tagid) f
+        WHERE t.id = f.tagid
+        ORDER BY count DESC, name ASC";
+    if ($numtags == 0) {
+        $tags = $DB->get_records_sql($sql);
+    } else {
+        $tags = $DB->get_records_sql($sql, null, 0, $numtags);
+    }
+
+    $return = array();
+    if ($tags) {
+        foreach ($tags as $value) {
+            $return[] = $value;
+        }
+    }
+
+    return $return;
+}
+
+/**
+ * Returns javascript for use in tags block and supporting pages
+ *
+ * @deprecated since 3.0
+ * @package  core_tag
+ * @category tag
+ * @return   null
+ */
+function coursetag_get_jscript() {
+    debugging('Function coursetag_get_jscript() is deprecated and obsolete.', DEBUG_DEVELOPER);
+    return '';
+}
+
+/**
+ * Returns javascript to create the links in the tag block footer.
+ *
+ * @deprecated since 3.0
+ * @package  core_tag
+ * @category tag
+ * @param    string   $elementid       the element to attach the footer to
+ * @param    array    $coursetagslinks links arrays each consisting of 'title', 'onclick' and 'text' elements
+ * @return   string   always returns a blank string
+ */
+function coursetag_get_jscript_links($elementid, $coursetagslinks) {
+    debugging('Function coursetag_get_jscript_links() is deprecated and obsolete.', DEBUG_DEVELOPER);
+    return '';
+}
+
+/**
+ * Returns all tags created by a user for a course
+ *
+ * @deprecated since 3.0
+ * @package  core_tag
+ * @category tag
+ * @param    int      $courseid tags are returned for the course that has this courseid
+ * @param    int      $userid   return tags which were created by this user
+ */
+function coursetag_get_records($courseid, $userid) {
+    debugging('Function coursetag_get_records() is deprecated. Userid is no longer used for tagging courses.', DEBUG_DEVELOPER);
+
+    global $CFG, $DB;
+
+    $sql = "SELECT t.id, name, rawname
+              FROM {tag} t, {tag_instance} ti
+             WHERE t.id = ti.tagid
+                 AND ti.tiuserid = :userid
+                 AND ti.itemid = :courseid
+          ORDER BY name ASC";
+
+    return $DB->get_records_sql($sql, array('userid'=>$userid, 'courseid'=>$courseid));
+}
+
+/**
+ * Stores a tag for a course for a user
+ *
+ * @deprecated since 3.0
+ * @package  core_tag
+ * @category tag
+ * @param    array  $tags     simple array of keywords to be stored
+ * @param    int    $courseid the id of the course we wish to store a tag for
+ * @param    int    $userid   the id of the user we wish to store a tag for
+ * @param    string $tagtype  official or default only
+ * @param    string $myurl    (optional) for logging creation of course tags
+ */
+function coursetag_store_keywords($tags, $courseid, $userid=0, $tagtype='official', $myurl='') {
+    debugging('Function coursetag_store_keywords() is deprecated. Userid is no longer used for tagging courses.', DEBUG_DEVELOPER);
+
+    global $CFG;
+
+    if (is_array($tags) and !empty($tags)) {
+        if ($tagtype === 'official') {
+            $tagcoll = core_tag_area::get_collection('core', 'course');
+            // We don't normally need to create tags, they are created automatically when added to items. but we do here because we want them to be official.
+            core_tag_tag::create_if_missing($tagcoll, $tags, true);
+        }
+        foreach ($tags as $tag) {
+            $tag = trim($tag);
+            if (strlen($tag) > 0) {
+                core_tag_tag::add_item_tag('core', 'course', $courseid, context_course::instance($courseid), $tag, $userid);
+            }
+        }
+    }
+
+}
+
+/**
+ * Deletes a personal tag for a user for a course.
+ *
+ * @deprecated since 3.0
+ * @package  core_tag
+ * @category tag
+ * @param    int      $tagid    the tag we wish to delete
+ * @param    int      $userid   the user that the tag is associated with
+ * @param    int      $courseid the course that the tag is associated with
+ */
+function coursetag_delete_keyword($tagid, $userid, $courseid) {
+    debugging('Function coursetag_delete_keyword() is deprecated. Userid is no longer used for tagging courses.', DEBUG_DEVELOPER);
+
+    $tag = core_tag_tag::get($tagid);
+    core_tag_tag::remove_item_tag('core', 'course', $courseid, $tag->rawname, $userid);
+}
+
+/**
+ * Get courses tagged with a tag
+ *
+ * @deprecated since 3.0
+ * @package  core_tag
+ * @category tag
+ * @param int $tagid
+ * @return array of course objects
+ */
+function coursetag_get_tagged_courses($tagid) {
+    debugging('Function coursetag_get_tagged_courses() is deprecated. Userid is no longer used for tagging courses.', DEBUG_DEVELOPER);
+
+    global $DB;
+
+    $courses = array();
+
+    $ctxselect = context_helper::get_preload_record_columns_sql('ctx');
+
+    $sql = "SELECT c.*, $ctxselect
+            FROM {course} c
+            JOIN {tag_instance} t ON t.itemid = c.id
+            JOIN {context} ctx ON ctx.instanceid = c.id
+            WHERE t.tagid = :tagid AND
+            t.itemtype = 'course' AND
+            ctx.contextlevel = :contextlevel
+            ORDER BY c.sortorder ASC";
+    $params = array('tagid' => $tagid, 'contextlevel' => CONTEXT_COURSE);
+    $rs = $DB->get_recordset_sql($sql, $params);
+    foreach ($rs as $course) {
+        context_helper::preload_from_record($course);
+        if ($course->visible == 1 || has_capability('moodle/course:viewhiddencourses', context_course::instance($course->id))) {
+            $courses[$course->id] = $course;
+        }
+    }
+    return $courses;
+}
+
+/**
+ * Course tagging function used only during the deletion of a course (called by lib/moodlelib.php) to clean up associated tags
+ *
+ * @package core_tag
+ * @deprecated since 3.0
+ * @param   int      $courseid     the course we wish to delete tag instances from
+ * @param   bool     $showfeedback if we should output a notification of the delete to the end user
+ */
+function coursetag_delete_course_tags($courseid, $showfeedback=false) {
+    debugging('Function coursetag_delete_course_tags() is deprecated. Use core_tag_tag::remove_all_item_tags().', DEBUG_DEVELOPER);
+
+    global $OUTPUT;
+    core_tag_tag::remove_all_item_tags('core', 'course', $courseid);
+
+    if ($showfeedback) {
+        echo $OUTPUT->notification(get_string('deletedcoursetags', 'tag'), 'notifysuccess');
+    }
+}
+
+/**
+ * Set the type of a tag.  At this time (version 2.2) the possible values are 'default' or 'official'.  Official tags will be
+ * displayed separately "at tagging time" (while selecting the tags to apply to a record).
+ *
+ * @package  core_tag
+ * @deprecated since 3.1
+ * @param    string   $tagid tagid to modify
+ * @param    string   $type either 'default' or 'official'
+ * @return   bool     true on success, false otherwise
+ */
+function tag_type_set($tagid, $type) {
+    debugging('Function tag_type_set() is deprecated and can be replaced with use core_tag_tag::get($tagid)->update().', DEBUG_DEVELOPER);
+    if ($tag = core_tag_tag::get($tagid, '*')) {
+        return $tag->update(array('isstandard' => ($type === 'official') ? 1 : 0));
+    }
+    return false;
+}
+
+/**
+ * Set the description of a tag
+ *
+ * @package  core_tag
+ * @deprecated since 3.1
+ * @param    int      $tagid the id of the tag
+ * @param    string   $description the tag's description string to be set
+ * @param    int      $descriptionformat the moodle text format of the description
+ *                    {@link http://docs.moodle.org/dev/Text_formats_2.0#Database_structure}
+ * @return   bool     true on success, false otherwise
+ */
+function tag_description_set($tagid, $description, $descriptionformat) {
+    debugging('Function tag_type_set() is deprecated and can be replaced with core_tag_tag::get($tagid)->update().', DEBUG_DEVELOPER);
+    if ($tag = core_tag_tag::get($tagid, '*')) {
+        return $tag->update(array('description' => $description, 'descriptionformat' => $descriptionformat));
+    }
+    return false;
+}
+
+/**
+ * Get the array of db record of tags associated to a record (instances).
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param string $record_type the record type for which we want to get the tags
+ * @param int $record_id the record id for which we want to get the tags
+ * @param string $type the tag type (either 'default' or 'official'). By default, all tags are returned.
+ * @param int $userid (optional) only required for course tagging
+ * @return array the array of tags
+ */
+function tag_get_tags($record_type, $record_id, $type=null, $userid=0) {
+    debugging('Method tag_get_tags() is deprecated and replaced with core_tag_tag::get_item_tags(). ' .
+        'Component is now required when retrieving tag instances.', DEBUG_DEVELOPER);
+    $standardonly = ($type === 'official' ? core_tag_tag::STANDARD_ONLY :
+        (!empty($type) ? core_tag_tag::NOT_STANDARD_ONLY : core_tag_tag::BOTH_STANDARD_AND_NOT));
+    $tags = core_tag_tag::get_item_tags(null, $record_type, $record_id, $standardonly, $userid);
+    $rv = array();
+    foreach ($tags as $id => $t) {
+        $rv[$id] = $t->to_object();
+    }
+    return $rv;
+}
+
+/**
+ * Get the array of tags display names, indexed by id.
+ *
+ * @package  core_tag
+ * @deprecated since 3.1
+ * @param    string $record_type the record type for which we want to get the tags
+ * @param    int    $record_id   the record id for which we want to get the tags
+ * @param    string $type        the tag type (either 'default' or 'official'). By default, all tags are returned.
+ * @return   array  the array of tags (with the value returned by core_tag_tag::make_display_name), indexed by id
+ */
+function tag_get_tags_array($record_type, $record_id, $type=null) {
+    debugging('Method tag_get_tags_array() is deprecated and replaced with core_tag_tag::get_item_tags_array(). ' .
+        'Component is now required when retrieving tag instances.', DEBUG_DEVELOPER);
+    $standardonly = ($type === 'official' ? core_tag_tag::STANDARD_ONLY :
+        (!empty($type) ? core_tag_tag::NOT_STANDARD_ONLY : core_tag_tag::BOTH_STANDARD_AND_NOT));
+    return core_tag_tag::get_item_tags_array('', $record_type, $record_id, $standardonly);
+}
+
+/**
+ * Get a comma-separated string of tags associated to a record.
+ *
+ * Use {@link tag_get_tags()} to get the same information in an array.
+ *
+ * @package  core_tag
+ * @deprecated since 3.1
+ * @param    string   $record_type the record type for which we want to get the tags
+ * @param    int      $record_id   the record id for which we want to get the tags
+ * @param    int      $html        either TAG_RETURN_HTML or TAG_RETURN_TEXT, depending on the type of output desired
+ * @param    string   $type        either 'official' or 'default', if null, all tags are returned
+ * @return   string   the comma-separated list of tags.
+ */
+function tag_get_tags_csv($record_type, $record_id, $html=null, $type=null) {
+    global $CFG, $OUTPUT;
+    debugging('Method tag_get_tags_csv() is deprecated. Instead you should use either ' .
+            'core_tag_tag::get_item_tags_array() or $OUTPUT->tag_list(core_tag_tag::get_item_tags()). ' .
+        'Component is now required when retrieving tag instances.', DEBUG_DEVELOPER);
+    $standardonly = ($type === 'official' ? core_tag_tag::STANDARD_ONLY :
+        (!empty($type) ? core_tag_tag::NOT_STANDARD_ONLY : core_tag_tag::BOTH_STANDARD_AND_NOT));
+    if ($html != TAG_RETURN_TEXT) {
+        return $OUTPUT->tag_list(core_tag_tag::get_item_tags('', $record_type, $record_id, $standardonly), '');
+    } else {
+        return join(', ', core_tag_tag::get_item_tags_array('', $record_type, $record_id, $standardonly, 0, false));
+    }
+}
+
+/**
+ * Get an array of tag ids associated to a record.
+ *
+ * @package  core_tag
+ * @deprecated since 3.1
+ * @param    string    $record_type the record type for which we want to get the tags
+ * @param    int       $record_id the record id for which we want to get the tags
+ * @return   array     tag ids, indexed and sorted by 'ordering'
+ */
+function tag_get_tags_ids($record_type, $record_id) {
+    debugging('Method tag_get_tags_ids() is deprecated. Please consider using core_tag_tag::get_item_tags() or similar methods.', DEBUG_DEVELOPER);
+    $tag_ids = array();
+    $tagobjects = core_tag_tag::get_item_tags(null, $record_type, $record_id);
+    foreach ($tagobjects as $tagobject) {
+        $tag = $tagobject->to_object();
+        if ( array_key_exists($tag->ordering, $tag_ids) ) {
+            $tag->ordering++;
+        }
+        $tag_ids[$tag->ordering] = $tag->id;
+    }
+    ksort($tag_ids);
+    return $tag_ids;
+}
+
+/**
+ * Returns the database ID of a set of tags.
+ *
+ * @deprecated since 3.1
+ * @param    mixed $tags one tag, or array of tags, to look for.
+ * @param    bool  $return_value specify the type of the returned value. Either TAG_RETURN_OBJECT, or TAG_RETURN_ARRAY (default).
+ *                               If TAG_RETURN_ARRAY is specified, an array will be returned even if only one tag was passed in $tags.
+ * @return   mixed tag-indexed array of ids (or objects, if second parameter is TAG_RETURN_OBJECT), or only an int, if only one tag
+ *                 is given *and* the second parameter is null. No value for a key means the tag wasn't found.
+ */
+function tag_get_id($tags, $return_value = null) {
+    global $CFG, $DB;
+    debugging('Method tag_get_id() is deprecated and can be replaced with core_tag_tag::get_by_name() or core_tag_tag::get_by_name_bulk(). ' .
+        'You need to specify tag collection when retrieving tag by name', DEBUG_DEVELOPER);
+
+    if (!is_array($tags)) {
+        if(is_null($return_value) || $return_value == TAG_RETURN_OBJECT) {
+            if ($tagobject = core_tag_tag::get_by_name(core_tag_collection::get_default(), $tags)) {
+                return $tagobject->id;
+            } else {
+                return 0;
+            }
+        }
+        $tags = array($tags);
+    }
+
+    $records = core_tag_tag::get_by_name_bulk(core_tag_collection::get_default(), $tags,
+        $return_value == TAG_RETURN_OBJECT ? '*' : 'id, name');
+    foreach ($records as $name => $record) {
+        if ($return_value != TAG_RETURN_OBJECT) {
+            $records[$name] = $record->id ? $record->id : null;
+        } else {
+            $records[$name] = $record->to_object();
+        }
+    }
+    return $records;
+}
+
+/**
+ * Change the "value" of a tag, and update the associated 'name'.
+ *
+ * @package  core_tag
+ * @deprecated since 3.1
+ * @param    int      $tagid  the id of the tag to modify
+ * @param    string   $newrawname the new rawname
+ * @return   bool     true on success, false otherwise
+ */
+function tag_rename($tagid, $newrawname) {
+    debugging('Function tag_rename() is deprecated and may be replaced with core_tag_tag::get($tagid)->update().', DEBUG_DEVELOPER);
+    if ($tag = core_tag_tag::get($tagid, '*')) {
+        return $tag->update(array('rawname' => $newrawname));
+    }
+    return false;
+}
+
+/**
+ * Delete one instance of a tag.  If the last instance was deleted, it will also delete the tag, unless its type is 'official'.
+ *
+ * @package  core_tag
+ * @deprecated since 3.1
+ * @param    string $record_type the type of the record for which to remove the instance
+ * @param    int    $record_id   the id of the record for which to remove the instance
+ * @param    int    $tagid       the tagid that needs to be removed
+ * @param    int    $userid      (optional) the userid
+ * @return   bool   true on success, false otherwise
+ */
+function tag_delete_instance($record_type, $record_id, $tagid, $userid = null) {
+    debugging('Function tag_delete_instance() is deprecated and replaced with core_tag_tag::remove_item_tag() instead. ' .
+        'Component is required for retrieving instances', DEBUG_DEVELOPER);
+    $tag = core_tag_tag::get($tagid);
+    core_tag_tag::remove_item_tag('', $record_type, $record_id, $tag->rawname, $userid);
+}
+
+/**
+ * Find all records tagged with a tag of a given type ('post', 'user', etc.)
+ *
+ * @package  core_tag
+ * @deprecated since 3.1
+ * @category tag
+ * @param    string   $tag       tag to look for
+ * @param    string   $type      type to restrict search to.  If null, every matching record will be returned
+ * @param    int      $limitfrom (optional, required if $limitnum is set) return a subset of records, starting at this point.
+ * @param    int      $limitnum  (optional, required if $limitfrom is set) return a subset comprising this many records.
+ * @return   array of matching objects, indexed by record id, from the table containing the type requested
+ */
+function tag_find_records($tag, $type, $limitfrom='', $limitnum='') {
+    debugging('Function tag_find_records() is deprecated and replaced with core_tag_tag::get_by_name()->get_tagged_items(). '.
+        'You need to specify tag collection when retrieving tag by name', DEBUG_DEVELOPER);
+
+    if (!$tag || !$type) {
+        return array();
+    }
+
+    $tagobject = core_tag_tag::get_by_name(core_tag_area::get_collection('', $type), $tag);
+    return $tagobject->get_tagged_items('', $type, $limitfrom, $limitnum);
+}
+
+/**
+ * Adds one or more tag in the database.  This function should not be called directly : you should
+ * use tag_set.
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param   mixed    $tags     one tag, or an array of tags, to be created
+ * @param   string   $type     type of tag to be created ("default" is the default value and "official" is the only other supported
+ *                             value at this time). An official tag is kept even if there are no records tagged with it.
+ * @return array     $tags ids indexed by their lowercase normalized names. Any boolean false in the array indicates an error while
+ *                             adding the tag.
+ */
+function tag_add($tags, $type="default") {
+    debugging('Function tag_add() is deprecated. You can use core_tag_tag::create_if_missing(), however it should not be necessary ' .
+        'since tags are created automatically when assigned to items', DEBUG_DEVELOPER);
+    if (!is_array($tags)) {
+        $tags = array($tags);
+    }
+    $objects = core_tag_tag::create_if_missing(core_tag_collection::get_default(), $tags,
+            $type === 'official');
+
+    // New function returns the tags in different format, for BC we keep the format that this function used to have.
+    $rv = array();
+    foreach ($objects as $name => $tagobject) {
+        if (isset($tagobject->id)) {
+            $rv[$tagobject->name] = $tagobject->id;
+        } else {
+            $rv[$name] = false;
+        }
+    }
+    return $rv;
+}
+
+/**
+ * Assigns a tag to a record; if the record already exists, the time and ordering will be updated.
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param string $record_type the type of the record that will be tagged
+ * @param int $record_id the id of the record that will be tagged
+ * @param string $tagid the tag id to set on the record.
+ * @param int $ordering the order of the instance for this record
+ * @param int $userid (optional) only required for course tagging
+ * @param string|null $component the component that was tagged
+ * @param int|null $contextid the context id of where this tag was assigned
+ * @return bool true on success, false otherwise
+ */
+function tag_assign($record_type, $record_id, $tagid, $ordering, $userid = 0, $component = null, $contextid = null) {
+    global $DB;
+    $message = 'Function tag_assign() is deprecated. Use core_tag_tag::set_item_tags() or core_tag_tag::add_item_tag() instead. ' .
+        'Tag instance ordering should not be set manually';
+    if ($component === null || $contextid === null) {
+        $message .= '. You should specify the component and contextid of the item being tagged in your call to tag_assign.';
+    }
+    debugging($message, DEBUG_DEVELOPER);
+
+    if ($contextid) {
+        $context = context::instance_by_id($contextid);
+    } else {
+        $context = context_system::instance();
+    }
+
+    // Get the tag.
+    $tag = $DB->get_record('tag', array('id' => $tagid), 'name, rawname', MUST_EXIST);
+
+    $taginstanceid = core_tag_tag::add_item_tag($component, $record_type, $record_id, $context, $tag->rawname, $userid);
+
+    // Alter the "ordering" of tag_instance. This should never be done manually and only remains here for the backward compatibility.
+    $taginstance = new stdClass();
+    $taginstance->id = $taginstanceid;
+    $taginstance->ordering     = $ordering;
+    $taginstance->timemodified = time();
+
+    $DB->update_record('tag_instance', $taginstance);
+
+    return true;
+}
+
+/**
+ * Count how many records are tagged with a specific tag.
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param   string   $record_type record to look for ('post', 'user', etc.)
+ * @param   int      $tagid       is a single tag id
+ * @return  int      number of mathing tags.
+ */
+function tag_record_count($record_type, $tagid) {
+    debugging('Method tag_record_count() is deprecated and replaced with core_tag_tag::get($tagid)->count_tagged_items(). '.
+        'Component is now required when retrieving tag instances.', DEBUG_DEVELOPER);
+    return core_tag_tag::get($tagid)->count_tagged_items('', $record_type);
+}
+
+/**
+ * Determine if a record is tagged with a specific tag
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param   string   $record_type the record type to look for
+ * @param   int      $record_id   the record id to look for
+ * @param   string   $tag         a tag name
+ * @return  bool/int true if it is tagged, 0 (false) otherwise
+ */
+function tag_record_tagged_with($record_type, $record_id, $tag) {
+    debugging('Method tag_record_tagged_with() is deprecated and replaced with core_tag_tag::get($tagid)->is_item_tagged_with(). '.
+        'Component is now required when retrieving tag instances.', DEBUG_DEVELOPER);
+    return core_tag_tag::is_item_tagged_with('', $record_type, $record_id, $tag);
+}
+
+/**
+ * Flag a tag as inappropriate.
+ *
+ * @deprecated since 3.1
+ * @param int|array $tagids a single tagid, or an array of tagids
+ */
+function tag_set_flag($tagids) {
+    debugging('Function tag_set_flag() is deprecated and replaced with core_tag_tag::get($tagid)->flag().', DEBUG_DEVELOPER);
+    $tagids = (array) $tagids;
+    foreach ($tagids as $tagid) {
+        if ($tag = core_tag_tag::get($tagid, '*')) {
+            $tag->flag();
+        }
+    }
+}
+
+/**
+ * Remove the inappropriate flag on a tag.
+ *
+ * @deprecated since 3.1
+ * @param int|array $tagids a single tagid, or an array of tagids
+ */
+function tag_unset_flag($tagids) {
+    debugging('Function tag_unset_flag() is deprecated and replaced with core_tag_tag::get($tagid)->reset_flag().', DEBUG_DEVELOPER);
+    $tagids = (array) $tagids;
+    foreach ($tagids as $tagid) {
+        if ($tag = core_tag_tag::get($tagid, '*')) {
+            $tag->reset_flag();
+        }
+    }
+}
+
+/**
+ * Prints or returns a HTML tag cloud with varying classes styles depending on the popularity and type of each tag.
+ *
+ * @deprecated since 3.1
+ *
+ * @param    array     $tagset Array of tags to display
+ * @param    int       $nr_of_tags Limit for the number of tags to return/display, used if $tagset is null
+ * @param    bool      $return     if true the function will return the generated tag cloud instead of displaying it.
+ * @param    string    $sort (optional) selected sorting, default is alpha sort (name) also timemodified or popularity
+ * @return string|null a HTML string or null if this function does the output
+ */
+function tag_print_cloud($tagset=null, $nr_of_tags=150, $return=false, $sort='') {
+    global $OUTPUT;
+
+    debugging('Function tag_print_cloud() is deprecated and replaced with function core_tag_collection::get_tag_cloud(), '
+            . 'templateable core_tag\output\tagcloud and template core_tag/tagcloud.', DEBUG_DEVELOPER);
+
+    // Set up sort global - used to pass sort type into core_tag_collection::cloud_sort through usort() avoiding multiple sort functions.
+    if ($sort == 'popularity') {
+        $sort = 'count';
+    } else if ($sort == 'date') {
+        $sort = 'timemodified';
+    } else {
+        $sort = 'name';
+    }
+
+    if (is_null($tagset)) {
+        // No tag set received, so fetch tags from database.
+        // Always add query by tagcollid even when it's not known to make use of the table index.
+        $tagcloud = core_tag_collection::get_tag_cloud(0, false, $nr_of_tags, $sort);
+    } else {
+        $tagsincloud = $tagset;
+
+        $etags = array();
+        foreach ($tagsincloud as $tag) {
+            $etags[] = $tag;
+        }
+
+        core_tag_collection::$cloudsortfield = $sort;
+        usort($tagsincloud, "core_tag_collection::cloud_sort");
+
+        $tagcloud = new \core_tag\output\tagcloud($tagsincloud);
+    }
+
+    $output = $OUTPUT->render_from_template('core_tag/tagcloud', $tagcloud->export_for_template($OUTPUT));
+    if ($return) {
+        return $output;
+    } else {
+        echo $output;
+    }
+}
+
+/**
+ * Function that returns tags that start with some text, for use by the autocomplete feature
+ *
+ * @package core_tag
+ * @deprecated since 3.0
+ * @access  private
+ * @param   string   $text string that the tag names will be matched against
+ * @return  mixed    an array of objects, or false if no records were found or an error occured.
+ */
+function tag_autocomplete($text) {
+    debugging('Function tag_autocomplete() is deprecated without replacement. ' .
+            'New form element "tags" does proper autocomplete.', DEBUG_DEVELOPER);
+    global $DB;
+    return $DB->get_records_sql("SELECT tg.id, tg.name, tg.rawname
+                                   FROM {tag} tg
+                                  WHERE tg.name LIKE ?", array(core_text::strtolower($text)."%"));
+}
+
+/**
+ * Prints a box with the description of a tag and its related tags
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param   stdClass    $tag_object
+ * @param   bool        $return     if true the function will return the generated tag cloud instead of displaying it.
+ * @return  string/null a HTML box showing a description of the tag object and it's relationsips or null if output is done directly
+ *                      in the function.
+ */
+function tag_print_description_box($tag_object, $return=false) {
+    global $USER, $CFG, $OUTPUT;
+    require_once($CFG->libdir.'/filelib.php');
+
+    debugging('Function tag_print_description_box() is deprecated without replacement. ' .
+            'See core_tag_renderer for similar code.', DEBUG_DEVELOPER);
+
+    $relatedtags = array();
+    if ($tag = core_tag_tag::get($tag_object->id)) {
+        $relatedtags = $tag->get_related_tags();
+    }
+
+    $content = !empty($tag_object->description);
+    $output = '';
+
+    if ($content) {
+        $output .= $OUTPUT->box_start('generalbox tag-description');
+    }
+
+    if (!empty($tag_object->description)) {
+        $options = new stdClass();
+        $options->para = false;
+        $options->overflowdiv = true;
+        $tag_object->description = file_rewrite_pluginfile_urls($tag_object->description, 'pluginfile.php', context_system::instance()->id, 'tag', 'description', $tag_object->id);
+        $output .= format_text($tag_object->description, $tag_object->descriptionformat, $options);
+    }
+
+    if ($content) {
+        $output .= $OUTPUT->box_end();
+    }
+
+    if ($relatedtags) {
+        $output .= $OUTPUT->tag_list($relatedtags, get_string('relatedtags', 'tag'), 'tag-relatedtags');
+    }
+
+    if ($return) {
+        return $output;
+    } else {
+        echo $output;
+    }
+}
+
+/**
+ * Prints a box that contains the management links of a tag
+ *
+ * @deprecated since 3.1
+ * @param  core_tag_tag|stdClass    $tag_object
+ * @param  bool        $return     if true the function will return the generated tag cloud instead of displaying it.
+ * @return string|null a HTML string or null if this function does the output
+ */
+function tag_print_management_box($tag_object, $return=false) {
+    global $USER, $CFG, $OUTPUT;
+
+    debugging('Function tag_print_description_box() is deprecated without replacement. ' .
+            'See core_tag_renderer for similar code.', DEBUG_DEVELOPER);
+
+    $tagname  = core_tag_tag::make_display_name($tag_object);
+    $output = '';
+
+    if (!isguestuser()) {
+        $output .= $OUTPUT->box_start('box','tag-management-box');
+        $systemcontext   = context_system::instance();
+        $links = array();
+
+        // Add a link for users to add/remove this from their interests
+        if (core_tag_tag::is_enabled('core', 'user') && core_tag_area::get_collection('core', 'user') == $tag_object->tagcollid) {
+            if (core_tag_tag::is_item_tagged_with('core', 'user', $USER->id, $tag_object->name)) {
+                $links[] = '<a href="'. $CFG->wwwroot .'/tag/user.php?action=removeinterest&amp;sesskey='. sesskey() .
+                        '&amp;tag='. rawurlencode($tag_object->name) .'">'.
+                        get_string('removetagfrommyinterests', 'tag', $tagname) .'</a>';
+            } else {
+                $links[] = '<a href="'. $CFG->wwwroot .'/tag/user.php?action=addinterest&amp;sesskey='. sesskey() .
+                        '&amp;tag='. rawurlencode($tag_object->name) .'">'.
+                        get_string('addtagtomyinterests', 'tag', $tagname) .'</a>';
+            }
+        }
+
+        // Flag as inappropriate link.  Only people with moodle/tag:flag capability.
+        if (has_capability('moodle/tag:flag', $systemcontext)) {
+            $links[] = '<a href="'. $CFG->wwwroot .'/tag/user.php?action=flaginappropriate&amp;sesskey='.
+                    sesskey() . '&amp;id='. $tag_object->id . '">'. get_string('flagasinappropriate',
+                            'tag', rawurlencode($tagname)) .'</a>';
+        }
+
+        // Edit tag: Only people with moodle/tag:edit capability who either have it as an interest or can manage tags
+        if (has_capability('moodle/tag:edit', $systemcontext) ||
+            has_capability('moodle/tag:manage', $systemcontext)) {
+            $links[] = '<a href="' . $CFG->wwwroot . '/tag/edit.php?id=' . $tag_object->id . '">' .
+                    get_string('edittag', 'tag') . '</a>';
+        }
+
+        $output .= implode(' | ', $links);
+        $output .= $OUTPUT->box_end();
+    }
+
+    if ($return) {
+        return $output;
+    } else {
+        echo $output;
+    }
+}
+
+/**
+ * Prints the tag search box
+ *
+ * @deprecated since 3.1
+ * @param  bool        $return if true return html string
+ * @return string|null a HTML string or null if this function does the output
+ */
+function tag_print_search_box($return=false) {
+    global $CFG, $OUTPUT;
+
+    debugging('Function tag_print_search_box() is deprecated without replacement. ' .
+            'See core_tag_renderer for similar code.', DEBUG_DEVELOPER);
+
+    $query = optional_param('query', '', PARAM_RAW);
+
+    $output = $OUTPUT->box_start('','tag-search-box');
+    $output .= '<form action="'.$CFG->wwwroot.'/tag/search.php" style="display:inline">';
+    $output .= '<div>';
+    $output .= '<label class="accesshide" for="searchform_search">'.get_string('searchtags', 'tag').'</label>';
+    $output .= '<input id="searchform_search" name="query" type="text" size="40" value="'.s($query).'" />';
+    $output .= '<button id="searchform_button" type="submit">'. get_string('search', 'tag') .'</button><br />';
+    $output .= '</div>';
+    $output .= '</form>';
+    $output .= $OUTPUT->box_end();
+
+    if ($return) {
+        return $output;
+    }
+    else {
+        echo $output;
+    }
+}
+
+/**
+ * Prints the tag search results
+ *
+ * @deprecated since 3.1
+ * @param string       $query text that tag names will be matched against
+ * @param int          $page current page
+ * @param int          $perpage nr of users displayed per page
+ * @param bool         $return if true return html string
+ * @return string|null a HTML string or null if this function does the output
+ */
+function tag_print_search_results($query,  $page, $perpage, $return=false) {
+    global $CFG, $USER, $OUTPUT;
+
+    debugging('Function tag_print_search_results() is deprecated without replacement. ' .
+            'In /tag/search.php the search results are printed using the core_tag/tagcloud template.', DEBUG_DEVELOPER);
+
+    $query = clean_param($query, PARAM_TAG);
+
+    $count = count(tag_find_tags($query, false));
+    $tags = array();
+
+    if ( $found_tags = tag_find_tags($query, true,  $page * $perpage, $perpage) ) {
+        $tags = array_values($found_tags);
+    }
+
+    $baseurl = $CFG->wwwroot.'/tag/search.php?query='. rawurlencode($query);
+    $output = '';
+
+    // link "Add $query to my interests"
+    $addtaglink = '';
+    if (core_tag_tag::is_enabled('core', 'user') && !core_tag_tag::is_item_tagged_with('core', 'user', $USER->id, $query)) {
+        $addtaglink = html_writer::link(new moodle_url('/tag/user.php', array('action' => 'addinterest', 'sesskey' => sesskey(),
+            'tag' => $query)), get_string('addtagtomyinterests', 'tag', s($query)));
+    }
+
+    if ( !empty($tags) ) { // there are results to display!!
+        $output .= $OUTPUT->heading(get_string('searchresultsfor', 'tag', htmlspecialchars($query)) ." : {$count}", 3, 'main');
+
+        //print a link "Add $query to my interests"
+        if (!empty($addtaglink)) {
+            $output .= $OUTPUT->box($addtaglink, 'box', 'tag-management-box');
+        }
+
+        $nr_of_lis_per_ul = 6;
+        $nr_of_uls = ceil( sizeof($tags) / $nr_of_lis_per_ul );
+
+        $output .= '<ul id="tag-search-results">';
+        for($i = 0; $i < $nr_of_uls; $i++) {
+            foreach (array_slice($tags, $i * $nr_of_lis_per_ul, $nr_of_lis_per_ul) as $tag) {
+                $output .= '<li>';
+                $tag_link = html_writer::link(core_tag_tag::make_url($tag->tagcollid, $tag->rawname),
+                    core_tag_tag::make_display_name($tag));
+                $output .= $tag_link;
+                $output .= '</li>';
+            }
+        }
+        $output .= '</ul>';
+        $output .= '<div>&nbsp;</div>'; // <-- small layout hack in order to look good in Firefox
+
+        $output .= $OUTPUT->paging_bar($count, $page, $perpage, $baseurl);
+    }
+    else { //no results were found!!
+        $output .= $OUTPUT->heading(get_string('noresultsfor', 'tag', htmlspecialchars($query)), 3, 'main');
+
+        //print a link "Add $query to my interests"
+        if (!empty($addtaglink)) {
+            $output .= $OUTPUT->box($addtaglink, 'box', 'tag-management-box');
+        }
+    }
+
+    if ($return) {
+        return $output;
+    }
+    else {
+        echo $output;
+    }
+}
+
+/**
+ * Prints a table of the users tagged with the tag passed as argument
+ *
+ * @deprecated since 3.1
+ * @param  stdClass    $tagobject the tag we wish to return data for
+ * @param  int         $limitfrom (optional, required if $limitnum is set) prints users starting at this point.
+ * @param  int         $limitnum (optional, required if $limitfrom is set) prints this many users.
+ * @param  bool        $return if true return html string
+ * @return string|null a HTML string or null if this function does the output
+ */
+function tag_print_tagged_users_table($tagobject, $limitfrom='', $limitnum='', $return=false) {
+
+    debugging('Function tag_print_tagged_users_table() is deprecated without replacement. ' .
+            'See core_user_renderer for similar code.', DEBUG_DEVELOPER);
+
+    //List of users with this tag
+    $tagobject = core_tag_tag::get($tagobject->id);
+    $userlist = $tagobject->get_tagged_items('core', 'user', $limitfrom, $limitnum);
+
+    $output = tag_print_user_list($userlist, true);
+
+    if ($return) {
+        return $output;
+    }
+    else {
+        echo $output;
+    }
+}
+
+/**
+ * Prints an individual user box
+ *
+ * @deprecated since 3.1
+ * @param user_object  $user  (contains the following fields: id, firstname, lastname and picture)
+ * @param bool         $return if true return html string
+ * @return string|null a HTML string or null if this function does the output
+ */
+function tag_print_user_box($user, $return=false) {
+    global $CFG, $OUTPUT;
+
+    debugging('Function tag_print_user_box() is deprecated without replacement. ' .
+            'See core_user_renderer for similar code.', DEBUG_DEVELOPER);
+
+    $usercontext = context_user::instance($user->id);
+    $profilelink = '';
+
+    if ($usercontext and (has_capability('moodle/user:viewdetails', $usercontext) || has_coursecontact_role($user->id))) {
+        $profilelink = $CFG->wwwroot .'/user/view.php?id='. $user->id;
+    }
+
+    $output = $OUTPUT->box_start('user-box', 'user'. $user->id);
+    $fullname = fullname($user);
+    $alt = '';
+
+    if (!empty($profilelink)) {
+        $output .= '<a href="'. $profilelink .'">';
+        $alt = $fullname;
+    }
+
+    $output .= $OUTPUT->user_picture($user, array('size'=>100));
+    $output .= '<br />';
+
+    if (!empty($profilelink)) {
+        $output .= '</a>';
+    }
+
+    //truncate name if it's too big
+    if (core_text::strlen($fullname) > 26) {
+        $fullname = core_text::substr($fullname, 0, 26) .'...';
+    }
+
+    $output .= '<strong>'. $fullname .'</strong>';
+    $output .= $OUTPUT->box_end();
+
+    if ($return) {
+        return $output;
+    }
+    else {
+        echo $output;
+    }
+}
+
+/**
+ * Prints a list of users
+ *
+ * @deprecated since 3.1
+ * @param  array       $userlist an array of user objects
+ * @param  bool        $return if true return html string, otherwise output the result
+ * @return string|null a HTML string or null if this function does the output
+ */
+function tag_print_user_list($userlist, $return=false) {
+
+    debugging('Function tag_print_user_list() is deprecated without replacement. ' .
+            'See core_user_renderer for similar code.', DEBUG_DEVELOPER);
+
+    $output = '<div><ul class="inline-list">';
+
+    foreach ($userlist as $user){
+        $output .= '<li>'. tag_print_user_box($user, true) ."</li>\n";
+    }
+    $output .= "</ul></div>\n";
+
+    if ($return) {
+        return $output;
+    }
+    else {
+        echo $output;
+    }
+}
+
+/**
+ * Function that returns the name that should be displayed for a specific tag
+ *
+ * @package  core_tag
+ * @category tag
+ * @deprecated since 3.1
+ * @param    stdClass|core_tag_tag   $tagobject a line out of tag table, as returned by the adobd functions
+ * @param    int      $html TAG_RETURN_HTML (default) will return htmlspecialchars encoded string, TAG_RETURN_TEXT will not encode.
+ * @return   string
+ */
+function tag_display_name($tagobject, $html=TAG_RETURN_HTML) {
+    debugging('Function tag_display_name() is deprecated. Use core_tag_tag::make_display_name().', DEBUG_DEVELOPER);
+    if (!isset($tagobject->name)) {
+        return '';
+    }
+    return core_tag_tag::make_display_name($tagobject, $html != TAG_RETURN_TEXT);
+}
+
+/**
+ * Function that normalizes a list of tag names.
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param   array/string $rawtags array of tags, or a single tag.
+ * @param   int          $case    case to use for returned value (default: lower case). Either TAG_CASE_LOWER (default) or TAG_CASE_ORIGINAL
+ * @return  array        lowercased normalized tags, indexed by the normalized tag, in the same order as the original array.
+ *                       (Eg: 'Banana' => 'banana').
+ */
+function tag_normalize($rawtags, $case = TAG_CASE_LOWER) {
+    debugging('Function tag_normalize() is deprecated. Use core_tag_tag::normalize().', DEBUG_DEVELOPER);
+
+    if ( !is_array($rawtags) ) {
+        $rawtags = array($rawtags);
+    }
+
+    return core_tag_tag::normalize($rawtags, $case == TAG_CASE_LOWER);
+}
+
+/**
+ * Get a comma-separated list of tags related to another tag.
+ *
+ * @package  core_tag
+ * @deprecated since 3.1
+ * @param    array    $related_tags the array returned by tag_get_related_tags
+ * @param    int      $html    either TAG_RETURN_HTML (default) or TAG_RETURN_TEXT : return html links, or just text.
+ * @return   string   comma-separated list
+ */
+function tag_get_related_tags_csv($related_tags, $html=TAG_RETURN_HTML) {
+    global $OUTPUT;
+    debugging('Method tag_get_related_tags_csv() is deprecated. Consider '
+            . 'looping through array or using $OUTPUT->tag_list(core_tag_tag::get_item_tags())',
+        DEBUG_DEVELOPER);
+    if ($html != TAG_RETURN_TEXT) {
+        return $OUTPUT->tag_list($related_tags, '');
+    }
+
+    $tagsnames = array();
+    foreach ($related_tags as $tag) {
+        $tagsnames[] = core_tag_tag::make_display_name($tag, false);
+    }
+    return implode(', ', $tagsnames);
+}
+
+/**
+ * Used to require that the return value from a function is an array.
+ * Only used in the deprecated function {@link tag_get_id()}
+ * @deprecated since 3.1
+ */
+define('TAG_RETURN_ARRAY', 0);
+/**
+ * Used to require that the return value from a function is an object.
+ * Only used in the deprecated function {@link tag_get_id()}
+ * @deprecated since 3.1
+ */
+define('TAG_RETURN_OBJECT', 1);
+/**
+ * Use to specify that HTML free text is expected to be returned from a function.
+ * Only used in deprecated functions {@link tag_get_tags_csv()}, {@link tag_display_name()},
+ * {@link tag_get_related_tags_csv()}
+ * @deprecated since 3.1
+ */
+define('TAG_RETURN_TEXT', 2);
+/**
+ * Use to specify that encoded HTML is expected to be returned from a function.
+ * Only used in deprecated functions {@link tag_get_tags_csv()}, {@link tag_display_name()},
+ * {@link tag_get_related_tags_csv()}
+ * @deprecated since 3.1
+ */
+define('TAG_RETURN_HTML', 3);
+
+/**
+ * Used to specify that we wish a lowercased string to be returned
+ * Only used in deprecated function {@link tag_normalize()}
+ * @deprecated since 3.1
+ */
+define('TAG_CASE_LOWER', 0);
+/**
+ * Used to specify that we do not wish the case of the returned string to change
+ * Only used in deprecated function {@link tag_normalize()}
+ * @deprecated since 3.1
+ */
+define('TAG_CASE_ORIGINAL', 1);
+
+/**
+ * Used to specify that we want all related tags returned, no matter how they are related.
+ * Only used in deprecated function {@link tag_get_related_tags()}
+ * @deprecated since 3.1
+ */
+define('TAG_RELATED_ALL', 0);
+/**
+ * Used to specify that we only want back tags that were manually related.
+ * Only used in deprecated function {@link tag_get_related_tags()}
+ * @deprecated since 3.1
+ */
+define('TAG_RELATED_MANUAL', 1);
+/**
+ * Used to specify that we only want back tags where the relationship was automatically correlated.
+ * Only used in deprecated function {@link tag_get_related_tags()}
+ * @deprecated since 3.1
+ */
+define('TAG_RELATED_CORRELATED', 2);
+
+/**
+ * Set the tags assigned to a record.  This overwrites the current tags.
+ *
+ * This function is meant to be fed the string coming up from the user interface, which contains all tags assigned to a record.
+ *
+ * Due to API change $component and $contextid are now required. Instead of
+ * calling  this function you can use {@link core_tag_tag::set_item_tags()} or
+ * {@link core_tag_tag::set_related_tags()}
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param string $itemtype the type of record to tag ('post' for blogs, 'user' for users, 'tag' for tags, etc.)
+ * @param int $itemid the id of the record to tag
+ * @param array $tags the array of tags to set on the record. If given an empty array, all tags will be removed.
+ * @param string|null $component the component that was tagged
+ * @param int|null $contextid the context id of where this tag was assigned
+ * @return bool|null
+ */
+function tag_set($itemtype, $itemid, $tags, $component = null, $contextid = null) {
+    debugging('Function tag_set() is deprecated. Use ' .
+        ' core_tag_tag::set_item_tags() instead', DEBUG_DEVELOPER);
+
+    if ($itemtype === 'tag') {
+        return core_tag_tag::get($itemid, '*', MUST_EXIST)->set_related_tags($tags);
+    } else {
+        $context = $contextid ? context::instance_by_id($contextid) : context_system::instance();
+        return core_tag_tag::set_item_tags($component, $itemtype, $itemid, $context, $tags);
+    }
+}
+
+/**
+ * Adds a tag to a record, without overwriting the current tags.
+ *
+ * This function remains here for backward compatiblity. It is recommended to use
+ * {@link core_tag_tag::add_item_tag()} or {@link core_tag_tag::add_related_tags()} instead
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param string $itemtype the type of record to tag ('post' for blogs, 'user' for users, etc.)
+ * @param int $itemid the id of the record to tag
+ * @param string $tag the tag to add
+ * @param string|null $component the component that was tagged
+ * @param int|null $contextid the context id of where this tag was assigned
+ * @return bool|null
+ */
+function tag_set_add($itemtype, $itemid, $tag, $component = null, $contextid = null) {
+    debugging('Function tag_set_add() is deprecated. Use ' .
+        ' core_tag_tag::add_item_tag() instead', DEBUG_DEVELOPER);
+
+    if ($itemtype === 'tag') {
+        return core_tag_tag::get($itemid, '*', MUST_EXIST)->add_related_tags(array($tag));
+    } else {
+        $context = $contextid ? context::instance_by_id($contextid) : context_system::instance();
+        return core_tag_tag::add_item_tag($component, $itemtype, $itemid, $context, $tag);
+    }
+}
+
+/**
+ * Removes a tag from a record, without overwriting other current tags.
+ *
+ * This function remains here for backward compatiblity. It is recommended to use
+ * {@link core_tag_tag::remove_item_tag()} instead
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param string $itemtype the type of record to tag ('post' for blogs, 'user' for users, etc.)
+ * @param int $itemid the id of the record to tag
+ * @param string $tag the tag to delete
+ * @param string|null $component the component that was tagged
+ * @param int|null $contextid the context id of where this tag was assigned
+ * @return bool|null
+ */
+function tag_set_delete($itemtype, $itemid, $tag, $component = null, $contextid = null) {
+    debugging('Function tag_set_delete() is deprecated. Use ' .
+        ' core_tag_tag::remove_item_tag() instead', DEBUG_DEVELOPER);
+    return core_tag_tag::remove_item_tag($component, $itemtype, $itemid, $tag);
+}
+
+/**
+ * Simple function to just return a single tag object when you know the name or something
+ *
+ * See also {@link core_tag_tag::get()} and {@link core_tag_tag::get_by_name()}
+ *
+ * @package  core_tag
+ * @deprecated since 3.1
+ * @param    string $field        which field do we use to identify the tag: id, name or rawname
+ * @param    string $value        the required value of the aforementioned field
+ * @param    string $returnfields which fields do we want returned. This is a comma seperated string containing any combination of
+ *                                'id', 'name', 'rawname' or '*' to include all fields.
+ * @return   mixed  tag object
+ */
+function tag_get($field, $value, $returnfields='id, name, rawname, tagcollid') {
+    global $DB;
+    debugging('Function tag_get() is deprecated. Use ' .
+        ' core_tag_tag::get() or core_tag_tag::get_by_name()',
+        DEBUG_DEVELOPER);
+    if ($field === 'id') {
+        $tag = core_tag_tag::get((int)$value, $returnfields);
+    } else if ($field === 'name') {
+        $tag = core_tag_tag::get_by_name(0, $value, $returnfields);
+    } else {
+        $params = array($field => $value);
+        return $DB->get_record('tag', $params, $returnfields);
+    }
+    if ($tag) {
+        return $tag->to_object();
     }
     return null;
+}
+
+/**
+ * Returns tags related to a tag
+ *
+ * Related tags of a tag come from two sources:
+ *   - manually added related tags, which are tag_instance entries for that tag
+ *   - correlated tags, which are calculated
+ *
+ * @package  core_tag
+ * @deprecated since 3.1
+ * @param    string   $tagid          is a single **normalized** tag name or the id of a tag
+ * @param    int      $type           the function will return either manually (TAG_RELATED_MANUAL) related tags or correlated
+ *                                    (TAG_RELATED_CORRELATED) tags. Default is TAG_RELATED_ALL, which returns everything.
+ * @param    int      $limitnum       (optional) return a subset comprising this many records, the default is 10
+ * @return   array    an array of tag objects
+ */
+function tag_get_related_tags($tagid, $type=TAG_RELATED_ALL, $limitnum=10) {
+    debugging('Method tag_get_related_tags() is deprecated, '
+        . 'use core_tag_tag::get_correlated_tags(), core_tag_tag::get_related_tags() or '
+        . 'core_tag_tag::get_manual_related_tags()', DEBUG_DEVELOPER);
+    $result = array();
+    if ($tag = core_tag_tag::get($tagid)) {
+        if ($type == TAG_RELATED_CORRELATED) {
+            $tags = $tag->get_correlated_tags();
+        } else if ($type == TAG_RELATED_MANUAL) {
+            $tags = $tag->get_manual_related_tags();
+        } else {
+            $tags = $tag->get_related_tags();
+        }
+        $tags = array_slice($tags, 0, $limitnum);
+        foreach ($tags as $id => $tag) {
+            $result[$id] = $tag->to_object();
+        }
+    }
+    return $result;
+}
+
+/**
+ * Delete one or more tag, and all their instances if there are any left.
+ *
+ * @package  core_tag
+ * @deprecated since 3.1
+ * @param    mixed    $tagids one tagid (int), or one array of tagids to delete
+ * @return   bool     true on success, false otherwise
+ */
+function tag_delete($tagids) {
+    debugging('Method tag_delete() is deprecated, use core_tag_tag::delete_tags()',
+        DEBUG_DEVELOPER);
+    return core_tag_tag::delete_tags($tagids);
+}
+
+/**
+ * Deletes all the tag instances given a component and an optional contextid.
+ *
+ * @deprecated since 3.1
+ * @param string $component
+ * @param int $contextid if null, then we delete all tag instances for the $component
+ */
+function tag_delete_instances($component, $contextid = null) {
+    debugging('Method tag_delete() is deprecated, use core_tag_tag::delete_instances()',
+        DEBUG_DEVELOPER);
+    core_tag_tag::delete_instances($component, null, $contextid);
+}
+
+/**
+ * Clean up the tag tables, making sure all tagged object still exists.
+ *
+ * This should normally not be necessary, but in case related tags are not deleted when the tagged record is removed, this should be
+ * done once in a while, perhaps on an occasional cron run.  On a site with lots of tags, this could become an expensive function to
+ * call: don't run at peak time.
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ */
+function tag_cleanup() {
+    debugging('Method tag_cleanup() is deprecated, use \core\task\tag_cron_task::cleanup()',
+        DEBUG_DEVELOPER);
+
+    $task = new \core\task\tag_cron_task();
+    return $task->cleanup();
+}
+
+/**
+ * This function will delete numerous tag instances efficiently.
+ * This removes tag instances only. It doesn't check to see if it is the last use of a tag.
+ *
+ * @deprecated since 3.1
+ * @param array $instances An array of tag instance objects with the addition of the tagname and tagrawname
+ *        (used for recording a delete event).
+ */
+function tag_bulk_delete_instances($instances) {
+    debugging('Method tag_bulk_delete_instances() is deprecated, '
+        . 'use \core\task\tag_cron_task::bulk_delete_instances()',
+        DEBUG_DEVELOPER);
+
+    $task = new \core\task\tag_cron_task();
+    return $task->bulk_delete_instances($instances);
+}
+
+/**
+ * Calculates and stores the correlated tags of all tags. The correlations are stored in the 'tag_correlation' table.
+ *
+ * Two tags are correlated if they appear together a lot. Ex.: Users tagged with "computers" will probably also be tagged with "algorithms".
+ *
+ * The rationale for the 'tag_correlation' table is performance. It works as a cache for a potentially heavy load query done at the
+ * 'tag_instance' table. So, the 'tag_correlation' table stores redundant information derived from the 'tag_instance' table.
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param   int      $mincorrelation Only tags with more than $mincorrelation correlations will be identified.
+ */
+function tag_compute_correlations($mincorrelation = 2) {
+    debugging('Method tag_compute_correlations() is deprecated, '
+        . 'use \core\task\tag_cron_task::compute_correlations()',
+        DEBUG_DEVELOPER);
+
+    $task = new \core\task\tag_cron_task();
+    return $task->compute_correlations($mincorrelation);
+}
+
+/**
+ * This function processes a tag correlation and makes changes in the database as required.
+ *
+ * The tag correlation object needs have both a tagid property and a correlatedtags property that is an array.
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param   stdClass $tagcorrelation
+ * @return  int/bool The id of the tag correlation that was just processed or false.
+ */
+function tag_process_computed_correlation(stdClass $tagcorrelation) {
+    debugging('Method tag_process_computed_correlation() is deprecated, '
+        . 'use \core\task\tag_cron_task::process_computed_correlation()',
+        DEBUG_DEVELOPER);
+
+    $task = new \core\task\tag_cron_task();
+    return $task->process_computed_correlation($tagcorrelation);
+}
+
+/**
+ * Tasks that should be performed at cron time
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ */
+function tag_cron() {
+    debugging('Method tag_cron() is deprecated, use \core\task\tag_cron_task::execute()',
+        DEBUG_DEVELOPER);
+
+    $task = new \core\task\tag_cron_task();
+    $task->execute();
+}
+
+/**
+ * Search for tags with names that match some text
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param   string        $text      escaped string that the tag names will be matched against
+ * @param   bool          $ordered   If true, tags are ordered by their popularity. If false, no ordering.
+ * @param   int/string    $limitfrom (optional, required if $limitnum is set) return a subset of records, starting at this point.
+ * @param   int/string    $limitnum  (optional, required if $limitfrom is set) return a subset comprising this many records.
+ * @param   int           $tagcollid
+ * @return  array/boolean an array of objects, or false if no records were found or an error occured.
+ */
+function tag_find_tags($text, $ordered=true, $limitfrom='', $limitnum='', $tagcollid = null) {
+    debugging('Method tag_find_tags() is deprecated without replacement', DEBUG_DEVELOPER);
+    global $DB;
+
+    $text = core_text::strtolower(clean_param($text, PARAM_TAG));
+
+    list($sql, $params) = $DB->get_in_or_equal($tagcollid ? array($tagcollid) :
+        array_keys(core_tag_collection::get_collections(true)));
+    array_unshift($params, "%{$text}%");
+
+    if ($ordered) {
+        $query = "SELECT tg.id, tg.name, tg.rawname, tg.tagcollid, COUNT(ti.id) AS count
+                    FROM {tag} tg LEFT JOIN {tag_instance} ti ON tg.id = ti.tagid
+                   WHERE tg.name LIKE ? AND tg.tagcollid $sql
+                GROUP BY tg.id, tg.name, tg.rawname
+                ORDER BY count DESC";
+    } else {
+        $query = "SELECT tg.id, tg.name, tg.rawname, tg.tagcollid
+                    FROM {tag} tg
+                   WHERE tg.name LIKE ? AND tg.tagcollid $sql";
+    }
+    return $DB->get_records_sql($query, $params, $limitfrom , $limitnum);
+}
+
+/**
+ * Get the name of a tag
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param   mixed    $tagids the id of the tag, or an array of ids
+ * @return  mixed    string name of one tag, or id-indexed array of strings
+ */
+function tag_get_name($tagids) {
+    debugging('Method tag_get_name() is deprecated without replacement', DEBUG_DEVELOPER);
+    global $DB;
+
+    if (!is_array($tagids)) {
+        if ($tag = $DB->get_record('tag', array('id'=>$tagids))) {
+            return $tag->name;
+        }
+        return false;
+    }
+
+    $tag_names = array();
+    foreach($DB->get_records_list('tag', 'id', $tagids) as $tag) {
+        $tag_names[$tag->id] = $tag->name;
+    }
+
+    return $tag_names;
+}
+
+/**
+ * Returns the correlated tags of a tag, retrieved from the tag_correlation table. Make sure cron runs, otherwise the table will be
+ * empty and this function won't return anything.
+ *
+ * Correlated tags are calculated in cron based on existing tag instances.
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param   int      $tagid   is a single tag id
+ * @param   int      $notused  this argument is no longer used
+ * @return  array    an array of tag objects or an empty if no correlated tags are found
+ */
+function tag_get_correlated($tagid, $notused = null) {
+    debugging('Method tag_get_correlated() is deprecated, '
+        . 'use core_tag_tag::get_correlated_tags()', DEBUG_DEVELOPER);
+    $result = array();
+    if ($tag = core_tag_tag::get($tagid)) {
+        $tags = $tag->get_correlated_tags(true);
+        // Convert to objects for backward-compatibility.
+        foreach ($tags as $id => $tag) {
+            $result[$id] = $tag->to_object();
+        }
+    }
+    return $result;
+}
+
+/**
+ * This function is used by print_tag_cloud, to usort() the tags in the cloud. See php.net/usort for the parameters documentation.
+ * This was originally in blocks/blog_tags/block_blog_tags.php, named blog_tags_sort().
+ *
+ * @package core_tag
+ * @deprecated since 3.1
+ * @param   string $a Tag name to compare against $b
+ * @param   string $b Tag name to compare against $a
+ * @return  int    The result of the comparison/validation 1, 0 or -1
+ */
+function tag_cloud_sort($a, $b) {
+    debugging('Method tag_cloud_sort() is deprecated, similar method can be found in core_tag_collection::cloud_sort()', DEBUG_DEVELOPER);
+    global $CFG;
+
+    if (empty($CFG->tagsort)) {
+        $tagsort = 'name'; // by default, sort by name
+    } else {
+        $tagsort = $CFG->tagsort;
+    }
+
+    if (is_numeric($a->$tagsort)) {
+        return ($a->$tagsort == $b->$tagsort) ? 0 : ($a->$tagsort > $b->$tagsort) ? 1 : -1;
+    } elseif (is_string($a->$tagsort)) {
+        return strcmp($a->$tagsort, $b->$tagsort);
+    } else {
+        return 0;
+    }
+}
+
+/**
+ * Loads the events definitions for the component (from file). If no
+ * events are defined for the component, we simply return an empty array.
+ *
+ * @access protected To be used from eventslib only
+ * @deprecated since Moodle 3.1
+ * @param string $component examples: 'moodle', 'mod_forum', 'block_quiz_results'
+ * @return array Array of capabilities or empty array if not exists
+ */
+function events_load_def($component) {
+    global $CFG;
+    if ($component === 'unittest') {
+        $defpath = $CFG->dirroot.'/lib/tests/fixtures/events.php';
+    } else {
+        $defpath = core_component::get_component_directory($component).'/db/events.php';
+    }
+
+    $handlers = array();
+
+    if (file_exists($defpath)) {
+        require($defpath);
+    }
+
+    // make sure the definitions are valid and complete; tell devs what is wrong
+    foreach ($handlers as $eventname => $handler) {
+        if ($eventname === 'reset') {
+            debugging("'reset' can not be used as event name.");
+            unset($handlers['reset']);
+            continue;
+        }
+        if (!is_array($handler)) {
+            debugging("Handler of '$eventname' must be specified as array'");
+            unset($handlers[$eventname]);
+            continue;
+        }
+        if (!isset($handler['handlerfile'])) {
+            debugging("Handler of '$eventname' must include 'handlerfile' key'");
+            unset($handlers[$eventname]);
+            continue;
+        }
+        if (!isset($handler['handlerfunction'])) {
+            debugging("Handler of '$eventname' must include 'handlerfunction' key'");
+            unset($handlers[$eventname]);
+            continue;
+        }
+        if (!isset($handler['schedule'])) {
+            $handler['schedule'] = 'instant';
+        }
+        if ($handler['schedule'] !== 'instant' and $handler['schedule'] !== 'cron') {
+            debugging("Handler of '$eventname' must include valid 'schedule' type (instant or cron)'");
+            unset($handlers[$eventname]);
+            continue;
+        }
+        if (!isset($handler['internal'])) {
+            $handler['internal'] = 1;
+        }
+        $handlers[$eventname] = $handler;
+    }
+
+    return $handlers;
+}
+
+/**
+ * Puts a handler on queue
+ *
+ * @access protected To be used from eventslib only
+ * @deprecated since Moodle 3.1
+ * @param stdClass $handler event handler object from db
+ * @param stdClass $event event data object
+ * @param string $errormessage The error message indicating the problem
+ * @return int id number of new queue handler
+ */
+function events_queue_handler($handler, $event, $errormessage) {
+    global $DB;
+
+    if ($qhandler = $DB->get_record('events_queue_handlers', array('queuedeventid'=>$event->id, 'handlerid'=>$handler->id))) {
+        debugging("Please check code: Event id $event->id is already queued in handler id $qhandler->id");
+        return $qhandler->id;
+    }
+
+    // make a new queue handler
+    $qhandler = new stdClass();
+    $qhandler->queuedeventid  = $event->id;
+    $qhandler->handlerid      = $handler->id;
+    $qhandler->errormessage   = $errormessage;
+    $qhandler->timemodified   = time();
+    if ($handler->schedule === 'instant' and $handler->status == 1) {
+        $qhandler->status     = 1; //already one failed attempt to dispatch this event
+    } else {
+        $qhandler->status     = 0;
+    }
+
+    return $DB->insert_record('events_queue_handlers', $qhandler);
+}
+
+/**
+ * trigger a single event with a specified handler
+ *
+ * @access protected To be used from eventslib only
+ * @deprecated since Moodle 3.1
+ * @param stdClass $handler This shoudl be a row from the events_handlers table.
+ * @param stdClass $eventdata An object containing information about the event
+ * @param string $errormessage error message indicating problem
+ * @return bool|null True means event processed, false means retry event later; may throw exception, NULL means internal error
+ */
+function events_dispatch($handler, $eventdata, &$errormessage) {
+    global $CFG;
+
+    debugging('Events API using $handlers array has been deprecated in favour of Events 2 API, please use it instead.', DEBUG_DEVELOPER);
+
+    $function = unserialize($handler->handlerfunction);
+
+    if (is_callable($function)) {
+        // oki, no need for includes
+
+    } else if (file_exists($CFG->dirroot.$handler->handlerfile)) {
+        include_once($CFG->dirroot.$handler->handlerfile);
+
+    } else {
+        $errormessage = "Handler file of component $handler->component: $handler->handlerfile can not be found!";
+        return null;
+    }
+
+    // checks for handler validity
+    if (is_callable($function)) {
+        $result = call_user_func($function, $eventdata);
+        if ($result === false) {
+            $errormessage = "Handler function of component $handler->component: $handler->handlerfunction requested resending of event!";
+            return false;
+        }
+        return true;
+
+    } else {
+        $errormessage = "Handler function of component $handler->component: $handler->handlerfunction not callable function or class method!";
+        return null;
+    }
+}
+
+/**
+ * given a queued handler, call the respective event handler to process the event
+ *
+ * @access protected To be used from eventslib only
+ * @deprecated since Moodle 3.1
+ * @param stdClass $qhandler events_queued_handler row from db
+ * @return boolean true means event processed, false means retry later, NULL means fatal failure
+ */
+function events_process_queued_handler($qhandler) {
+    global $DB;
+
+    // get handler
+    if (!$handler = $DB->get_record('events_handlers', array('id'=>$qhandler->handlerid))) {
+        debugging("Error processing queue handler $qhandler->id, missing handler id: $qhandler->handlerid");
+        //irrecoverable error, remove broken queue handler
+        events_dequeue($qhandler);
+        return NULL;
+    }
+
+    // get event object
+    if (!$event = $DB->get_record('events_queue', array('id'=>$qhandler->queuedeventid))) {
+        // can't proceed with no event object - might happen when two crons running at the same time
+        debugging("Error processing queue handler $qhandler->id, missing event id: $qhandler->queuedeventid");
+        //irrecoverable error, remove broken queue handler
+        events_dequeue($qhandler);
+        return NULL;
+    }
+
+    // call the function specified by the handler
+    try {
+        $errormessage = 'Unknown error';
+        if (events_dispatch($handler, unserialize(base64_decode($event->eventdata)), $errormessage)) {
+            //everything ok
+            events_dequeue($qhandler);
+            return true;
+        }
+    } catch (Exception $e) {
+        // the problem here is that we do not want one broken handler to stop all others,
+        // cron handlers are very tricky because the needed data might have been deleted before the cron execution
+        $errormessage = "Handler function of component $handler->component: $handler->handlerfunction threw exception :" .
+                $e->getMessage() . "\n" . format_backtrace($e->getTrace(), true);
+        if (!empty($e->debuginfo)) {
+            $errormessage .= $e->debuginfo;
+        }
+    }
+
+    //dispatching failed
+    $qh = new stdClass();
+    $qh->id           = $qhandler->id;
+    $qh->errormessage = $errormessage;
+    $qh->timemodified = time();
+    $qh->status       = $qhandler->status + 1;
+    $DB->update_record('events_queue_handlers', $qh);
+
+    debugging($errormessage);
+
+    return false;
+}
+
+/**
+ * Updates all of the event definitions within the database.
+ *
+ * Unfortunately this isn't as simple as removing them all and then readding
+ * the updated event definitions. Chances are queued items are referencing the
+ * existing definitions.
+ *
+ * Note that the absence of the db/events.php event definition file
+ * will cause any queued events for the component to be removed from
+ * the database.
+ *
+ * @category event
+ * @deprecated since Moodle 3.1
+ * @param string $component examples: 'moodle', 'mod_forum', 'block_quiz_results'
+ * @return boolean always returns true
+ */
+function events_update_definition($component='moodle') {
+    global $DB;
+
+    // load event definition from events.php
+    $filehandlers = events_load_def($component);
+
+    if ($filehandlers) {
+        debugging('Events API using $handlers array has been deprecated in favour of Events 2 API, please use it instead.', DEBUG_DEVELOPER);
+    }
+
+    // load event definitions from db tables
+    // if we detect an event being already stored, we discard from this array later
+    // the remaining needs to be removed
+    $cachedhandlers = events_get_cached($component);
+
+    foreach ($filehandlers as $eventname => $filehandler) {
+        if (!empty($cachedhandlers[$eventname])) {
+            if ($cachedhandlers[$eventname]['handlerfile'] === $filehandler['handlerfile'] &&
+                $cachedhandlers[$eventname]['handlerfunction'] === serialize($filehandler['handlerfunction']) &&
+                $cachedhandlers[$eventname]['schedule'] === $filehandler['schedule'] &&
+                $cachedhandlers[$eventname]['internal'] == $filehandler['internal']) {
+                // exact same event handler already present in db, ignore this entry
+
+                unset($cachedhandlers[$eventname]);
+                continue;
+
+            } else {
+                // same event name matches, this event has been updated, update the datebase
+                $handler = new stdClass();
+                $handler->id              = $cachedhandlers[$eventname]['id'];
+                $handler->handlerfile     = $filehandler['handlerfile'];
+                $handler->handlerfunction = serialize($filehandler['handlerfunction']); // static class methods stored as array
+                $handler->schedule        = $filehandler['schedule'];
+                $handler->internal        = $filehandler['internal'];
+
+                $DB->update_record('events_handlers', $handler);
+
+                unset($cachedhandlers[$eventname]);
+                continue;
+            }
+
+        } else {
+            // if we are here, this event handler is not present in db (new)
+            // add it
+            $handler = new stdClass();
+            $handler->eventname       = $eventname;
+            $handler->component       = $component;
+            $handler->handlerfile     = $filehandler['handlerfile'];
+            $handler->handlerfunction = serialize($filehandler['handlerfunction']); // static class methods stored as array
+            $handler->schedule        = $filehandler['schedule'];
+            $handler->status          = 0;
+            $handler->internal        = $filehandler['internal'];
+
+            $DB->insert_record('events_handlers', $handler);
+        }
+    }
+
+    // clean up the left overs, the entries in cached events array at this points are deprecated event handlers
+    // and should be removed, delete from db
+    events_cleanup($component, $cachedhandlers);
+
+    events_get_handlers('reset');
+
+    return true;
+}
+
+/**
+ * Events cron will try to empty the events queue by processing all the queued events handlers
+ *
+ * @access public Part of the public API
+ * @deprecated since Moodle 3.1
+ * @category event
+ * @param string $eventname empty means all
+ * @return int number of dispatched events
+ */
+function events_cron($eventname='') {
+    global $DB;
+
+    $failed = array();
+    $processed = 0;
+
+    if ($eventname) {
+        $sql = "SELECT qh.*
+                  FROM {events_queue_handlers} qh, {events_handlers} h
+                 WHERE qh.handlerid = h.id AND h.eventname=?
+              ORDER BY qh.id";
+        $params = array($eventname);
+    } else {
+        $sql = "SELECT *
+                  FROM {events_queue_handlers}
+              ORDER BY id";
+        $params = array();
+    }
+
+    $rs = $DB->get_recordset_sql($sql, $params);
+    if ($rs->valid()) {
+        debugging('Events API using $handlers array has been deprecated in favour of Events 2 API, please use it instead.', DEBUG_DEVELOPER);
+    }
+
+    foreach ($rs as $qhandler) {
+        if (isset($failed[$qhandler->handlerid])) {
+            // do not try to dispatch any later events when one already asked for retry or ended with exception
+            continue;
+        }
+        $status = events_process_queued_handler($qhandler);
+        if ($status === false) {
+            // handler is asking for retry, do not send other events to this handler now
+            $failed[$qhandler->handlerid] = $qhandler->handlerid;
+        } else if ($status === NULL) {
+            // means completely broken handler, event data was purged
+            $failed[$qhandler->handlerid] = $qhandler->handlerid;
+        } else {
+            $processed++;
+        }
+    }
+    $rs->close();
+
+    // remove events that do not have any handlers waiting
+    $sql = "SELECT eq.id
+              FROM {events_queue} eq
+              LEFT JOIN {events_queue_handlers} qh ON qh.queuedeventid = eq.id
+             WHERE qh.id IS NULL";
+    $rs = $DB->get_recordset_sql($sql);
+    foreach ($rs as $event) {
+        //debugging('Purging stale event '.$event->id);
+        $DB->delete_records('events_queue', array('id'=>$event->id));
+    }
+    $rs->close();
+
+    return $processed;
+}
+
+/**
+ * Do not call directly, this is intended to be used from new event base only.
+ *
+ * @private
+ * @deprecated since Moodle 3.1
+ * @param string $eventname name of the event
+ * @param mixed $eventdata event data object
+ * @return int number of failed events
+ */
+function events_trigger_legacy($eventname, $eventdata) {
+    global $CFG, $USER, $DB;
+
+    $failedcount = 0; // number of failed events.
+
+    // pull out all registered event handlers
+    if ($handlers = events_get_handlers($eventname)) {
+        foreach ($handlers as $handler) {
+            $errormessage = '';
+
+            if ($handler->schedule === 'instant') {
+                if ($handler->status) {
+                    //check if previous pending events processed
+                    if (!$DB->record_exists('events_queue_handlers', array('handlerid'=>$handler->id))) {
+                        // ok, queue is empty, lets reset the status back to 0 == ok
+                        $handler->status = 0;
+                        $DB->set_field('events_handlers', 'status', 0, array('id'=>$handler->id));
+                        // reset static handler cache
+                        events_get_handlers('reset');
+                    }
+                }
+
+                // dispatch the event only if instant schedule and status ok
+                if ($handler->status or (!$handler->internal and $DB->is_transaction_started())) {
+                    // increment the error status counter
+                    $handler->status++;
+                    $DB->set_field('events_handlers', 'status', $handler->status, array('id'=>$handler->id));
+                    // reset static handler cache
+                    events_get_handlers('reset');
+
+                } else {
+                    $errormessage = 'Unknown error';
+                    $result = events_dispatch($handler, $eventdata, $errormessage);
+                    if ($result === true) {
+                        // everything is fine - event dispatched
+                        continue;
+                    } else if ($result === false) {
+                        // retry later - set error count to 1 == send next instant into cron queue
+                        $DB->set_field('events_handlers', 'status', 1, array('id'=>$handler->id));
+                        // reset static handler cache
+                        events_get_handlers('reset');
+                    } else {
+                        // internal problem - ignore the event completely
+                        $failedcount ++;
+                        continue;
+                    }
+                }
+
+                // update the failed counter
+                $failedcount ++;
+
+            } else if ($handler->schedule === 'cron') {
+                //ok - use queueing of events only
+
+            } else {
+                // unknown schedule - ignore event completely
+                debugging("Unknown handler schedule type: $handler->schedule");
+                $failedcount ++;
+                continue;
+            }
+
+            // if even type is not instant, or dispatch asked for retry, queue it
+            $event = new stdClass();
+            $event->userid      = $USER->id;
+            $event->eventdata   = base64_encode(serialize($eventdata));
+            $event->timecreated = time();
+            if (debugging()) {
+                $dump = '';
+                $callers = debug_backtrace();
+                foreach ($callers as $caller) {
+                    if (!isset($caller['line'])) {
+                        $caller['line'] = '?';
+                    }
+                    if (!isset($caller['file'])) {
+                        $caller['file'] = '?';
+                    }
+                    $dump .= 'line ' . $caller['line'] . ' of ' . substr($caller['file'], strlen($CFG->dirroot) + 1);
+                    if (isset($caller['function'])) {
+                        $dump .= ': call to ';
+                        if (isset($caller['class'])) {
+                            $dump .= $caller['class'] . $caller['type'];
+                        }
+                        $dump .= $caller['function'] . '()';
+                    }
+                    $dump .= "\n";
+                }
+                $event->stackdump = $dump;
+            } else {
+                $event->stackdump = '';
+            }
+            $event->id = $DB->insert_record('events_queue', $event);
+            events_queue_handler($handler, $event, $errormessage);
+        }
+    } else {
+        // No handler found for this event name - this is ok!
+    }
+
+    return $failedcount;
+}
+
+/**
+ * checks if an event is registered for this component
+ *
+ * @access public Part of the public API
+ * @deprecated since Moodle 3.1
+ * @param string $eventname name of the event
+ * @param string $component component name, can be mod/data or moodle
+ * @return bool
+ */
+function events_is_registered($eventname, $component) {
+    global $DB;
+
+    debugging('events_is_registered() has been deprecated along with all Events 1 API in favour of Events 2 API,' .
+        ' please use it instead.', DEBUG_DEVELOPER);
+
+    return $DB->record_exists('events_handlers', array('component'=>$component, 'eventname'=>$eventname));
+}
+
+/**
+ * checks if an event is queued for processing - either cron handlers attached or failed instant handlers
+ *
+ * @access public Part of the public API
+ * @deprecated since Moodle 3.1
+ * @param string $eventname name of the event
+ * @return int number of queued events
+ */
+function events_pending_count($eventname) {
+    global $DB;
+
+    debugging('events_pending_count() has been deprecated along with all Events 1 API in favour of Events 2 API,' .
+        ' please use it instead.', DEBUG_DEVELOPER);
+
+    $sql = "SELECT COUNT('x')
+              FROM {events_queue_handlers} qh
+              JOIN {events_handlers} h ON h.id = qh.handlerid
+             WHERE h.eventname = ?";
+
+    return $DB->count_records_sql($sql, array($eventname));
+}
+
+/**
+ * Emails admins about a clam outcome
+ *
+ * @deprecated since Moodle 3.0 - this is a part of clamav plugin now.
+ * @param string $notice The body of the email to be sent.
+ * @return void
+ */
+function clam_message_admins($notice) {
+    debugging('clam_message_admins() is deprecated, please use message_admins() method of \antivirus_clamav\scanner class.', DEBUG_DEVELOPER);
+
+    $antivirus = \core\antivirus\manager::get_antivirus('clamav');
+    $antivirus->message_admins($notice);
+}
+
+/**
+ * Returns the string equivalent of a numeric clam error code
+ *
+ * @deprecated since Moodle 3.0 - this is a part of clamav plugin now.
+ * @param int $returncode The numeric error code in question.
+ * @return string The definition of the error code
+ */
+function get_clam_error_code($returncode) {
+    debugging('get_clam_error_code() is deprecated, please use get_clam_error_code() method of \antivirus_clamav\scanner class.', DEBUG_DEVELOPER);
+
+    $antivirus = \core\antivirus\manager::get_antivirus('clamav');
+    return $antivirus->get_clam_error_code($returncode);
+}
+
+/**
+ * Returns the rename action.
+ *
+ * @deprecated since 3.1
+ * @param cm_info $mod The module to produce editing buttons for
+ * @param int $sr The section to link back to (used for creating the links)
+ * @return The markup for the rename action, or an empty string if not available.
+ */
+function course_get_cm_rename_action(cm_info $mod, $sr = null) {
+    global $COURSE, $OUTPUT;
+
+    static $str;
+    static $baseurl;
+
+    debugging('Function course_get_cm_rename_action() is deprecated. Please use inplace_editable ' .
+        'https://docs.moodle.org/dev/Inplace_editable', DEBUG_DEVELOPER);
+
+    $modcontext = context_module::instance($mod->id);
+    $hasmanageactivities = has_capability('moodle/course:manageactivities', $modcontext);
+
+    if (!isset($str)) {
+        $str = get_strings(array('edittitle'));
+    }
+
+    if (!isset($baseurl)) {
+        $baseurl = new moodle_url('/course/mod.php', array('sesskey' => sesskey()));
+    }
+
+    if ($sr !== null) {
+        $baseurl->param('sr', $sr);
+    }
+
+    // AJAX edit title.
+    if ($mod->has_view() && $hasmanageactivities && course_ajax_enabled($COURSE) &&
+        (($mod->course == $COURSE->id) || ($mod->course == SITEID))) {
+        // we will not display link if we are on some other-course page (where we should not see this module anyway)
+        return html_writer::span(
+            html_writer::link(
+                new moodle_url($baseurl, array('update' => $mod->id)),
+                $OUTPUT->pix_icon('t/editstring', '', 'moodle', array('class' => 'iconsmall visibleifjs', 'title' => '')),
+                array(
+                    'class' => 'editing_title',
+                    'data-action' => 'edittitle',
+                    'title' => $str->edittitle,
+                )
+            )
+        );
+    }
+    return '';
+}
+
+/*
+ * This function returns the number of activities using the given scale in the given course.
+ *
+ * @deprecated since Moodle 3.1
+ * @param int $courseid The course ID to check.
+ * @param int $scaleid The scale ID to check
+ * @return int
+ */
+function course_scale_used($courseid, $scaleid) {
+    global $CFG, $DB;
+
+    debugging('course_scale_used() is deprecated and never used, plugins can implement <modname>_scale_used_anywhere, '.
+        'all implementations of <modname>_scale_used are now ignored', DEBUG_DEVELOPER);
+
+    $return = 0;
+
+    if (!empty($scaleid)) {
+        if ($cms = get_course_mods($courseid)) {
+            foreach ($cms as $cm) {
+                // Check cm->name/lib.php exists.
+                if (file_exists($CFG->dirroot.'/mod/'.$cm->modname.'/lib.php')) {
+                    include_once($CFG->dirroot.'/mod/'.$cm->modname.'/lib.php');
+                    $functionname = $cm->modname.'_scale_used';
+                    if (function_exists($functionname)) {
+                        if ($functionname($cm->instance, $scaleid)) {
+                            $return++;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check if any course grade item makes use of the scale.
+        $return += $DB->count_records('grade_items', array('courseid' => $courseid, 'scaleid' => $scaleid));
+
+        // Check if any outcome in the course makes use of the scale.
+        $return += $DB->count_records_sql("SELECT COUNT('x')
+                                             FROM {grade_outcomes_courses} goc,
+                                                  {grade_outcomes} go
+                                            WHERE go.id = goc.outcomeid
+                                                  AND go.scaleid = ? AND goc.courseid = ?",
+            array($scaleid, $courseid));
+    }
+    return $return;
+}
+
+/**
+ * This function returns the number of activities using scaleid in the entire site
+ *
+ * @deprecated since Moodle 3.1
+ * @param int $scaleid
+ * @param array $courses
+ * @return int
+ */
+function site_scale_used($scaleid, &$courses) {
+    $return = 0;
+
+    debugging('site_scale_used() is deprecated and never used, plugins can implement <modname>_scale_used_anywhere, '.
+        'all implementations of <modname>_scale_used are now ignored', DEBUG_DEVELOPER);
+
+    if (!is_array($courses) || count($courses) == 0) {
+        $courses = get_courses("all", false, "c.id, c.shortname");
+    }
+
+    if (!empty($scaleid)) {
+        if (is_array($courses) && count($courses) > 0) {
+            foreach ($courses as $course) {
+                $return += course_scale_used($course->id, $scaleid);
+            }
+        }
+    }
+    return $return;
+}
+
+/**
+ * Returns detailed function information
+ *
+ * @deprecated since Moodle 3.1
+ * @param string|object $function name of external function or record from external_function
+ * @param int $strictness IGNORE_MISSING means compatible mode, false returned if record not found, debug message if more found;
+ *                        MUST_EXIST means throw exception if no record or multiple records found
+ * @return stdClass description or false if not found or exception thrown
+ * @since Moodle 2.0
+ */
+function external_function_info($function, $strictness=MUST_EXIST) {
+    debugging('external_function_info() is deprecated. Please use external_api::external_function_info() instead.',
+              DEBUG_DEVELOPER);
+    return external_api::external_function_info($function, $strictness);
+}
+
+/**
+ * Retrieves an array of records from a CSV file and places
+ * them into a given table structure
+ * This function is deprecated. Please use csv_import_reader() instead.
+ *
+ * @deprecated since Moodle 3.2 MDL-55126
+ * @todo MDL-55195 for final deprecation in Moodle 3.6
+ * @see csv_import_reader::load_csv_content()
+ * @global stdClass $CFG
+ * @global moodle_database $DB
+ * @param string $file The path to a CSV file
+ * @param string $table The table to retrieve columns from
+ * @return bool|array Returns an array of CSV records or false
+ */
+function get_records_csv($file, $table) {
+    global $CFG, $DB;
+
+    debugging('get_records_csv() is deprecated. Please use lib/csvlib.class.php csv_import_reader() instead.');
+
+    if (!$metacolumns = $DB->get_columns($table)) {
+        return false;
+    }
+
+    if(!($handle = @fopen($file, 'r'))) {
+        print_error('get_records_csv failed to open '.$file);
+    }
+
+    $fieldnames = fgetcsv($handle, 4096);
+    if(empty($fieldnames)) {
+        fclose($handle);
+        return false;
+    }
+
+    $columns = array();
+
+    foreach($metacolumns as $metacolumn) {
+        $ord = array_search($metacolumn->name, $fieldnames);
+        if(is_int($ord)) {
+            $columns[$metacolumn->name] = $ord;
+        }
+    }
+
+    $rows = array();
+
+    while (($data = fgetcsv($handle, 4096)) !== false) {
+        $item = new stdClass;
+        foreach($columns as $name => $ord) {
+            $item->$name = $data[$ord];
+        }
+        $rows[] = $item;
+    }
+
+    fclose($handle);
+    return $rows;
+}
+
+/**
+ * Create a file with CSV contents
+ * This function is deprecated. Please use download_as_dataformat() instead.
+ *
+ * @deprecated since Moodle 3.2 MDL-55126
+ * @todo MDL-55195 for final deprecation in Moodle 3.6
+ * @see download_as_dataformat (lib/dataformatlib.php)
+ * @global stdClass $CFG
+ * @global moodle_database $DB
+ * @param string $file The file to put the CSV content into
+ * @param array $records An array of records to write to a CSV file
+ * @param string $table The table to get columns from
+ * @return bool success
+ */
+function put_records_csv($file, $records, $table = NULL) {
+    global $CFG, $DB;
+
+    debugging('put_records_csv() is deprecated. Please use lib/dataformatlib.php download_as_dataformat()');
+
+    if (empty($records)) {
+        return true;
+    }
+
+    $metacolumns = NULL;
+    if ($table !== NULL && !$metacolumns = $DB->get_columns($table)) {
+        return false;
+    }
+
+    echo "x";
+
+    if(!($fp = @fopen($CFG->tempdir.'/'.$file, 'w'))) {
+        print_error('put_records_csv failed to open '.$file);
+    }
+
+    $proto = reset($records);
+    if(is_object($proto)) {
+        $fields_records = array_keys(get_object_vars($proto));
+    }
+    else if(is_array($proto)) {
+        $fields_records = array_keys($proto);
+    }
+    else {
+        return false;
+    }
+    echo "x";
+
+    if(!empty($metacolumns)) {
+        $fields_table = array_map(create_function('$a', 'return $a->name;'), $metacolumns);
+        $fields = array_intersect($fields_records, $fields_table);
+    }
+    else {
+        $fields = $fields_records;
+    }
+
+    fwrite($fp, implode(',', $fields));
+    fwrite($fp, "\r\n");
+
+    foreach($records as $record) {
+        $array  = (array)$record;
+        $values = array();
+        foreach($fields as $field) {
+            if(strpos($array[$field], ',')) {
+                $values[] = '"'.str_replace('"', '\"', $array[$field]).'"';
+            }
+            else {
+                $values[] = $array[$field];
+            }
+        }
+        fwrite($fp, implode(',', $values)."\r\n");
+    }
+
+    fclose($fp);
+    @chmod($CFG->tempdir.'/'.$file, $CFG->filepermissions);
+    return true;
+}
+
+/**
+ * Determines if the given value is a valid CSS colour.
+ *
+ * A CSS colour can be one of the following:
+ *    - Hex colour:  #AA66BB
+ *    - RGB colour:  rgb(0-255, 0-255, 0-255)
+ *    - RGBA colour: rgba(0-255, 0-255, 0-255, 0-1)
+ *    - HSL colour:  hsl(0-360, 0-100%, 0-100%)
+ *    - HSLA colour: hsla(0-360, 0-100%, 0-100%, 0-1)
+ *
+ * Or a recognised browser colour mapping {@link css_optimiser::$htmlcolours}
+ *
+ * @deprecated since Moodle 3.2
+ * @todo MDL-56173 for final deprecation in Moodle 3.6
+ * @param string $value The colour value to check
+ * @return bool
+ */
+function css_is_colour($value) {
+    debugging('css_is_colour() is deprecated without a replacement. Please copy the implementation '.
+        'into your plugin if you need this functionality.', DEBUG_DEVELOPER);
+
+    $value = trim($value);
+
+    $hex  = '/^#([a-fA-F0-9]{1,3}|[a-fA-F0-9]{6})$/';
+    $rgb  = '#^rgb\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$#i';
+    $rgba = '#^rgba\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1}(\.\d+)?)\s*\)$#i';
+    $hsl  = '#^hsl\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\%\s*,\s*(\d{1,3})\%\s*\)$#i';
+    $hsla = '#^hsla\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\%\s*,\s*(\d{1,3})\%\s*,\s*(\d{1}(\.\d+)?)\s*\)$#i';
+
+    if (in_array(strtolower($value), array('inherit'))) {
+        return true;
+    } else if (preg_match($hex, $value)) {
+        return true;
+    } else if (in_array(strtolower($value), array_keys(css_optimiser::$htmlcolours))) {
+        return true;
+    } else if (preg_match($rgb, $value, $m) && $m[1] < 256 && $m[2] < 256 && $m[3] < 256) {
+        // It is an RGB colour.
+        return true;
+    } else if (preg_match($rgba, $value, $m) && $m[1] < 256 && $m[2] < 256 && $m[3] < 256) {
+        // It is an RGBA colour.
+        return true;
+    } else if (preg_match($hsl, $value, $m) && $m[1] <= 360 && $m[2] <= 100 && $m[3] <= 100) {
+        // It is an HSL colour.
+        return true;
+    } else if (preg_match($hsla, $value, $m) && $m[1] <= 360 && $m[2] <= 100 && $m[3] <= 100) {
+        // It is an HSLA colour.
+        return true;
+    }
+    // Doesn't look like a colour.
+    return false;
+}
+
+/**
+ * Returns true is the passed value looks like a CSS width.
+ * In order to pass this test the value must be purely numerical or end with a
+ * valid CSS unit term.
+ *
+ * @param string|int $value
+ * @return boolean
+ * @deprecated since Moodle 3.2
+ * @todo MDL-56173 for final deprecation in Moodle 3.6
+ */
+function css_is_width($value) {
+    debugging('css_is_width() is deprecated without a replacement. Please copy the implementation '.
+        'into your plugin if you need this functionality.', DEBUG_DEVELOPER);
+
+    $value = trim($value);
+    if (in_array(strtolower($value), array('auto', 'inherit'))) {
+        return true;
+    }
+    if ((string)$value === '0' || preg_match('#^(\-\s*)?(\d*\.)?(\d+)\s*(em|px|pt|\%|in|cm|mm|ex|pc)$#i', $value)) {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * A simple sorting function to sort two array values on the number of items they contain
+ *
+ * @param array $a
+ * @param array $b
+ * @return int
+ * @deprecated since Moodle 3.2
+ * @todo MDL-56173 for final deprecation in Moodle 3.6
+ */
+function css_sort_by_count(array $a, array $b) {
+    debugging('css_sort_by_count() is deprecated without a replacement. Please copy the implementation '.
+        'into your plugin if you need this functionality.', DEBUG_DEVELOPER);
+
+    $a = count($a);
+    $b = count($b);
+    if ($a == $b) {
+        return 0;
+    }
+    return ($a > $b) ? -1 : 1;
+}
+
+/**
+ * A basic CSS optimiser that strips out unwanted things and then processes CSS organising and cleaning styles.
+ * @deprecated since Moodle 3.2
+ * @todo MDL-56173 for final deprecation in Moodle 3.6
+ */
+class css_optimiser {
+    /**
+     * An array of the common HTML colours that are supported by most browsers.
+     *
+     * This reference table is used to allow us to unify colours, and will aid
+     * us in identifying buggy CSS using unsupported colours.
+     *
+     * @var string[]
+     * @deprecated since Moodle 3.2
+     * @todo MDL-56173 for final deprecation in Moodle 3.6
+     */
+    public static $htmlcolours = array(
+        'aliceblue' => '#F0F8FF',
+        'antiquewhite' => '#FAEBD7',
+        'aqua' => '#00FFFF',
+        'aquamarine' => '#7FFFD4',
+        'azure' => '#F0FFFF',
+        'beige' => '#F5F5DC',
+        'bisque' => '#FFE4C4',
+        'black' => '#000000',
+        'blanchedalmond' => '#FFEBCD',
+        'blue' => '#0000FF',
+        'blueviolet' => '#8A2BE2',
+        'brown' => '#A52A2A',
+        'burlywood' => '#DEB887',
+        'cadetblue' => '#5F9EA0',
+        'chartreuse' => '#7FFF00',
+        'chocolate' => '#D2691E',
+        'coral' => '#FF7F50',
+        'cornflowerblue' => '#6495ED',
+        'cornsilk' => '#FFF8DC',
+        'crimson' => '#DC143C',
+        'cyan' => '#00FFFF',
+        'darkblue' => '#00008B',
+        'darkcyan' => '#008B8B',
+        'darkgoldenrod' => '#B8860B',
+        'darkgray' => '#A9A9A9',
+        'darkgrey' => '#A9A9A9',
+        'darkgreen' => '#006400',
+        'darkKhaki' => '#BDB76B',
+        'darkmagenta' => '#8B008B',
+        'darkolivegreen' => '#556B2F',
+        'arkorange' => '#FF8C00',
+        'darkorchid' => '#9932CC',
+        'darkred' => '#8B0000',
+        'darksalmon' => '#E9967A',
+        'darkseagreen' => '#8FBC8F',
+        'darkslateblue' => '#483D8B',
+        'darkslategray' => '#2F4F4F',
+        'darkslategrey' => '#2F4F4F',
+        'darkturquoise' => '#00CED1',
+        'darkviolet' => '#9400D3',
+        'deeppink' => '#FF1493',
+        'deepskyblue' => '#00BFFF',
+        'dimgray' => '#696969',
+        'dimgrey' => '#696969',
+        'dodgerblue' => '#1E90FF',
+        'firebrick' => '#B22222',
+        'floralwhite' => '#FFFAF0',
+        'forestgreen' => '#228B22',
+        'fuchsia' => '#FF00FF',
+        'gainsboro' => '#DCDCDC',
+        'ghostwhite' => '#F8F8FF',
+        'gold' => '#FFD700',
+        'goldenrod' => '#DAA520',
+        'gray' => '#808080',
+        'grey' => '#808080',
+        'green' => '#008000',
+        'greenyellow' => '#ADFF2F',
+        'honeydew' => '#F0FFF0',
+        'hotpink' => '#FF69B4',
+        'indianred ' => '#CD5C5C',
+        'indigo ' => '#4B0082',
+        'ivory' => '#FFFFF0',
+        'khaki' => '#F0E68C',
+        'lavender' => '#E6E6FA',
+        'lavenderblush' => '#FFF0F5',
+        'lawngreen' => '#7CFC00',
+        'lemonchiffon' => '#FFFACD',
+        'lightblue' => '#ADD8E6',
+        'lightcoral' => '#F08080',
+        'lightcyan' => '#E0FFFF',
+        'lightgoldenrodyellow' => '#FAFAD2',
+        'lightgray' => '#D3D3D3',
+        'lightgrey' => '#D3D3D3',
+        'lightgreen' => '#90EE90',
+        'lightpink' => '#FFB6C1',
+        'lightsalmon' => '#FFA07A',
+        'lightseagreen' => '#20B2AA',
+        'lightskyblue' => '#87CEFA',
+        'lightslategray' => '#778899',
+        'lightslategrey' => '#778899',
+        'lightsteelblue' => '#B0C4DE',
+        'lightyellow' => '#FFFFE0',
+        'lime' => '#00FF00',
+        'limegreen' => '#32CD32',
+        'linen' => '#FAF0E6',
+        'magenta' => '#FF00FF',
+        'maroon' => '#800000',
+        'mediumaquamarine' => '#66CDAA',
+        'mediumblue' => '#0000CD',
+        'mediumorchid' => '#BA55D3',
+        'mediumpurple' => '#9370D8',
+        'mediumseagreen' => '#3CB371',
+        'mediumslateblue' => '#7B68EE',
+        'mediumspringgreen' => '#00FA9A',
+        'mediumturquoise' => '#48D1CC',
+        'mediumvioletred' => '#C71585',
+        'midnightblue' => '#191970',
+        'mintcream' => '#F5FFFA',
+        'mistyrose' => '#FFE4E1',
+        'moccasin' => '#FFE4B5',
+        'navajowhite' => '#FFDEAD',
+        'navy' => '#000080',
+        'oldlace' => '#FDF5E6',
+        'olive' => '#808000',
+        'olivedrab' => '#6B8E23',
+        'orange' => '#FFA500',
+        'orangered' => '#FF4500',
+        'orchid' => '#DA70D6',
+        'palegoldenrod' => '#EEE8AA',
+        'palegreen' => '#98FB98',
+        'paleturquoise' => '#AFEEEE',
+        'palevioletred' => '#D87093',
+        'papayawhip' => '#FFEFD5',
+        'peachpuff' => '#FFDAB9',
+        'peru' => '#CD853F',
+        'pink' => '#FFC0CB',
+        'plum' => '#DDA0DD',
+        'powderblue' => '#B0E0E6',
+        'purple' => '#800080',
+        'red' => '#FF0000',
+        'rosybrown' => '#BC8F8F',
+        'royalblue' => '#4169E1',
+        'saddlebrown' => '#8B4513',
+        'salmon' => '#FA8072',
+        'sandybrown' => '#F4A460',
+        'seagreen' => '#2E8B57',
+        'seashell' => '#FFF5EE',
+        'sienna' => '#A0522D',
+        'silver' => '#C0C0C0',
+        'skyblue' => '#87CEEB',
+        'slateblue' => '#6A5ACD',
+        'slategray' => '#708090',
+        'slategrey' => '#708090',
+        'snow' => '#FFFAFA',
+        'springgreen' => '#00FF7F',
+        'steelblue' => '#4682B4',
+        'tan' => '#D2B48C',
+        'teal' => '#008080',
+        'thistle' => '#D8BFD8',
+        'tomato' => '#FF6347',
+        'transparent' => 'transparent',
+        'turquoise' => '#40E0D0',
+        'violet' => '#EE82EE',
+        'wheat' => '#F5DEB3',
+        'white' => '#FFFFFF',
+        'whitesmoke' => '#F5F5F5',
+        'yellow' => '#FFFF00',
+        'yellowgreen' => '#9ACD32'
+    );
+
+    /**
+     * Used to orocesses incoming CSS optimising it and then returning it. Now just returns
+     * what is sent to it. Do not use.
+     *
+     * @param string $css The raw CSS to optimise
+     * @return string The optimised CSS
+     * @deprecated since Moodle 3.2
+     * @todo MDL-56173 for final deprecation in Moodle 3.6
+     */
+    public function process($css) {
+        debugging('class css_optimiser is deprecated and no longer does anything, '.
+            'please consider using stylelint to optimise your css.', DEBUG_DEVELOPER);
+
+        return $css;
+    }
+}
+
+/**
+ * Load the course contexts for all of the users courses
+ *
+ * @deprecated since Moodle 3.2
+ * @param array $courses array of course objects. The courses the user is enrolled in.
+ * @return array of course contexts
+ */
+function message_get_course_contexts($courses) {
+    debugging('message_get_course_contexts() is deprecated and is no longer used.', DEBUG_DEVELOPER);
+
+    $coursecontexts = array();
+
+    foreach($courses as $course) {
+        $coursecontexts[$course->id] = context_course::instance($course->id);
+    }
+
+    return $coursecontexts;
+}
+
+/**
+ * strip off action parameters like 'removecontact'
+ *
+ * @deprecated since Moodle 3.2
+ * @param moodle_url/string $moodleurl a URL. Typically the current page URL.
+ * @return string the URL minus parameters that perform actions (like adding/removing/blocking a contact).
+ */
+function message_remove_url_params($moodleurl) {
+    debugging('message_remove_url_params() is deprecated and is no longer used.', DEBUG_DEVELOPER);
+
+    $newurl = new moodle_url($moodleurl);
+    $newurl->remove_params('addcontact','removecontact','blockcontact','unblockcontact');
+    return $newurl->out();
+}
+
+/**
+ * Count the number of messages with a field having a specified value.
+ * if $field is empty then return count of the whole array
+ * if $field is non-existent then return 0
+ *
+ * @deprecated since Moodle 3.2
+ * @param array $messagearray array of message objects
+ * @param string $field the field to inspect on the message objects
+ * @param string $value the value to test the field against
+ */
+function message_count_messages($messagearray, $field='', $value='') {
+    debugging('message_count_messages() is deprecated and is no longer used.', DEBUG_DEVELOPER);
+
+    if (!is_array($messagearray)) return 0;
+    if ($field == '' or empty($messagearray)) return count($messagearray);
+
+    $count = 0;
+    foreach ($messagearray as $message) {
+        $count += ($message->$field == $value) ? 1 : 0;
+    }
+    return $count;
+}
+
+/**
+ * Count the number of users blocked by $user1
+ *
+ * @deprecated since Moodle 3.2
+ * @param object $user1 user object
+ * @return int the number of blocked users
+ */
+function message_count_blocked_users($user1=null) {
+    debugging('message_count_blocked_users() is deprecated, please use \core_message\api::count_blocked_users() instead.',
+        DEBUG_DEVELOPER);
+
+    return \core_message\api::count_blocked_users($user1);
+}
+
+/**
+ * Print a message contact link
+ *
+ * @deprecated since Moodle 3.2
+ * @param int $userid the ID of the user to apply to action to
+ * @param string $linktype can be add, remove, block or unblock
+ * @param bool $return if true return the link as a string. If false echo the link.
+ * @param string $script the URL to send the user to when the link is clicked. If null, the current page.
+ * @param bool $text include text next to the icons?
+ * @param bool $icon include a graphical icon?
+ * @return string  if $return is true otherwise bool
+ */
+function message_contact_link($userid, $linktype='add', $return=false, $script=null, $text=false, $icon=true) {
+    debugging('message_contact_link() is deprecated and is no longer used.', DEBUG_DEVELOPER);
+
+    global $OUTPUT, $PAGE;
+
+    //hold onto the strings as we're probably creating a bunch of links
+    static $str;
+
+    if (empty($script)) {
+        //strip off previous action params like 'removecontact'
+        $script = message_remove_url_params($PAGE->url);
+    }
+
+    if (empty($str->blockcontact)) {
+        $str = new stdClass();
+        $str->blockcontact   =  get_string('blockcontact', 'message');
+        $str->unblockcontact =  get_string('unblockcontact', 'message');
+        $str->removecontact  =  get_string('removecontact', 'message');
+        $str->addcontact     =  get_string('addcontact', 'message');
+    }
+
+    $command = $linktype.'contact';
+    $string  = $str->{$command};
+
+    $safealttext = s($string);
+
+    $safestring = '';
+    if (!empty($text)) {
+        $safestring = $safealttext;
+    }
+
+    $img = '';
+    if ($icon) {
+        $iconpath = null;
+        switch ($linktype) {
+            case 'block':
+                $iconpath = 't/block';
+                break;
+            case 'unblock':
+                $iconpath = 't/unblock';
+                break;
+            case 'remove':
+                $iconpath = 't/removecontact';
+                break;
+            case 'add':
+            default:
+                $iconpath = 't/addcontact';
+        }
+
+        $img = '<img src="'.$OUTPUT->pix_url($iconpath).'" class="iconsmall" alt="'.$safealttext.'" />';
+    }
+
+    $output = '<span class="'.$linktype.'contact">'.
+        '<a href="'.$script.'&amp;'.$command.'='.$userid.
+        '&amp;sesskey='.sesskey().'" title="'.$safealttext.'">'.
+        $img.
+        $safestring.'</a></span>';
+
+    if ($return) {
+        return $output;
+    } else {
+        echo $output;
+        return true;
+    }
+}
+
+/**
+ * Get the users recent event notifications
+ *
+ * @deprecated since Moodle 3.2
+ * @param object $user the current user
+ * @param int $limitfrom can be used for paging
+ * @param int $limitto can be used for paging
+ * @return array
+ */
+function message_get_recent_notifications($user, $limitfrom=0, $limitto=100) {
+    debugging('message_get_recent_notifications() is deprecated and is no longer used.', DEBUG_DEVELOPER);
+
+    global $DB;
+
+    $userfields = user_picture::fields('u', array('lastaccess'));
+    $sql = "SELECT mr.id AS message_read_id, $userfields, mr.notification, mr.smallmessage, mr.fullmessage, mr.fullmessagehtml, mr.fullmessageformat, mr.timecreated as timecreated, mr.contexturl, mr.contexturlname
+              FROM {message_read} mr
+                   JOIN {user} u ON u.id=mr.useridfrom
+             WHERE mr.useridto = :userid1 AND u.deleted = '0' AND mr.notification = :notification
+             ORDER BY mr.timecreated DESC";
+    $params = array('userid1' => $user->id, 'notification' => 1);
+
+    $notifications =  $DB->get_records_sql($sql, $params, $limitfrom, $limitto);
+    return $notifications;
+}
+
+/**
+ * echo or return a link to take the user to the full message history between themselves and another user
+ *
+ * @deprecated since Moodle 3.2
+ * @param int $userid1 the ID of the user displayed on the left (usually the current user)
+ * @param int $userid2 the ID of the other user
+ * @param bool $return true to return the link as a string. False to echo the link.
+ * @param string $keywords any keywords to highlight in the message history
+ * @param string $position anchor name to jump to within the message history
+ * @param string $linktext optionally specify the link text
+ * @return string|bool. Returns a string if $return is true. Otherwise returns a boolean.
+ */
+function message_history_link($userid1, $userid2, $return=false, $keywords='', $position='', $linktext='') {
+    debugging('message_history_link() is deprecated and is no longer used.', DEBUG_DEVELOPER);
+
+    global $OUTPUT, $PAGE;
+    static $strmessagehistory;
+
+    if (empty($strmessagehistory)) {
+        $strmessagehistory = get_string('messagehistory', 'message');
+    }
+
+    if ($position) {
+        $position = "#$position";
+    }
+    if ($keywords) {
+        $keywords = "&search=".urlencode($keywords);
+    }
+
+    if ($linktext == 'icon') {  // Icon only
+        $fulllink = '<img src="'.$OUTPUT->pix_url('t/messages') . '" class="iconsmall" alt="'.$strmessagehistory.'" />';
+    } else if ($linktext == 'both') {  // Icon and standard name
+        $fulllink = '<img src="'.$OUTPUT->pix_url('t/messages') . '" class="iconsmall" alt="" />';
+        $fulllink .= '&nbsp;'.$strmessagehistory;
+    } else if ($linktext) {    // Custom name
+        $fulllink = $linktext;
+    } else {                   // Standard name only
+        $fulllink = $strmessagehistory;
+    }
+
+    $popupoptions = array(
+        'height' => 500,
+        'width' => 500,
+        'menubar' => false,
+        'location' => false,
+        'status' => true,
+        'scrollbars' => true,
+        'resizable' => true);
+
+    $link = new moodle_url('/message/index.php?history='.MESSAGE_HISTORY_ALL."&user1=$userid1&user2=$userid2$keywords$position");
+    if ($PAGE->url && $PAGE->url->get_param('viewing')) {
+        $link->param('viewing', $PAGE->url->get_param('viewing'));
+    }
+    $action = null;
+    $str = $OUTPUT->action_link($link, $fulllink, $action, array('title' => $strmessagehistory));
+
+    $str = '<span class="history">'.$str.'</span>';
+
+    if ($return) {
+        return $str;
+    } else {
+        echo $str;
+        return true;
+    }
+}
+
+/**
+ * Search a user's messages
+ *
+ * Returns a list of posts found using an array of search terms
+ * eg   word  +word -word
+ *
+ * @deprecated since Moodle 3.2
+ * @param array $searchterms an array of search terms (strings)
+ * @param bool $fromme include messages from the user?
+ * @param bool $tome include messages to the user?
+ * @param mixed $courseid SITEID for admins searching all messages. Other behaviour not yet implemented
+ * @param int $userid the user ID of the current user
+ * @return mixed An array of messages or false if no matching messages were found
+ */
+function message_search($searchterms, $fromme=true, $tome=true, $courseid='none', $userid=0) {
+    debugging('message_search() is deprecated and is no longer used.', DEBUG_DEVELOPER);
+
+    global $CFG, $USER, $DB;
+
+    // If user is searching all messages check they are allowed to before doing anything else.
+    if ($courseid == SITEID && !has_capability('moodle/site:readallmessages', context_system::instance())) {
+        print_error('accessdenied','admin');
+    }
+
+    // If no userid sent then assume current user.
+    if ($userid == 0) $userid = $USER->id;
+
+    // Some differences in SQL syntax.
+    if ($DB->sql_regex_supported()) {
+        $REGEXP    = $DB->sql_regex(true);
+        $NOTREGEXP = $DB->sql_regex(false);
+    }
+
+    $searchcond = array();
+    $params = array();
+    $i = 0;
+
+    // Preprocess search terms to check whether we have at least 1 eligible search term.
+    // If we do we can drop words around it like 'a'.
+    $dropshortwords = false;
+    foreach ($searchterms as $searchterm) {
+        if (strlen($searchterm) >= 2) {
+            $dropshortwords = true;
+        }
+    }
+
+    foreach ($searchterms as $searchterm) {
+        $i++;
+
+        $NOT = false; // Initially we aren't going to perform NOT LIKE searches, only MSSQL and Oracle.
+
+        if ($dropshortwords && strlen($searchterm) < 2) {
+            continue;
+        }
+        // Under Oracle and MSSQL, trim the + and - operators and perform simpler LIKE search.
+        if (!$DB->sql_regex_supported()) {
+            if (substr($searchterm, 0, 1) == '-') {
+                $NOT = true;
+            }
+            $searchterm = trim($searchterm, '+-');
+        }
+
+        if (substr($searchterm,0,1) == "+") {
+            $searchterm = substr($searchterm,1);
+            $searchterm = preg_quote($searchterm, '|');
+            $searchcond[] = "m.fullmessage $REGEXP :ss$i";
+            $params['ss'.$i] = "(^|[^a-zA-Z0-9])$searchterm([^a-zA-Z0-9]|$)";
+
+        } else if (substr($searchterm,0,1) == "-") {
+            $searchterm = substr($searchterm,1);
+            $searchterm = preg_quote($searchterm, '|');
+            $searchcond[] = "m.fullmessage $NOTREGEXP :ss$i";
+            $params['ss'.$i] = "(^|[^a-zA-Z0-9])$searchterm([^a-zA-Z0-9]|$)";
+
+        } else {
+            $searchcond[] = $DB->sql_like("m.fullmessage", ":ss$i", false, true, $NOT);
+            $params['ss'.$i] = "%$searchterm%";
+        }
+    }
+
+    if (empty($searchcond)) {
+        $searchcond = " ".$DB->sql_like('m.fullmessage', ':ss1', false);
+        $params['ss1'] = "%";
+    } else {
+        $searchcond = implode(" AND ", $searchcond);
+    }
+
+    // There are several possibilities
+    // 1. courseid = SITEID : The admin is searching messages by all users
+    // 2. courseid = ??     : A teacher is searching messages by users in
+    //                        one of their courses - currently disabled
+    // 3. courseid = none   : User is searching their own messages;
+    //    a.  Messages from user
+    //    b.  Messages to user
+    //    c.  Messages to and from user
+
+    if ($fromme && $tome) {
+        $searchcond .= " AND ((useridto = :useridto AND timeusertodeleted = 0) OR
+            (useridfrom = :useridfrom AND timeuserfromdeleted = 0))";
+        $params['useridto'] = $userid;
+        $params['useridfrom'] = $userid;
+    } else if ($fromme) {
+        $searchcond .= " AND (useridfrom = :useridfrom AND timeuserfromdeleted = 0)";
+        $params['useridfrom'] = $userid;
+    } else if ($tome) {
+        $searchcond .= " AND (useridto = :useridto AND timeusertodeleted = 0)";
+        $params['useridto'] = $userid;
+    }
+    if ($courseid == SITEID) { // Admin is searching all messages.
+        $m_read   = $DB->get_records_sql("SELECT m.id, m.useridto, m.useridfrom, m.smallmessage, m.fullmessage, m.timecreated
+                                            FROM {message_read} m
+                                           WHERE $searchcond", $params, 0, MESSAGE_SEARCH_MAX_RESULTS);
+        $m_unread = $DB->get_records_sql("SELECT m.id, m.useridto, m.useridfrom, m.smallmessage, m.fullmessage, m.timecreated
+                                            FROM {message} m
+                                           WHERE $searchcond", $params, 0, MESSAGE_SEARCH_MAX_RESULTS);
+
+    } else if ($courseid !== 'none') {
+        // This has not been implemented due to security concerns.
+        $m_read   = array();
+        $m_unread = array();
+
+    } else {
+
+        if ($fromme and $tome) {
+            $searchcond .= " AND (m.useridfrom=:userid1 OR m.useridto=:userid2)";
+            $params['userid1'] = $userid;
+            $params['userid2'] = $userid;
+
+        } else if ($fromme) {
+            $searchcond .= " AND m.useridfrom=:userid";
+            $params['userid'] = $userid;
+
+        } else if ($tome) {
+            $searchcond .= " AND m.useridto=:userid";
+            $params['userid'] = $userid;
+        }
+
+        $m_read   = $DB->get_records_sql("SELECT m.id, m.useridto, m.useridfrom, m.smallmessage, m.fullmessage, m.timecreated
+                                            FROM {message_read} m
+                                           WHERE $searchcond", $params, 0, MESSAGE_SEARCH_MAX_RESULTS);
+        $m_unread = $DB->get_records_sql("SELECT m.id, m.useridto, m.useridfrom, m.smallmessage, m.fullmessage, m.timecreated
+                                            FROM {message} m
+                                           WHERE $searchcond", $params, 0, MESSAGE_SEARCH_MAX_RESULTS);
+
+    }
+
+    /// The keys may be duplicated in $m_read and $m_unread so we can't
+    /// do a simple concatenation
+    $messages = array();
+    foreach ($m_read as $m) {
+        $messages[] = $m;
+    }
+    foreach ($m_unread as $m) {
+        $messages[] = $m;
+    }
+
+    return (empty($messages)) ? false : $messages;
+}
+
+/**
+ * Given a message object that we already know has a long message
+ * this function truncates the message nicely to the first
+ * sane place between $CFG->forum_longpost and $CFG->forum_shortpost
+ *
+ * @deprecated since Moodle 3.2
+ * @param string $message the message
+ * @param int $minlength the minimum length to trim the message to
+ * @return string the shortened message
+ */
+function message_shorten_message($message, $minlength = 0) {
+    debugging('message_shorten_message() is deprecated and is no longer used.', DEBUG_DEVELOPER);
+
+    $i = 0;
+    $tag = false;
+    $length = strlen($message);
+    $count = 0;
+    $stopzone = false;
+    $truncate = 0;
+    if ($minlength == 0) $minlength = MESSAGE_SHORTLENGTH;
+
+
+    for ($i=0; $i<$length; $i++) {
+        $char = $message[$i];
+
+        switch ($char) {
+            case "<":
+                $tag = true;
+                break;
+            case ">":
+                $tag = false;
+                break;
+            default:
+                if (!$tag) {
+                    if ($stopzone) {
+                        if ($char == '.' or $char == ' ') {
+                            $truncate = $i+1;
+                            break 2;
+                        }
+                    }
+                    $count++;
+                }
+                break;
+        }
+        if (!$stopzone) {
+            if ($count > $minlength) {
+                $stopzone = true;
+            }
+        }
+    }
+
+    if (!$truncate) {
+        $truncate = $i;
+    }
+
+    return substr($message, 0, $truncate);
+}
+
+/**
+ * Given a string and an array of keywords, this function looks
+ * for the first keyword in the string, and then chops out a
+ * small section from the text that shows that word in context.
+ *
+ * @deprecated since Moodle 3.2
+ * @param string $message the text to search
+ * @param array $keywords array of keywords to find
+ */
+function message_get_fragment($message, $keywords) {
+    debugging('message_get_fragment() is deprecated and is no longer used.', DEBUG_DEVELOPER);
+
+    $fullsize = 160;
+    $halfsize = (int)($fullsize/2);
+
+    $message = strip_tags($message);
+
+    foreach ($keywords as $keyword) {  // Just get the first one
+        if ($keyword !== '') {
+            break;
+        }
+    }
+    if (empty($keyword)) {   // None found, so just return start of message
+        return message_shorten_message($message, 30);
+    }
+
+    $leadin = $leadout = '';
+
+/// Find the start of the fragment
+    $start = 0;
+    $length = strlen($message);
+
+    $pos = strpos($message, $keyword);
+    if ($pos > $halfsize) {
+        $start = $pos - $halfsize;
+        $leadin = '...';
+    }
+/// Find the end of the fragment
+    $end = $start + $fullsize;
+    if ($end > $length) {
+        $end = $length;
+    } else {
+        $leadout = '...';
+    }
+
+/// Pull out the fragment and format it
+
+    $fragment = substr($message, $start, $end - $start);
+    $fragment = $leadin.highlight(implode(' ',$keywords), $fragment).$leadout;
+    return $fragment;
+}
+
+/**
+ * Retrieve the messages between two users
+ *
+ * @deprecated since Moodle 3.2
+ * @param object $user1 the current user
+ * @param object $user2 the other user
+ * @param int $limitnum the maximum number of messages to retrieve
+ * @param bool $viewingnewmessages are we currently viewing new messages?
+ */
+function message_get_history($user1, $user2, $limitnum=0, $viewingnewmessages=false) {
+    debugging('message_get_history() is deprecated and is no longer used.', DEBUG_DEVELOPER);
+
+    global $DB, $CFG;
+
+    $messages = array();
+
+    //we want messages sorted oldest to newest but if getting a subset of messages we need to sort
+    //desc to get the last $limitnum messages then flip the order in php
+    $sort = 'asc';
+    if ($limitnum>0) {
+        $sort = 'desc';
+    }
+
+    $notificationswhere = null;
+    //we have just moved new messages to read. If theyre here to see new messages dont hide notifications
+    if (!$viewingnewmessages && $CFG->messaginghidereadnotifications) {
+        $notificationswhere = 'AND notification=0';
+    }
+
+    //prevent notifications of your own actions appearing in your own message history
+    $ownnotificationwhere = ' AND NOT (useridfrom=? AND notification=1)';
+
+    $sql = "((useridto = ? AND useridfrom = ? AND timeusertodeleted = 0) OR
+        (useridto = ? AND useridfrom = ? AND timeuserfromdeleted = 0))";
+    if ($messages_read = $DB->get_records_select('message_read', $sql . $notificationswhere . $ownnotificationwhere,
+        array($user1->id, $user2->id, $user2->id, $user1->id, $user1->id),
+        "timecreated $sort", '*', 0, $limitnum)) {
+        foreach ($messages_read as $message) {
+            $messages[] = $message;
+        }
+    }
+    if ($messages_new = $DB->get_records_select('message', $sql . $ownnotificationwhere,
+        array($user1->id, $user2->id, $user2->id, $user1->id, $user1->id),
+        "timecreated $sort", '*', 0, $limitnum)) {
+        foreach ($messages_new as $message) {
+            $messages[] = $message;
+        }
+    }
+
+    $result = core_collator::asort_objects_by_property($messages, 'timecreated', core_collator::SORT_NUMERIC);
+
+    //if we only want the last $limitnum messages
+    $messagecount = count($messages);
+    if ($limitnum > 0 && $messagecount > $limitnum) {
+        $messages = array_slice($messages, $messagecount - $limitnum, $limitnum, true);
+    }
+
+    return $messages;
+}
+
+/**
+ * Constructs the add/remove contact link to display next to other users
+ *
+ * @deprecated since Moodle 3.2
+ * @param bool $incontactlist is the user a contact
+ * @param bool $isblocked is the user blocked
+ * @param stdClass $contact contact object
+ * @param string $script the URL to send the user to when the link is clicked. If null, the current page.
+ * @param bool $text include text next to the icons?
+ * @param bool $icon include a graphical icon?
+ * @return string
+ */
+function message_get_contact_add_remove_link($incontactlist, $isblocked, $contact, $script=null, $text=false, $icon=true) {
+    debugging('message_get_contact_add_remove_link() is deprecated and is no longer used.', DEBUG_DEVELOPER);
+
+    $strcontact = '';
+
+    if($incontactlist){
+        $strcontact = message_contact_link($contact->id, 'remove', true, $script, $text, $icon);
+    } else if ($isblocked) {
+        $strcontact = message_contact_link($contact->id, 'add', true, $script, $text, $icon);
+    } else{
+        $strcontact = message_contact_link($contact->id, 'add', true, $script, $text, $icon);
+    }
+
+    return $strcontact;
+}
+
+/**
+ * Constructs the block contact link to display next to other users
+ *
+ * @deprecated since Moodle 3.2
+ * @param bool $incontactlist is the user a contact?
+ * @param bool $isblocked is the user blocked?
+ * @param stdClass $contact contact object
+ * @param string $script the URL to send the user to when the link is clicked. If null, the current page.
+ * @param bool $text include text next to the icons?
+ * @param bool $icon include a graphical icon?
+ * @return string
+ */
+function message_get_contact_block_link($incontactlist, $isblocked, $contact, $script=null, $text=false, $icon=true) {
+    debugging('message_get_contact_block_link() is deprecated and is no longer used.', DEBUG_DEVELOPER);
+
+    $strblock   = '';
+
+    //commented out to allow the user to block a contact without having to remove them first
+    /*if ($incontactlist) {
+        //$strblock = '';
+    } else*/
+    if ($isblocked) {
+        $strblock   = message_contact_link($contact->id, 'unblock', true, $script, $text, $icon);
+    } else{
+        $strblock   = message_contact_link($contact->id, 'block', true, $script, $text, $icon);
+    }
+
+    return $strblock;
+}
+
+/**
+ * marks ALL messages being sent from $fromuserid to $touserid as read
+ *
+ * @deprecated since Moodle 3.2
+ * @param int $touserid the id of the message recipient
+ * @param int $fromuserid the id of the message sender
+ * @return void
+ */
+function message_mark_messages_read($touserid, $fromuserid) {
+    debugging('message_mark_messages_read() is deprecated and is no longer used, please use
+        \core_message\api::mark_all_read_for_user() instead.', DEBUG_DEVELOPER);
+
+    \core_message\api::mark_all_read_for_user($touserid, $fromuserid);
+}
+
+/**
+ * Return a list of page types
+ *
+ * @deprecated since Moodle 3.2
+ * @param string $pagetype current page type
+ * @param stdClass $parentcontext Block's parent context
+ * @param stdClass $currentcontext Current context of block
+ */
+function message_page_type_list($pagetype, $parentcontext, $currentcontext) {
+    debugging('message_page_type_list() is deprecated and is no longer used.', DEBUG_DEVELOPER);
+
+    return array('messages-*'=>get_string('page-message-x', 'message'));
+}
+
+/**
+ * Determines if a user is permitted to send another user a private message.
+ * If no sender is provided then it defaults to the logged in user.
+ *
+ * @deprecated since Moodle 3.2
+ * @param object $recipient User object.
+ * @param object $sender User object.
+ * @return bool true if user is permitted, false otherwise.
+ */
+function message_can_post_message($recipient, $sender = null) {
+    debugging('message_can_post_message() is deprecated and is no longer used, please use
+        \core_message\api::can_post_message() instead.', DEBUG_DEVELOPER);
+
+    return \core_message\api::can_post_message($recipient, $sender);
+}
+
+/**
+ * Checks if the recipient is allowing messages from users that aren't a
+ * contact. If not then it checks to make sure the sender is in the
+ * recipient's contacts.
+ *
+ * @deprecated since Moodle 3.2
+ * @param object $recipient User object.
+ * @param object $sender User object.
+ * @return bool true if $sender is blocked, false otherwise.
+ */
+function message_is_user_non_contact_blocked($recipient, $sender = null) {
+    debugging('message_is_user_non_contact_blocked() is deprecated and is no longer used, please use
+        \core_message\api::is_user_non_contact_blocked() instead.', DEBUG_DEVELOPER);
+
+    return \core_message\api::is_user_non_contact_blocked($recipient, $sender);
+}
+
+/**
+ * Checks if the recipient has specifically blocked the sending user.
+ *
+ * Note: This function will always return false if the sender has the
+ * readallmessages capability at the system context level.
+ *
+ * @deprecated since Moodle 3.2
+ * @param object $recipient User object.
+ * @param object $sender User object.
+ * @return bool true if $sender is blocked, false otherwise.
+ */
+function message_is_user_blocked($recipient, $sender = null) {
+    debugging('message_is_user_blocked() is deprecated and is no longer used, please use
+        \core_message\api::is_user_blocked() instead.', DEBUG_DEVELOPER);
+
+    return \core_message\api::is_user_blocked($recipient, $sender);
 }

@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -25,5 +24,4 @@
 
 $string['feedback'] = 'Feedback';
 $string['feedback:addinstance'] = 'Add a new feedback block';
-$string['missing_feedback_module'] = 'This blocks relies on the Feedback activity module, but that module is not present!';
 $string['pluginname'] = 'Feedback';

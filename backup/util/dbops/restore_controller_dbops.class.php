@@ -95,6 +95,12 @@ abstract class restore_controller_dbops extends restore_dbops {
             throw new backup_dbops_exception('restore_controller_dbops_nonexisting');
         }
         $controller = unserialize(base64_decode($controllerrec->controller));
+        if (!is_object($controller)) {
+            // The controller field of the table did not contain a serialized object.
+            // It is made empty after it has been used successfully, it is likely that
+            // the user has pressed the browser back button at some point.
+            throw new backup_dbops_exception('restore_controller_dbops_loading_invalid_controller');
+        }
         // Check checksum is ok. Sounds silly but it isn't ;-)
         if (!$controller->is_checksum_correct($controllerrec->checksum)) {
             throw new backup_dbops_exception('restore_controller_dbops_loading_checksum_mismatch');
@@ -111,8 +117,8 @@ abstract class restore_controller_dbops extends restore_dbops {
             // TODO: If not match, exception, table corresponds to another backup/restore operation
             return true;
         }
-        backup_controller_dbops::create_temptable_from_real_table($restoreid, 'backup_ids_template', 'backup_ids_temp');
-        backup_controller_dbops::create_temptable_from_real_table($restoreid, 'backup_files_template', 'backup_files_temp');
+        backup_controller_dbops::create_backup_ids_temp_table($restoreid);
+        backup_controller_dbops::create_backup_files_temp_table($restoreid);
         return false;
     }
 

@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,14 +17,13 @@
 /**
  * Display example submission followed by its reference assessment and the user's assessment to compare them
  *
- * @package    mod
- * @subpackage workshop
+ * @package    mod_workshop
  * @copyright  2009 David Mudrak <david.mudrak@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once(dirname(dirname(dirname(__FILE__))).'/config.php');
-require_once(dirname(__FILE__).'/locallib.php');
+require(__DIR__.'/../../config.php');
+require_once(__DIR__.'/locallib.php');
 
 $cmid   = required_param('cmid', PARAM_INT);    // course module id
 $sid    = required_param('sid', PARAM_INT);     // example submission id
@@ -74,7 +72,8 @@ $PAGE->navbar->add(get_string('examplecomparing', 'workshop'));
 // Output starts here
 $output = $PAGE->get_renderer('mod_workshop');
 echo $output->header();
-echo $output->heading(get_string('assessedexample', 'workshop'), 2);
+echo $output->heading(format_string($workshop->name));
+echo $output->heading(get_string('assessedexample', 'workshop'), 3);
 
 echo $output->render($workshop->prepare_example_submission($example));
 

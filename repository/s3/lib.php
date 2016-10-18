@@ -18,7 +18,7 @@
 /**
  * This plugin is used to access s3 files
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    repository_s3
  * @copyright  2010 Dongsheng Cai {@link http://dongsheng.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -26,10 +26,15 @@
 require_once($CFG->dirroot . '/repository/lib.php');
 require_once($CFG->dirroot . '/repository/s3/S3.php');
 
+// This constant is not defined in php 5.4. Set it to avoid errors.
+if (!defined('CURL_SSLVERSION_TLSv1')) {
+    define('CURL_SSLVERSION_TLSv1', 1);
+}
+
 /**
  * This is a repository class used to browse Amazon S3 content.
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    repository_s3
  * @copyright  2009 Dongsheng Cai {@link http://dongsheng.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -43,10 +48,36 @@ class repository_s3 extends repository {
      * @param array $options
      */
     public function __construct($repositoryid, $context = SYSCONTEXTID, $options = array()) {
+        global $CFG;
         parent::__construct($repositoryid, $context, $options);
         $this->access_key = get_config('s3', 'access_key');
         $this->secret_key = get_config('s3', 'secret_key');
-        $this->s = new S3($this->access_key, $this->secret_key);
+        $this->endpoint = get_config('s3', 'endpoint');
+        if ($this->endpoint === false) { // If no endpoint has been set, use the default.
+            $this->endpoint = 's3.amazonaws.com';
+        }
+        $this->s = new S3($this->access_key, $this->secret_key, false, $this->endpoint);
+        $this->s->setExceptions(true);
+
+        // Port of curl::__construct().
+        if (!empty($CFG->proxyhost)) {
+            if (empty($CFG->proxyport)) {
+                $proxyhost = $CFG->proxyhost;
+            } else {
+                $proxyhost = $CFG->proxyhost . ':' . $CFG->proxyport;
+            }
+            $proxytype = CURLPROXY_HTTP;
+            $proxyuser = null;
+            $proxypass = null;
+            if (!empty($CFG->proxyuser) and !empty($CFG->proxypassword)) {
+                $proxyuser = $CFG->proxyuser;
+                $proxypass = $CFG->proxypassword;
+            }
+            if (!empty($CFG->proxytype) && $CFG->proxytype == 'SOCKS5') {
+                $proxytype = CURLPROXY_SOCKS5;
+            }
+            $this->s->setProxy($proxyhost, $proxyuser, $proxypass, $proxytype);
+        }
     }
 
     /**
@@ -75,7 +106,7 @@ class repository_s3 extends repository {
     public function get_listing($path = '', $page = '') {
         global $CFG, $OUTPUT;
         if (empty($this->access_key)) {
-            die(json_encode(array('e'=>get_string('needaccesskey', 'repository_s3'))));
+            throw new moodle_exception('needaccesskey', 'repository_s3');
         }
 
         $list = array();
@@ -97,7 +128,17 @@ class repository_s3 extends repository {
         $tree = array();
 
         if (empty($path)) {
-            $buckets = $this->s->listBuckets();
+            try {
+                $buckets = $this->s->listBuckets();
+            } catch (S3Exception $e) {
+                throw new moodle_exception(
+                    'errorwhilecommunicatingwith',
+                    'repository',
+                    '',
+                    $this->get_name(),
+                    $e->getMessage()
+                );
+            }
             foreach ($buckets as $bucket) {
                 $folder = array(
                     'title' => $bucket,
@@ -112,7 +153,17 @@ class repository_s3 extends repository {
             $folders = array();
             list($bucket, $uri) = $this->explode_path($path);
 
-            $contents = $this->s->getBucket($bucket, $uri, null, null, '/', true);
+            try {
+                $contents = $this->s->getBucket($bucket, $uri, null, null, '/', true);
+            } catch (S3Exception $e) {
+                throw new moodle_exception(
+                    'errorwhilecommunicatingwith',
+                    'repository',
+                    '',
+                    $this->get_name(),
+                    $e->getMessage()
+                );
+            }
             foreach ($contents as $object) {
 
                 // If object has a prefix, it is a 'CommonPrefix', which we consider a folder
@@ -183,7 +234,17 @@ class repository_s3 extends repository {
     public function get_file($filepath, $file = '') {
         list($bucket, $uri) = $this->explode_path($filepath);
         $path = $this->prepare_file($file);
-        $this->s->getObject($bucket, $uri, $path);
+        try {
+            $this->s->getObject($bucket, $uri, $path);
+        } catch (S3Exception $e) {
+            throw new moodle_exception(
+                'errorwhilecommunicatingwith',
+                'repository',
+                '',
+                $this->get_name(),
+                $e->getMessage()
+            );
+        }
         return array('path' => $path);
     }
 
@@ -216,14 +277,31 @@ class repository_s3 extends repository {
     }
 
     public static function get_type_option_names() {
-        return array('access_key', 'secret_key', 'pluginname');
+        return array('access_key', 'secret_key', 'endpoint', 'pluginname');
     }
 
     public static function type_config_form($mform, $classname = 'repository') {
         parent::type_config_form($mform);
         $strrequired = get_string('required');
+        $endpointselect = array( // List of possible Amazon S3 Endpoints.
+            "s3.amazonaws.com" => "s3.amazonaws.com",
+            "s3-external-1.amazonaws.com" => "s3-external-1.amazonaws.com",
+            "s3-us-west-2.amazonaws.com" => "s3-us-west-2.amazonaws.com",
+            "s3-us-west-1.amazonaws.com" => "s3-us-west-1.amazonaws.com",
+            "s3-eu-west-1.amazonaws.com" => "s3-eu-west-1.amazonaws.com",
+            "s3.eu-central-1.amazonaws.com" => "s3.eu-central-1.amazonaws.com",
+            "s3-eu-central-1.amazonaws.com" => "s3-eu-central-1.amazonaws.com",
+            "s3-ap-southeast-1.amazonaws.com" => "s3-ap-southeast-1.amazonaws.com",
+            "s3-ap-southeast-2.amazonaws.com" => "s3-ap-southeast-2.amazonaws.com",
+            "s3-ap-northeast-1.amazonaws.com" => "s3-ap-northeast-1.amazonaws.com",
+            "s3-sa-east-1.amazonaws.com" => "s3-sa-east-1.amazonaws.com"
+        );
         $mform->addElement('text', 'access_key', get_string('access_key', 'repository_s3'));
+        $mform->setType('access_key', PARAM_RAW_TRIMMED);
         $mform->addElement('text', 'secret_key', get_string('secret_key', 'repository_s3'));
+        $mform->setType('secret_key', PARAM_RAW_TRIMMED);
+        $mform->addElement('select', 'endpoint', get_string('endpoint', 'repository_s3'), $endpointselect);
+        $mform->setDefault('endpoint', 's3.amazonaws.com'); // Default to US Endpoint.
         $mform->addRule('access_key', $strrequired, 'required', null, 'client');
         $mform->addRule('secret_key', $strrequired, 'required', null, 'client');
     }
@@ -235,5 +313,14 @@ class repository_s3 extends repository {
      */
     public function supported_returntypes() {
         return FILE_INTERNAL;
+    }
+
+    /**
+     * Is this repository accessing private data?
+     *
+     * @return bool
+     */
+    public function contains_private_data() {
+        return false;
     }
 }

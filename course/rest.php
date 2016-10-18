@@ -26,7 +26,7 @@
 if (!defined('AJAX_SCRIPT')) {
     define('AJAX_SCRIPT', true);
 }
-require_once(dirname(__FILE__) . '/../config.php');
+require_once(__DIR__ . '/../config.php');
 require_once($CFG->dirroot.'/course/lib.php');
 
 // Initialise ALL the incoming parameters here, up front.
@@ -104,11 +104,25 @@ switch($requestmethod) {
                     case 'visible':
                         require_capability('moodle/course:activityvisibility', $modcontext);
                         set_coursemodule_visible($cm->id, $value);
+                        \core\event\course_module_updated::create_from_cm($cm, $modcontext)->trigger();
+                        break;
+
+                    case 'duplicate':
+                        require_capability('moodle/course:manageactivities', $coursecontext);
+                        require_capability('moodle/backup:backuptargetimport', $coursecontext);
+                        require_capability('moodle/restore:restoretargetimport', $coursecontext);
+                        if (!course_allowed_module($course, $cm->modname)) {
+                            throw new moodle_exception('No permission to create that activity');
+                        }
+                        $sr = optional_param('sr', null, PARAM_INT);
+                        $result = mod_duplicate_activity($course, $cm, $sr);
+                        echo json_encode($result);
                         break;
 
                     case 'groupmode':
                         require_capability('moodle/course:manageactivities', $modcontext);
                         set_coursemodule_groupmode($cm->id, $value);
+                        \core\event\course_module_updated::create_from_cm($cm, $modcontext)->trigger();
                         break;
 
                     case 'indent':
@@ -133,41 +147,8 @@ switch($requestmethod) {
                             $beforemod = NULL;
                         }
 
-                        moveto_module($cm, $section, $beforemod);
-                        break;
-                    case 'gettitle':
-                        require_capability('moodle/course:manageactivities', $modcontext);
-                        $cm = get_coursemodule_from_id('', $id, 0, false, MUST_EXIST);
-                        $module = new stdClass();
-                        $module->id = $cm->instance;
-
-                        // Don't pass edit strings through multilang filters - we need the entire string
-                        echo json_encode(array('instancename' => $cm->name));
-                        break;
-                    case 'updatetitle':
-                        require_capability('moodle/course:manageactivities', $modcontext);
-                        $cm = get_coursemodule_from_id('', $id, 0, false, MUST_EXIST);
-                        $module = new stdClass();
-                        $module->id = $cm->instance;
-
-                        // Escape strings as they would be by mform
-                        if (!empty($CFG->formatstringstriptags)) {
-                            $module->name = clean_param($title, PARAM_TEXT);
-                        } else {
-                            $module->name = clean_param($title, PARAM_CLEANHTML);
-                        }
-
-                        if (!empty($module->name)) {
-                            $DB->update_record($cm->modname, $module);
-                            rebuild_course_cache($cm->course);
-                        } else {
-                            $module->name = $cm->name;
-                        }
-
-                        // We need to return strings after they've been through filters for multilang
-                        $stringoptions = new stdClass;
-                        $stringoptions->context = $coursecontext;
-                        echo json_encode(array('instancename' => format_string($module->name, true,  $stringoptions)));
+                        $isvisible = moveto_module($cm, $section, $beforemod);
+                        echo json_encode(array('visible' => (bool) $isvisible));
                         break;
                 }
                 break;
@@ -187,44 +168,7 @@ switch($requestmethod) {
         switch ($class) {
             case 'resource':
                 require_capability('moodle/course:manageactivities', $modcontext);
-                $modlib = "$CFG->dirroot/mod/$cm->modname/lib.php";
-
-                if (file_exists($modlib)) {
-                    include_once($modlib);
-                } else {
-                    throw new moodle_exception("Ajax rest.php: This module is missing mod/$cm->modname/lib.php");
-                }
-                $deleteinstancefunction = $cm->modname."_delete_instance";
-
-                // Run the module's cleanup funtion.
-                if (!$deleteinstancefunction($cm->instance)) {
-                    throw new moodle_exception("Ajax rest.php: Could not delete the $cm->modname $cm->name (instance)");
-                    die;
-                }
-
-                // remove all module files in case modules forget to do that
-                $fs = get_file_storage();
-                $fs->delete_area_files($modcontext->id);
-
-                if (!delete_course_module($cm->id)) {
-                    throw new moodle_exception("Ajax rest.php: Could not delete the $cm->modname $cm->name (coursemodule)");
-                }
-                // Remove the course_modules entry.
-                if (!delete_mod_from_section($cm->id, $cm->section)) {
-                    throw new moodle_exception("Ajax rest.php: Could not delete the $cm->modname $cm->name from section");
-                }
-
-                // Trigger a mod_deleted event with information about this module.
-                $eventdata = new stdClass();
-                $eventdata->modulename = $cm->modname;
-                $eventdata->cmid       = $cm->id;
-                $eventdata->courseid   = $course->id;
-                $eventdata->userid     = $USER->id;
-                events_trigger('mod_deleted', $eventdata);
-
-                add_to_log($courseid, "course", "delete mod",
-                           "view.php?id=$courseid",
-                           "$cm->modname $cm->instance", $cm->id);
+                course_delete_module($cm->id);
                 break;
         }
         break;

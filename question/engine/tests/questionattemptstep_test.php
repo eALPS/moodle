@@ -27,8 +27,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
-require_once(dirname(__FILE__) . '/../lib.php');
-require_once(dirname(__FILE__) . '/helpers.php');
+require_once(__DIR__ . '/../lib.php');
+require_once(__DIR__ . '/helpers.php');
 
 
 /**
@@ -85,13 +85,13 @@ class question_attempt_step_test extends advanced_testcase {
 
     public function test_cannot_set_qt_var_without_underscore() {
         $step = new question_attempt_step();
-        $this->setExpectedException('moodle_exception');
+        $this->expectException('moodle_exception');
         $step->set_qt_var('x', 1);
     }
 
     public function test_cannot_set_behaviour_var_without_underscore() {
         $step = new question_attempt_step();
-        $this->setExpectedException('moodle_exception');
+        $this->expectException('moodle_exception');
         $step->set_behaviour_var('x', 1);
     }
 
@@ -127,58 +127,5 @@ class question_attempt_step_test extends advanced_testcase {
         $this->assertEquals(array(), $step->get_qt_data());
         $this->assertEquals(array(), $step->get_behaviour_data());
 
-    }
-}
-
-
-/**
- * Unit tests for the loading data into the {@link question_attempt_step} class.
- *
- * @copyright  2009 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class question_attempt_step_db_test extends data_loading_method_test_base {
-    public function test_load_with_data() {
-        $records = new question_test_recordset(array(
-            array('attemptstepid', 'questionattemptid', 'sequencenumber', 'state', 'fraction', 'timecreated', 'userid', 'name', 'value'),
-            array(             1,                   1,                0,  'todo',       null,    1256228502,       13,   null,    null),
-            array(             2,                   1,                1,  'complete',   null,    1256228505,       13,    'x',     'a'),
-            array(             2,                   1,                1,  'complete',   null,    1256228505,       13,   '_y',    '_b'),
-            array(             2,                   1,                1,  'complete',   null,    1256228505,       13,   '-z',    '!c'),
-            array(             2,                   1,                1,  'complete',   null,    1256228505,       13, '-_t',    '!_d'),
-            array(             3,                   1,                2,  'gradedright', 1.0,    1256228515,       13, '-finish',  '1'),
-        ));
-
-        $step = question_attempt_step::load_from_records($records, 2);
-        $this->assertEquals(question_state::$complete, $step->get_state());
-        $this->assertNull($step->get_fraction());
-        $this->assertEquals(1256228505, $step->get_timecreated());
-        $this->assertEquals(13, $step->get_user_id());
-        $this->assertEquals(array('x' => 'a', '_y' => '_b', '-z' => '!c', '-_t' => '!_d'), $step->get_all_data());
-    }
-
-    public function test_load_without_data() {
-        $records = new question_test_recordset(array(
-            array('attemptstepid', 'questionattemptid', 'sequencenumber', 'state', 'fraction', 'timecreated', 'userid', 'name', 'value'),
-            array(             2,                   1,                1,  'complete',   null,    1256228505,       13,   null,    null),
-        ));
-
-        $step = question_attempt_step::load_from_records($records, 2);
-        $this->assertEquals(question_state::$complete, $step->get_state());
-        $this->assertNull($step->get_fraction());
-        $this->assertEquals(1256228505, $step->get_timecreated());
-        $this->assertEquals(13, $step->get_user_id());
-        $this->assertEquals(array(), $step->get_all_data());
-    }
-
-    public function test_load_dont_be_too_greedy() {
-        $records = new question_test_recordset(array(
-            array('attemptstepid', 'questionattemptid', 'sequencenumber', 'state', 'fraction', 'timecreated', 'userid', 'name', 'value'),
-            array(             1,                   1,                0,  'todo',       null,    1256228502,       13,    'x',     'right'),
-            array(             2,                   2,                0,  'complete',   null,    1256228505,       13,    'x',     'wrong'),
-        ));
-
-        $step = question_attempt_step::load_from_records($records, 1);
-        $this->assertEquals(array('x' => 'right'), $step->get_all_data());
     }
 }

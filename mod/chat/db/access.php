@@ -85,7 +85,7 @@ $capabilities = array(
             'teacher' => CAP_ALLOW,
             'editingteacher' => CAP_ALLOW,
             'manager' => CAP_ALLOW,
-            // not student - nervous about allowing this by default
+            // Not student - nervous about allowing this by default.
         ),
 
     ),
@@ -103,4 +103,12 @@ $capabilities = array(
         ),
     ),
 
+    'mod/chat:view' => array(
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_MODULE,
+        'archetypes' => array(
+            'user' => CAP_ALLOW,
+            'guest' => CAP_ALLOW
+        )
+    )
 );

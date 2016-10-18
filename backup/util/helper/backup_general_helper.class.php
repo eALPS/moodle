@@ -72,7 +72,7 @@ abstract class backup_general_helper extends backup_helper {
 
         static $availableblocks = array(); // Get and cache available blocks
         if (empty($availableblocks)) {
-            $availableblocks = array_keys(get_plugin_list('block'));
+            $availableblocks = array_keys(core_component::get_plugin_list('block'));
         }
 
         $path = $path . '/blocks'; // Always look under blocks subdir
@@ -115,6 +115,9 @@ abstract class backup_general_helper extends backup_helper {
      */
     public static function get_backup_information($tempdir) {
         global $CFG;
+        // Make a request cache and store the data in there.
+        static $cachesha1 = null;
+        static $cache = null;
 
         $info = new stdclass(); // Final information goes here
 
@@ -122,6 +125,12 @@ abstract class backup_general_helper extends backup_helper {
         if (!file_exists($moodlefile)) { // Shouldn't happen ever, but...
             throw new backup_helper_exception('missing_moodle_backup_xml_file', $moodlefile);
         }
+
+        $moodlefilesha1 = sha1_file($moodlefile);
+        if ($moodlefilesha1 === $cachesha1) {
+            return clone $cache;
+        }
+
         // Load the entire file to in-memory array
         $xmlparser = new progressive_parser();
         $xmlparser->set_file($moodlefile);
@@ -143,17 +152,32 @@ abstract class backup_general_helper extends backup_helper {
         $info->mnet_remoteusers         = $infoarr['mnet_remoteusers'];
         $info->original_wwwroot         = $infoarr['original_wwwroot'];
         $info->original_site_identifier_hash = $infoarr['original_site_identifier_hash'];
-        $info->original_course_id       = $infoarr['original_course_id'];
-        $info->original_course_fullname = $infoarr['original_course_fullname'];
-        $info->original_course_shortname= $infoarr['original_course_shortname'];
-        $info->original_course_startdate= $infoarr['original_course_startdate'];
-        $info->original_course_contextid= $infoarr['original_course_contextid'];
-        $info->original_system_contextid= $infoarr['original_system_contextid'];
+        $info->original_course_id        = $infoarr['original_course_id'];
+        $info->original_course_fullname  = $infoarr['original_course_fullname'];
+        $info->original_course_shortname = $infoarr['original_course_shortname'];
+        $info->original_course_startdate = $infoarr['original_course_startdate'];
+        // Old versions may not have this.
+        if (isset($infoarr['original_course_enddate'])) {
+            $info->original_course_enddate  = $infoarr['original_course_enddate'];
+        }
+        $info->original_course_contextid = $infoarr['original_course_contextid'];
+        $info->original_system_contextid = $infoarr['original_system_contextid'];
         // Moodle backup file don't have this option before 2.3
         if (!empty($infoarr['include_file_references_to_external_content'])) {
             $info->include_file_references_to_external_content = 1;
         } else {
             $info->include_file_references_to_external_content = 0;
+        }
+        // Introduced in Moodle 2.9.
+        $info->original_course_format = '';
+        if (!empty($infoarr['original_course_format'])) {
+            $info->original_course_format = $infoarr['original_course_format'];
+        }
+        // include_files is a new setting in 2.6.
+        if (isset($infoarr['include_files'])) {
+            $info->include_files = $infoarr['include_files'];
+        } else {
+            $info->include_files = 1;
         }
         $info->type   =  $infoarr['details']['detail'][0]['type'];
         $info->format =  $infoarr['details']['detail'][0]['format'];
@@ -210,11 +234,14 @@ abstract class backup_general_helper extends backup_helper {
                 case 'activity':
                     $info->activities[$setting['activity']]->settings[$setting['name']] = $setting['value'];
                     break;
-                default: // Shouldn't happen
-                    throw new backup_helper_exception('wrong_setting_level_moodle_backup_xml_file', $setting['level']);
+                default: // Shouldn't happen but tolerated for portability of customized backups.
+                    debugging("Unknown backup setting level: {$setting['level']}", DEBUG_DEVELOPER);
+                    break;
             }
         }
 
+        $cache = clone $info;
+        $cachesha1 = $moodlefilesha1;
         return $info;
     }
 
@@ -224,11 +251,15 @@ abstract class backup_general_helper extends backup_helper {
      * This will only extract the moodle_backup.xml file from an MBZ
      * file and then call {@link self::get_backup_information()}.
      *
+     * This can be a long-running (multi-minute) operation for large backups.
+     * Pass a $progress value to receive progress updates.
+     *
      * @param string $filepath absolute path to the MBZ file.
+     * @param file_progress $progress Progress updates
      * @return stdClass containing information.
-     * @since 2.4
+     * @since Moodle 2.4
      */
-    public static function get_backup_information_from_mbz($filepath) {
+    public static function get_backup_information_from_mbz($filepath, file_progress $progress = null) {
         global $CFG;
         if (!is_readable($filepath)) {
             throw new backup_helper_exception('missing_moodle_backup_file', $filepath);
@@ -238,7 +269,8 @@ abstract class backup_general_helper extends backup_helper {
         $tmpname = 'info_from_mbz_' . time() . '_' . random_string(4);
         $tmpdir = $CFG->tempdir . '/backup/' . $tmpname;
         $fp = get_file_packer('application/vnd.moodle.backup');
-        $extracted = $fp->extract_to_pathname($filepath, $tmpdir, array('moodle_backup.xml'));
+
+        $extracted = $fp->extract_to_pathname($filepath, $tmpdir, array('moodle_backup.xml'), $progress);
         $moodlefile =  $tmpdir . '/' . 'moodle_backup.xml';
         if (!$extracted || !is_readable($moodlefile)) {
             throw new backup_helper_exception('missing_moodle_backup_xml_file', $moodlefile);

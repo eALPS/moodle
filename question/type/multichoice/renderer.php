@@ -99,7 +99,7 @@ abstract class qtype_multichoice_renderer_base extends qtype_with_combined_feedb
                                 $qa, 'question', 'answer', $ansid)),
                     array('for' => $inputattributes['id']));
 
-            // $options->suppresschoicefeedback is a hack specific to the
+            // Param $options->suppresschoicefeedback is a hack specific to the
             // oumultiresponse question type. It would be good to refactor to
             // avoid refering to it here.
             if ($options->feedback && empty($options->suppresschoicefeedback) &&
@@ -134,9 +134,9 @@ abstract class qtype_multichoice_renderer_base extends qtype_with_combined_feedb
             $result .= html_writer::tag('div', $radio . ' ' . $feedbackimg[$key] . $feedback[$key],
                     array('class' => $classes[$key])) . "\n";
         }
-        $result .= html_writer::end_tag('div'); // answer
+        $result .= html_writer::end_tag('div'); // Answer.
 
-        $result .= html_writer::end_tag('div'); // ablock
+        $result .= html_writer::end_tag('div'); // Ablock.
 
         if ($qa->get_state() == question_state::$invalid) {
             $result .= html_writer::nonempty_tag('div',
@@ -185,6 +185,24 @@ abstract class qtype_multichoice_renderer_base extends qtype_with_combined_feedb
     public function specific_feedback(question_attempt $qa) {
         return $this->combined_feedback($qa);
     }
+
+    /**
+     * Function returns string based on number of correct answers
+     * @param array $right An Array of correct responses to the current question
+     * @return string based on number of correct responses
+     */
+    protected function correct_choices(array $right) {
+        // Return appropriate string for single/multiple correct answer(s).
+        if (count($right) == 1) {
+                return get_string('correctansweris', 'qtype_multichoice',
+                        implode(', ', $right));
+        } else if (count($right) > 1) {
+                return get_string('correctanswersare', 'qtype_multichoice',
+                        implode(', ', $right));
+        } else {
+                return "";
+        }
+    }
 }
 
 
@@ -223,16 +241,16 @@ class qtype_multichoice_single_renderer extends qtype_multichoice_renderer_base 
     public function correct_response(question_attempt $qa) {
         $question = $qa->get_question();
 
+        // Put all correct answers (100% grade) into $right.
+        $right = array();
         foreach ($question->answers as $ansid => $ans) {
             if (question_state::graded_state_for_fraction($ans->fraction) ==
                     question_state::$gradedright) {
-                return get_string('correctansweris', 'qtype_multichoice',
-                        $question->format_text($ans->answer, $ans->answerformat,
-                                $qa, 'question', 'answer', $ansid));
+                $right[] = $question->make_html_inline($question->format_text($ans->answer, $ans->answerformat,
+                        $qa, 'question', 'answer', $ansid));
             }
         }
-
-        return '';
+        return $this->correct_choices($right);
     }
 }
 
@@ -278,16 +296,11 @@ class qtype_multichoice_multi_renderer extends qtype_multichoice_renderer_base {
         $right = array();
         foreach ($question->answers as $ansid => $ans) {
             if ($ans->fraction > 0) {
-                $right[] = $question->format_text($ans->answer, $ans->answerformat,
-                        $qa, 'question', 'answer', $ansid);
+                $right[] = $question->make_html_inline($question->format_text($ans->answer, $ans->answerformat,
+                        $qa, 'question', 'answer', $ansid));
             }
         }
-
-        if (!empty($right)) {
-                return get_string('correctansweris', 'qtype_multichoice',
-                        implode(', ', $right));
-        }
-        return '';
+        return $this->correct_choices($right);
     }
 
     protected function num_parts_correct(question_attempt $qa) {

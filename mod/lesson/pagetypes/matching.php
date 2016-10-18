@@ -18,8 +18,7 @@
 /**
  * Matching
  *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright  2009 Sam Hemelryk
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  **/
@@ -55,6 +54,18 @@ class lesson_page_type_matching extends lesson_page {
         $data->id = $PAGE->cm->id;
         $data->pageid = $this->properties->id;
         $mform->set_data($data);
+
+        // Trigger an event question viewed.
+        $eventparams = array(
+            'context' => context_module::instance($PAGE->cm->id),
+            'objectid' => $this->properties->id,
+            'other' => array(
+                    'pagetype' => $this->get_typestring()
+                )
+            );
+
+        $event = \mod_lesson\event\question_viewed::create($eventparams);
+        $event->trigger();
         return $mform->display();
     }
 
@@ -71,7 +82,7 @@ class lesson_page_type_matching extends lesson_page {
         $responses = array();
         foreach ($answers as $answer) {
             // get all the response
-            if ($answer->response != NULL) {
+            if ($answer->response != null) {
                 $responses[] = trim($answer->response);
             }
         }
@@ -79,9 +90,8 @@ class lesson_page_type_matching extends lesson_page {
         $responseoptions = array(''=>get_string('choosedots'));
         if (!empty($responses)) {
             shuffle($responses);
-            $responses = array_unique($responses);
-            foreach ($responses as $response) {
-                $responseoptions[htmlspecialchars(trim($response))] = $response;
+            foreach ($responses as  $response) {
+                $responseoptions[htmlspecialchars($response)] = $response;
             }
         }
         if (isset($USER->modattempts[$this->lesson->id]) && !empty($attempt->useranswer)) {
@@ -98,12 +108,25 @@ class lesson_page_type_matching extends lesson_page {
     }
 
     public function create_answers($properties) {
-        global $DB;
+        global $DB, $PAGE;
         // now add the answers
         $newanswer = new stdClass;
         $newanswer->lessonid = $this->lesson->id;
         $newanswer->pageid = $this->properties->id;
         $newanswer->timecreated = $this->properties->timecreated;
+
+        $cm = get_coursemodule_from_instance('lesson', $this->lesson->id, $this->lesson->course);
+        $context = context_module::instance($cm->id);
+
+        // Check for duplicate response format.
+        $duplicateresponse = array();
+        if (is_array($properties->response_editor) &&             // If there are response_editors to iterate.
+                is_array(reset($properties->response_editor))) {  // And they come split into text & format array.
+            foreach ($properties->response_editor as $response) { // Iterate over all them.
+                $duplicateresponse[] = $response['text'];         // Picking the text only. This pagetype is that way.
+            }
+            $properties->response_editor = $duplicateresponse;
+        }
 
         $answers = array();
 
@@ -115,9 +138,9 @@ class lesson_page_type_matching extends lesson_page {
                 $answer->answer = $properties->answer_editor[$i]['text'];
                 $answer->answerformat = $properties->answer_editor[$i]['format'];
             }
-            if (!empty($properties->response_editor[$i]) && is_array($properties->response_editor[$i])) {
-                $answer->response = $properties->response_editor[$i]['text'];
-                $answer->responseformat = $properties->response_editor[$i]['format'];
+            if (!empty($properties->response_editor[$i])) {
+                $answer->response = $properties->response_editor[$i];
+                $answer->responseformat = 0;
             }
 
             if (isset($properties->jumpto[$i])) {
@@ -129,6 +152,8 @@ class lesson_page_type_matching extends lesson_page {
 
             if (isset($answer->answer) && $answer->answer != '') {
                 $answer->id = $DB->insert_record("lesson_answers", $answer);
+                $this->save_answers_files($context, $PAGE->course->maxbytes,
+                        $answer, $properties->answer_editor[$i]);
                 $answers[$answer->id] = new lesson_page_answer($answer);
             } else if ($i < 2) {
                 $answer->id = $DB->insert_record("lesson_answers", $answer);
@@ -160,38 +185,42 @@ class lesson_page_type_matching extends lesson_page {
         }
 
         $response = $data->response;
-        if (!is_array($response)) {
-            $result->noanswer = true;
-            return $result;
+        $getanswers = $this->get_answers();
+        foreach ($getanswers as $key => $answer) {
+            $getanswers[$key] = parent::rewrite_answers_urls($answer);
         }
 
-        $answers = $this->get_answers();
+        $correct = array_shift($getanswers);
+        $wrong   = array_shift($getanswers);
 
-        $correct = array_shift($answers);
-        $wrong   = array_shift($answers);
-
-        foreach ($answers as $key=>$answer) {
-            if ($answer->answer === '' or $answer->response === '') {
-                // incomplete option!
-                unset($answers[$key]);
+        $answers = array();
+        foreach ($getanswers as $key => $answer) {
+            if ($answer->answer !== '' or $answer->response !== '') {
+                $answers[$answer->id] = $answer;
             }
         }
-        // get he users exact responses for record keeping
+
+        // get the user's exact responses for record keeping
         $hits = 0;
         $userresponse = array();
-        foreach ($response as $key => $value) {
-            foreach($answers as $answer) {
-                if ($value === $answer->response) {
-                    $userresponse[] = $answer->id;
-                }
-                if ((int)$answer->id === (int)$key) {
-                    $result->studentanswer .= '<br />'.format_text($answer->answer, $answer->answerformat, $formattextdefoptions).' = '.$value;
-                }
-                if ((int)$answer->id === (int)$key and $value === $answer->response) {
+        $result->studentanswerformat = FORMAT_HTML;
+        foreach ($response as $id => $value) {
+            if ($value == '') {
+                $result->noanswer = true;
+                return $result;
+            }
+            $value = htmlspecialchars_decode($value);
+            $userresponse[] = $value;
+            // Make sure the user's answer exists in question's answer
+            if (array_key_exists($id, $answers)) {
+                $answer = $answers[$id];
+                $result->studentanswer .= '<br />'.format_text($answer->answer, $answer->answerformat, $formattextdefoptions).' = '.$value;
+                if (trim($answer->response) == trim($value)) {
                     $hits++;
                 }
             }
         }
+
         $result->userresponse = implode(",", $userresponse);
 
         if ($hits == count($answers)) {
@@ -222,8 +251,9 @@ class lesson_page_type_matching extends lesson_page {
         $n = 0;
 
         foreach ($answers as $answer) {
+            $answer = parent::rewrite_answers_urls($answer);
             if ($n < 2) {
-                if ($answer->answer != NULL) {
+                if ($answer->answer != null) {
                     $cells = array();
                     if ($n == 0) {
                         $cells[] = "<span class=\"label\">".get_string("correctresponse", "lesson").'</span>';
@@ -298,8 +328,12 @@ class lesson_page_type_matching extends lesson_page {
         $answers  = $this->get_answers();
         $properties->id = $this->properties->id;
         $properties->lessonid = $this->lesson->id;
+        $properties->timemodified = time();
         $properties = file_postupdate_standard_editor($properties, 'contents', array('noclean'=>true, 'maxfiles'=>EDITOR_UNLIMITED_FILES, 'maxbytes'=>$PAGE->course->maxbytes), context_module::instance($PAGE->cm->id), 'mod_lesson', 'page_contents', $properties->id);
         $DB->update_record("lesson_pages", $properties);
+
+        // Trigger an event: page updated.
+        \mod_lesson\event\page_updated::create_from_lesson_page($this, $context)->trigger();
 
         // need to add two to offset correct response and wrong response
         $this->lesson->maxanswers += 2;
@@ -315,9 +349,9 @@ class lesson_page_type_matching extends lesson_page {
                 $this->answers[$i]->answer = $properties->answer_editor[$i]['text'];
                 $this->answers[$i]->answerformat = $properties->answer_editor[$i]['format'];
             }
-            if (!empty($properties->response_editor[$i]) && is_array($properties->response_editor[$i])) {
-                $this->answers[$i]->response = $properties->response_editor[$i]['text'];
-                $this->answers[$i]->responseformat = $properties->response_editor[$i]['format'];
+            if (!empty($properties->response_editor[$i])) {
+                $this->answers[$i]->response = $properties->response_editor[$i];
+                $this->answers[$i]->responseformat = 0;
             }
 
             if (isset($properties->jumpto[$i])) {
@@ -334,6 +368,8 @@ class lesson_page_type_matching extends lesson_page {
                 } else {
                     $DB->update_record("lesson_answers", $this->answers[$i]->properties());
                 }
+                // Save files in answers (no response_editor for matching questions).
+                $this->save_answers_files($context, $maxbytes, $this->answers[$i], $properties->answer_editor[$i]);
             } else if ($i < 2) {
                 if (!isset($this->answers[$i]->id)) {
                     $this->answers[$i]->id =  $DB->insert_record("lesson_answers", $this->answers[$i]);
@@ -341,6 +377,8 @@ class lesson_page_type_matching extends lesson_page {
                     $DB->update_record("lesson_answers", $this->answers[$i]->properties());
                 }
 
+                // Save files in answers (no response_editor for matching questions).
+                $this->save_answers_files($context, $maxbytes, $this->answers[$i], $properties->answer_editor[$i]);
             } else if (isset($this->answers[$i]->id)) {
                 $DB->delete_records('lesson_answers', array('id'=>$this->answers[$i]->id));
                 unset($this->answers[$i]);
@@ -377,8 +415,8 @@ class lesson_page_type_matching extends lesson_page {
         $formattextdefoptions = new stdClass;
         $formattextdefoptions->para = false;  //I'll use it widely in this page
         foreach ($answers as $answer) {
-            if ($n == 0 && $useranswer != NULL && $useranswer->correct) {
-                if ($answer->response == NULL && $useranswer != NULL) {
+            if ($n == 0 && $useranswer != null && $useranswer->correct) {
+                if ($answer->response == null && $useranswer != null) {
                     $answerdata->response = get_string("thatsthecorrectanswer", "lesson");
                 } else {
                     $answerdata->response = $answer->response;
@@ -388,8 +426,8 @@ class lesson_page_type_matching extends lesson_page {
                 } else {
                     $answerdata->score = get_string("receivedcredit", "lesson");
                 }
-            } elseif ($n == 1 && $useranswer != NULL && !$useranswer->correct) {
-                if ($answer->response == NULL && $useranswer != NULL) {
+            } elseif ($n == 1 && $useranswer != null && !$useranswer->correct) {
+                if ($answer->response == null && $useranswer != null) {
                     $answerdata->response = get_string("thatsthewronganswer", "lesson");
                 } else {
                     $answerdata->response = $answer->response;
@@ -401,13 +439,13 @@ class lesson_page_type_matching extends lesson_page {
                 }
             } elseif ($n > 1) {
                 $data = '<label class="accesshide" for="answer_' . $n . '">' . get_string('answer', 'lesson') . '</label>';
-                $data .= "<select id=\"answer_". $n ."\" disabled=\"disabled\"><option selected=\"selected\">".strip_tags(format_string($answer->answer))."</option></select>";
-                if ($useranswer != NULL) {
+                $data .= strip_tags(format_string($answer->answer)) . ' ';
+                if ($useranswer != null) {
                     $userresponse = explode(",", $useranswer->useranswer);
                     $data .= '<label class="accesshide" for="stu_answer_response_' . $n . '">' . get_string('matchesanswer', 'lesson') . '</label>';
                     $data .= "<select id=\"stu_answer_response_" . $n . "\" disabled=\"disabled\"><option selected=\"selected\">";
                     if (array_key_exists($i, $userresponse)) {
-                        $data .= strip_tags(format_string($answers[$userresponse[$i]]->response));
+                        $data .= $userresponse[$i];
                     }
                     $data .= "</option></select>";
                 } else {
@@ -457,38 +495,59 @@ class lesson_add_page_form_matching extends lesson_add_page_form_base {
 
     public $qtype = 'matching';
     public $qtypestring = 'matching';
+    protected $answerformat = LESSON_ANSWER_HTML;
+    protected $responseformat = '';
 
     public function custom_definition() {
 
         $this->_form->addElement('header', 'correctresponse', get_string('correctresponse', 'lesson'));
-        $this->_form->addElement('editor', 'answer_editor[0]', get_string('correctresponse', 'lesson'), array('rows'=>'4', 'columns'=>'80'), array('noclean'=>true));
+        $this->_form->addElement('editor', 'answer_editor[0]', get_string('correctresponse', 'lesson'),
+                array('rows' => '4', 'columns' => '80'),
+                array('noclean' => true, 'maxfiles' => EDITOR_UNLIMITED_FILES, 'maxbytes' => $this->_customdata['maxbytes']));
+        $this->_form->setType('answer_editor[0]', PARAM_RAW);
+        $this->_form->setDefault('answer_editor[0]', array('text' => '', 'format' => FORMAT_HTML));
         $this->add_jumpto(0, get_string('correctanswerjump','lesson'), LESSON_NEXTPAGE);
         $this->add_score(0, get_string("correctanswerscore", "lesson"), 1);
 
         $this->_form->addElement('header', 'wrongresponse', get_string('wrongresponse', 'lesson'));
-        $this->_form->addElement('editor', 'answer_editor[1]', get_string('wrongresponse', 'lesson'), array('rows'=>'4', 'columns'=>'80'), array('noclean'=>true));
+        $this->_form->addElement('editor', 'answer_editor[1]', get_string('wrongresponse', 'lesson'),
+                array('rows' => '4', 'columns' => '80'),
+                array('noclean' => true, 'maxfiles' => EDITOR_UNLIMITED_FILES, 'maxbytes' => $this->_customdata['maxbytes']));
+        $this->_form->setType('answer_editor[1]', PARAM_RAW);
+        $this->_form->setDefault('answer_editor[1]', array('text' => '', 'format' => FORMAT_HTML));
+
         $this->add_jumpto(1, get_string('wronganswerjump','lesson'), LESSON_THISPAGE);
         $this->add_score(1, get_string("wronganswerscore", "lesson"), 0);
 
         for ($i = 2; $i < $this->_customdata['lesson']->maxanswers+2; $i++) {
             $this->_form->addElement('header', 'matchingpair'.($i-1), get_string('matchingpair', 'lesson', $i-1));
-            $this->add_answer($i, NULL, ($i < 4));
-            $this->add_response($i, get_string('matchesanswer','lesson'), ($i < 4));
+            $this->add_answer($i, null, ($i < 4), LESSON_ANSWER_HTML);
+            $required = ($i < 4);
+            $label = get_string('matchesanswer','lesson');
+            $count = $i;
+            $this->_form->addElement('text', 'response_editor['.$count.']', $label, array('size'=>'50'));
+            $this->_form->setType('response_editor['.$count.']', PARAM_NOTAGS);
+            $this->_form->setDefault('response_editor['.$count.']', '');
+            if ($required) {
+                $this->_form->addRule('response_editor['.$count.']', get_string('required'), 'required', null, 'client');
+            }
         }
     }
 }
 
-
 class lesson_display_answer_form_matching extends moodleform {
 
     public function definition() {
-        global $USER, $OUTPUT;
+        global $USER, $OUTPUT, $PAGE;
         $mform = $this->_form;
         $answers = $this->_customdata['answers'];
         $useranswers = $this->_customdata['useranswers'];
         $responseoptions = $this->_customdata['responseoptions'];
         $lessonid = $this->_customdata['lessonid'];
         $contents = $this->_customdata['contents'];
+
+        // Disable shortforms.
+        $mform->setDisableShortforms();
 
         $mform->addElement('header', 'pageheader');
 
@@ -512,19 +571,22 @@ class lesson_display_answer_form_matching extends moodleform {
         $mform->setType('pageid', PARAM_INT);
 
         $i = 0;
+
         foreach ($answers as $answer) {
             $mform->addElement('html', '<div class="answeroption">');
-            if ($answer->response != NULL) {
+            if ($answer->response != null) {
                 $responseid = 'response['.$answer->id.']';
                 if ($hasattempt) {
                     $responseid = 'response_'.$answer->id;
-                    $mform->addElement('hidden', 'response['.$answer->id.']', htmlspecialchars(trim($answers[$useranswers[$i]]->response)));
-                    $mform->setType('response['.$answer->id.']', PARAM_TEXT);
+                    $mform->addElement('hidden', 'response['.$answer->id.']', htmlspecialchars($useranswers[$i]));
+                    // Temporary fixed until MDL-38885 gets integrated
+                    $mform->setType('response', PARAM_TEXT);
                 }
+                $answer = lesson_page_type_matching::rewrite_answers_urls($answer);
                 $mform->addElement('select', $responseid, format_text($answer->answer,$answer->answerformat,$options), $responseoptions, $disabled);
                 $mform->setType($responseid, PARAM_TEXT);
                 if ($hasattempt) {
-                    $mform->setDefault($responseid, htmlspecialchars(trim($answers[$useranswers[$i]]->response))); //TODO: this is suspicious
+                    $mform->setDefault($responseid, htmlspecialchars(trim($useranswers[$i])));
                 } else {
                     $mform->setDefault($responseid, 'answeroption');
                 }

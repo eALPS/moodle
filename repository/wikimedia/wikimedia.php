@@ -26,6 +26,7 @@
 define('WIKIMEDIA_THUMBS_PER_PAGE', 24);
 define('WIKIMEDIA_FILE_NS', 6);
 define('WIKIMEDIA_IMAGE_SIDE_LENGTH', 1024);
+define('WIKIMEDIA_THUMB_SIZE', 120);
 
 class wikimedia {
     private $_conn  = null;
@@ -33,7 +34,7 @@ class wikimedia {
 
     public function __construct($url = '') {
         if (empty($url)) {
-            $this->api = 'http://commons.wikimedia.org/w/api.php';
+            $this->api = 'https://commons.wikimedia.org/w/api.php';
         } else {
             $this->api = $url;
         }
@@ -69,7 +70,7 @@ class wikimedia {
                 $this->_param['titles'] .= ('|'.urldecode($title));
             }
         } else {
-            $this->_param['titles'] = urldecode($title);
+            $this->_param['titles'] = urldecode($titles);
         }
         $this->_param['prop']   = 'imageinfo';
         $this->_param['iiprop'] = 'url';
@@ -105,17 +106,18 @@ class wikimedia {
      * @param int $orig_width
      * @param int $orig_height
      * @param int $thumb_width
+     * @param bool $force When true, forces the generation of a thumb URL.
      * @global object OUTPUT
      * @return string
      */
-    public function get_thumb_url($image_url, $orig_width, $orig_height, $thumb_width=75) {
+    public function get_thumb_url($image_url, $orig_width, $orig_height, $thumb_width = 75, $force = false) {
         global $OUTPUT;
 
-        if ($orig_width <= $thumb_width AND $orig_height <= $thumb_width) {
+        if (!$force && $orig_width <= $thumb_width && $orig_height <= $thumb_width) {
             return $image_url;
         } else {
             $thumb_url = '';
-            $commons_main_dir = 'http://upload.wikimedia.org/wikipedia/commons/';
+            $commons_main_dir = 'https://upload.wikimedia.org/wikipedia/commons/';
             if ($image_url) {
                 $short_path = str_replace($commons_main_dir, '', $image_url);
                 $extension = strtolower(pathinfo($short_path, PATHINFO_EXTENSION));
@@ -135,13 +137,17 @@ class wikimedia {
             return $thumb_url;
         }
     }
+
     /**
      * Search for images and return photos array.
      *
      * @param string $keyword
+     * @param int $page
+     * @param array $params additional query params
      * @return array
      */
-    public function search_images($keyword, $page = 0) {
+    public function search_images($keyword, $page = 0, $params = array()) {
+        global $OUTPUT;
         $files_array = array();
         $this->_param['action'] = 'query';
         $this->_param['generator'] = 'search';
@@ -150,9 +156,10 @@ class wikimedia {
         $this->_param['gsrlimit'] = WIKIMEDIA_THUMBS_PER_PAGE;
         $this->_param['gsroffset'] = $page * WIKIMEDIA_THUMBS_PER_PAGE;
         $this->_param['prop']   = 'imageinfo';
-        $this->_param['iiprop'] = 'url|dimensions|mime';
-        $this->_param['iiurlwidth'] = WIKIMEDIA_IMAGE_SIDE_LENGTH;
-        $this->_param['iiurlheight'] = WIKIMEDIA_IMAGE_SIDE_LENGTH;
+        $this->_param['iiprop'] = 'url|dimensions|mime|timestamp|size|user';
+        $this->_param += $params;
+        $this->_param += array('iiurlwidth' => WIKIMEDIA_IMAGE_SIDE_LENGTH,
+            'iiurlheight' => WIKIMEDIA_IMAGE_SIDE_LENGTH);
         //didn't work with POST
         $content = $this->_conn->get($this->api, $this->_param);
         $result = unserialize($content);
@@ -162,26 +169,65 @@ class wikimedia {
                 $file_type = $page['imageinfo'][0]['mime'];
                 $image_types = array('image/jpeg', 'image/png', 'image/gif', 'image/svg+xml');
                 if (in_array($file_type, $image_types)) {  //is image
-                    $thumbnail = $this->get_thumb_url($page['imageinfo'][0]['url'], $page['imageinfo'][0]['width'], $page['imageinfo'][0]['height']);
-                    $source = $page['imageinfo'][0]['thumburl'];        //upload scaled down image
                     $extension = pathinfo($title, PATHINFO_EXTENSION);
-                    if (strcmp($extension, 'svg') == 0) {               //upload png version of svg-s
+                    $issvg = strcmp($extension, 'svg') == 0;
+
+                    // Get PNG equivalent to SVG files.
+                    if ($issvg) {
                         $title .= '.png';
                     }
-                } else {                                   //other file types
-                    $thumbnail = '';
-                    $source = $page['imageinfo'][0]['url'];
+
+                    // The thumbnail (max size requested) is smaller than the original size, we will use the thumbnail.
+                    if ($page['imageinfo'][0]['thumbwidth'] < $page['imageinfo'][0]['width']) {
+                        $attrs = array(
+                            //upload scaled down image
+                            'source' => $page['imageinfo'][0]['thumburl'],
+                            'image_width' => $page['imageinfo'][0]['thumbwidth'],
+                            'image_height' => $page['imageinfo'][0]['thumbheight']
+                        );
+                        if ($attrs['image_width'] <= WIKIMEDIA_THUMB_SIZE && $attrs['image_height'] <= WIKIMEDIA_THUMB_SIZE) {
+                            $attrs['realthumbnail'] = $attrs['source'];
+                        }
+                        if ($attrs['image_width'] <= 24 && $attrs['image_height'] <= 24) {
+                            $attrs['realicon'] = $attrs['source'];
+                        }
+
+                    // We use the original file.
+                    } else {
+                        $attrs = array(
+                            //upload full size image
+                            'image_width' => $page['imageinfo'][0]['width'],
+                            'image_height' => $page['imageinfo'][0]['height'],
+                            'size' => $page['imageinfo'][0]['size']
+                        );
+
+                        // We cannot use the source when the file is SVG.
+                        if ($issvg) {
+                            // So we generate a PNG thumbnail of the file at its original size.
+                            $attrs['source'] = $this->get_thumb_url($page['imageinfo'][0]['url'], $page['imageinfo'][0]['width'],
+                                $page['imageinfo'][0]['height'], $page['imageinfo'][0]['width'], true);
+                        } else {
+                            $attrs['source'] = $page['imageinfo'][0]['url'];
+                        }
+                    }
+                    $attrs += array(
+                        'realthumbnail' => $this->get_thumb_url($page['imageinfo'][0]['url'], $page['imageinfo'][0]['width'], $page['imageinfo'][0]['height'], WIKIMEDIA_THUMB_SIZE),
+                        'realicon' => $this->get_thumb_url($page['imageinfo'][0]['url'], $page['imageinfo'][0]['width'], $page['imageinfo'][0]['height'], 24),
+                        'author' => $page['imageinfo'][0]['user'],
+                        'datemodified' => strtotime($page['imageinfo'][0]['timestamp']),
+                        );
+                } else {  // other file types
+                    $attrs = array('source' => $page['imageinfo'][0]['url']);
                 }
                 $files_array[] = array(
                     'title'=>substr($title, 5),         //chop off 'File:'
-                    'thumbnail'=>$thumbnail,
-                    'thumbnail_width'=>120,
-                    'thumbnail_height'=>120,
-                    // plugin-dependent unique path to the file (id, url, path, etc.)
-                    'source'=>$source,
+                    'thumbnail' => $OUTPUT->pix_url(file_extension_icon(substr($title, 5), WIKIMEDIA_THUMB_SIZE))->out(false),
+                    'thumbnail_width' => WIKIMEDIA_THUMB_SIZE,
+                    'thumbnail_height' => WIKIMEDIA_THUMB_SIZE,
+                    'license' => 'cc-sa',
                     // the accessible url of the file
                     'url'=>$page['imageinfo'][0]['descriptionurl']
-                );
+                ) + $attrs;
             }
         }
         return $files_array;

@@ -16,8 +16,7 @@
 
 /**
  * Returns an array of reports to which are currently readable.
- * @package    mod
- * @subpackage scorm
+ * @package    mod_scorm
  * @author     Ankit Kumar Agarwal
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -35,10 +34,24 @@ function scorm_report_list($context) {
     if (!empty($reportlist)) {
         return $reportlist;
     }
-    $installed = get_plugin_list('scormreport');
+    $installed = core_component::get_plugin_list('scormreport');
     foreach ($installed as $reportname => $notused) {
+
+        // Moodle 2.8+ style of autoloaded classes.
+        $classname = "scormreport_$reportname\\report";
+        if (class_exists($classname)) {
+            $report = new $classname();
+
+            if ($report->canview($context)) {
+                $reportlist[] = $reportname;
+            }
+            continue;
+        }
+
+        // Legacy style of naming classes.
         $pluginfile = $CFG->dirroot.'/mod/scorm/report/'.$reportname.'/report.php';
         if (is_readable($pluginfile)) {
+            debugging("Please use autoloaded classnames for your plugin. Refer MDL-46469 for details", DEBUG_DEVELOPER);
             include_once($pluginfile);
             $reportclassname = "scorm_{$reportname}_report";
             if (class_exists($reportclassname)) {
@@ -68,15 +81,16 @@ function get_scorm_question_count($scormid) {
     $params[] = "cmi.interactions_%.id";
     $rs = $DB->get_recordset_select("scorm_scoes_track", $select, $params, 'element');
     $keywords = array("cmi.interactions_", ".id");
-    foreach ($rs as $record) {
-        $num = trim(str_ireplace($keywords, '', $record->element));
-        if (is_numeric($num) && $num > $count) {
-            $count = $num;
+    if ($rs->valid()) {
+        foreach ($rs as $record) {
+            $num = trim(str_ireplace($keywords, '', $record->element));
+            if (is_numeric($num) && $num > $count) {
+                $count = $num;
+            }
         }
+        // Done as interactions start at 0 (do only if we have something to report).
+        $count++;
     }
-    //done as interactions start at 0
-    $count++;
-    $rs->close(); // closing recordset
+    $rs->close(); // Closing recordset.
     return $count;
 }
-

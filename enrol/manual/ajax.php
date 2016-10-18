@@ -30,6 +30,8 @@ define('AJAX_SCRIPT', true);
 require('../../config.php');
 require_once($CFG->dirroot.'/enrol/locallib.php');
 require_once($CFG->dirroot.'/group/lib.php');
+require_once($CFG->dirroot.'/enrol/manual/locallib.php');
+require_once($CFG->dirroot.'/cohort/lib.php');
 
 $id      = required_param('id', PARAM_INT); // Course id.
 $action  = required_param('action', PARAM_ALPHANUMEXT);
@@ -67,10 +69,19 @@ switch ($action) {
         $enrolid = required_param('enrolid', PARAM_INT);
         $search = optional_param('search', '', PARAM_RAW);
         $page = optional_param('page', 0, PARAM_INT);
-        $outcome->response = $manager->get_potential_users($enrolid, $search, $searchanywhere, $page);
+        $addedenrollment = optional_param('enrolcount', 0, PARAM_INT);
+        $perpage = optional_param('perpage', 25, PARAM_INT);  //  This value is hard-coded to 25 in quickenrolment.js
+        $outcome->response = $manager->get_potential_users($enrolid, $search, $searchanywhere, $page, $perpage, $addedenrollment);
         $extrafields = get_extra_user_fields($context);
+        $useroptions = array();
+        // User is not enrolled yet, either link to site profile or do not link at all.
+        if (has_capability('moodle/user:viewdetails', context_system::instance())) {
+            $useroptions['courseid'] = SITEID;
+        } else {
+            $useroptions['link'] = false;
+        }
         foreach ($outcome->response['users'] as &$user) {
-            $user->picture = $OUTPUT->user_picture($user);
+            $user->picture = $OUTPUT->user_picture($user, $useroptions);
             $user->fullname = fullname($user);
             $fieldvalues = array();
             foreach ($extrafields as $field) {
@@ -85,12 +96,31 @@ switch ($action) {
         $outcome->response['users'] = array_values($outcome->response['users']);
         $outcome->success = true;
         break;
+    case 'searchcohorts':
+        $enrolid = required_param('enrolid', PARAM_INT);
+        $search = optional_param('search', '', PARAM_RAW);
+        $page = optional_param('page', 0, PARAM_INT);
+        $addedenrollment = optional_param('enrolcount', 0, PARAM_INT);
+        $perpage = optional_param('perpage', 25, PARAM_INT);  //  This value is hard-coded to 25 in quickenrolment.js
+        $outcome->response = enrol_manual_get_potential_cohorts($context, $enrolid, $search, $page, $perpage, $addedenrollment);
+        $outcome->success = true;
+        break;
     case 'enrol':
         $enrolid = required_param('enrolid', PARAM_INT);
-        $userid = required_param('userid', PARAM_INT);
+        $cohort = $user = null;
+        $cohortid = optional_param('cohortid', 0, PARAM_INT);
+        if (!$cohortid) {
+            $userid = required_param('userid', PARAM_INT);
+            $user = $DB->get_record('user', array('id' => $userid), '*', MUST_EXIST);
+        } else {
+            $cohort = $DB->get_record('cohort', array('id' => $cohortid), '*', MUST_EXIST);
+            if (!cohort_can_view_cohort($cohort, $context)) {
+                throw new enrol_ajax_exception('invalidenrolinstance'); // TODO error text!
+            }
+        }
 
         $roleid = optional_param('role', null, PARAM_INT);
-        $duration = optional_param('duration', 0, PARAM_INT);
+        $duration = optional_param('duration', 0, PARAM_FLOAT);
         $startdate = optional_param('startdate', 0, PARAM_INT);
         $recovergrades = optional_param('recovergrades', 0, PARAM_INT);
 
@@ -98,9 +128,21 @@ switch ($action) {
             $roleid = null;
         }
 
+        if (empty($startdate)) {
+            if (!$startdate = get_config('enrol_manual', 'enrolstart')) {
+                // Default to now if there is no system setting.
+                $startdate = 4;
+            }
+        }
+
         switch($startdate) {
             case 2:
                 $timestart = $course->startdate;
+                break;
+            case 4:
+                // We mimic get_enrolled_sql round(time(), -2) but always floor as we want users to always access their
+                // courses once they are enrolled.
+                $timestart = intval(substr(time(), 0, 8) . '00') - 1;
                 break;
             case 3:
             default:
@@ -112,10 +154,9 @@ switch ($action) {
         if ($duration <= 0) {
             $timeend = 0;
         } else {
-            $timeend = $timestart + ($duration*24*60*60);
+            $timeend = $timestart + intval($duration*24*60*60);
         }
 
-        $user = $DB->get_record('user', array('id'=>$userid), '*', MUST_EXIST);
         $instances = $manager->get_enrolment_instances();
         $plugins = $manager->get_enrolment_plugins(true); // Do not allow actions on disabled plugins.
         if (!array_key_exists($enrolid, $instances)) {
@@ -127,10 +168,10 @@ switch ($action) {
         }
         $plugin = $plugins[$instance->enrol];
         if ($plugin->allow_enrol($instance) && has_capability('enrol/'.$plugin->get_name().':enrol', $context)) {
-            $plugin->enrol_user($instance, $user->id, $roleid, $timestart, $timeend);
-            if ($recovergrades) {
-                require_once($CFG->libdir.'/gradelib.php');
-                grade_recover_history_grades($user->id, $instance->courseid);
+            if ($user) {
+                $plugin->enrol_user($instance, $user->id, $roleid, $timestart, $timeend, null, $recovergrades);
+            } else {
+                $plugin->enrol_cohort($instance, $cohort->id, $roleid, $timestart, $timeend, null, $recovergrades);
             }
         } else {
             throw new enrol_ajax_exception('enrolnotpermitted');
