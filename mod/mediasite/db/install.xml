@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="mod/mediasite/db" VERSION="20140228" COMMENT="XMLDB file for Moodle mod/mediasite"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
+>
+  <TABLES>
+    <TABLE NAME="mediasite" NEXT="mediasite_sites" COMMENT="main mediasite activity table">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" NEXT="course" SEQUENCE="true"/>
+        <FIELD NAME="course" TYPE="int" LENGTH="10" NOTNULL="true" PREVIOUS="id" NEXT="name" DEFAULT="0" SEQUENCE="false" COMMENT="Course mediasite activity belongs to"/>
+        <FIELD NAME="name" TYPE="char" LENGTH="255" NOTNULL="true" PREVIOUS="course" NEXT="description" SEQUENCE="false" COMMENT="name field for moodle instances"/>
+        <FIELD NAME="description" TYPE="text" NOTNULL="true" PREVIOUS="name" NEXT="resourceid" SEQUENCE="false"/>
+        <FIELD NAME="resourceid" TYPE="char" LENGTH="36" NOTNULL="true" PREVIOUS="description" NEXT="resourcetype" SEQUENCE="false"/>
+        <FIELD NAME="resourcetype" TYPE="char" LENGTH="255" NOTNULL="true" PREVIOUS="resourceid" NEXT="openaspopup" SEQUENCE="false"/>
+        <FIELD NAME="openaspopup" TYPE="int" LENGTH="1" NOTNULL="true" PREVIOUS="resourcetype" NEXT="duration" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="duration" TYPE="int" LENGTH="4" NOTNULL="true" PREVIOUS="openaspopup" NEXT="restrictip" DEFAULT="300" SEQUENCE="false"/>
+        <FIELD NAME="restrictip" TYPE="int" LENGTH="1" NOTNULL="true" PREVIOUS="duration" NEXT="timecreated" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" PREVIOUS="restrictip" NEXT="timemodified" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" PREVIOUS="timecreated" NEXT="siteid" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="siteid" TYPE="int" LENGTH="10" NOTNULL="false" PREVIOUS="timemodified" SEQUENCE="false" COMMENT="The id of the site. It has to match the other mediasite table that contains the list of sites"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id" NEXT="siteidforeignkey" />
+        <KEY NAME="siteidforeignkey" TYPE="foreign" FIELDS="siteid" REFTABLE="mediasite_sites" REFFIELDS="id" PREVIOUS="primary" />
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="course" UNIQUE="false" FIELDS="course"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="mediasite_sites" PREVIOUS="mediasite" NEXT="mediasite_config" COMMENT="Site table for multiple mediasite sites">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" NEXT="sitename" SEQUENCE="true"/>
+        <FIELD NAME="sitename" TYPE="char" LENGTH="255" NOTNULL="true" PREVIOUS="id" NEXT="endpoint" DEFAULT="Default" SEQUENCE="false" COMMENT="Name of site"/>
+        <FIELD NAME="endpoint" TYPE="char" LENGTH="255" NOTNULL="true" PREVIOUS="sitename" NEXT="apikey" SEQUENCE="false"/>
+        <FIELD NAME="apikey" TYPE="char" LENGTH="36" NOTNULL="true" PREVIOUS="endpoint" NEXT="username" SEQUENCE="false"/>
+        <FIELD NAME="username" TYPE="char" LENGTH="255" NOTNULL="true" PREVIOUS="apikey" NEXT="password" DEFAULT="MediasiteAdmin" SEQUENCE="false"/>
+        <FIELD NAME="password" TYPE="char" LENGTH="255" NOTNULL="true" PREVIOUS="username" NEXT="passthru" SEQUENCE="false"/>
+        <FIELD NAME="passthru" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" PREVIOUS="password" NEXT="siteclient" SEQUENCE="false"/>
+        <FIELD NAME="siteclient" TYPE="char" LENGTH="16" NOTNULL="true" DEFAULT="odata" PREVIOUS="passthru" NEXT="sslselect" SEQUENCE="false"/>
+        <FIELD NAME="sslselect" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" PREVIOUS="siteclient" NEXT="cert" SEQUENCE="false"/>
+        <FIELD NAME="cert" TYPE="binary" NOTNULL="false" PREVIOUS="sslselect" SEQUENCE="false" COMMENT="Certificate value for SSL"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id" NEXT="sitename" />
+        <KEY NAME="sitename" TYPE="unique" FIELDS="sitename" PREVIOUS="primary" />
+      </KEYS>
+    </TABLE>
+    <TABLE NAME="mediasite_config" PREVIOUS="mediasite_sites" NEXT="mediasite_status" COMMENT="mediasite configuration table">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" NEXT="siteid" SEQUENCE="true"/>
+        <FIELD NAME="siteid" TYPE="int" LENGTH="10" NOTNULL="false" PREVIOUS="id" NEXT="openaspopup" SEQUENCE="false" COMMENT="The id of the site. It has to match the other mediasite table that contains the list of sites"/>
+        <FIELD NAME="openaspopup" TYPE="int" LENGTH="1" NOTNULL="true" PREVIOUS="siteid" NEXT="duration" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="duration" TYPE="int" LENGTH="4" NOTNULL="true" PREVIOUS="openaspopup" NEXT="restrictip" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="restrictip" TYPE="int" LENGTH="1" NOTNULL="true" PREVIOUS="duration" DEFAULT="1" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id" NEXT="defaultsiteidforeignkey" />
+        <KEY NAME="defaultsiteidforeignkey" TYPE="foreign" FIELDS="siteid" REFTABLE="mediasite_sites" REFFIELDS="id" PREVIOUS="primary" />
+      </KEYS>
+    </TABLE>
+    <TABLE NAME="mediasite_status" PREVIOUS="mediasite_config" COMMENT="mediasite status table">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" NEXT="sessionid" SEQUENCE="true"/>
+        <FIELD NAME="sessionid" TYPE="char" LENGTH="20" NOTNULL="true" PREVIOUS="id" NEXT="processed" DEFAULT="0" SEQUENCE="false" COMMENT="Session context"/>
+        <FIELD NAME="processed" TYPE="int" LENGTH="1" NOTNULL="true" PREVIOUS="sessionid" NEXT="status" DEFAULT="1" SEQUENCE="false"/>
+        <FIELD NAME="status" TYPE="text" NOTNULL="true" PREVIOUS="processed" SEQUENCE="false" COMMENT="Status of the transaction"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sessionid" UNIQUE="true" FIELDS="sessionid"/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB>

@@ -1,0 +1,89 @@
+.sofo-title { width: 100%;
+              font-size: 15px;
+              font-weight: bold;
+              margin-bottom: 10px;}
+.sofo-presenter { font-style: italic; font-family: 'Lucinda Grande', Arial, sans-serif; margin-right: 24px; }
+.sofo-description { margin-right: 24px }
+.sofo-description:first-letter {
+    font-size: 1.5em;
+}
+.sofo-description-block {  }
+.sofo-air-date { font-style: italic; margin-right: 10px }
+.sofo-thumbnail { margin: 5px;
+                  display: block;
+                  border: 6px solid rgb(170, 170, 170);
+                  width: 192px;
+                  height: auto;
+                  float: right; }
+.sofo-thumbnail:hover { border: 6px solid lightgray }
+.sofo-preview { display: none; float: left; margin:5px; border: 1px solid black; width: 576px; height: 576px; }
+.sofo-details { width: 100%;
+                height: auto }
+.sofo-search-results-action { overflow: auto }
+.sofo-search-result-item { overflow: auto; margin-top:5px; }
+.sofo-search-results { display: block;
+                       list-style: none;
+                       width: 100%;
+                       height: auto; }
+.sofo-presenter-list { margin-top:0; margin-bottom: 0; list-style: none; margin: 0; }
+.sofo-slide-list li {
+    display: inline;
+    list-style-type: none;
+    padding-right: 10px;
+}
+.sofo-slide {
+    display: block;
+    border: 6px solid rgb(170, 170, 170);
+    width: 96px;
+    height: auto;
+}
+.sofo-truncated-search-results-notification { background-color: green; }
+.sofo-validation-notice { color: red; }
+.sofo-search-selection-text { font-style: italic; }
+input#id_searchtext.sofo-search-text { width: 500px; }
+
+.fitemtitle label { float: left; white-space: nowrap; }
+.felement .fcheckbox label { float: left; }
+#fitem_id_sites { width: 100%; }
+#fitem_id_duration { width: 100%; }
+#fitem_id_openaspopup { width: 100%; }
+#fitem_id_restrictip { width: 100%; }
+#id_sites {margin-left: 50px; }
+#id_duration {margin-left: 50px; }
+#id_openaspopup { margin-left: 50px; height: 15px; width: 15px; }
+#id_restrictip { margin-left: 50px; height: 15px; width: 15px; }
+#id_siteaddbutton { margin: auto; padding: 5px; }
+
+/*add.php style*/
+#fitem_id_sitename { width: 1700px; }
+#fitem_id_siteurl { width: 1700px; }
+#fitem_id_siteusername { width: 1700px; }
+#fitem_id_sitepassword { width: 1700px; }
+#fitem_id_sitepassthru { width: 1700px; }
+#fitem_id_cert { width: 1700px; }
+.filepicker-filelist { width: 400px; }
+
+/*
+html { width: 800px; }
+#page-mod-mediasite-site-add { width: 700px; }
+#mform1 { width: 600px; }
+*/
+.fcontainer .clearfix { width: 600px; }
+
+/*add.php style*/
+#id_sitename { width: 100px; }
+#id_siteurl { width: 400px; }
+#id_siteusername { width: 100px; }
+#id_sitepassword { width: 100px; }
+/*
+#id_resource_table tr.r0 td { background-color: lightgray; color: black }
+#id_resource_table tr.r1 td { background-color: whitesmoke; color: black }
+#id_resource_table .header { font-weight: bold; background: lightgreen }
+*/
+#id_resource_table .sofo-table-hiddencolumn { display: none }
+.mediasite .instancename { width: 100%;
+                           font-size: 15px;
+                           font-weight: bold;
+                           margin-bottom: 10px;
+                           color: black }
+.mod-indent-outer { width: 100% }
