@@ -150,6 +150,10 @@ abstract class core_filetypes {
             'mpe' => array('type' => 'video/mpeg', 'icon' => 'mpeg', 'groups' => array('video', 'web_video'), 'string' => 'video'),
             'mpg' => array('type' => 'video/mpeg', 'icon' => 'mpeg', 'groups' => array('video', 'web_video'), 'string' => 'video'),
             'mpr' => array('type' => 'application/vnd.moodle.profiling', 'icon' => 'moodle'),
+            
+            // add by eALPS Developer
+            'msi'  => array ('type'=>'application/x-msi', 'icon'=>'unknown'),
+            // end by eALPS Developer
 
             'nbk' => array('type' => 'application/x-smarttech-notebook', 'icon' => 'archive'),
             'notebook' => array('type' => 'application/x-smarttech-notebook', 'icon' => 'archive'),
