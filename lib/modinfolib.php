@@ -554,8 +554,7 @@ class course_modinfo {
 
         // Get section data
         $sections = $DB->get_records('course_sections', array('course' => $course->id), 'section',
-                'section, id, course, name, summary, summaryformat, sequence, visible, ' .
-                'availability');
+                'section, id, course, name, summary, summaryformat, sequence, visible, availability');
         $compressedsections = array();
 
         $formatoptionsdef = course_get_format($course)->section_format_options();
@@ -691,6 +690,8 @@ class course_modinfo {
  * @property-read int $added Time that this course-module was added (unix time) - from course_modules table
  * @property-read int $visible Visible setting (0 or 1; if this is 0, students cannot see/access the activity) - from
  *    course_modules table
+ * @property-read int $visibleoncoursepage Visible on course page setting - from course_modules table, adjusted to
+ *    whether course format allows this module to have the "stealth" mode
  * @property-read int $visibleold Old visible setting (if the entire section is hidden, the previous value for
  *    visible is stored in this field) - from course_modules table
  * @property-read int $groupmode Group mode (one of the constants NOGROUPS, SEPARATEGROUPS, or VISIBLEGROUPS) - from
@@ -753,6 +754,7 @@ class course_modinfo {
  * @property-read mixed $customdata Optional custom data stored in modinfo cache for this activity, or null if none
  * @property-read string $afterlink Extra HTML code to display after link - calculated on request
  * @property-read string $afterediticons Extra HTML code to display after editing icons (e.g. more icons) - calculated on request
+ * @property-read bool $deletioninprogress True if this course module is scheduled for deletion, false otherwise.
  */
 class cm_info implements IteratorAggregate {
     /**
@@ -832,6 +834,12 @@ class cm_info implements IteratorAggregate {
      * @var int
      */
     private $visible;
+
+    /**
+     * Visible on course page setting - from course_modules table
+     * @var int
+     */
+    private $visibleoncoursepage;
 
     /**
      * Old visible setting (if the entire section is hidden, the previous value for
@@ -999,6 +1007,12 @@ class cm_info implements IteratorAggregate {
     private $uservisible;
 
     /**
+     * True if this course-module is visible to the CURRENT user on the course page
+     * @var bool
+     */
+    private $uservisibleoncoursepage;
+
+    /**
      * @var moodle_url
      */
     private $url;
@@ -1037,6 +1051,11 @@ class cm_info implements IteratorAggregate {
      * @var string
      */
     private $afterediticons;
+
+    /**
+     * @var bool representing the deletion state of the module. True if the mod is scheduled for deletion.
+     */
+    private $deletioninprogress;
 
     /**
      * List of class read-only properties and their getter methods.
@@ -1088,7 +1107,9 @@ class cm_info implements IteratorAggregate {
         'showdescription' => false,
         'uservisible' => 'get_user_visible',
         'visible' => false,
+        'visibleoncoursepage' => false,
         'visibleold' => false,
+        'deletioninprogress' => false
     );
 
     /**
@@ -1382,7 +1403,8 @@ class cm_info implements IteratorAggregate {
      */
     public function get_grouping_label($textclasses = '') {
         $groupinglabel = '';
-        if (!empty($this->groupingid) && has_capability('moodle/course:managegroups', context_course::instance($this->course))) {
+        if ($this->effectivegroupmode != NOGROUPS && !empty($this->groupingid) &&
+                has_capability('moodle/course:managegroups', context_course::instance($this->course))) {
             $groupings = groups_get_all_groupings($this->course);
             $groupinglabel = html_writer::tag('span', '('.format_string($groupings[$this->groupingid]->name).')',
                 array('class' => 'groupinglabel '.$textclasses));
@@ -1419,6 +1441,15 @@ class cm_info implements IteratorAggregate {
      */
     public function get_modinfo() {
         return $this->modinfo;
+    }
+
+    /**
+     * Returns the section this module belongs to
+     *
+     * @return section_info
+     */
+    public function get_section_info() {
+        return $this->modinfo->get_section_info($this->sectionnum);
     }
 
     /**
@@ -1503,9 +1534,9 @@ class cm_info implements IteratorAggregate {
 
         // Standard fields from table course_modules.
         static $cmfields = array('id', 'course', 'module', 'instance', 'section', 'idnumber', 'added',
-            'score', 'indent', 'visible', 'visibleold', 'groupmode', 'groupingid',
+            'score', 'indent', 'visible', 'visibleoncoursepage', 'visibleold', 'groupmode', 'groupingid',
             'completion', 'completiongradeitemnumber', 'completionview', 'completionexpected',
-            'showdescription', 'availability');
+            'showdescription', 'availability', 'deletioninprogress');
         foreach ($cmfields as $key) {
             $cmrecord->$key = $this->$key;
         }
@@ -1679,6 +1710,7 @@ class cm_info implements IteratorAggregate {
         $this->idnumber         = isset($mod->idnumber) ? $mod->idnumber : '';
         $this->name             = $mod->name;
         $this->visible          = $mod->visible;
+        $this->visibleoncoursepage = $mod->visibleoncoursepage;
         $this->sectionnum       = $mod->section; // Note weirdness with name here
         $this->groupmode        = isset($mod->groupmode) ? $mod->groupmode : 0;
         $this->groupingid       = isset($mod->groupingid) ? $mod->groupingid : 0;
@@ -1700,6 +1732,7 @@ class cm_info implements IteratorAggregate {
         $this->added = isset($mod->added) ? $mod->added : 0;
         $this->score = isset($mod->score) ? $mod->score : 0;
         $this->visibleold = isset($mod->visibleold) ? $mod->visibleold : 0;
+        $this->deletioninprogress = isset($mod->deletioninprogress) ? $mod->deletioninprogress : 0;
 
         // Note: it saves effort and database space to always include the
         // availability and completion fields, even if availability or completion
@@ -1817,6 +1850,34 @@ class cm_info implements IteratorAggregate {
     }
 
     /**
+     * Returns whether this module is visible to the current user on course page
+     *
+     * Activity may be visible on the course page but not available, for example
+     * when it is hidden conditionally but the condition information is displayed.
+     *
+     * @return bool
+     */
+    public function is_visible_on_course_page() {
+        $this->obtain_dynamic_data();
+        return $this->uservisibleoncoursepage;
+    }
+
+    /**
+     * Whether this module is available but hidden from course page
+     *
+     * "Stealth" modules are the ones that are not shown on course page but available by following url.
+     * They are normally also displayed in grade reports and other reports.
+     * Module will be stealth either if visibleoncoursepage=0 or it is a visible module inside the hidden
+     * section.
+     *
+     * @return bool
+     */
+    public function is_stealth() {
+        return !$this->visibleoncoursepage ||
+            ($this->visible && ($section = $this->get_section_info()) && !$section->visible);
+    }
+
+    /**
      * Getter method for property $available, ensures that dynamic data is retrieved
      * @return bool
      */
@@ -1861,6 +1922,12 @@ class cm_info implements IteratorAggregate {
         }
         $this->uservisible = true;
 
+        // If the module is being deleted, set the uservisible state to false and return.
+        if ($this->deletioninprogress) {
+            $this->uservisible = false;
+            return null;
+        }
+
         // If the user cannot access the activity set the uservisible flag to false.
         // Additional checks are required to determine whether the activity is entirely hidden or just greyed out.
         if ((!$this->visible or !$this->get_available()) and
@@ -1875,6 +1942,16 @@ class cm_info implements IteratorAggregate {
              $this->uservisible = false;
             // Ensure activity is completely hidden from the user.
             $this->availableinfo = '';
+        }
+
+        $this->uservisibleoncoursepage = $this->uservisible &&
+            ($this->visibleoncoursepage ||
+                has_capability('moodle/course:manageactivities', $this->get_context(), $userid) ||
+                has_capability('moodle/course:activityvisibility', $this->get_context(), $userid));
+        // Activity that is not available, not hidden from course page and has availability
+        // info is actually visible on the course page (with availability info and without a link).
+        if (!$this->uservisible && $this->visibleoncoursepage && $this->availableinfo) {
+            $this->uservisibleoncoursepage = true;
         }
     }
 
@@ -2465,7 +2542,7 @@ class section_info implements IteratorAggregate {
         'summary' => '',
         'summaryformat' => '1', // FORMAT_HTML, but must be a string
         'visible' => '1',
-        'availability' => null,
+        'availability' => null
     );
 
     /**

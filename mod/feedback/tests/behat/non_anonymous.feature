@@ -23,13 +23,13 @@ Feature: Non anonymous feedback
       | user    | course               | role    |
       | manager | Acceptance test site | manager |
     And the following "activities" exist:
-      | activity   | name            | course               | idnumber  | anonymous | publish_stats |
-      | feedback   | Site feedback   | Acceptance test site | feedback0 | 2         | 1             |
-      | feedback   | Course feedback | C1                   | feedback1 | 2         | 1             |
+      | activity   | name            | course               | idnumber  | anonymous | publish_stats | section |
+      | feedback   | Site feedback   | Acceptance test site | feedback0 | 2         | 1             | 1       |
+      | feedback   | Course feedback | C1                   | feedback1 | 2         | 1             | 0       |
     When I log in as "manager"
     And I am on site homepage
     And I follow "Site feedback"
-    And I follow "Edit questions"
+    And I click on "Edit questions" "link" in the "[role=main]" "css_element"
     And I add a "Multiple choice" question to the feedback with:
       | Question                       | Do you like our site?              |
       | Label                          | multichoice2                       |
@@ -48,7 +48,7 @@ Feature: Non anonymous feedback
   Scenario: Complete non anonymous feedback on the front page as an authenticated user
     And I log in as "user1"
     And I am on site homepage
-    When I follow "Site feedback"
+    And I follow "Site feedback"
     And I follow "Preview"
     And I should see "Do you like our site?"
     And I press "Continue"
@@ -96,7 +96,7 @@ Feature: Non anonymous feedback
     And I log in as "manager"
     And I am on site homepage
     And I follow "Site feedback"
-    And I follow "Show responses"
+    And I navigate to "Show responses" in current page administration
     And I should see "Username"
     And I should see "Non anonymous entries (2)"
     And I should not see "Anonymous entries"
@@ -111,7 +111,7 @@ Feature: Non anonymous feedback
     When I log in as "teacher"
     And I follow "Course 1"
     And I follow "Course feedback"
-    And I follow "Edit questions"
+    And I click on "Edit questions" "link" in the "[role=main]" "css_element"
     And I add a "Multiple choice" question to the feedback with:
       | Question                       | Do you like this course?           |
       | Label                          | multichoice1                       |
@@ -152,7 +152,7 @@ Feature: Non anonymous feedback
     And I should see "Do you like this course?"
     And I press "Continue"
     And I should not see "Answer the questions..."
-    And I follow "Show responses"
+    And I navigate to "Show responses" in current page administration
     And I should see "Non anonymous entries (2)"
     And I should not see "Anonymous"
     And I click on "," "link" in the "Username 1" "table_row"
@@ -163,7 +163,7 @@ Feature: Non anonymous feedback
     And I should see "(Username 2)"
     And I should not see "Next"
     And I should see "Prev"
-    And I follow "Back"
+    And I click on "Back" "link" in the "region-main" "region"
     # Delete non anonymous response
     And I click on "Delete entry" "link" in the "Username 1" "table_row"
     And I press "Yes"

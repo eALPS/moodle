@@ -68,6 +68,26 @@ define('ENROL_EXT_REMOVED_SUSPEND', 2);
 define('ENROL_EXT_REMOVED_SUSPENDNOROLES', 3);
 
 /**
+ * Do not send email.
+ */
+define('ENROL_DO_NOT_SEND_EMAIL', 0);
+
+/**
+ * Send email from course contact.
+ */
+define('ENROL_SEND_EMAIL_FROM_COURSE_CONTACT', 1);
+
+/**
+ * Send email from enrolment key holder.
+ */
+define('ENROL_SEND_EMAIL_FROM_KEY_HOLDER', 2);
+
+/**
+ * Send email from no reply address.
+ */
+define('ENROL_SEND_EMAIL_FROM_NOREPLY', 3);
+
+/**
  * Returns instances of enrol plugins
  * @param bool $enabled return enabled only
  * @return array of enrol plugins name=>instance
@@ -125,13 +145,15 @@ function enrol_get_plugin($name) {
 
     $location = "$CFG->dirroot/enrol/$name";
 
-    if (!file_exists("$location/lib.php")) {
-        return null;
-    }
-    include_once("$location/lib.php");
     $class = "enrol_{$name}_plugin";
     if (!class_exists($class)) {
-        return null;
+        if (!file_exists("$location/lib.php")) {
+            return null;
+        }
+        include_once("$location/lib.php");
+        if (!class_exists($class)) {
+            return null;
+        }
     }
 
     return new $class();
@@ -1157,6 +1179,10 @@ function is_enrolled(context $context, $user = null, $withcapability = '', $only
  * Returns an array of joins, wheres and params that will limit the group of
  * users to only those enrolled and with given capability (if specified).
  *
+ * Note this join will return duplicate rows for users who have been enrolled
+ * several times (e.g. as manual enrolment, and as self enrolment). You may
+ * need to use a SELECT DISTINCT in your query (see get_enrolled_sql for example).
+ *
  * @param context $context
  * @param string $prefix optional, a prefix to the user id column
  * @param string|array $capability optional, may include a capability name, or array of names.
@@ -1360,6 +1386,20 @@ function count_enrolled_users(context $context, $withcapability = '', $groupid =
              WHERE $capjoin->wheres AND u.deleted = 0";
 
     return $DB->count_records_sql($sql, $capjoin->params);
+}
+
+/**
+ * Send welcome email "from" options.
+ *
+ * @return array list of from options
+ */
+function enrol_send_welcome_email_options() {
+    return [
+        ENROL_DO_NOT_SEND_EMAIL                 => get_string('no'),
+        ENROL_SEND_EMAIL_FROM_COURSE_CONTACT    => get_string('sendfromcoursecontact', 'enrol'),
+        ENROL_SEND_EMAIL_FROM_KEY_HOLDER        => get_string('sendfromkeyholder', 'enrol'),
+        ENROL_SEND_EMAIL_FROM_NOREPLY           => get_string('sendfromnoreply', 'enrol')
+    ];
 }
 
 /**
@@ -2621,7 +2661,8 @@ abstract class enrol_plugin {
         $subject = get_string('expirymessageenrolledsubject', 'enrol_'.$name, $a);
         $body = get_string('expirymessageenrolledbody', 'enrol_'.$name, $a);
 
-        $message = new stdClass();
+        $message = new \core\message\message();
+        $message->courseid          = $ue->courseid;
         $message->notification      = 1;
         $message->component         = 'enrol_'.$name;
         $message->name              = 'expiry_notification';
@@ -2682,7 +2723,8 @@ abstract class enrol_plugin {
         $subject = get_string('expirymessageenrollersubject', 'enrol_'.$name, $a);
         $body = get_string('expirymessageenrollerbody', 'enrol_'.$name, $a);
 
-        $message = new stdClass();
+        $message = new \core\message\message();
+        $message->courseid          = $course->id;
         $message->notification      = 1;
         $message->component         = 'enrol_'.$name;
         $message->name              = 'expiry_notification';

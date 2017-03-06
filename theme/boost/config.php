@@ -27,14 +27,16 @@ defined('MOODLE_INTERNAL') || die();
 require_once(__DIR__ . '/lib.php');
 
 $THEME->name = 'boost';
-$THEME->scssfile = theme_boost_get_scss_file($THEME);
 $THEME->sheets = [];
 $THEME->editor_sheets = [];
+$THEME->scss = function($theme) {
+    return theme_boost_get_main_scss_content($theme);
+};
 
 $THEME->layouts = [
     // Most backwards compatible layout without the blocks - this is the layout used by default.
     'base' => array(
-        'file' => 'columns1.php',
+        'file' => 'columns2.php',
         'regions' => array(),
     ),
     // Standard layout with blocks, this is recommended for most pages with general information.
@@ -79,7 +81,7 @@ $THEME->layouts = [
         'file' => 'columns2.php',
         'regions' => array('side-pre'),
         'defaultregion' => 'side-pre',
-        'options' => array('langmenu' => true),
+        'options' => array('nonavbar' => true, 'langmenu' => true),
     ),
     // My public page.
     'mypublic' => array(
@@ -88,7 +90,7 @@ $THEME->layouts = [
         'defaultregion' => 'side-pre',
     ),
     'login' => array(
-        'file' => 'columns1.php',
+        'file' => 'login.php',
         'regions' => array(),
         'options' => array('langmenu' => true),
     ),
@@ -146,6 +148,8 @@ $THEME->parents = [];
 $THEME->enable_dock = false;
 $THEME->csstreepostprocessor = 'theme_boost_css_tree_post_processor';
 $THEME->extrascsscallback = 'theme_boost_get_extra_scss';
-$THEME->scssvariablescallback = 'theme_boost_get_scss_variables';
+$THEME->prescsscallback = 'theme_boost_get_pre_scss';
 $THEME->yuicssmodules = array();
 $THEME->rendererfactory = 'theme_overridden_renderer_factory';
+$THEME->requiredblocks = '';
+$THEME->addblockposition = BLOCK_ADDBLOCK_POSITION_FLATNAV;

@@ -201,7 +201,8 @@ class core_message_events_testcase extends advanced_testcase {
             'context'  => context_system::instance(),
             'relateduserid' => 2,
             'other' => array(
-                'messageid' => 3
+                'messageid' => 3,
+                'courseid' => 4
             )
         ));
 
@@ -218,7 +219,65 @@ class core_message_events_testcase extends advanced_testcase {
         $this->assertEventLegacyLogData($expected, $event);
         $url = new moodle_url('/message/index.php', array('user1' => $event->userid, 'user2' => $event->relateduserid));
         $this->assertEquals($url, $event->get_url());
+        $this->assertEquals(3, $event->other['messageid']);
+        $this->assertEquals(4, $event->other['courseid']);
     }
+
+    public function test_mesage_sent_without_other_courseid() {
+
+        // Creating a message_sent event without other[courseid] leads to exception.
+        $this->expectException('coding_exception');
+        $this->expectExceptionMessage('The \'courseid\' value must be set in other');
+
+        $event = \core\event\message_sent::create(array(
+            'userid' => 1,
+            'context'  => context_system::instance(),
+            'relateduserid' => 2,
+            'other' => array(
+                'messageid' => 3,
+            )
+        ));
+    }
+
+    public function test_mesage_sent_via_create_from_ids() {
+        // Containing courseid.
+        $event = \core\event\message_sent::create_from_ids(1, 2, 3, 4);
+
+        // Trigger and capturing the event.
+        $sink = $this->redirectEvents();
+        $event->trigger();
+        $events = $sink->get_events();
+        $event = reset($events);
+
+        // Check that the event data is valid.
+        $this->assertInstanceOf('\core\event\message_sent', $event);
+        $this->assertEquals(context_system::instance(), $event->get_context());
+        $expected = array(SITEID, 'message', 'write', 'index.php?user=1&id=2&history=1#m3', 1);
+        $this->assertEventLegacyLogData($expected, $event);
+        $url = new moodle_url('/message/index.php', array('user1' => $event->userid, 'user2' => $event->relateduserid));
+        $this->assertEquals($url, $event->get_url());
+        $this->assertEquals(3, $event->other['messageid']);
+        $this->assertEquals(4, $event->other['courseid']);
+    }
+
+    public function test_mesage_sent_via_create_from_ids_without_other_courseid() {
+
+        // Creating a message_sent event without courseid leads to debugging + SITEID.
+        // TODO: MDL-55449 Ensure this leads to exception instead of debugging in Moodle 3.6.
+        $event = \core\event\message_sent::create_from_ids(1, 2, 3);
+
+        // Trigger and capturing the event.
+        $sink = $this->redirectEvents();
+        $event->trigger();
+        $events = $sink->get_events();
+        $event = reset($events);
+
+        $this->assertDebuggingCalled();
+        $this->assertEquals(SITEID, $event->other['courseid']);
+    }
+
+
+
 
     /**
      * Test the message viewed event.
@@ -303,5 +362,75 @@ class core_message_events_testcase extends advanced_testcase {
         $this->assertEquals($message->id, $event->other['messageid']);
         $this->assertEquals($message->useridfrom, $event->other['useridfrom']);
         $this->assertEquals($message->useridto, $event->other['useridto']);
+    }
+
+    /**
+     * Test the message deleted event is fired when deleting a conversation.
+     */
+    public function test_message_deleted_whole_conversation() {
+        global $DB;
+
+        // Create a message.
+        $message = new stdClass();
+        $message->useridfrom = '1';
+        $message->useridto = '2';
+        $message->subject = 'Subject';
+        $message->message = 'Message';
+        $message->timeuserfromdeleted = 0;
+        $message->timeusertodeleted = 0;
+        $message->timecreated = 1;
+
+        $messages = [];
+        // Send this a few times.
+        $messages[] = $DB->insert_record('message', $message);
+
+        $message->timecreated++;
+        $messages[] = $DB->insert_record('message', $message);
+
+        $message->timecreated++;
+        $messages[] = $DB->insert_record('message', $message);
+
+        $message->timecreated++;
+        $messages[] = $DB->insert_record('message', $message);
+
+        // Create a read message.
+        $message->timeread = time();
+
+        // Send this a few times.
+        $message->timecreated++;
+        $messages[] = $DB->insert_record('message_read', $message);
+
+        $message->timecreated++;
+        $messages[] = $DB->insert_record('message_read', $message);
+
+        $message->timecreated++;
+        $messages[] = $DB->insert_record('message_read', $message);
+
+        $message->timecreated++;
+        $messages[] = $DB->insert_record('message_read', $message);
+
+        // Trigger and capture the event.
+        $sink = $this->redirectEvents();
+        \core_message\api::delete_conversation(1, 2);
+        $events = $sink->get_events();
+
+        // Check that there were the correct number of events triggered.
+        $this->assertEquals(8, count($events));
+
+        // Check that the event data is valid.
+        $i = 0;
+        foreach ($events as $event) {
+            $table = ($i > 3) ? 'message_read' : 'message';
+
+            $this->assertInstanceOf('\core\event\message_deleted', $event);
+            $this->assertEquals($message->useridfrom, $event->userid);
+            $this->assertEquals($message->useridto, $event->relateduserid);
+            $this->assertEquals($table, $event->other['messagetable']);
+            $this->assertEquals($messages[$i], $event->other['messageid']);
+            $this->assertEquals($message->useridfrom, $event->other['useridfrom']);
+            $this->assertEquals($message->useridto, $event->other['useridto']);
+
+            $i++;
+        }
     }
 }

@@ -23,8 +23,9 @@
  */
 define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/custom_interaction_events',
         'core/auto_rows', 'core_message/message_area_actions', 'core/modal_factory', 'core/modal_events',
-        'core/str', 'core_message/message_area_events'],
-    function($, Ajax, Templates, Notification, CustomEvents, AutoRows, Actions, ModalFactory, ModalEvents, Str, Events) {
+        'core/str', 'core_message/message_area_events', 'core/backoff_timer'],
+    function($, Ajax, Templates, Notification, CustomEvents, AutoRows, Actions, ModalFactory,
+             ModalEvents, Str, Events, BackOffTimer) {
 
         /** @type {int} The message area default height. */
         var MESSAGES_AREA_DEFAULT_HEIGHT = 500;
@@ -49,8 +50,11 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
             SENDMESSAGE: "[data-action='send-message']",
             SENDMESSAGETEXT: "[data-region='send-message-txt']",
             SHOWCONTACTS: "[data-action='show-contacts']",
-            STARTDELETEMESSAGES: "[data-action='start-delete-messages']"
+            STARTDELETEMESSAGES: "[data-action='start-delete-messages']",
         };
+
+        /** @type {int} The number of milliseconds in a second. */
+        var MILLISECONDSINSEC = 1000;
 
         /**
          * Messages class.
@@ -71,11 +75,20 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
         /** @type {int} the number of messagess displayed */
         Messages.prototype._numMessagesDisplayed = 0;
 
+        /** @type {array} the messages displayed or about to be displayed on the page */
+        Messages.prototype._messageQueue = [];
+
         /** @type {int} the number of messages to retrieve */
         Messages.prototype._numMessagesToRetrieve = 20;
 
         /** @type {Modal} the confirmation modal */
         Messages.prototype._confirmationModal = null;
+
+        /** @type {int} the timestamp for the most recent visible message */
+        Messages.prototype._latestMessageTimestamp = 0;
+
+        /** @type {BackOffTimer} the backoff timer */
+        Messages.prototype._backoffTimer = null;
 
         /** @type {Messagearea} The messaging area object. */
         Messages.prototype.messageArea = null;
@@ -92,6 +105,11 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
                 CustomEvents.events.down,
                 CustomEvents.events.enter,
             ]);
+
+            // We have a responsive media query based on height that reduces this size on screens shorter than 670.
+            if ($(window).height() <= 670) {
+                MESSAGES_AREA_DEFAULT_HEIGHT = 400;
+            }
 
             AutoRows.init(this.messageArea.node);
 
@@ -131,7 +149,16 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
             var messages = this.messageArea.find(SELECTORS.MESSAGES);
             if (messages.length) {
                 this._addScrollEventListener(messages.find(SELECTORS.MESSAGE).length);
+                this._latestMessageTimestamp = messages.find(SELECTORS.MESSAGE + ':last').data('timecreated');
             }
+
+            // Create a timer to poll the server for new messages.
+            this._backoffTimer = new BackOffTimer(this._loadNewMessages.bind(this),
+                BackOffTimer.getIncrementalCallback(this.messageArea.pollmin * MILLISECONDSINSEC, MILLISECONDSINSEC,
+                    this.messageArea.pollmax * MILLISECONDSINSEC, this.messageArea.polltimeout * MILLISECONDSINSEC));
+
+            // Start the timer.
+            this._backoffTimer.start();
         };
 
         /**
@@ -145,6 +172,10 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
         Messages.prototype._viewMessages = function(event, userid) {
             // We are viewing another user, or re-loading the panel, so set number of messages displayed to 0.
             this._numMessagesDisplayed = 0;
+            // Stop the existing timer so we can set up the new user's messages.
+            this._backoffTimer.stop();
+            // Reset the latest timestamp when we change the messages view.
+            this._latestMessageTimestamp = 0;
 
             // Mark all the messages as read.
             var markMessagesAsRead = Ajax.call([{
@@ -178,6 +209,9 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
             }).then(function(html, js) {
                 Templates.replaceNodeContents(this.messageArea.find(SELECTORS.MESSAGESAREA), html, js);
                 this._addScrollEventListener(numberreceived);
+                // Restart the poll timer.
+                this._backoffTimer.restart();
+                this.messageArea.find(SELECTORS.SENDMESSAGETEXT).focus();
             }.bind(this)).fail(Notification.exception);
         };
 
@@ -211,13 +245,9 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
                     SELECTORS.LOADINGICON).remove();
                 // Check if we got something to do.
                 if (numberreceived > 0) {
-                    // Let's check if we can remove the block time.
-                    // First, get the block time that is currently being displayed.
-                    var blocktime = this.messageArea.node.find(SELECTORS.BLOCKTIME + ":first");
-                    var newblocktime = $(html).find(SELECTORS.BLOCKTIME + ":first").addBack();
-                    if (blocktime.html() == newblocktime.html()) {
-                        // Remove the block time as it's present above.
-                        blocktime.remove();
+                    var newHtml = $('<div>' + html + '</div>');
+                    if (this._hasMatchingBlockTime(this.messageArea.node, newHtml, true)) {
+                        this.messageArea.node.find(SELECTORS.BLOCKTIME + ':first').remove();
                     }
                     // Get height before we add the messages.
                     var oldheight = this.messageArea.find(SELECTORS.MESSAGES)[0].scrollHeight;
@@ -236,27 +266,98 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
         };
 
         /**
+         * Loads and renders messages newer than the most recently seen messages.
+         *
+         * @return {Promise|boolean} The promise resolved when the messages have been loaded.
+         * @private
+         */
+        Messages.prototype._loadNewMessages = function() {
+            if (this._isLoadingMessages) {
+                return false;
+            }
+
+            // If we have no user id yet then bail early.
+            if (!this._getUserId()) {
+                return false;
+            }
+
+            this._isLoadingMessages = true;
+
+            // Only scroll the message window if the user hasn't scrolled up.
+            var shouldScrollBottom = false;
+            var messages = this.messageArea.find(SELECTORS.MESSAGES);
+            if (messages.length !== 0) {
+                var scrollTop = messages.scrollTop();
+                var innerHeight = messages.innerHeight();
+                var scrollHeight = messages[0].scrollHeight;
+
+                if (scrollTop + innerHeight >= scrollHeight) {
+                    shouldScrollBottom = true;
+                }
+            }
+
+            // Keep track of the number of messages received.
+            return this._getMessages(this._getUserId(), true).then(function(data) {
+                return this._addMessagesToDom(data.messages, shouldScrollBottom);
+            }.bind(this)).always(function() {
+                // Mark that we are no longer busy loading data.
+                this._isLoadingMessages = false;
+            }.bind(this)).fail(Notification.exception);
+        };
+
+        /**
          * Handles returning a list of messages to display.
          *
          * @param {int} userid
+         * @param {bool} fromTimestamp Load messages from the latest known timestamp
          * @return {Promise} The promise resolved when the contact area has been rendered
          * @private
          */
-        Messages.prototype._getMessages = function(userid) {
+        Messages.prototype._getMessages = function(userid, fromTimestamp) {
+            var args = {
+                currentuserid: this.messageArea.getCurrentUserId(),
+                otheruserid: userid,
+                limitfrom: this._numMessagesDisplayed,
+                limitnum: this._numMessagesToRetrieve,
+                newest: true
+            };
+
+            // If we're trying to load new messages since the message UI was
+            // rendered. Used for ajax polling while user is on the message UI.
+            if (fromTimestamp) {
+                args.timefrom = this._latestMessageTimestamp;
+                // Remove limit and offset. We want all new messages.
+                args.limitfrom = 0;
+                args.limitnum = 0;
+            }
+
             // Call the web service to get our data.
             var promises = Ajax.call([{
                 methodname: 'core_message_data_for_messagearea_messages',
-                args: {
-                    currentuserid: this.messageArea.getCurrentUserId(),
-                    otheruserid: userid,
-                    limitfrom: this._numMessagesDisplayed,
-                    limitnum: this._numMessagesToRetrieve,
-                    newest: true
-                }
+                args: args,
             }]);
 
             // Do stuff when we get data back.
-            return promises[0];
+            return promises[0].then(function(data) {
+                var messages = data.messages;
+
+                // Did we get any new messages?
+                if (messages && messages.length) {
+                    var latestMessage = messages[messages.length - 1];
+
+                    // Update our record of the latest known message for future requests.
+                    if (latestMessage.timecreated > this._latestMessageTimestamp) {
+                        // Next request should be for the second after the most recent message we've seen.
+                        this._latestMessageTimestamp = latestMessage.timecreated + 1;
+                    }
+                }
+
+                return data;
+            }.bind(this)).fail(function(ex) {
+                // Stop the timer if we received an error so that we don't keep spamming the server.
+                this._backoffTimer.stop();
+                Notification.exception(ex);
+            }.bind(this));
         };
 
         /**
@@ -267,10 +368,10 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
          */
         Messages.prototype._sendMessage = function() {
             var element = this.messageArea.find(SELECTORS.SENDMESSAGETEXT);
-            var text = element.val();
+            var text = element.val().trim();
 
             // Do not do anything if it is empty.
-            if (text.trim() === '') {
+            if (text === '') {
                 return false;
             }
 
@@ -309,12 +410,13 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
                 // Fire an event to say the message was sent.
                 this.messageArea.trigger(Events.MESSAGESENT, [this._getUserId(), text]);
                 // Update the messaging area.
-                return this._addMessageToDom();
+                return this._addLastMessageToDom();
             }.bind(this)).then(function() {
                 // Ok, we are no longer sending a message.
                 this._isSendingMessage = false;
             }.bind(this)).always(function() {
                 element.prop('disabled', false);
+                element.focus();
             }).fail(Notification.exception);
         };
 
@@ -429,36 +531,42 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
         Messages.prototype._deleteAllMessages = function() {
             // Create the confirmation modal if we haven't already.
             if (!this._confirmationModal) {
-                ModalFactory.create({
-                    type: ModalFactory.types.CONFIRM,
-                    body: Str.get_string('deleteallconfirm', 'message'),
-                }, this.messageArea.find(SELECTORS.DELETEALLMESSAGES))
-                .done(function(modal) {
-                    this._confirmationModal = modal;
+                Str.get_strings([
+                    {key: 'confirm'},
+                    {key: 'deleteallconfirm', component: 'message'}
+                ]).done(function(s) {
+                    ModalFactory.create({
+                        title: s[0],
+                        type: ModalFactory.types.CONFIRM,
+                        body: s[1]
+                    }, this.messageArea.find(SELECTORS.DELETEALLMESSAGES))
+                        .done(function(modal) {
+                            this._confirmationModal = modal;
 
-                    // Only delete the conversation if the user agreed in the confirmation modal.
-                    modal.getRoot().on(ModalEvents.yes, function() {
-                        var otherUserId = this._getUserId();
-                        var request = {
-                            methodname: 'core_message_delete_conversation',
-                            args: {
-                                userid: this.messageArea.getCurrentUserId(),
-                                otheruserid: otherUserId
-                            }
-                        };
+                            // Only delete the conversation if the user agreed in the confirmation modal.
+                            modal.getRoot().on(ModalEvents.yes, function() {
+                                var otherUserId = this._getUserId();
+                                var request = {
+                                    methodname: 'core_message_delete_conversation',
+                                    args: {
+                                        userid: this.messageArea.getCurrentUserId(),
+                                        otheruserid: otherUserId
+                                    }
+                                };
 
-                        // Delete the conversation.
-                        Ajax.call([request])[0].then(function() {
-                            // Clear the message area.
-                            this.messageArea.find(SELECTORS.MESSAGESAREA).empty();
-                            // Let the app know a conversation was deleted.
-                            this.messageArea.trigger(Events.CONVERSATIONDELETED, otherUserId);
-                            this._hideDeleteAction();
-                        }.bind(this), Notification.exeption);
-                    }.bind(this));
+                                // Delete the conversation.
+                                Ajax.call([request])[0].then(function() {
+                                    // Clear the message area.
+                                    this.messageArea.find(SELECTORS.MESSAGESAREA).empty();
+                                    // Let the app know a conversation was deleted.
+                                    this.messageArea.trigger(Events.CONVERSATIONDELETED, otherUserId);
+                                    this._hideDeleteAction();
+                                }.bind(this), Notification.exception);
+                            }.bind(this));
 
-                    // Display the confirmation.
-                    modal.show();
+                            // Display the confirmation.
+                            modal.show();
+                        }.bind(this));
                 }.bind(this));
             } else {
                 // Otherwise just show the existing modal.
@@ -491,10 +599,58 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
         /**
          * Handles adding messages to the DOM.
          *
+         * @param {array} messages An array of messages to be added to the DOM.
+         * @param {boolean} shouldScrollBottom True will scroll to the bottom of the message window and show the new messages.
+         * @return {Promise} The promise resolved when the messages have been added to the DOM.
+         * @private
+         */
+        Messages.prototype._addMessagesToDom = function(messages, shouldScrollBottom) {
+            var numberreceived = 0;
+            var messagesArea = this.messageArea.find(SELECTORS.MESSAGES);
+            messages = messages.filter(function(message) {
+                var id = "" + message.id + message.isread;
+                // If the message is already queued to be rendered, remove from the list of messages.
+                if (this._messageQueue[id]) {
+                    return false;
+                }
+                // Filter out any messages already rendered.
+                var result = messagesArea.find(SELECTORS.MESSAGE + '[data-id="' + id + '"]');
+                // Any message we are rendering should go in the messageQueue.
+                if (!result.length) {
+                    this._messageQueue[id] = true;
+                }
+                return !result.length;
+            }.bind(this));
+            numberreceived = messages.length;
+            // We have the data - lets render the template with it.
+            return Templates.render('core_message/message_area_messages', {messages: messages}).then(function(html, js) {
+                // Check if we got something to do.
+                if (numberreceived > 0) {
+                    var newHtml = $('<div>' + html + '</div>');
+                    if (this._hasMatchingBlockTime(this.messageArea.node, newHtml, false)) {
+                        newHtml.find(SELECTORS.BLOCKTIME + ':first').remove();
+                    }
+                    // Show the new content.
+                    Templates.appendNodeContents(this.messageArea.find(SELECTORS.MESSAGES), newHtml, js);
+                    // Scroll the new message into view.
+                    if (shouldScrollBottom) {
+                        this._scrollBottom();
+                    }
+                    // Increment the number of messages displayed.
+                    this._numMessagesDisplayed += numberreceived;
+                    // Reset the poll timer because the user may be active.
+                    this._backoffTimer.restart();
+                }
+            }.bind(this));
+        };
+
+        /**
+         * Handles adding the last message to the DOM.
+         *
          * @return {Promise} The promise resolved when the message has been added to the DOM.
          * @private
          */
-        Messages.prototype._addMessageToDom = function() {
+        Messages.prototype._addLastMessageToDom = function() {
             // Call the web service to return how the message should look.
             var promises = Ajax.call([{
                 methodname: 'core_message_data_for_messagearea_get_most_recent_message',
@@ -506,13 +662,10 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
 
             // Add the message.
             return promises[0].then(function(data) {
-                return Templates.render('core_message/message_area_message', data);
-            }).then(function(html, js) {
-                Templates.appendNodeContents(this.messageArea.find(SELECTORS.MESSAGES), html, js);
-                // Empty the response text area.
+                return this._addMessagesToDom([data], true);
+            }.bind(this)).always(function() {
+                // Empty the response text area.text
                 this.messageArea.find(SELECTORS.SENDMESSAGETEXT).val('').trigger('input');
-                // Scroll down.
-                this._scrollBottom();
             }.bind(this)).fail(Notification.exception);
         };
 
@@ -674,11 +827,47 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
 
         /**
          * Hide the messaging area. This only applies on smaller screen resolutions.
+         *
+         * @private
          */
         Messages.prototype._hideMessagingArea = function() {
             this.messageArea.find(SELECTORS.MESSAGINGAREA)
                 .removeClass('show-messages')
                 .addClass('hide-messages');
+        };
+
+        /**
+         * Checks if a day separator needs to be removed.
+         *
+         * Example - scrolling up and loading previous messages that belong to the
+         * same day as the last message that was previously shown, meaning we can
+         * remove the original separator.
+         *
+         * @param {jQuery} domHtml The HTML in the DOM.
+         * @param {jQuery} newHtml The HTML to compare to the DOM
+         * @param {boolean} loadingPreviousMessages Are we loading previous messages?
+         * @return {boolean}
+         * @private
+         */
+        Messages.prototype._hasMatchingBlockTime = function(domHtml, newHtml, loadingPreviousMessages) {
+            var blockTime, blockTimePos, newBlockTime, newBlockTimePos;
+
+            if (loadingPreviousMessages) {
+                blockTimePos = ':first';
+                newBlockTimePos = ':last';
+            } else {
+                blockTimePos = ':last';
+                newBlockTimePos = ':first';
+            }
+
+            blockTime = domHtml.find(SELECTORS.BLOCKTIME + blockTimePos);
+            newBlockTime = newHtml.find(SELECTORS.BLOCKTIME + newBlockTimePos);
+
+            if (blockTime.length && newBlockTime.length) {
+                return blockTime.data('blocktime') == newBlockTime.data('blocktime');
+            }
+
+            return false;
         };
 
         return Messages;

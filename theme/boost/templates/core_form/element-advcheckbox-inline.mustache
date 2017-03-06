@@ -1,7 +1,13 @@
-<label class="form-check-inline {{#error}}has-danger{{/error}}">
-{{^element.frozen}}
-<input type="hidden" name="{{element.name}}" value="{{element.deselectedvalue}}">
-<input type="checkbox" name="{{element.name}}"
+<label class="form-check-inline {{#error}}has-danger{{/error}} fitem {{#advanced}}advanced{{/advanced}} {{{element.extraclasses}}}">
+{{^element.hardfrozen}}
+    {{^element.frozen}}
+        <input type="hidden" name="{{element.name}}" value="{{element.deselectedvalue}}">
+    {{/element.frozen}}
+    {{#element.frozen}}
+        <input type="hidden" name="{{element.name}}" value="{{element.frozenvalue}}">
+    {{/element.frozen}}
+{{/element.hardfrozen}}
+<input type="checkbox" name="{{element.name}}" class="{{element.extraclasses}}"
     id="{{element.id}}"
     {{#element.selectedvalue}}
         value="{{element.selectedvalue}}"
@@ -11,10 +17,16 @@
     {{#error}}
         autofocus aria-describedby="id_error_{{element.name}}"
     {{/error}}
+    {{#element.frozen}}
+        disabled
+    {{/element.frozen}}
     {{{element.attributes}}} >
-{{/element.frozen}}
-    {{{label}}} {{{helpbutton}}}
+    {{{label}}}
 </label>
+{{#text}}
+    <em>{{{.}}}</em>
+{{/text}}
+{{{helpbutton}}}
 <span class="form-control-feedback" id="id_error_{{element.name}}" {{^error}} style="display: none;"{{/error}}>
     {{{error}}}
 </span>

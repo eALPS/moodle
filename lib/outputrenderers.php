@@ -283,12 +283,15 @@ class renderer_base {
      * @param int $maxheight The maximum height, or null when the maximum height does not matter.
      * @return moodle_url|false
      */
-    public function get_logo_url($maxwidth = null, $maxheight = 100) {
+    public function get_logo_url($maxwidth = null, $maxheight = 200) {
         global $CFG;
         $logo = get_config('core_admin', 'logo');
         if (empty($logo)) {
             return false;
         }
+
+        // 200px high is the default image size which should be displayed at 100px in the page to account for retina displays.
+        // It's not worth the overhead of detecting and serving 2 different images based on the device.
 
         // Hide the requested size in the file path.
         $filepath = ((int) $maxwidth . 'x' . (int) $maxheight) . '/';
@@ -510,9 +513,30 @@ class core_renderer extends renderer_base {
      */
     public function htmlattributes() {
         $return = get_html_lang(true);
+        $attributes = array();
         if ($this->page->theme->doctype !== 'html5') {
-            $return .= ' xmlns="http://www.w3.org/1999/xhtml"';
+            $attributes['xmlns'] = 'http://www.w3.org/1999/xhtml';
         }
+
+        // Give plugins an opportunity to add things like xml namespaces to the html element.
+        // This function should return an array of html attribute names => values.
+        $pluginswithfunction = get_plugins_with_function('add_htmlattributes', 'lib.php');
+        foreach ($pluginswithfunction as $plugins) {
+            foreach ($plugins as $function) {
+                $newattrs = $function();
+                unset($newattrs['dir']);
+                unset($newattrs['lang']);
+                unset($newattrs['xmlns']);
+                unset($newattrs['xml:lang']);
+                $attributes += $newattrs;
+            }
+        }
+
+        foreach ($attributes as $key => $val) {
+            $val = s($val);
+            $return .= " $key=\"$val\"";
+        }
+
         return $return;
     }
 
@@ -536,6 +560,15 @@ class core_renderer extends renderer_base {
         }
 
         $output = '';
+
+        // Give plugins an opportunity to add any head elements. The callback
+        // must always return a string containing valid html head content.
+        $pluginswithfunction = get_plugins_with_function('before_standard_html_head', 'lib.php');
+        foreach ($pluginswithfunction as $plugins) {
+            foreach ($plugins as $function) {
+                $output .= $function();
+            }
+        }
 
         // Allow a url_rewrite plugin to setup any dynamic head content.
         if (isset($CFG->urlrewriteclass) && !isset($CFG->upgraderunning)) {
@@ -563,20 +596,8 @@ class core_renderer extends renderer_base {
             }
         }
 
-        // flow player embedding support
-        $this->page->requires->js_function_call('M.util.load_flowplayer');
-
         // Set up help link popups for all links with the helptooltip class
         $this->page->requires->js_init_call('M.util.help_popups.setup');
-
-        // Setup help icon overlays.
-        $this->page->requires->yui_module('moodle-core-popuphelp', 'M.core.init_popuphelp');
-        $this->page->requires->strings_for_js(array(
-            'morehelp',
-            'loadinghelp',
-        ), 'moodle');
-
-        $this->page->requires->js_function_call('setTimeout', array('fix_column_widths()', 20));
 
         $focus = $this->page->focuscontrol;
         if (!empty($focus)) {
@@ -637,7 +658,18 @@ class core_renderer extends renderer_base {
         if ($this->page->pagelayout !== 'embedded' && !empty($CFG->additionalhtmltopofbody)) {
             $output .= "\n".$CFG->additionalhtmltopofbody;
         }
+
+        // Give plugins an opportunity to inject extra html content. The callback
+        // must always return a string containing valid html.
+        $pluginswithfunction = get_plugins_with_function('before_standard_top_of_body_html', 'lib.php');
+        foreach ($pluginswithfunction as $plugins) {
+            foreach ($plugins as $function) {
+                $output .= $function();
+            }
+        }
+
         $output .= $this->maintenance_warning();
+
         return $output;
     }
 
@@ -656,17 +688,23 @@ class core_renderer extends renderer_base {
         if (isset($CFG->maintenance_later) and $CFG->maintenance_later > time()) {
             $timeleft = $CFG->maintenance_later - time();
             // If timeleft less than 30 sec, set the class on block to error to highlight.
-            $errorclass = ($timeleft < 30) ? 'error' : 'warning';
-            $output .= $this->box_start($errorclass . ' moodle-has-zindex maintenancewarning');
+            $errorclass = ($timeleft < 30) ? 'alert-error alert-danger' : 'alert-warning';
+            $output .= $this->box_start($errorclass . ' moodle-has-zindex maintenancewarning m-a-1 alert');
             $a = new stdClass();
-            $a->min = (int)($timeleft/60);
+            $a->hour = (int)($timeleft / 3600);
+            $a->min = (int)(($timeleft / 60) % 60);
             $a->sec = (int)($timeleft % 60);
-            $output .= get_string('maintenancemodeisscheduled', 'admin', $a) ;
+            if ($a->hour > 0) {
+                $output .= get_string('maintenancemodeisscheduledlong', 'admin', $a);
+            } else {
+                $output .= get_string('maintenancemodeisscheduled', 'admin', $a);
+            }
+
             $output .= $this->box_end();
             $this->page->requires->yui_module('moodle-core-maintenancemodetimer', 'M.core.maintenancemodetimer',
                     array(array('timeleftinsec' => $timeleft)));
             $this->page->requires->strings_for_js(
-                    array('maintenancemodeisscheduled', 'sitemaintenance'),
+                    array('maintenancemodeisscheduled', 'maintenancemodeisscheduledlong', 'sitemaintenance'),
                     'admin');
         }
         return $output;
@@ -719,7 +757,7 @@ class core_renderer extends renderer_base {
         }
         if (!empty($CFG->debugvalidators)) {
             // NOTE: this is not a nice hack, $PAGE->url is not always accurate and $FULLME neither, it is not a bug if it fails. --skodak
-            $output .= '<div class="validators"><ul>
+            $output .= '<div class="validators"><ul class="list-unstyled m-l-1">
               <li><a href="http://validator.w3.org/check?verbose=1&amp;ss=1&amp;uri=' . urlencode(qualified_me()) . '">Validate HTML</a></li>
               <li><a href="http://www.contentquality.com/mynewtester/cynthia.exe?rptmode=-1&amp;url1=' . urlencode(qualified_me()) . '">Section 508 Check</a></li>
               <li><a href="http://www.contentquality.com/mynewtester/cynthia.exe?rptmode=0&amp;warnp2n3e=1&amp;url1=' . urlencode(qualified_me()) . '">WCAG 1 (2,3) Check</a></li>
@@ -1002,10 +1040,27 @@ class core_renderer extends renderer_base {
      * @return string HTML that you must output this, preferably immediately.
      */
     public function header() {
-        global $USER, $CFG;
+        global $USER, $CFG, $SESSION;
+
+        // Give plugins an opportunity touch things before the http headers are sent
+        // such as adding additional headers. The return value is ignored.
+        $pluginswithfunction = get_plugins_with_function('before_http_headers', 'lib.php');
+        foreach ($pluginswithfunction as $plugins) {
+            foreach ($plugins as $function) {
+                $function();
+            }
+        }
 
         if (\core\session\manager::is_loggedinas()) {
             $this->page->add_body_class('userloggedinas');
+        }
+
+        if (isset($SESSION->justloggedin) && !empty($CFG->displayloginfailures)) {
+            require_once($CFG->dirroot . '/user/lib.php');
+            // Set second parameter to false as we do not want reset the counter, the same message appears on footer.
+            if ($count = user_count_login_failures($USER, false)) {
+                $this->page->add_body_class('loginfailures');
+            }
         }
 
         // If the user is logged in, and we're not in initial install,
@@ -1106,6 +1161,14 @@ class core_renderer extends renderer_base {
      */
     public function footer() {
         global $CFG, $DB, $PAGE;
+
+        // Give plugins an opportunity to touch the page before JS is finalized.
+        $pluginswithfunction = get_plugins_with_function('before_footer', 'lib.php');
+        foreach ($pluginswithfunction as $plugins) {
+            foreach ($plugins as $function) {
+                $function();
+            }
+        }
 
         $output = $this->container_end_all(true);
 
@@ -1704,10 +1767,11 @@ class core_renderer extends renderer_base {
     public function confirm($message, $continue, $cancel) {
         if ($continue instanceof single_button) {
             // ok
+            $continue->primary = true;
         } else if (is_string($continue)) {
-            $continue = new single_button(new moodle_url($continue), get_string('continue'), 'post');
+            $continue = new single_button(new moodle_url($continue), get_string('continue'), 'post', true);
         } else if ($continue instanceof moodle_url) {
-            $continue = new single_button($continue, get_string('continue'), 'post');
+            $continue = new single_button($continue, get_string('continue'), 'post', true);
         } else {
             throw new coding_exception('The continue param to $OUTPUT->confirm() must be either a URL (string/moodle_url) or a single_button instance.');
         }
@@ -1722,9 +1786,18 @@ class core_renderer extends renderer_base {
             throw new coding_exception('The cancel param to $OUTPUT->confirm() must be either a URL (string/moodle_url) or a single_button instance.');
         }
 
-        $output = $this->box_start('generalbox', 'notice');
+        $output = $this->box_start('generalbox modal modal-dialog modal-in-page show', 'notice');
+        $output .= $this->box_start('modal-content', 'modal-content');
+        $output .= $this->box_start('modal-header', 'modal-header');
+        $output .= html_writer::tag('h4', get_string('confirm'));
+        $output .= $this->box_end();
+        $output .= $this->box_start('modal-body', 'modal-body');
         $output .= html_writer::tag('p', $message);
+        $output .= $this->box_end();
+        $output .= $this->box_start('modal-footer', 'modal-footer');
         $output .= html_writer::tag('div', $this->render($continue) . $this->render($cancel), array('class' => 'buttons'));
+        $output .= $this->box_end();
+        $output .= $this->box_end();
         $output .= $this->box_end();
         return $output;
     }
@@ -1891,71 +1964,7 @@ class core_renderer extends renderer_base {
      * @return string HTML fragment
      */
     protected function render_single_select(single_select $select) {
-        $select = clone($select);
-        if (empty($select->formid)) {
-            $select->formid = html_writer::random_id('single_select_f');
-        }
-
-        $output = '';
-        $params = $select->url->params();
-        if ($select->method === 'post') {
-            $params['sesskey'] = sesskey();
-        }
-        foreach ($params as $name=>$value) {
-            $output .= html_writer::empty_tag('input', array('type'=>'hidden', 'name'=>$name, 'value'=>$value));
-        }
-
-        if (empty($select->attributes['id'])) {
-            $select->attributes['id'] = html_writer::random_id('single_select');
-        }
-
-        if ($select->disabled) {
-            $select->attributes['disabled'] = 'disabled';
-        }
-
-        if ($select->tooltip) {
-            $select->attributes['title'] = $select->tooltip;
-        }
-
-        $select->attributes['class'] = 'autosubmit';
-        if ($select->class) {
-            $select->attributes['class'] .= ' ' . $select->class;
-        }
-
-        if ($select->label) {
-            $output .= html_writer::label($select->label, $select->attributes['id'], false, $select->labelattributes);
-        }
-
-        if ($select->helpicon instanceof help_icon) {
-            $output .= $this->render($select->helpicon);
-        }
-        $output .= html_writer::select($select->options, $select->name, $select->selected, $select->nothing, $select->attributes);
-
-        $go = html_writer::empty_tag('input', array('type'=>'submit', 'value'=>get_string('go')));
-        $output .= html_writer::tag('noscript', html_writer::tag('div', $go), array('class' => 'inline'));
-
-        $nothing = empty($select->nothing) ? false : key($select->nothing);
-        $this->page->requires->yui_module('moodle-core-formautosubmit',
-            'M.core.init_formautosubmit',
-            array(array('selectid' => $select->attributes['id'], 'nothing' => $nothing))
-        );
-
-        // then div wrapper for xhtml strictness
-        $output = html_writer::tag('div', $output);
-
-        // now the form itself around it
-        if ($select->method === 'get') {
-            $url = $select->url->out_omit_querystring(true); // url without params, the anchor part allowed
-        } else {
-            $url = $select->url->out_omit_querystring();     // url without params, the anchor part not allowed
-        }
-        $formattributes = array('method' => $select->method,
-                                'action' => $url,
-                                'id'     => $select->formid);
-        $output = html_writer::tag('form', $output, $formattributes);
-
-        // and finally one more wrapper with class
-        return html_writer::tag('div', $output, array('class' => $select->class));
+        return $this->render_from_template('core/single_select', $select->export_for_template($this));
     }
 
     /**
@@ -1982,116 +1991,7 @@ class core_renderer extends renderer_base {
      * @return string HTML fragment
      */
     protected function render_url_select(url_select $select) {
-        global $CFG;
-
-        $select = clone($select);
-        if (empty($select->formid)) {
-            $select->formid = html_writer::random_id('url_select_f');
-        }
-
-        if (empty($select->attributes['id'])) {
-            $select->attributes['id'] = html_writer::random_id('url_select');
-        }
-
-        if ($select->disabled) {
-            $select->attributes['disabled'] = 'disabled';
-        }
-
-        if ($select->tooltip) {
-            $select->attributes['title'] = $select->tooltip;
-        }
-
-        $output = '';
-
-        if ($select->label) {
-            $output .= html_writer::label($select->label, $select->attributes['id'], false, $select->labelattributes);
-        }
-
-        $classes = array();
-        if (!$select->showbutton) {
-            $classes[] = 'autosubmit';
-        }
-        if ($select->class) {
-            $classes[] = $select->class;
-        }
-        if (count($classes)) {
-            $select->attributes['class'] = implode(' ', $classes);
-        }
-
-        if ($select->helpicon instanceof help_icon) {
-            $output .= $this->render($select->helpicon);
-        }
-
-        // For security reasons, the script course/jumpto.php requires URL starting with '/'. To keep
-        // backward compatibility, we are removing heading $CFG->wwwroot from URLs here.
-        $urls = array();
-        foreach ($select->urls as $k=>$v) {
-            if (is_array($v)) {
-                // optgroup structure
-                foreach ($v as $optgrouptitle => $optgroupoptions) {
-                    foreach ($optgroupoptions as $optionurl => $optiontitle) {
-                        if (empty($optionurl)) {
-                            $safeoptionurl = '';
-                        } else if (strpos($optionurl, $CFG->wwwroot.'/') === 0) {
-                            // debugging('URLs passed to url_select should be in local relative form - please fix the code.', DEBUG_DEVELOPER);
-                            $safeoptionurl = str_replace($CFG->wwwroot, '', $optionurl);
-                        } else if (strpos($optionurl, '/') !== 0) {
-                            debugging("Invalid url_select urls parameter inside optgroup: url '$optionurl' is not local relative url!");
-                            continue;
-                        } else {
-                            $safeoptionurl = $optionurl;
-                        }
-                        $urls[$k][$optgrouptitle][$safeoptionurl] = $optiontitle;
-                    }
-                }
-            } else {
-                // plain list structure
-                if (empty($k)) {
-                    // nothing selected option
-                } else if (strpos($k, $CFG->wwwroot.'/') === 0) {
-                    $k = str_replace($CFG->wwwroot, '', $k);
-                } else if (strpos($k, '/') !== 0) {
-                    debugging("Invalid url_select urls parameter: url '$k' is not local relative url!");
-                    continue;
-                }
-                $urls[$k] = $v;
-            }
-        }
-        $selected = $select->selected;
-        if (!empty($selected)) {
-            if (strpos($select->selected, $CFG->wwwroot.'/') === 0) {
-                $selected = str_replace($CFG->wwwroot, '', $selected);
-            } else if (strpos($selected, '/') !== 0) {
-                debugging("Invalid value of parameter 'selected': url '$selected' is not local relative url!");
-            }
-        }
-
-        $output .= html_writer::empty_tag('input', array('type'=>'hidden', 'name'=>'sesskey', 'value'=>sesskey()));
-        $output .= html_writer::select($urls, 'jump', $selected, $select->nothing, $select->attributes);
-
-        if (!$select->showbutton) {
-            $go = html_writer::empty_tag('input', array('type'=>'submit', 'value'=>get_string('go')));
-            $output .= html_writer::tag('noscript', html_writer::tag('div', $go), array('class' => 'inline'));
-            $nothing = empty($select->nothing) ? false : key($select->nothing);
-            $this->page->requires->yui_module('moodle-core-formautosubmit',
-                'M.core.init_formautosubmit',
-                array(array('selectid' => $select->attributes['id'], 'nothing' => $nothing))
-            );
-        } else {
-            $output .= html_writer::empty_tag('input', array('type'=>'submit', 'value'=>$select->showbutton));
-        }
-
-        // then div wrapper for xhtml strictness
-        $output = html_writer::tag('div', $output);
-
-        // now the form itself around it
-        $formattributes = array('method' => 'post',
-                                'action' => new moodle_url('/course/jumpto.php'),
-                                'id'     => $select->formid);
-        $output = html_writer::tag('form', $output, $formattributes);
-
-        // and finally one more wrapper with class
-        return html_writer::tag('div', $output, array('class' => $select->class));
+        return $this->render_from_template('core/url_select', $select->export_for_template($this));
     }
 
     /**
@@ -2591,7 +2491,7 @@ $icon_progress
 </div>
 <div id="filepicker-wrapper-{$client_id}" class="mdl-left" style="display:none">
     <div>
-        <input type="button" class="fp-btn-choose" id="filepicker-button-{$client_id}" value="{$straddfile}"{$buttonname}/>
+        <input type="button" class="btn btn-secondary fp-btn-choose" id="filepicker-button-{$client_id}" value="{$straddfile}"{$buttonname}/>
         <span> $maxsize </span>
     </div>
 EOD;
@@ -2730,6 +2630,9 @@ EOD;
             $protocol = (isset($_SERVER['SERVER_PROTOCOL']) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0');
             if (empty($_SERVER['HTTP_RANGE'])) {
                 @header($protocol . ' 404 Not Found');
+            } else if (core_useragent::check_safari_ios_version(602) && !empty($_SERVER['HTTP_X_PLAYBACK_SESSION_ID'])) {
+                // Coax iOS 10 into sending the session cookie.
+                @header($protocol . ' 403 Forbidden');
             } else {
                 // Must stop byteserving attempts somehow,
                 // this is weird but Chrome PDF viewer can be stopped only with 407!
@@ -2932,7 +2835,7 @@ EOD;
         if (!($url instanceof moodle_url)) {
             $url = new moodle_url($url);
         }
-        $button = new single_button($url, get_string('continue'), 'get');
+        $button = new single_button($url, get_string('continue'), 'get', true);
         $button->class = 'continuebutton';
 
         return $this->render($button);
@@ -3189,7 +3092,7 @@ EOD;
             array('for' => 'id_q_' . $id, 'class' => 'accesshide')) . html_writer::tag('input', '', $inputattrs);
         $searchinput = html_writer::tag('form', $contents, $formattrs);
 
-        return html_writer::tag('div', $searchicon . $searchinput, array('class' => 'search-input-wrapper', 'id' => $id));
+        return html_writer::tag('div', $searchicon . $searchinput, array('class' => 'search-input-wrapper nav-link', 'id' => $id));
     }
 
     /**
@@ -4086,18 +3989,6 @@ EOD;
         return $html;
     }
 
-    /**
-     * Returns the header bar.
-     *
-     * @since Moodle 2.9
-     * @param array $headerinfo An array of header information, dependant on what type of header is being displayed. The following
-     *                          array example is user specific.
-     *                          heading => Override the page heading.
-     *                          user => User object.
-     *                          usercontext => user context.
-     * @param int $headinglevel What level the 'h' tag will be.
-     * @return string HTML for the header bar.
-     */
     public function context_header($headerinfo = null, $headinglevel = 1) {
         global $DB, $USER, $CFG;
         $context = $this->page->context;
@@ -4370,13 +4261,21 @@ EOD;
                     $helpbutton = $element->getHelpButton();
                 }
                 $label = $element->getLabel();
+                $text = '';
                 if (method_exists($element, 'getText')) {
-                    $label .= ' ' . $element->getText();
+                    // There currently exists code that adds a form element with an empty label.
+                    // If this is the case then set the label to the description.
+                    if (empty($label)) {
+                        $label = $element->getText();
+                    } else {
+                        $text = $element->getText();
+                    }
                 }
 
                 $context = array(
                     'element' => $elementcontext,
                     'label' => $label,
+                    'text' => $text,
                     'required' => $required,
                     'advanced' => $advanced,
                     'helpbutton' => $helpbutton,
@@ -4388,6 +4287,18 @@ EOD;
             // No template for this element.
             return false;
         }
+    }
+
+    /**
+     * Render the login signup form into a nice template for the theme.
+     *
+     * @param mform $form
+     * @return string
+     */
+    public function render_login_signup_form($form) {
+        $context = $form->export_for_template($this);
+
+        return $this->render_from_template('core/signup_form_layout', $context);
     }
 
     /**
@@ -4633,6 +4544,7 @@ class core_renderer_ajax extends core_renderer {
  * Used in file resources, media filter, and any other places that need to
  * output embedded media.
  *
+ * @deprecated since Moodle 3.2
  * @copyright 2011 The Open University
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -4643,75 +4555,14 @@ class core_media_renderer extends plugin_renderer_base {
     private $embeddablemarkers;
 
     /**
-     * Constructor requires medialib.php.
+     * Constructor
      *
      * This is needed in the constructor (not later) so that you can use the
      * constants and static functions that are defined in core_media class
      * before you call renderer functions.
      */
     public function __construct() {
-        global $CFG;
-        require_once($CFG->libdir . '/medialib.php');
-    }
-
-    /**
-     * Obtains the list of core_media_player objects currently in use to render
-     * items.
-     *
-     * The list is in rank order (highest first) and does not include players
-     * which are disabled.
-     *
-     * @return array Array of core_media_player objects in rank order
-     */
-    protected function get_players() {
-        global $CFG;
-
-        // Save time by only building the list once.
-        if (!$this->players) {
-            // Get raw list of players.
-            $players = $this->get_players_raw();
-
-            // Chuck all the ones that are disabled.
-            foreach ($players as $key => $player) {
-                if (!$player->is_enabled()) {
-                    unset($players[$key]);
-                }
-            }
-
-            // Sort in rank order (highest first).
-            usort($players, array('core_media_player', 'compare_by_rank'));
-            $this->players = $players;
-        }
-        return $this->players;
-    }
-
-    /**
-     * Obtains a raw list of player objects that includes objects regardless
-     * of whether they are disabled or not, and without sorting.
-     *
-     * You can override this in a subclass if you need to add additional
-     * players.
-     *
-     * The return array is be indexed by player name to make it easier to
-     * remove players in a subclass.
-     *
-     * @return array $players Array of core_media_player objects in any order
-     */
-    protected function get_players_raw() {
-        return array(
-            'vimeo' => new core_media_player_vimeo(),
-            'youtube' => new core_media_player_youtube(),
-            'youtube_playlist' => new core_media_player_youtube_playlist(),
-            'html5video' => new core_media_player_html5video(),
-            'html5audio' => new core_media_player_html5audio(),
-            'mp3' => new core_media_player_mp3(),
-            'flv' => new core_media_player_flv(),
-            'wmp' => new core_media_player_wmp(),
-            'qt' => new core_media_player_qt(),
-            'rm' => new core_media_player_rm(),
-            'swf' => new core_media_player_swf(),
-            'link' => new core_media_player_link(),
-        );
+        debugging('Class core_media_renderer is deprecated, please use core_media_manager::instance()', DEBUG_DEVELOPER);
     }
 
     /**
@@ -4733,18 +4584,7 @@ class core_media_renderer extends plugin_renderer_base {
      */
     public function embed_url(moodle_url $url, $name = '', $width = 0, $height = 0,
             $options = array()) {
-
-        // Get width and height from URL if specified (overrides parameters in
-        // function call).
-        $rawurl = $url->out(false);
-        if (preg_match('/[?#]d=([\d]{1,4}%?)x([\d]{1,4}%?)/', $rawurl, $matches)) {
-            $width = $matches[1];
-            $height = $matches[2];
-            $url = new moodle_url(str_replace($matches[0], '', $rawurl));
-        }
-
-        // Defer to array version of function.
-        return $this->embed_alternatives(array($url), $name, $width, $height, $options);
+        return core_media_manager::instance()->embed_url($url, $name, $width, $height, $options);
     }
 
     /**
@@ -4779,38 +4619,7 @@ class core_media_renderer extends plugin_renderer_base {
      */
     public function embed_alternatives($alternatives, $name = '', $width = 0, $height = 0,
             $options = array()) {
-
-        // Get list of player plugins (will also require the library).
-        $players = $this->get_players();
-
-        // Set up initial text which will be replaced by first player that
-        // supports any of the formats.
-        $out = core_media_player::PLACEHOLDER;
-
-        // Loop through all players that support any of these URLs.
-        foreach ($players as $player) {
-            // Option: When no other player matched, don't do the default link player.
-            if (!empty($options[core_media::OPTION_FALLBACK_TO_BLANK]) &&
-                    $player->get_rank() === 0 && $out === core_media_player::PLACEHOLDER) {
-                continue;
-            }
-
-            $supported = $player->list_supported_urls($alternatives, $options);
-            if ($supported) {
-                // Embed.
-                $text = $player->embed($supported, $name, $width, $height, $options);
-
-                // Put this in place of the 'fallback' slot in the previous text.
-                $out = str_replace(core_media_player::PLACEHOLDER, $text, $out);
-            }
-        }
-
-        // Remove 'fallback' slot from final version and return it.
-        $out = str_replace(core_media_player::PLACEHOLDER, '', $out);
-        if (!empty($options[core_media::OPTION_BLOCK]) && $out !== '') {
-            $out = html_writer::tag('div', $out, array('class' => 'resourcecontent'));
-        }
-        return $out;
+        return core_media_manager::instance()->embed_alternatives($alternatives, $name, $width, $height, $options);
     }
 
     /**
@@ -4825,7 +4634,7 @@ class core_media_renderer extends plugin_renderer_base {
      * @return bool True if file can be embedded
      */
     public function can_embed_url(moodle_url $url, $options = array()) {
-        return $this->can_embed_urls(array($url), $options);
+        return core_media_manager::instance()->can_embed_url($url, $options);
     }
 
     /**
@@ -4838,18 +4647,7 @@ class core_media_renderer extends plugin_renderer_base {
      * @return bool True if file can be embedded
      */
     public function can_embed_urls(array $urls, $options = array()) {
-        // Check all players to see if any of them support it.
-        foreach ($this->get_players() as $player) {
-            // Link player (always last on list) doesn't count!
-            if ($player->get_rank() <= 0) {
-                break;
-            }
-            // First player that supports it, return true.
-            if ($player->list_supported_urls($urls, $options)) {
-                return true;
-            }
-        }
-        return false;
+        return core_media_manager::instance()->can_embed_urls($urls, $options);
     }
 
     /**
@@ -4864,19 +4662,7 @@ class core_media_renderer extends plugin_renderer_base {
      * @return string String suitable for use in regex such as '(\.mp4|\.flv)'
      */
     public function get_embeddable_markers() {
-        if (empty($this->embeddablemarkers)) {
-            $markers = '';
-            foreach ($this->get_players() as $player) {
-                foreach ($player->get_embeddable_markers() as $marker) {
-                    if ($markers !== '') {
-                        $markers .= '|';
-                    }
-                    $markers .= preg_quote($marker);
-                }
-            }
-            $this->embeddablemarkers = $markers;
-        }
-        return $this->embeddablemarkers;
+        return core_media_manager::instance()->get_embeddable_markers();
     }
 }
 
@@ -5029,6 +4815,47 @@ class core_renderer_maintenance extends core_renderer {
         // debugging('Please do not use $OUTPUT->'.__FUNCTION__.'() when performing maintenance tasks.', DEBUG_DEVELOPER);
         return '';
 
+    }
+
+    /**
+     * Overridden confirm message for upgrades.
+     *
+     * @param string $message The question to ask the user
+     * @param single_button|moodle_url|string $continue The single_button component representing the Continue answer.
+     * @param single_button|moodle_url|string $cancel The single_button component representing the Cancel answer.
+     * @return string HTML fragment
+     */
+    public function confirm($message, $continue, $cancel) {
+        // We need plain styling of confirm boxes on upgrade because we don't know which stylesheet we have (it could be
+        // from any previous version of Moodle).
+        if ($continue instanceof single_button) {
+            $continue->primary = true;
+        } else if (is_string($continue)) {
+            $continue = new single_button(new moodle_url($continue), get_string('continue'), 'post', true);
+        } else if ($continue instanceof moodle_url) {
+            $continue = new single_button($continue, get_string('continue'), 'post', true);
+        } else {
+            throw new coding_exception('The continue param to $OUTPUT->confirm() must be either a URL' .
+                                       ' (string/moodle_url) or a single_button instance.');
+        }
+
+        if ($cancel instanceof single_button) {
+            $output = '';
+        } else if (is_string($cancel)) {
+            $cancel = new single_button(new moodle_url($cancel), get_string('cancel'), 'get');
+        } else if ($cancel instanceof moodle_url) {
+            $cancel = new single_button($cancel, get_string('cancel'), 'get');
+        } else {
+            throw new coding_exception('The cancel param to $OUTPUT->confirm() must be either a URL' .
+                                       ' (string/moodle_url) or a single_button instance.');
+        }
+
+        $output = $this->box_start('generalbox', 'notice');
+        $output .= html_writer::tag('h4', get_string('confirm'));
+        $output .= html_writer::tag('p', $message);
+        $output .= html_writer::tag('div', $this->render($continue) . $this->render($cancel), array('class' => 'buttons'));
+        $output .= $this->box_end();
+        return $output;
     }
 
     /**

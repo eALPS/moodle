@@ -47,9 +47,16 @@
         clear: both;
         border-radius: 4px;
 
+        img {
+            max-width: 100%;
+        }
+
         .contacts-area {
             border-right: 1px solid #e3e3e3;
             height: 600px;
+            @media (max-height: 670px) {
+                height: 500px;
+            }
             width: 280px;
             display: inline-block;
             box-sizing: border-box;
@@ -98,6 +105,7 @@
 
                 .searchfilterarea {
                     line-height: 20px;
+                    cursor: pointer;
 
                     .searchfilter {
                         float: left;
@@ -106,7 +114,6 @@
                     .searchfilterdelete {
                         float: left;
                         margin-left: 5px;
-                        cursor: pointer;
                     }
                 }
             }
@@ -140,6 +147,9 @@
 
             .contacts {
                 height: 500px;
+                @media (max-height: 670px) {
+                    height: 400px;
+                }
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
 
@@ -276,6 +286,9 @@
         .messages-area {
             width: ~"calc(100% - 280px)";
             height: 600px;
+            @media (max-height: 670px) {
+                height: 500px;
+            }
             box-sizing: border-box;
             margin: 0;
             position: relative;
@@ -316,6 +329,9 @@
                 padding: 30px;
                 font-size: 16px;
                 height: 600px;
+                @media (max-height: 670px) {
+                    height: 500px;
+                }
                 box-sizing: border-box;
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
@@ -432,6 +448,9 @@
 
             .messages {
                 height: 500px;
+                @media (max-height: 670px) {
+                    height: 400px;
+                }
                 overflow-y: auto;
                 overflow-x: hidden;
                 -webkit-overflow-scrolling: touch;
@@ -465,6 +484,8 @@
                         position: relative;
 
                         .text {
+                            display: block;
+
                             p {
                                 margin: 0;
                             }
@@ -634,21 +655,6 @@
             }
         }
     }
-}
-
-#newmessageoverlay {
-    .well;
-    margin: 0 1em;
-    position: fixed;
-    bottom: 0;
-    right: 0;
-}
-#newmessageoverlay #usermessage {
-    padding: 10px;
-}
-/* Widen the plain text editor on the bulk message screen */
-#page-user-action_redir #edit-messagebody {
-    width: auto;
 }
 
 .preferences-container {
@@ -850,6 +856,9 @@
 
 .notification-area {
     height: 600px;
+    @media (max-height: 670px) {
+        height: 500px;
+    }
     box-sizing: border-box;
     border-radius: 4px;
     margin-bottom: 30px;
@@ -947,8 +956,11 @@
             }
         }
 
-        .content {
+        > .content {
             height: 500px;
+            @media (max-height: 670px) {
+                height: 400px;
+            }
             box-sizing: border-box;
             overflow: auto;
             -webkit-overflow-scrolling: touch;
@@ -985,36 +997,15 @@
     }
 }
 
-.dir-rtl {
-    .messaging-area-container {
-        .messaging-area {
-            .contacts-area {
-                .contacts {
-                    .contact {
-                        .picture {
-                            float: right;
-                        }
-
-                        .information {
-                            float: right;
-                        }
-
-                        .unread-count-container {
-                            float: right;
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 @media (max-width: 979px) {
     .messaging-area-container {
         .messaging-area {
             position: relative;
             overflow: hidden;
             height: 600px;
+            @media (max-height: 670px) {
+                height: 500px;
+            }
 
             .messages-area {
                 .messages-header {

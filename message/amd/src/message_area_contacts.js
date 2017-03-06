@@ -32,6 +32,7 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
             CONTACTS: "[data-region='contacts'][data-region-content='contacts']",
             CONTACTSAREA: "[data-region='contacts-area']",
             CONVERSATIONS: "[data-region='contacts'][data-region-content='conversations']",
+            COURSE: "[data-region='course']",
             LASTMESSAGETEXT: "[data-region='last-message-text']",
             LASTMESSAGEUSER: "[data-region='last-message-user']",
             LOADINGICON: '.loading-icon',
@@ -134,6 +135,9 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
             this.messageArea.onDelegateEvent(CustomEvents.events.down, SELECTORS.VIEWCONVERSATION,
                 this._selectNextConversation.bind(this));
 
+            this.messageArea.onDelegateEvent(CustomEvents.events.up, SELECTORS.COURSE, this._selectPreviousCourse.bind());
+            this.messageArea.onDelegateEvent(CustomEvents.events.down, SELECTORS.COURSE, this._selectNextCourse.bind());
+
             this.messageArea.onDelegateEvent('focus', SELECTORS.SEARCHBOX, this._setSearching.bind(this));
             this.messageArea.onDelegateEvent('blur', SELECTORS.SEARCHBOX, this._clearSearching.bind(this));
 
@@ -149,9 +153,10 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
             this.messageArea.onDelegateEvent(CustomEvents.events.scrollBottom, SELECTORS.CONTACTS,
                 this._loadContacts.bind(this));
 
-            // Set the number of conversations. We set this to the number of conversations we asked to retrieve not by
-            // the number that was actually retrieved, see MDL-55870.
-            this._numConversationsDisplayed = 20;
+            if (!this.messageArea.showContactsFirst()) {
+                // Set the initial number of conversations to retrieve. Otherwise it will display no conversations.
+                this._numConversationsDisplayed = 20;
+            }
         };
 
         /**
@@ -535,8 +540,10 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
         Contacts.prototype._setSelectedUser = function(selector) {
             // Remove the 'selected' class from any other contact.
             this.messageArea.find(SELECTORS.CONTACT).removeClass('selected');
+            this.messageArea.find(SELECTORS.CONTACT).attr('aria-pressed', false);
             // Set the tab for the user to selected.
             this.messageArea.find(SELECTORS.CONTACT + selector).addClass('selected');
+            this.messageArea.find(SELECTORS.CONTACT + selector).attr('aria-pressed', true);
         };
 
         /**
@@ -546,6 +553,9 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
          * @return {String} The altered text
          */
         Contacts.prototype._getContactText = function(text) {
+            // Remove the HTML tags to render the contact text.
+            text = $(document.createElement('div')).html(text).text();
+
             if (text.length > this._messageLength) {
                 text = text.substr(0, this._messageLength - 3);
                 text += '...';
@@ -603,6 +613,34 @@ define(['jquery', 'core/ajax', 'core/templates', 'core/notification', 'core/cust
             var contact = $(e.target).closest(SELECTORS.CONTACT);
             var previous = contact.prev();
             previous.focus();
+
+            data.originalEvent.preventDefault();
+            data.originalEvent.stopPropagation();
+        };
+
+        /**
+         * Shifts focus to the next course in the list.
+         *
+         * @param {event} e The jquery event
+         * @param {object} data Additional event data
+         */
+        Contacts.prototype._selectNextCourse = function(e, data) {
+            var course = $(e.target).closest(SELECTORS.COURSE);
+            course.next().focus();
+
+            data.originalEvent.preventDefault();
+            data.originalEvent.stopPropagation();
+        };
+
+        /**
+         * Shifts focus to the previous course in the list.
+         *
+         * @param {event} e The jquery event
+         * @param {object} data Additional event data
+         */
+        Contacts.prototype._selectPreviousCourse = function(e, data) {
+            var course = $(e.target).closest(SELECTORS.COURSE);
+            course.prev().focus();
 
             data.originalEvent.preventDefault();
             data.originalEvent.stopPropagation();

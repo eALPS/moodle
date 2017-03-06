@@ -77,7 +77,7 @@ class user_competency_plan extends persistent {
      * @return competency Competency Object
      */
     public function get_competency() {
-        return new competency($this->get_competencyid());
+        return new competency($this->get('competencyid'));
     }
 
     /**
@@ -86,7 +86,7 @@ class user_competency_plan extends persistent {
      * @return context The context.
      */
     public function get_context() {
-        return context_user::instance($this->get_userid());
+        return context_user::instance($this->get('userid'));
     }
 
     /**
@@ -221,7 +221,7 @@ class user_competency_plan extends persistent {
         $record = $DB->get_record_sql($sql, array($planid, $competencyid));
 
         if (!$record) {
-            throw new coding_exception('The competency does not belong to this plan: ' . $competencyid . ', ' . $planid);
+            throw new \coding_exception('The competency does not belong to this plan: ' . $competencyid . ', ' . $planid);
         }
 
         return new competency(0, $record);
@@ -250,7 +250,7 @@ class user_competency_plan extends persistent {
             } else {
                 $ids = array();
                 foreach ($competenciesorids as $comp) {
-                    $ids[] = $comp->get_id();
+                    $ids[] = $comp->get('id');
                 }
             }
 

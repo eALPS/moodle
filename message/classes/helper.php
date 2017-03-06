@@ -43,30 +43,54 @@ class helper {
      * @param int $limitfrom
      * @param int $limitnum
      * @param string $sort
+     * @param int $timefrom the time from the message being sent
+     * @param int $timeto the time up until the message being sent
      * @return array of messages
      */
     public static function get_messages($userid, $otheruserid, $timedeleted = 0, $limitfrom = 0, $limitnum = 0,
-                                        $sort = 'timecreated ASC') {
+                                        $sort = 'timecreated ASC', $timefrom = 0, $timeto = 0) {
         global $DB;
 
-        $sql = "SELECT id, useridfrom, useridto, subject, fullmessage, fullmessagehtml, fullmessageformat,
+        $messageid = $DB->sql_concat("'message_'", 'id');
+        $messagereadid = $DB->sql_concat("'messageread_'", 'id');
+
+        $sql = "SELECT {$messageid} AS fakeid, id, useridfrom, useridto, subject, fullmessage, fullmessagehtml, fullmessageformat,
                        smallmessage, notification, timecreated, 0 as timeread
                   FROM {message} m
                  WHERE ((useridto = ? AND useridfrom = ? AND timeusertodeleted = ?)
                     OR (useridto = ? AND useridfrom = ? AND timeuserfromdeleted = ?))
                    AND notification = 0
+                   %where%
              UNION ALL
-                SELECT id, useridfrom, useridto, subject, fullmessage, fullmessagehtml, fullmessageformat,
+                SELECT {$messagereadid} AS fakeid, id, useridfrom, useridto, subject, fullmessage, fullmessagehtml, fullmessageformat,
                        smallmessage, notification, timecreated, timeread
                   FROM {message_read} mr
                  WHERE ((useridto = ? AND useridfrom = ? AND timeusertodeleted = ?)
                     OR (useridto = ? AND useridfrom = ? AND timeuserfromdeleted = ?))
                    AND notification = 0
+                   %where%
               ORDER BY $sort";
-        $params = array($userid, $otheruserid, $timedeleted,
-                        $otheruserid, $userid, $timedeleted,
-                        $userid, $otheruserid, $timedeleted,
-                        $otheruserid, $userid, $timedeleted);
+        $params1 = array($userid, $otheruserid, $timedeleted,
+                         $otheruserid, $userid, $timedeleted);
+
+        $params2 = array($userid, $otheruserid, $timedeleted,
+                         $otheruserid, $userid, $timedeleted);
+        $where = array();
+
+        if (!empty($timefrom)) {
+            $where[] = 'AND timecreated >= ?';
+            $params1[] = $timefrom;
+            $params2[] = $timefrom;
+        }
+
+        if (!empty($timeto)) {
+            $where[] = 'AND timecreated <= ?';
+            $params1[] = $timeto;
+            $params2[] = $timeto;
+        }
+
+        $sql = str_replace('%where%', implode(' ', $where), $sql);
+        $params = array_merge($params1, $params2);
 
         return $DB->get_records_sql($sql, $params, $limitfrom, $limitnum);
     }
@@ -147,19 +171,42 @@ class helper {
         $data->messageid = null;
         if (isset($contact->smallmessage)) {
             $data->ismessaging = true;
-            $data->lastmessage = $contact->smallmessage;
+            // Strip the HTML tags from the message for displaying in the contact area.
+            $data->lastmessage = clean_param($contact->smallmessage, PARAM_NOTAGS);
             $data->useridfrom = $contact->useridfrom;
             if (isset($contact->messageid)) {
                 $data->messageid = $contact->messageid;
             }
         }
-        // Check if the user is online.
-        $data->isonline = self::is_online($userfields->lastaccess);
-        $data->isblocked = isset($contact->blocked) ? $contact->blocked : 0;
-        $data->isread = isset($contact->isread) ? $contact->isread : 0;
+        $data->isonline = null;
+        if (self::show_online_status($userfields)) {
+            $data->isonline = self::is_online($userfields->lastaccess);
+        }
+        $data->isblocked = isset($contact->blocked) ? (bool) $contact->blocked : false;
+        $data->isread = isset($contact->isread) ? (bool) $contact->isread : false;
         $data->unreadcount = isset($contact->unreadcount) ? $contact->unreadcount : null;
 
         return $data;
+    }
+
+    /**
+     * Helper function for checking if we should show the user's online status.
+     *
+     * @param \stdClass $user
+     * @return boolean
+     */
+    public static function show_online_status($user) {
+        global $CFG;
+
+        require_once($CFG->dirroot . '/user/lib.php');
+
+        if ($lastaccess = user_get_user_details($user, null, array('lastaccess'))) {
+            if (isset($lastaccess['lastaccess'])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -244,5 +291,18 @@ class helper {
         );
 
         return $params;
+    }
+
+    /**
+     * Returns the cache key for the time created value of the last message between two users.
+     *
+     * @param int $userid
+     * @param int $user2id
+     * @return string
+     */
+    public static function get_last_message_time_created_cache_key($userid, $user2id) {
+        $ids = [$userid, $user2id];
+        sort($ids);
+        return implode('_', $ids);
     }
 }

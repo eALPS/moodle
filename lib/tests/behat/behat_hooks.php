@@ -317,19 +317,18 @@ class behat_hooks extends behat_base {
             $namedpartialclass = 'behat_partial_named_selector';
             $namedexactclass = 'behat_exact_named_selector';
 
-            if ($suitename !== 'default') {
-                // If override selector exist, then set it as default behat selectors class.
-                $overrideclass = behat_config_util::get_behat_theme_selector_override_classname($suitename, 'named_partial', true);
-                if (class_exists($overrideclass)) {
-                    $namedpartialclass = $overrideclass;
-                }
-
-                // If override selector exist, then set it as default behat selectors class.
-                $overrideclass = behat_config_util::get_behat_theme_selector_override_classname($suitename, 'named_exact', true);
-                if (class_exists($overrideclass)) {
-                    $namedexactclass = $overrideclass;
-                }
+            // If override selector exist, then set it as default behat selectors class.
+            $overrideclass = behat_config_util::get_behat_theme_selector_override_classname($suitename, 'named_partial', true);
+            if (class_exists($overrideclass)) {
+                $namedpartialclass = $overrideclass;
             }
+
+            // If override selector exist, then set it as default behat selectors class.
+            $overrideclass = behat_config_util::get_behat_theme_selector_override_classname($suitename, 'named_exact', true);
+            if (class_exists($overrideclass)) {
+                $namedexactclass = $overrideclass;
+            }
+
             $this->getSession()->getSelectorsHandler()->registerSelector('named_partial', new $namedpartialclass());
             $this->getSession()->getSelectorsHandler()->registerSelector('named_exact', new $namedexactclass());
         }
@@ -340,7 +339,12 @@ class behat_hooks extends behat_base {
         // Reset $SESSION.
         \core\session\manager::init_empty_session();
 
+        // Ignore E_NOTICE and E_WARNING during reset, as this might be caused because of some existing process
+        // running ajax. This will be investigated in another issue.
+        $errorlevel = error_reporting();
+        error_reporting($errorlevel & ~E_NOTICE & ~E_WARNING);
         behat_util::reset_all_data();
+        error_reporting($errorlevel);
 
         // Assign valid data to admin user (some generator-related code needs a valid user).
         $user = $DB->get_record('user', array('username' => 'admin'));
@@ -424,6 +428,11 @@ class behat_hooks extends behat_base {
      */
     public function after_step_javascript(AfterStepScope $scope) {
         global $CFG, $DB;
+
+        // If step is undefined then throw exception, to get failed exit code.
+        if ($scope->getTestResult()->getResultCode() === Behat\Behat\Tester\Result\StepResult::UNDEFINED) {
+            throw new coding_exception("Step '" . $scope->getStep()->getText() . "'' is undefined.");
+        }
 
         // Save the page content if the step failed.
         if (!empty($CFG->behat_faildump_path) &&
@@ -577,11 +586,23 @@ class behat_hooks extends behat_base {
         // The scenario title + the failed step text.
         // We want a i-am-the-scenario-title_i-am-the-failed-step.$filetype format.
         $filename = $scope->getFeature()->getTitle() . '_' . $scope->getStep()->getText();
-        $filename = preg_replace('/([^a-zA-Z0-9\_]+)/', '-', $filename);
 
-        // File name limited to 255 characters. Leaving 5 chars for line number and 4 chars for the file.
+        // As file name is limited to 255 characters. Leaving 5 chars for line number and 4 chars for the file.
         // extension as we allow .png for images and .html for DOM contents.
-        $filename = substr($filename, 0, 245) . '_' . $scope->getStep()->getLine() . '.' . $filetype;
+        $filenamelen = 245;
+
+        // Suffix suite name to faildump file, if it's not default suite.
+        $suitename = $scope->getSuite()->getName();
+        if ($suitename != 'default') {
+            $suitename = '_' . $suitename;
+            $filenamelen = $filenamelen - strlen($suitename);
+        } else {
+            // No need to append suite name for default.
+            $suitename = '';
+        }
+
+        $filename = preg_replace('/([^a-zA-Z0-9\_]+)/', '-', $filename);
+        $filename = substr($filename, 0, $filenamelen) . $suitename . '_' . $scope->getStep()->getLine() . '.' . $filetype;
 
         return array($dir, $filename);
     }
@@ -594,7 +615,7 @@ class behat_hooks extends behat_base {
      *
      * @Given /^I look for exceptions$/
      * @throw Exception Unknown type, depending on what we caught in the hook or basic \Exception.
-     * @see Moodle\BehatExtension\Tester\MoodleStepTester
+     * @see Moodle\BehatExtension\EventDispatcher\Tester\ChainedStepTester
      */
     public function i_look_for_exceptions() {
         // If the step already failed in a hook throw the exception.

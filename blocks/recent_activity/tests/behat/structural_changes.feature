@@ -49,6 +49,7 @@ Feature: View structural changes in recent activity block
     Given I log in as "teacher1"
     And I follow "Course 1"
     And I turn editing mode on
+    And I add the "Recent activity" block
     When I add a "Forum" to section "1" and I fill the form with:
       | name        | ForumVisibleGroups |
       | Description | No description     |
@@ -145,6 +146,7 @@ Feature: View structural changes in recent activity block
     When I log in as "teacher1"
     And I follow "Course 1"
     And I turn editing mode on
+    And I add the "Recent activity" block
     And I add a "Forum" to section "1" and I fill the form with:
       | name        | ForumNew       |
       | Description | No description |
@@ -163,7 +165,7 @@ Feature: View structural changes in recent activity block
     And I log in as "teacher1"
     And I follow "Course 1"
     And I follow "ForumNew"
-    And I click on "Edit settings" "link" in the "Administration" "block"
+    And I navigate to "Edit settings" in current page administration
     And I set the following fields to these values:
       | name | ForumUpdated |
     And I press "Save and return to course"
@@ -192,6 +194,7 @@ Feature: View structural changes in recent activity block
     And I follow "Course 1"
     And I turn editing mode on
     And I delete "ForumUpdated" activity
+    And I run all adhoc tasks
     And I log out
     And I wait "1" seconds
     # Students 1 and 2 see that forum was deleted

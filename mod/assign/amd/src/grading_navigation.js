@@ -212,13 +212,17 @@ define(['jquery', 'core/notification', 'core/str', 'core/form-autocomplete',
                     if (user.requiregrading == "0") {
                         show = false;
                     }
+                } else if (filter == "grantedextension") {
+                    if (user.grantedextension == "0") {
+                        show = false;
+                    }
                 }
             });
 
             if (show) {
                 this._filteredUsers[this._filteredUsers.length] = user;
                 if (userid == user.id) {
-                    foundIndex = index;
+                    foundIndex = (this._filteredUsers.length - 1);
                 }
             }
         }.bind(this));

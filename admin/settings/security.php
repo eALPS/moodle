@@ -59,6 +59,8 @@ if ($hassiteconfig) { // speedup for non-admins, add all caps used on this page
     $temp->add(new admin_setting_configcheckbox('cronclionly', new lang_string('cronclionly', 'admin'), new lang_string
             ('configcronclionly', 'admin'), 1));
     $temp->add(new admin_setting_configpasswordunmask('cronremotepassword', new lang_string('cronremotepassword', 'admin'), new lang_string('configcronremotepassword', 'admin'), ''));
+    $temp->add(new admin_setting_configcheckbox('tool_task/enablerunnow', new lang_string('enablerunnow', 'tool_task'),
+            new lang_string('enablerunnow_desc', 'tool_task'), 1));
 
     $options = array(0=>get_string('no'), 3=>3, 5=>5, 7=>7, 10=>10, 20=>20, 30=>30, 50=>50, 100=>100);
     $temp->add(new admin_setting_configselect('lockoutthreshold', new lang_string('lockoutthreshold', 'admin'), new lang_string('lockoutthreshold_desc', 'admin'), 0, $options));
@@ -117,9 +119,15 @@ if ($hassiteconfig) { // speedup for non-admins, add all caps used on this page
     $temp->add(new admin_setting_configcheckbox('cookiesecure', new lang_string('cookiesecure', 'admin'), new lang_string('configcookiesecure', 'admin'), 1));
     $temp->add(new admin_setting_configcheckbox('cookiehttponly', new lang_string('cookiehttponly', 'admin'), new lang_string('configcookiehttponly', 'admin'), 0));
     $temp->add(new admin_setting_configcheckbox('allowframembedding', new lang_string('allowframembedding', 'admin'), new lang_string('allowframembedding_help', 'admin'), 0));
-    $temp->add(new admin_setting_configcheckbox('loginpasswordautocomplete', new lang_string('loginpasswordautocomplete', 'admin'), new lang_string('loginpasswordautocomplete_help', 'admin'), 0));
-    $ADMIN->add('security', $temp);
 
+    // Settings elements used by the \core\files\curl_security_helper class.
+    $temp->add(new admin_setting_configmixedhostiplist('curlsecurityblockedhosts',
+               new lang_string('curlsecurityblockedhosts', 'admin'),
+               new lang_string('curlsecurityblockedhostssyntax', 'admin'), ""));
+    $temp->add(new admin_setting_configportlist('curlsecurityallowedport',
+               new lang_string('curlsecurityallowedport', 'admin'),
+               new lang_string('curlsecurityallowedportsyntax', 'admin'), ""));
+    $ADMIN->add('security', $temp);
 
     // "notifications" settingpage
     $temp = new admin_settingpage('notifications', new lang_string('notifications', 'admin'));

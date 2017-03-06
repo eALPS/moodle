@@ -1,14 +1,15 @@
-$toggle-height: 35px;
 $toggle-width: 25px;
 $standard-border: 1px solid #ddd;
 $region-container-height: 500px;
 $region-container-width: 380px;
 $region-container-z-index: 1;
 $region-header-height: 25px;
+$region-footer-height: 30px;
 $content-item-hover-colour-bg: #79b5e6;
 $content-item-hover-colour-text: #fff;
 $content-item-selected-colour-bg: #4f94cd;
 $content-item-unread-colour: #f4f4f4;
+$content-header-footer-height: $region-header-height + $region-footer-height;
 
 @mixin invisible() {
     opacity: 0;
@@ -104,6 +105,14 @@ $content-item-unread-colour: #f4f4f4;
     box-sizing: border-box;
 }
 
+.popover-region-footer-container {
+    height: $region-footer-height;
+    text-align: center;
+    border-top: $standard-border;
+    background-color: $popover-bg;
+    padding-top: 3px;
+}
+
 .popover-region-header-text {
     float: left;
     margin: 0;
@@ -124,6 +133,11 @@ $content-item-unread-colour: #f4f4f4;
         height: 12px;
         width: 12px;
     }
+
+    .newmessage-link {
+        margin-right: 10px;
+    }
+
     label {
         display: inline-block;
         text-align: center;
@@ -132,7 +146,7 @@ $content-item-unread-colour: #f4f4f4;
 }
 
 .popover-region-content-container {
-    height: calc(100% - 25px);
+    height: calc(100% - #{$content-header-footer-height});
     width: 100%;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -178,15 +192,7 @@ $content-item-unread-colour: #f4f4f4;
     }
 
     .popover-region-toggle {
-        height: $toggle-height;
         width: $toggle-width;
-        line-height: $toggle-height;
-
-        img {
-            height: 16px;
-            width: 16px;
-            margin: 0;
-        }
     }
 
     .count-container {
@@ -202,8 +208,9 @@ $content-item-unread-colour: #f4f4f4;
     }
 
     .popover-region-container {
-        top: $toggle-height;
+        top: $line-height-base * 1.4 * $font-size-base;
     }
+
 }
 
 .content-item-container {
@@ -229,6 +236,7 @@ $content-item-unread-colour: #f4f4f4;
     }
 
     &.unread {
+        margin: 0;
         background-color: $content-item-unread-colour;
 
         &:hover {

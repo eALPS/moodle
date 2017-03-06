@@ -69,17 +69,23 @@ trait templatable_form_element {
 
         // Special wierd named property.
         $context['frozen'] = !empty($this->_flagFrozen);
+        $context['hardfrozen'] = !empty($this->_flagFrozen) && empty($this->_persistantFreeze);
 
         // Other attributes.
         $otherattributes = [];
         foreach ($this->getAttributes() as $attr => $value) {
-            if (!in_array($attr, $standardattributes) && $attr != 'class') {
+            if (!in_array($attr, $standardattributes) && $attr != 'class' && !is_object($value)) {
                 $otherattributes[] = $attr . '="' . s($value) . '"';
             }
         }
         $context['extraclasses'] = $extraclasses;
         $context['type'] = $this->getType();
         $context['attributes'] = implode(' ', $otherattributes);
+
+        // Elements with multiple values need array syntax.
+        if ($this->getAttribute('multiple')) {
+            $context['name'] = $context['name'] . '[]';
+        }
 
         return $context;
     }

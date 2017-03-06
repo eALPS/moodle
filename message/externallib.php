@@ -214,11 +214,24 @@ class core_message_external extends external_api {
      * @since Moodle 2.5
      */
     public static function create_contacts($userids, $userid = 0) {
-        global $CFG;
+        global $CFG, $USER;
 
         // Check if messaging is enabled.
         if (empty($CFG->messaging)) {
             throw new moodle_exception('disabled', 'message');
+        }
+
+        if (empty($userid)) {
+            $userid = $USER->id;
+        }
+
+        // Validate context.
+        $context = context_system::instance();
+        self::validate_context($context);
+
+        $capability = 'moodle/site:manageallmessaging';
+        if (($USER->id != $userid) && !has_capability($capability, $context)) {
+            throw new required_capability_exception($context, $capability, 'nopermissions', '');
         }
 
         $params = array('userids' => $userids, 'userid' => $userid);
@@ -276,11 +289,24 @@ class core_message_external extends external_api {
      * @since Moodle 2.5
      */
     public static function delete_contacts($userids, $userid = 0) {
-        global $CFG;
+        global $CFG, $USER;
 
         // Check if messaging is enabled.
         if (empty($CFG->messaging)) {
             throw new moodle_exception('disabled', 'message');
+        }
+
+        if (empty($userid)) {
+            $userid = $USER->id;
+        }
+
+        // Validate context.
+        $context = context_system::instance();
+        self::validate_context($context);
+
+        $capability = 'moodle/site:manageallmessaging';
+        if (($USER->id != $userid) && !has_capability($capability, $context)) {
+            throw new required_capability_exception($context, $capability, 'nopermissions', '');
         }
 
         $params = array('userids' => $userids, 'userid' => $userid);
@@ -331,11 +357,24 @@ class core_message_external extends external_api {
      * @since Moodle 2.5
      */
     public static function block_contacts($userids, $userid = 0) {
-        global $CFG;
+        global $CFG, $USER;
 
         // Check if messaging is enabled.
         if (empty($CFG->messaging)) {
             throw new moodle_exception('disabled', 'message');
+        }
+
+        if (empty($userid)) {
+            $userid = $USER->id;
+        }
+
+        // Validate context.
+        $context = context_system::instance();
+        self::validate_context($context);
+
+        $capability = 'moodle/site:manageallmessaging';
+        if (($USER->id != $userid) && !has_capability($capability, $context)) {
+            throw new required_capability_exception($context, $capability, 'nopermissions', '');
         }
 
         $params = array('userids' => $userids, 'userid' => $userid);
@@ -393,11 +432,24 @@ class core_message_external extends external_api {
      * @since Moodle 2.5
      */
     public static function unblock_contacts($userids, $userid = 0) {
-        global $CFG;
+        global $CFG, $USER;
 
         // Check if messaging is enabled.
         if (empty($CFG->messaging)) {
             throw new moodle_exception('disabled', 'message');
+        }
+
+        if (empty($userid)) {
+            $userid = $USER->id;
+        }
+
+        // Validate context.
+        $context = context_system::instance();
+        self::validate_context($context);
+
+        $capability = 'moodle/site:manageallmessaging';
+        if (($USER->id != $userid) && !has_capability($capability, $context)) {
+            throw new required_capability_exception($context, $capability, 'nopermissions', '');
         }
 
         $params = array('userids' => $userids, 'userid' => $userid);
@@ -437,6 +489,7 @@ class core_message_external extends external_api {
                 'sentfromcurrentuser' => new external_value(PARAM_BOOL, 'Was the last message sent from the current user?'),
                 'lastmessage' => new external_value(PARAM_NOTAGS, 'The user\'s last message'),
                 'messageid' => new external_value(PARAM_INT, 'The unique search message id', VALUE_DEFAULT, null),
+                'showonlinestatus' => new external_value(PARAM_BOOL, 'Show the user\'s online status?'),
                 'isonline' => new external_value(PARAM_BOOL, 'The user\'s online status'),
                 'isread' => new external_value(PARAM_BOOL, 'If the user has read the message'),
                 'isblocked' => new external_value(PARAM_BOOL, 'If the user has been blocked'),
@@ -463,6 +516,7 @@ class core_message_external extends external_api {
                 'blocktime' => new external_value(PARAM_NOTAGS, 'The time to display above the message'),
                 'position' => new external_value(PARAM_ALPHA, 'The position of the text'),
                 'timesent' => new external_value(PARAM_NOTAGS, 'The time the message was sent'),
+                'timecreated' => new external_value(PARAM_INT, 'The timecreated timestamp for the message'),
                 'isread' => new external_value(PARAM_INT, 'Determines if the message was read or not'),
             )
         );
@@ -617,8 +671,8 @@ class core_message_external extends external_api {
                     new external_single_structure(
                         array(
                             'id' => new external_value(PARAM_INT, 'The course id'),
-                            'shortname' => new external_value(PARAM_NOTAGS, 'The course shortname'),
-                            'fullname' => new external_value(PARAM_NOTAGS, 'The course fullname'),
+                            'shortname' => new external_value(PARAM_TEXT, 'The course shortname'),
+                            'fullname' => new external_value(PARAM_TEXT, 'The course fullname'),
                         )
                     )
                 ),
@@ -848,6 +902,8 @@ class core_message_external extends external_api {
                 'limitfrom' => new external_value(PARAM_INT, 'Limit from', VALUE_DEFAULT, 0),
                 'limitnum' => new external_value(PARAM_INT, 'Limit number', VALUE_DEFAULT, 0),
                 'newest' => new external_value(PARAM_BOOL, 'Newest first?', VALUE_DEFAULT, false),
+                'timefrom' => new external_value(PARAM_INT,
+                    'The timestamp from which the messages were created', VALUE_DEFAULT, 0),
             )
         );
     }
@@ -865,7 +921,7 @@ class core_message_external extends external_api {
      * @since 3.2
      */
     public static function data_for_messagearea_messages($currentuserid, $otheruserid, $limitfrom = 0, $limitnum = 0,
-                                                         $newest = false) {
+                                                         $newest = false, $timefrom = 0) {
         global $CFG, $PAGE, $USER;
 
         // Check if messaging is enabled.
@@ -880,7 +936,8 @@ class core_message_external extends external_api {
             'otheruserid' => $otheruserid,
             'limitfrom' => $limitfrom,
             'limitnum' => $limitnum,
-            'newest' => $newest
+            'newest' => $newest,
+            'timefrom' => $timefrom,
         );
         self::validate_parameters(self::data_for_messagearea_messages_parameters(), $params);
         self::validate_context($systemcontext);
@@ -894,7 +951,29 @@ class core_message_external extends external_api {
         } else {
             $sort = 'timecreated ASC';
         }
-        $messages = \core_message\api::get_messages($currentuserid, $otheruserid, $limitfrom, $limitnum, $sort);
+
+        // We need to enforce a one second delay on messages to avoid race conditions of current
+        // messages still being sent.
+        //
+        // There is a chance that we could request messages before the current time's
+        // second has elapsed and while other messages are being sent in that same second. In which
+        // case those messages will be lost.
+        //
+        // Instead we ignore the current time in the result set to ensure that second is allowed to finish.
+        if (!empty($timefrom)) {
+            $timeto = time() - 1;
+        } else {
+            $timeto = 0;
+        }
+
+        // No requesting messages from the current time, as stated above.
+        if ($timefrom == time()) {
+            $messages = [];
+        } else {
+            $messages = \core_message\api::get_messages($currentuserid, $otheruserid, $limitfrom,
+                                                        $limitnum, $sort, $timefrom, $timeto);
+        }
+
         $messages = new \core_message\output\messagearea\messages($currentuserid, $otheruserid, $messages);
 
         $renderer = $PAGE->get_renderer('core_message');
@@ -915,10 +994,12 @@ class core_message_external extends external_api {
                 'currentuserid' => new external_value(PARAM_INT, 'The current user\'s id'),
                 'otheruserid' => new external_value(PARAM_INT, 'The other user\'s id'),
                 'otheruserfullname' => new external_value(PARAM_NOTAGS, 'The other user\'s fullname'),
+                'showonlinestatus' => new external_value(PARAM_BOOL, 'Show the user\'s online status?'),
                 'isonline' => new external_value(PARAM_BOOL, 'The user\'s online status'),
                 'messages' => new external_multiple_structure(
                     self::get_messagearea_message_structure()
-                )
+                ),
+                'isblocked' => new external_value(PARAM_BOOL, 'Is this user blocked by the current user?', VALUE_DEFAULT, false),
             )
         );
     }
@@ -1053,6 +1134,7 @@ class core_message_external extends external_api {
                 'fullname' => new external_value(PARAM_NOTAGS, 'The user\'s name'),
                 'profileimageurl' => new external_value(PARAM_URL, 'User picture URL'),
                 'profileimageurlsmall' => new external_value(PARAM_URL, 'Small user picture URL'),
+                'showonlinestatus' => new external_value(PARAM_BOOL, 'Show the user\'s online status?'),
                 'isonline' => new external_value(PARAM_BOOL, 'The user\'s online status'),
                 'isblocked' => new external_value(PARAM_BOOL, 'Is the user blocked?'),
                 'iscontact' => new external_value(PARAM_BOOL, 'Is the user a contact?')
@@ -1590,7 +1672,12 @@ class core_message_external extends external_api {
      * @return external_description
      */
     public static function get_unread_conversations_count($useridto) {
-        global $USER;
+        global $USER, $CFG;
+
+        // Check if messaging is enabled.
+        if (empty($CFG->messaging)) {
+            throw new moodle_exception('disabled', 'message');
+        }
 
         $params = self::validate_parameters(
             self::get_unread_conversations_count_parameters(),
@@ -1679,8 +1766,9 @@ class core_message_external extends external_api {
         core_user::require_active_user($user);
 
         // Check if we have permissions for retrieve the information.
-        if ($userid != $USER->id and !has_capability('moodle/site:readallmessages', $context)) {
-            throw new moodle_exception('accessdenied', 'admin');
+        $capability = 'moodle/site:manageallmessaging';
+        if (($USER->id != $userid) && !has_capability($capability, $context)) {
+            throw new required_capability_exception($context, $capability, 'nopermissions', '');
         }
 
         // Now, we can get safely all the blocked users.
@@ -1843,7 +1931,12 @@ class core_message_external extends external_api {
      * @return external_description
      */
     public static function mark_all_messages_as_read($useridto, $useridfrom) {
-        global $USER;
+        global $USER, $CFG;
+
+        // Check if messaging is enabled.
+        if (empty($CFG->messaging)) {
+            throw new moodle_exception('disabled', 'message');
+        }
 
         $params = self::validate_parameters(
             self::mark_all_messages_as_read_parameters(),
@@ -2092,7 +2185,12 @@ class core_message_external extends external_api {
      * @since 3.2
      */
     public static function message_processor_config_form($userid, $name, $formvalues) {
-        global $USER;
+        global $USER, $CFG;
+
+        // Check if messaging is enabled.
+        if (empty($CFG->messaging)) {
+            throw new moodle_exception('disabled', 'message');
+        }
 
         $params = self::validate_parameters(
             self::message_processor_config_form_parameters(),
@@ -2115,7 +2213,9 @@ class core_message_external extends external_api {
         $form = new stdClass();
 
         foreach ($formvalues as $formvalue) {
-            $form->$formvalue['name'] = $formvalue['value'];
+            // Curly braces to ensure interpretation is consistent between
+            // php 5 and php 7.
+            $form->{$formvalue['name']} = $formvalue['value'];
         }
 
         $processor->process_form($form, $preferences);
@@ -2160,7 +2260,12 @@ class core_message_external extends external_api {
      * @since 3.2
      */
     public static function get_message_processor($userid = 0, $name) {
-        global $USER, $PAGE;
+        global $USER, $PAGE, $CFG;
+
+        // Check if messaging is enabled.
+        if (empty($CFG->messaging)) {
+            throw new moodle_exception('disabled', 'message');
+        }
 
         $params = self::validate_parameters(
             self::get_message_processor_parameters(),
@@ -2202,6 +2307,108 @@ class core_message_external extends external_api {
     }
 
     /**
+     * Check that the user has enough permission to retrieve message or notifications preferences.
+     *
+     * @param  int $userid the user id requesting the preferences
+     * @return stdClass full user object
+     * @throws moodle_exception
+     * @since  Moodle 3.2
+     */
+    protected static function validate_preferences_permissions($userid) {
+        global $USER;
+
+        if (empty($userid)) {
+            $user = $USER;
+        } else {
+            $user = core_user::get_user($userid, '*', MUST_EXIST);
+            core_user::require_active_user($user);
+        }
+
+        $systemcontext = context_system::instance();
+        self::validate_context($systemcontext);
+
+        // Check access control.
+        if ($user->id == $USER->id) {
+            // Editing own message profile.
+            require_capability('moodle/user:editownmessageprofile', $systemcontext);
+        } else {
+            // Teachers, parents, etc.
+            $personalcontext = context_user::instance($user->id);
+            require_capability('moodle/user:editmessageprofile', $personalcontext);
+        }
+        return $user;
+    }
+
+    /**
+     * Returns a notification or message preference structure.
+     *
+     * @return external_single_structure the structure
+     * @since  Moodle 3.2
+     */
+    protected static function get_preferences_structure() {
+        return new external_single_structure(
+            array(
+                'userid' => new external_value(PARAM_INT, 'User id'),
+                'disableall' => new external_value(PARAM_INT, 'Whether all the preferences are disabled'),
+                'processors' => new external_multiple_structure(
+                    new external_single_structure(
+                        array(
+                            'displayname' => new external_value(PARAM_TEXT, 'Display name'),
+                            'name' => new external_value(PARAM_PLUGIN, 'Processor name'),
+                            'hassettings' => new external_value(PARAM_BOOL, 'Whether has settings'),
+                            'contextid' => new external_value(PARAM_INT, 'Context id'),
+                            'userconfigured' => new external_value(PARAM_INT, 'Whether is configured by the user'),
+                        )
+                    ),
+                    'Config form values'
+                ),
+                'components' => new external_multiple_structure(
+                    new external_single_structure(
+                        array(
+                            'displayname' => new external_value(PARAM_TEXT, 'Display name'),
+                            'notifications' => new external_multiple_structure(
+                                new external_single_structure(
+                                    array(
+                                        'displayname' => new external_value(PARAM_TEXT, 'Display name'),
+                                        'preferencekey' => new external_value(PARAM_ALPHANUMEXT, 'Preference key'),
+                                        'processors' => new external_multiple_structure(
+                                            new external_single_structure(
+                                                array(
+                                                    'displayname' => new external_value(PARAM_TEXT, 'Display name'),
+                                                    'name' => new external_value(PARAM_PLUGIN, 'Processor name'),
+                                                    'locked' => new external_value(PARAM_BOOL, 'Is locked by admin?'),
+                                                    'userconfigured' => new external_value(PARAM_INT, 'Is configured?'),
+                                                    'loggedin' => new external_single_structure(
+                                                        array(
+                                                            'name' => new external_value(PARAM_NOTAGS, 'Name'),
+                                                            'displayname' => new external_value(PARAM_TEXT, 'Display name'),
+                                                            'checked' => new external_value(PARAM_BOOL, 'Is checked?'),
+                                                        )
+                                                    ),
+                                                    'loggedoff' => new external_single_structure(
+                                                        array(
+                                                            'name' => new external_value(PARAM_NOTAGS, 'Name'),
+                                                            'displayname' => new external_value(PARAM_TEXT, 'Display name'),
+                                                            'checked' => new external_value(PARAM_BOOL, 'Is checked?'),
+                                                        )
+                                                    ),
+                                                )
+                                            ),
+                                            'Processors values for this notification'
+                                        ),
+                                    )
+                                ),
+                                'List of notificaitons for the component'
+                            ),
+                        )
+                    ),
+                    'Available components'
+                ),
+            )
+        );
+    }
+
+    /**
      * Returns description of method parameters
      *
      * @return external_function_parameters
@@ -2224,7 +2431,7 @@ class core_message_external extends external_api {
      * @since 3.2
      */
     public static function get_user_notification_preferences($userid = 0) {
-        global $USER, $PAGE;
+        global $PAGE;
 
         $params = self::validate_parameters(
             self::get_user_notification_preferences_parameters(),
@@ -2232,26 +2439,7 @@ class core_message_external extends external_api {
                 'userid' => $userid,
             )
         );
-
-        if (empty($params['userid'])) {
-            $user = $USER;
-        } else {
-            $user = core_user::get_user($params['userid'], '*', MUST_EXIST);
-            core_user::require_active_user($user);
-        }
-
-        $systemcontext = context_system::instance();
-        self::validate_context($systemcontext);
-
-        // Check access control.
-        if ($user->id == $USER->id) {
-            // Editing own message profile.
-            require_capability('moodle/user:editownmessageprofile', $systemcontext);
-        } else {
-            // Teachers, parents, etc.
-            $personalcontext = context_user::instance($user->id);
-            require_capability('moodle/user:editmessageprofile', $personalcontext);
-        }
+        $user = self::validate_preferences_permissions($params['userid']);
 
         $processors = get_message_processors();
         $providers = message_get_providers_for_user($user->id);
@@ -2276,66 +2464,84 @@ class core_message_external extends external_api {
     public static function get_user_notification_preferences_returns() {
         return new external_function_parameters(
             array(
-                'preferences' => new external_single_structure(
-                    array(
-                        'userid' => new external_value(PARAM_INT, 'User id'),
-                        'disableall' => new external_value(PARAM_INT, 'Whether all the preferences are disabled'),
-                        'processors' => new external_multiple_structure(
-                            new external_single_structure(
-                                array(
-                                    'displayname' => new external_value(PARAM_TEXT, 'Display name'),
-                                    'name' => new external_value(PARAM_PLUGIN, 'Processor name'),
-                                    'hassettings' => new external_value(PARAM_BOOL, 'Whether has settings'),
-                                    'contextid' => new external_value(PARAM_INT, 'Context id'),
-                                    'userconfigured' => new external_value(PARAM_INT, 'Whether is configured by the user'),
-                                )
-                            ),
-                            'Config form values'
-                        ),
-                        'components' => new external_multiple_structure(
-                            new external_single_structure(
-                                array(
-                                    'displayname' => new external_value(PARAM_TEXT, 'Display name'),
-                                    'notifications' => new external_multiple_structure(
-                                        new external_single_structure(
-                                            array(
-                                                'displayname' => new external_value(PARAM_TEXT, 'Display name'),
-                                                'preferencekey' => new external_value(PARAM_ALPHANUMEXT, 'Preference key'),
-                                                'processors' => new external_multiple_structure(
-                                                    new external_single_structure(
-                                                        array(
-                                                            'displayname' => new external_value(PARAM_TEXT, 'Display name'),
-                                                            'name' => new external_value(PARAM_PLUGIN, 'Processor name'),
-                                                            'locked' => new external_value(PARAM_BOOL, 'Is locked by admin?'),
-                                                            'userconfigured' => new external_value(PARAM_INT, 'Is configured?'),
-                                                            'loggedin' => new external_single_structure(
-                                                                array(
-                                                                    'name' => new external_value(PARAM_NOTAGS, 'Name'),
-                                                                    'displayname' => new external_value(PARAM_TEXT, 'Display name'),
-                                                                    'checked' => new external_value(PARAM_BOOL, 'Is checked?'),
-                                                                )
-                                                            ),
-                                                            'loggedoff' => new external_single_structure(
-                                                                array(
-                                                                    'name' => new external_value(PARAM_NOTAGS, 'Name'),
-                                                                    'displayname' => new external_value(PARAM_TEXT, 'Display name'),
-                                                                    'checked' => new external_value(PARAM_BOOL, 'Is checked?'),
-                                                                )
-                                                            ),
-                                                        )
-                                                    ),
-                                                    'Processors values for this notification'
-                                                ),
-                                            )
-                                        ),
-                                        'List of notificaitons for the component'
-                                    ),
-                                )
-                            ),
-                            'Available components'
-                        ),
-                    )
-                ),
+                'preferences' => self::get_preferences_structure(),
+                'warnings' => new external_warnings(),
+            )
+        );
+    }
+
+
+    /**
+     * Returns description of method parameters
+     *
+     * @return external_function_parameters
+     * @since 3.2
+     */
+    public static function get_user_message_preferences_parameters() {
+        return new external_function_parameters(
+            array(
+                'userid' => new external_value(PARAM_INT, 'id of the user, 0 for current user', VALUE_DEFAULT, 0)
+            )
+        );
+    }
+
+    /**
+     * Get the notification preferences for a given user.
+     *
+     * @param int $userid id of the user, 0 for current user
+     * @return external_description
+     * @throws moodle_exception
+     * @since 3.2
+     */
+    public static function get_user_message_preferences($userid = 0) {
+        global $PAGE;
+
+        $params = self::validate_parameters(
+            self::get_user_message_preferences_parameters(),
+            array(
+                'userid' => $userid,
+            )
+        );
+
+        $user = self::validate_preferences_permissions($params['userid']);
+
+        // Filter out enabled, available system_configured and user_configured processors only.
+        $readyprocessors = array_filter(get_message_processors(), function($processor) {
+            return $processor->enabled &&
+                $processor->configured &&
+                $processor->object->is_user_configured() &&
+                // Filter out processors that don't have and message preferences to configure.
+                $processor->object->has_message_preferences();
+        });
+
+        $providers = array_filter(message_get_providers_for_user($user->id), function($provider) {
+            return $provider->component === 'moodle';
+        });
+        $preferences = \core_message\api::get_all_message_preferences($readyprocessors, $providers, $user);
+        $notificationlistoutput = new \core_message\output\preferences\message_notification_list($readyprocessors,
+            $providers, $preferences, $user);
+
+        $renderer = $PAGE->get_renderer('core_message');
+
+        $result = array(
+            'warnings' => array(),
+            'preferences' => $notificationlistoutput->export_for_template($renderer),
+            'blocknoncontacts' => get_user_preferences('message_blocknoncontacts', '', $user->id) ? true : false,
+        );
+        return $result;
+    }
+
+    /**
+     * Returns description of method result value
+     *
+     * @return external_description
+     * @since 3.2
+     */
+    public static function get_user_message_preferences_returns() {
+        return new external_function_parameters(
+            array(
+                'preferences' => self::get_preferences_structure(),
+                'blocknoncontacts' => new external_value(PARAM_BOOL, 'Whether to block or not messages from non contacts'),
                 'warnings' => new external_warnings(),
             )
         );

@@ -730,6 +730,9 @@ function get_docs_url($path = null) {
 /**
  * Formats a backtrace ready for output.
  *
+ * This function does not include function arguments because they could contain sensitive information
+ * not suitable to be exposed in a response.
+ *
  * @param array $callers backtrace array, as returned by debug_backtrace().
  * @param boolean $plaintext if false, generates HTML, if true generates plain text.
  * @return string formatted backtrace, ready for output.
@@ -1378,6 +1381,10 @@ function disable_output_buffering() {
     ini_set('output_handler', '');
 
     error_reporting($olddebug);
+
+    // Disable buffering in nginx.
+    header('X-Accel-Buffering: no');
+
 }
 
 /**
@@ -1388,7 +1395,7 @@ function disable_output_buffering() {
  */
 function redirect_if_major_upgrade_required() {
     global $CFG;
-    $lastmajordbchanges = 2016100501.00;
+    $lastmajordbchanges = 2017021400.00;
     if (empty($CFG->version) or (float)$CFG->version < $lastmajordbchanges or
             during_initial_install() or !empty($CFG->adminsetuppending)) {
         try {

@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * A three column layout for the boost theme.
+ * A secure layout for the boost theme.
  *
  * @package   theme_boost
  * @copyright 2016 Damyon Wiese
@@ -24,11 +24,16 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$blockshtml = $OUTPUT->blocks('side-pre');
+$hasblocks = strpos($blockshtml, 'data-block=') !== false;
+$bodyattributes = $OUTPUT->body_attributes();
+
 $templatecontext = [
-    'sitename' => format_string($SITE->shortname, true, array('context' => context_course::instance(SITEID))),
+    'sitename' => format_string($SITE->shortname, true, ['context' => context_course::instance(SITEID), "escape" => false]),
     'output' => $OUTPUT,
-    'sidepreblocks' => $OUTPUT->blocks('side-pre', 'col-md-4 pull-md-8 col-lg-3 pull-lg-9'),
-    'sidepostblocks' => $OUTPUT->blocks('side-post', 'col-md-3')
+    'bodyattributes' => $bodyattributes,
+    'sidepreblocks' => $blockshtml,
+    'hasblocks' => $hasblocks
 ];
 
 echo $OUTPUT->render_from_template('theme_boost/secure', $templatecontext);

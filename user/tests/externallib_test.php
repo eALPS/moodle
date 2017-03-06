@@ -605,8 +605,26 @@ class core_user_externallib_testcase extends externallib_advanced_testcase {
         $context = context_system::instance();
         $roleid = $this->assignUserCapability('moodle/user:update', $context->id);
 
+        // Check we can't update deleted users, guest users, site admin.
+        $user2 = $user3 = $user4 = $user1;
+        $user2['id'] = $CFG->siteguest;
+
+        $siteadmins = explode(',', $CFG->siteadmins);
+        $user3['id'] = array_shift($siteadmins);
+
+        $userdeleted = self::getDataGenerator()->create_user();
+        $user4['id'] = $userdeleted->id;
+        user_delete_user($userdeleted);
+
         // Call the external function.
-        core_user_external::update_users(array($user1));
+        core_user_external::update_users(array($user1, $user2, $user3, $user4));
+
+        $dbuser2 = $DB->get_record('user', array('id' => $user2['id']));
+        $this->assertNotEquals($dbuser2->username, $user2['username']);
+        $dbuser3 = $DB->get_record('user', array('id' => $user3['id']));
+        $this->assertNotEquals($dbuser3->username, $user3['username']);
+        $dbuser4 = $DB->get_record('user', array('id' => $user4['id']));
+        $this->assertNotEquals($dbuser4->username, $user4['username']);
 
         $dbuser = $DB->get_record('user', array('id' => $user1['id']));
         $this->assertEquals($dbuser->username, $user1['username']);
@@ -850,7 +868,7 @@ class core_user_externallib_testcase extends externallib_advanced_testcase {
         $anotheruser = self::getDataGenerator()->create_user();
         $this->setUser($anotheruser);
 
-        $this->setExpectedException('required_capability_exception');
+        $this->expectException('required_capability_exception');
         $result = core_user_external::get_user_preferences('', $user->id);
     }
 
@@ -1067,7 +1085,14 @@ class core_user_externallib_testcase extends externallib_advanced_testcase {
 
         $DB->set_field('user', 'lastname', '', array('id' => $USER->id));
         $USER->lastname = '';
-        $this->expectException('require_login_exception');
-        $result = core_user_external::agree_site_policy();
+        try {
+            $result = core_user_external::agree_site_policy();
+            $this->fail('Expecting \'usernotfullysetup\' moodle_exception to be thrown');
+        } catch (moodle_exception $e) {
+            $this->assertEquals('usernotfullysetup', $e->errorcode);
+        } catch (Exception $e) {
+            $this->fail('Expecting \'usernotfullysetup\' moodle_exception to be thrown.');
+        }
+
     }
 }

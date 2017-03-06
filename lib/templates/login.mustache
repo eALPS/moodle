@@ -18,6 +18,25 @@
     @template core/login
 
     Moodle template for the login page.
+
+    Example context (json):
+    {
+        "autofocusform": false,
+        "canloginasguest": true,
+        "canloginbyemail": true,
+        "cansignup": true,
+        "error": "testerror",
+        "errorformatted": "Test error formatted",
+        "forgotpasswordurl": "http://example.com/login/forgot_password.php",
+        "hasidentityproviders": false,
+        "hasinstructions": true,
+        "instructions": "For full access to this site, you first need to create an account.",
+        "loginurl": "http://example.com/stable_master/login/index.php",
+        "rememberusername": true,
+        "signupurl": "http://localhost/stable_master/login/signup.php",
+        "cookieshelpiconformatted": "",
+        "username": ""
+    }
 }}
 {{#hasinstructions}}
 <div class="loginbox clearfix twocolumns">
@@ -42,7 +61,7 @@
                     {{{errorformatted}}}
                 </div>
             {{/error}}
-            <form action="{{loginurl}}" method="post" id="login" {{^passwordautocomplete}}autocomplete="off"{{/passwordautocomplete}}>
+            <form action="{{loginurl}}" method="post" id="login">
                 <div class="loginform">
                     <div class="form-label">
                         <label for="username">
@@ -62,7 +81,7 @@
                         <label for="password">{{#str}} password {{/str}}</label>
                     </div>
                     <div class="form-input">
-                        <input type="password" name="password" id="password" size="15" value="" {{^passwordautocomplete}}autocomplete="off"{{/passwordautocomplete}}>
+                        <input type="password" name="password" id="password" size="15" value="">
                     </div>
                 </div>
 
@@ -142,18 +161,20 @@
 </div>
 
 {{#js}}
-    require(['jquery', 'core/yui'], function($, Y) {
     {{#error}}
-        $(function() {
-            M.util.focus_login_error(Y);
+        require(['jquery'], function($) {
+            $('#loginerrormessage').focus();
         });
     {{/error}}
     {{^error}}
         {{#autofocusform}}
-            $(function() {
-                M.util.focus_login_form(Y);
+            require(['jquery'], function($) {
+                if ($('#username').val()) {
+                    $('#password').focus();
+                } else {
+                    $('#username').focus();
+                }
             });
         {{/autofocusform}}
     {{/error}}
-    })
 {{/js}}

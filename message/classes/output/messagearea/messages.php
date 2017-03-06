@@ -26,6 +26,7 @@ namespace core_message\output\messagearea;
 
 defined('MOODLE_INTERNAL') || die();
 
+use core_message\api;
 use renderable;
 use templatable;
 
@@ -66,11 +67,13 @@ class messages implements templatable, renderable {
      * @param array $messages
      */
     public function __construct($currentuserid, $otheruserid, $messages) {
-        $ufields = get_all_user_name_fields(true) . ', lastaccess';
+        $ufields = 'id, ' . get_all_user_name_fields(true) . ', lastaccess';
 
         $this->currentuserid = $currentuserid;
-        $this->otheruserid = $otheruserid;
-        $this->otheruser = \core_user::get_user($otheruserid, $ufields);
+        if ($otheruserid) {
+            $this->otheruserid = $otheruserid;
+            $this->otheruser = \core_user::get_user($otheruserid, $ufields, MUST_EXIST);
+        }
         $this->messages = $messages;
     }
 
@@ -80,14 +83,25 @@ class messages implements templatable, renderable {
         $data = new \stdClass();
         $data->iscurrentuser = $USER->id == $this->currentuserid;
         $data->currentuserid = $this->currentuserid;
-        $data->otheruserid = $this->otheruserid;
-        $data->otheruserfullname = fullname($this->otheruser);
-        $data->isonline = \core_message\helper::is_online($this->otheruser->lastaccess);
+        if ($this->otheruserid) {
+            $data->otheruserid = $this->otheruserid;
+            $data->otheruserfullname = fullname($this->otheruser);
+        }
+        $data->isonline = null;
+        if ($this->otheruserid) {
+            if (\core_message\helper::show_online_status($this->otheruser)) {
+                $data->isonline = \core_message\helper::is_online($this->otheruser->lastaccess);
+            }
+        }
+        $data->showonlinestatus = is_null($data->isonline) ? false : true;
+
         $data->messages = array();
         foreach ($this->messages as $message) {
             $message = new message($message);
             $data->messages[] = $message->export_for_template($output);
         }
+
+        $data->isblocked = api::is_user_blocked($this->currentuserid, $this->otheruserid);
 
         return $data;
     }

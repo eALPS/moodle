@@ -145,10 +145,7 @@ Feature: Manage plan workflow
       | Test-Plan3 | user1 | Description of plan 3 for user 1 | active | manager1 |
       | Test-Plan4 | user1 | Description of plan 4 for user 1 | active | manager1 |
     And I log in as "manager1"
-    And I expand "Site administration" node
-    And I expand "Users" node
-    And I expand "Accounts" node
-    And I follow "Browse list of users"
+    And I navigate to "Users > Accounts > Browse list of users" in site administration
     And I follow "User 1"
     And I follow "Learning plans"
     And I should see "List of learning plans"
@@ -167,10 +164,7 @@ Feature: Manage plan workflow
       | Test-Plan3 | user1 | Description of plan 3 for user 1 | active | manager1 |
       | Test-Plan4 | user1 | Description of plan 4 for user 1 | active | manager1 |
     And I log in as "manager1"
-    And I expand "Site administration" node
-    And I expand "Users" node
-    And I expand "Accounts" node
-    And I follow "Browse list of users"
+    And I navigate to "Users > Accounts > Browse list of users" in site administration
     And I follow "User 1"
     And I follow "Learning plans"
     And I should see "List of learning plans"
@@ -185,16 +179,13 @@ Feature: Manage plan workflow
     And I should not see "Active"
     And I log out
 
-Scenario: Manager reopen a complete learning plan
+  Scenario: Manager reopen a complete learning plan
     Given  the following lp "plans" exist:
       | name | user | description | status | reviewer |
       | Test-Plan3 | user1 | Description of plan 3 for user 1 | complete | manager1 |
       | Test-Plan4 | user1 | Description of plan 4 for user 1 | complete | manager1 |
     And I log in as "manager1"
-    And I expand "Site administration" node
-    And I expand "Users" node
-    And I expand "Accounts" node
-    And I follow "Browse list of users"
+    And I navigate to "Users > Accounts > Browse list of users" in site administration
     And I follow "User 1"
     And I follow "Learning plans"
     And I should see "List of learning plans"

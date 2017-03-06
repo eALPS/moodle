@@ -22,10 +22,25 @@
     margin-bottom: 4px;
 }
 
+.mform .form-inline {
+    .form-control,
+    .custom-select {
+        max-width: 100%;
+    }
+}
+
 .mform fieldset {
     margin-left: $spacer * 1.5;
     margin-bottom: $spacer / 2;
     border-bottom: $border-width solid $table-border-color;
+}
+
+.editor_atto_content.form-control {
+    width: 100%;
+}
+
+#adminsettings .form-control[size] {
+    width: auto;
 }
 
 .mform fieldset.collapsible legend a.fheader {
@@ -109,11 +124,6 @@ div.backup-section + form,
 #fgroup_id_buttonar {
     @extend .form-group;
     padding-left: 0;
-}
-
-.path-admin .buttons,
-.form-buttons { // Add back the padding it would usually get from being inside a .form-horizontal.
-    padding-left: $display1-size;
 }
 
 .form-item .form-setting .defaultsnext > input {
@@ -214,121 +224,20 @@ fieldset.coursesearchbox label {
     display: none;
 }
 
-.availability-field {
-    select,
-    input[type=text] {
-        position: relative;
-        top: 4px;
-    }
-
-    label {
-        display: inline;
-    }
-
-    .availability-group {
-        margin-right: 8px;
-    }
-
-    .availability-item {
-        margin-bottom: 6px;
-    }
-
-    .availability-none {
-        margin-left: 20px;
-        margin-bottom: 4px;
-    }
-
-    .availability-plugincontrols {
-        padding: 2px 0 0 4px;
-        border: 1px solid $gray-lighter;
-        border-radius: 4px;
-        display: inline-block;
-        margin-right: 8px;
-    }
-    /* Eye icon in front of an item and delete icon after it. */
-    .availability-eye,
-    .availability-delete {
-        margin-right: 8px;
-    }
-    /* Hidden eye icon still takes up space. */
-    .availability-eye[aria-hidden=true] {
-        display: inline;
-        visibility: hidden;
-    }
-    /* Eye icons in front of child lists are aligned specially. */
-    .availability-list > .availability-eye img {
-        vertical-align: top;
-        margin-top: 12px;
-    }
-    /* Add button lines up with child elements. */
-    .availability-button {
-        margin-left: 15px;
-    }
-    /* Nested section is grey. */
-    .availability-childlist > .availability-inner {
-        display: inline-block;
-        border: 1px solid $gray-lighter;
-        border-radius: 4px;
-        padding: 6px;
-        margin-bottom: 6px;
-    }
-    /* Second (and more) levels of nested sections are white. */
-    .availability-childlist .availability-childlist > .availability-inner {
-        background: white;
-    }
-    /* Connecting text needs to be indented. */
-    .availability-connector {
-        margin-left: 20px;
-        margin-bottom: 6px;
-    }
+.availability-eye {
+    clear: left;
+    float: left;
 }
-
-/* Default form styling colours all text red. With availability conditions
-   this looks excessive as we show 'Invalid' markers in specific places. */
-.mform .error .availability-field {
-    color: $body-color;
+.availability-inner,
+.availability-plugincontrols {
+    float: left;
+    @include border-radius($card-border-radius);
+    border: $card-border-width solid $card-border-color;
+    padding: $card-spacer-x / 2;
+    margin-left: $card-spacer-x / 2;
 }
-
-/* This dialogue is used to add an availability condition. */
-.availability-dialogue {
-    .moodle-dialogue .moodle-dialogue-bd {
-        padding-left: 0;
-        padding-right: 0;
-        padding-bottom: 2px;
-    }
-
-    ul {
-        display: block;
-        margin: 0;
-    }
-
-    li {
-        display: block;
-        list-style-type: none;
-        padding: 0 0 4px;
-        clear: both;
-        border-bottom: 1px solid $gray-lighter;
-        margin-bottom: 4px;
-    }
-
-    ul button {
-        float: left;
-        margin-left: 1em;
-        min-width: 140px;
-        margin-top: 4px;
-    }
-
-    label {
-        margin-left: 170px;
-        margin-right: 1em;
-        margin-bottom: 0;
-    }
-
-    .availability-buttons button {
-        margin-left: 1em;
-        margin-right: 1em;
-        margin-top: 4px;
-    }
+.availability-field .availability-plugincontrols .availability-group select {
+    max-width: 12rem;
 }
 
 /* Custom styles for autocomplete form element */
@@ -384,16 +293,67 @@ fieldset.coursesearchbox label {
 .form-autocomplete-selection:focus {
     outline: none;
 }
+/** Undo some bootstrap things */
+.form-autocomplete-selection + .form-control {
+    width: auto;
+    display: inline-block;
+}
 
 .form-autocomplete-selection [data-active-selection=true] {
     padding: 0.5em;
     font-size: large;
 }
 
+/* Non-bootstrap selects with a size show their contents outside of the element.
+ * Remove when we update to stable bootstrap 4. (MDL-56511) */
+select[size],
 select[multiple] {
     overflow: auto;
+}
+select[size=1] {
+    overflow: visible;
 }
 
 textarea[data-auto-rows] {
     overflow-x: hidden;
+}
+
+/** Allow wrapping an mform in a div with the form-inline class to have an inline, responsive form. */
+.form-inline {
+    @include media-breakpoint-up(md) {
+        .col-md-9,
+        .col-md-3 {
+            label {
+                margin-left: 1rem;
+            }
+            margin-bottom: 1rem;
+            width: auto;
+        }
+    }
+}
+
+[data-fieldtype="modgrade"] .form-group {
+    padding-bottom: $input-padding-y;
+}
+
+// We dont' use the mixin because it's expensive.
+[data-fieldtype="modgrade"] {
+    background-color: $card-bg;
+    @include border-radius($card-border-radius);
+    border: $card-border-width solid $card-border-color;
+    padding: $card-spacer-x;
+    margin-left: $grid-gutter-width / 2;
+    max-width: 30rem;
+}
+
+/** Atto fields do not have form-control because that would break the layout of the editor.
+    So they need these extra styles to highlight the editor when there is a validation error. */
+.has-danger .editor_atto_content.form-control,
+.has-danger .editor_atto_content.form-control-danger {
+    @include form-control-validation($brand-danger);
+    background-image: $form-icon-danger;
+    padding-right: ($input-padding-x * 3);
+    background-repeat: no-repeat;
+    background-position: center right ($input-height / 4);
+    background-size: ($input-height / 2) ($input-height / 2);
 }

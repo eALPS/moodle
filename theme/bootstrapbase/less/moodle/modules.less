@@ -9,6 +9,17 @@ select {
     width: auto;
 }
 
+// Assign
+.path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) #id_attemptsettings .fitem {
+    .fitemtitle,
+    .felement {
+        display: table-cell;
+        float: none;
+        border-top: 1px solid #ddd;
+        padding: 8px 0;
+    }
+}
+
 // Feedback module
 .path-mod-feedback .mform.feedback_form .fitem .fitemtitle {
     display: block;
@@ -291,15 +302,9 @@ div#dock {
 // Choice module
 
 .path-mod-choice {
-    .horizontal  .choices {
-        margin: 0;
-        .option {
-            display: inline-block;
-            padding: 10px;
-        }
-    }
-    .results .data {
-        white-space: normal;
+    .media-left {
+        float: left;
+        padding-right: 1em;
     }
 }
 
@@ -917,3 +922,17 @@ div#dock {
         background-color: @grayLight;
     }
 }
+
+// Scorm.
+.path-mod-scorm .scorm-center {
+    text-align: center;
+}
+
+.path-mod-scorm.forcejavascript .scorm-center {
+    display: none;
+}
+
+.path-mod-scorm.jsenabled .scorm-center {
+    display: block;
+}
+

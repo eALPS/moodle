@@ -47,11 +47,13 @@ list($options, $unrecognized) = cli_get_params(
         'diag'        => false,
         'tags'        => '',
         'updatesteps' => false,
-        'run-with-theme' => false,
         'optimize-runs' => '',
+        'add-core-features-to-theme' => false,
     ),
     array(
         'h' => 'help',
+        'o' => 'optimize-runs',
+        'a' => 'add-core-features-to-theme',
     )
 );
 
@@ -73,8 +75,9 @@ Options:
 --disable        Disables test environment
 --diag           Get behat test environment status code
 --updatesteps    Update feature step file.
---optimize-runs  Split features with specified tags in all parallel runs.
---run-with-theme Run all core features with specified theme.
+
+-o, --optimize-runs Split features with specified tags in all parallel runs.
+-a, --add-core-features-to-theme Add all core features to specified theme's
 
 -h, --help Print out this help
 
@@ -140,7 +143,7 @@ if ($options['run']) {
     $run = $options['run'];
     // If parallel option is not passed, then try get it form config.
     if (!$options['parallel']) {
-        $parallel = behat_config_manager::get_parallel_test_runs();
+        $parallel = behat_config_manager::get_behat_run_config_value('parallel');
     } else {
         $parallel = $options['parallel'];
     }
@@ -173,14 +176,11 @@ if ($options['install']) {
 } else if ($options['enable']) {
     if (!empty($parallel)) {
         // Save parallel site info for enable and install options.
-        $filepath = behat_config_manager::get_parallel_test_file_path();
-        if (!file_put_contents($filepath, $parallel)) {
-            behat_error(BEHAT_EXITCODE_PERMISSIONS, 'File ' . $filepath . ' can not be created');
-        }
+        behat_config_manager::set_behat_run_config_value('behatsiteenabled', 1);
     }
 
     // Enable test mode.
-    behat_util::start_test_mode($options['run-with-theme'], $options['optimize-runs'], $parallel, $run);
+    behat_util::start_test_mode($options['add-core-features-to-theme'], $options['optimize-runs'], $parallel, $run);
 
     // This is only displayed once for parallel install.
     if (empty($run)) {
@@ -197,7 +197,7 @@ if ($options['install']) {
     }
 
 } else if ($options['disable']) {
-    behat_util::stop_test_mode();
+    behat_util::stop_test_mode($run);
     // This is only displayed once for parallel install.
     if (empty($run)) {
         mtrace("Acceptance tests environment disabled");

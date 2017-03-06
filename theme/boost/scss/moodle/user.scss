@@ -15,16 +15,17 @@
 
 .userprofile .profile_tree {
     column-count: 2;
-}
 
-.userprofile .profile_tree section {
-    @extend .card;
-    @extend .card-block;
-    break-inside: avoid;
-}
+    section {
+        @extend .card;
+        @extend .card-block;
+        display: inline-block;
+        width: 100%;
 
-.userprofile .profile_tree section h3 {
-    @extend .lead;
+        h3 {
+            @extend .lead;
+        }
+    }
 }
 
 .userprofile dl.list {
@@ -58,6 +59,34 @@
     .editprofile,
     .viewmore {
         text-align: right;
+    }
+}
+
+.ajax-contact-button {
+    box-sizing: border-box;
+    position: relative;
+
+    &.loading {
+        .loading-icon {
+            display: block;
+        }
+    }
+
+    .loading-icon {
+        display: none;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.7);
+
+        .icon {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
     }
 }
 
@@ -211,10 +240,6 @@
     font-size: 0.8em;
 }
 
-#userselector_options {
-    padding: 0.3em 0;
-}
-
 #userselector_options .collapsibleregioncaption {
     font-weight: bold;
 }
@@ -262,6 +287,20 @@
 
         select {
             min-width: 175px;
+            max-width: 90%;
         }
     }
+}
+
+// Remove the little cog from participants page because we are putting a cog menu there.
+.userlist h3 .action-icon {
+    display: none;
+}
+
+#page-enrol-users .popover {
+    max-width: none;
+}
+
+.user-enroller-panel {
+    width: 600px;
 }

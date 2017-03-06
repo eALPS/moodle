@@ -43,7 +43,7 @@
     font-weight: 900;
 }
 
-.path-mod-assign.jsenabled .gradingoptionsform .fsubmit {
+.path-mod-assign.jsenabled .gradingoptionsform [type=submit] {
     display: none;
 }
 
@@ -387,6 +387,7 @@
 }
 
 .path-mod-assign [data-region="configure-filters"] label {
+    display: block;
     padding: 3px 20px;
 }
 
@@ -434,6 +435,12 @@
 .path-mod-assign [data-region="user-info"] em {
     display: block;
     font-style: normal;
+}
+
+.path-mod-assign [data-region="user-info"] em.nowrap {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .path-mod-assign [data-region="grading-actions-form"] label {
@@ -664,6 +671,7 @@
 .path-mod-assign [data-region="grade-panel"] .mform .fitem.fitem_ftext,
 .path-mod-assign [data-region="grade-panel"] .mform .fitem.fitem_f,
 .path-mod-assign [data-region="grade-panel"] .mform .fitem.fitem_feditor,
+.path-mod-assign [data-region="grade-panel"] .mform .fitem.fitem_fgrading,
 .path-mod-assign [data-region="grade-panel"] .mform .fitem.fitem_ffilemanager {
     background-color: #fff;
     border: 1px solid #ddd;
@@ -673,6 +681,7 @@
 .path-mod-assign [data-region="grade-panel"] .mform .fitem.fitem_ftext .fitemtitle,
 .path-mod-assign [data-region="grade-panel"] .mform .fitem.fitem_f .fitemtitle,
 .path-mod-assign [data-region="grade-panel"] .mform .fitem.fitem_feditor .fitemtitle,
+.path-mod-assign [data-region="grade-panel"] .mform .fitem.fitem_fgrading .fitemtitle,
 .path-mod-assign [data-region="grade-panel"] .mform .fitem.fitem_ffilemanager .fitemtitle {
     padding-left: 5px;
     padding-right: 5px;
@@ -681,6 +690,7 @@
 .path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) .fcontainer .fitem.fitem_ftext .felement,
 .path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) .fcontainer .fitem.fitem_f .felement,
 .path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) .fcontainer .fitem.fitem_feditor .felement,
+.path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) .fcontainer .fitem.fitem_fgrading .felement,
 .path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) .fcontainer .fitem.fitem_ffilemanager .felement {
     padding: 6px 10px 10px;
     box-sizing: border-box;
@@ -689,6 +699,7 @@
 .path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) .fitem.fitem_ftext .fitemtitle,
 .path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) .fitem.fitem_f .fitemtitle,
 .path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) .fitem.fitem_feditor .fitemtitle,
+.path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) .fitem.fitem_fgrading .fitemtitle,
 .path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) .fitem.fitem_ffilemanager .fitemtitle {
     border-bottom: 1px solid #ddd;
     box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
@@ -914,14 +925,6 @@
 
 .path-mod-assign [data-region="grade-panel"] .mform #id_attemptsettings .fitem {
     display: table-row;
-}
-
-.path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) #id_attemptsettings .fitem .fitemtitle,
-.path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) #id_attemptsettings .fitem .felement {
-    display: table-cell;
-    float: none;
-    border-top: 1px solid #ddd;
-    padding: 8px 0;
 }
 
 .path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) #id_attemptsettings .fitem:last-of-type .fitemtitle,

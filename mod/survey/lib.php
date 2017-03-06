@@ -497,7 +497,7 @@ function survey_shorten_name ($name, $numwords) {
  * @param object $question
  */
 function survey_print_multi($question) {
-    global $USER, $DB, $qnum, $checklist, $DB, $OUTPUT; //TODO: this is sloppy globals abuse
+    global $USER, $DB, $qnum, $DB, $OUTPUT; //TODO: this is sloppy globals abuse
 
     $stripreferthat = get_string("ipreferthat", "survey");
     $strifoundthat = get_string("ifoundthat", "survey");
@@ -555,15 +555,13 @@ function survey_print_multi($question) {
             echo $q->text ."</th>\n";
 
             $default = get_accesshide($strdefault);
-            echo "<td class=\"whitecell\"><label for=\"q$P$q->id\"><input type=\"radio\" name=\"q$P$q->id\" id=\"q$P" . $q->id . "_D\" value=\"0\" checked=\"checked\" />$default</label></td>";
+            echo "<td class=\"whitecell\"><label for=\"q$P$q->id\"><input type=\"radio\" name=\"q$P$q->id\" id=\"q$P" . $q->id . "_D\" value=\"0\" checked=\"checked\" data-survey-default=\"true\" />$default</label></td>";
 
             for ($i=1;$i<=$numoptions;$i++) {
                 $hiddentext = get_accesshide($options[$i-1]);
                 $id = "q$P" . $q->id . "_$i";
                 echo "<td><label for=\"$id\"><input type=\"radio\" name=\"q$P$q->id\" id=\"$id\" value=\"$i\" />$hiddentext</label></td>";
             }
-            $checklist["q$P$q->id"] = 0;
-
         } else {
             echo "<th scope=\"row\" class=\"optioncell\">";
             echo "<b class=\"qnumtopcell\">$qnum</b> &nbsp; ";
@@ -572,7 +570,7 @@ function survey_print_multi($question) {
             echo "<span class=\"option\">$q->text</span></th>\n";
 
             $default = get_accesshide($strdefault);
-            echo '<td class="whitecell"><label for="qP'.$q->id.'"><input type="radio" name="qP'.$q->id.'" id="qP'.$q->id.'" value="0" checked="checked" />'.$default.'</label></td>';
+            echo '<td class="whitecell"><label for="qP'.$q->id.'"><input type="radio" name="qP'.$q->id.'" id="qP'.$q->id.'" value="0" checked="checked" data-survey-default="true" />'.$default.'</label></td>';
 
 
             for ($i=1;$i<=$numoptions;$i++) {
@@ -589,16 +587,13 @@ function survey_print_multi($question) {
             echo "<span class=\"option\">$q->text</span></th>\n";
 
             $default = get_accesshide($strdefault);
-            echo '<td class="whitecell"><label for="q'. $q->id .'"><input type="radio" name="q'.$q->id. '" id="q'. $q->id .'" value="0" checked="checked" />'.$default.'</label></td>';
+            echo '<td class="whitecell"><label for="q'. $q->id .'"><input type="radio" name="q'.$q->id. '" id="q'. $q->id .'" value="0" checked="checked" data-survey-default="true" />'.$default.'</label></td>';
 
             for ($i=1;$i<=$numoptions;$i++) {
                 $hiddentext = get_accesshide($options[$i-1]);
                 $id = "q" . $q->id . "_$i";
                 echo "<td><label for=\"$id\"><input type=\"radio\" name=\"q$q->id\" id=\"$id\" value=\"$i\" />$hiddentext</label></td>";
             }
-
-            $checklist["qP$q->id"] = 0;
-            $checklist["q$q->id"] = 0;
         }
         echo "</tr>\n";
     }
@@ -627,11 +622,11 @@ function survey_print_single($question) {
 
 
     if ($question->type == 0) {           // Plain text field
-        echo "<textarea rows=\"3\" cols=\"30\" name=\"q$question->id\" id=\"q$question->id\">$question->options</textarea>";
+        echo "<textarea rows=\"3\" cols=\"30\" class=\"form-control\" name=\"q$question->id\" id=\"q$question->id\">$question->options</textarea>";
 
     } else if ($question->type > 0) {     // Choose one of a number
         $strchoose = get_string("choose");
-        echo "<select name=\"q$question->id\" id=\"q$question->id\">";
+        echo "<select name=\"q$question->id\" id=\"q$question->id\" class=\"custom-select\">";
         echo "<option value=\"0\" selected=\"selected\">$strchoose...</option>";
         $options = explode( ",", $question->options);
         foreach ($options as $key => $val) {
@@ -1049,4 +1044,33 @@ function survey_get_completion_state($course, $cm, $userid, $type) {
         // Completion option is not enabled so just return $type.
         return $type;
     }
+}
+
+/**
+ * Check if the module has any update that affects the current user since a given time.
+ *
+ * @param  cm_info $cm course module data
+ * @param  int $from the time to check updates from
+ * @param  array $filter  if we need to check only specific updates
+ * @return stdClass an object with the different type of areas indicating if they were updated or not
+ * @since Moodle 3.2
+ */
+function survey_check_updates_since(cm_info $cm, $from, $filter = array()) {
+    global $DB, $USER;
+
+    $updates = new stdClass();
+    if (!has_capability('mod/survey:participate', $cm->context)) {
+        return $updates;
+    }
+    $updates = course_check_module_updates_since($cm, $from, array(), $filter);
+
+    $updates->answers = (object) array('updated' => false);
+    $select = 'survey = ? AND userid = ? AND time > ?';
+    $params = array($cm->instance, $USER->id, $from);
+    $answers = $DB->get_records_select('survey_answers', $select, $params, '', 'id');
+    if (!empty($answers)) {
+        $updates->answers->updated = true;
+        $updates->answers->itemids = array_keys($answers);
+    }
+    return $updates;
 }

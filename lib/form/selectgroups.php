@@ -376,6 +376,9 @@ class MoodleQuickForm_selectgroups extends HTML_QuickForm_element implements tem
         if (is_array($this->_values)) {
             foreach ($this->_values as $key => $val) {
                 foreach ($this->_optGroups as $optGroup) {
+                    if (empty($optGroup['options'])) {
+                        continue;
+                    }
                     for ($i = 0, $optCount = count($optGroup['options']); $i < $optCount; $i++) {
                         if ((string)$val == (string)$optGroup['options'][$i]['attr']['value']) {
                             $value[$key] = $optGroup['options'][$i]['text'];
@@ -522,9 +525,14 @@ class MoodleQuickForm_selectgroups extends HTML_QuickForm_element implements tem
             ];
         }
 
+        // Standard option attributes.
+        $standardoptionattributes = ['text', 'value', 'selected', 'disabled'];
         foreach ($this->_optGroups as $group) {
             $options = [];
 
+            if (empty($group['options'])) {
+                continue;
+            }
             foreach ($group['options'] as $option) {
                 $o = ['value' => (string)$option['attr']['value']];
                 if (is_array($this->_values) && in_array($o['value'], $this->_values)) {
@@ -533,6 +541,15 @@ class MoodleQuickForm_selectgroups extends HTML_QuickForm_element implements tem
                     $o['selected'] = false;
                 }
                 $o['text'] = $option['text'];
+                $o['disabled'] = !empty($option['attr']['disabled']);
+                // Set other attributes.
+                $otheroptionattributes = [];
+                foreach ($option['attr'] as $attr => $value) {
+                    if (!in_array($attr, $standardoptionattributes) && $attr != 'class' && !is_object($value)) {
+                        $otheroptionattributes[] = $attr . '="' . s($value) . '"';
+                    }
+                }
+                $o['optionattributes'] = implode(' ', $otheroptionattributes);
                 $options[] = $o;
             }
 

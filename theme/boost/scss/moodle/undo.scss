@@ -18,6 +18,7 @@ li.activity.label,
     display: block;
     font-size: inherit;
     line-height: inherit;
+    text-align: inherit;
 }
 
 .file-picker td.label {
@@ -99,37 +100,6 @@ fieldset.hidden {
     visibility: inherit;
 }
 
-
-/* .controls vs .controls
- *
- * in expanding course list, can be fixed in renderer though
- */
-
-
-/* .btn vs .btn
- *
- * links, inputs and buttons are commonly styled with .btn in
- * bootstrap but it seems that some buttons in Moodle are
- * wrapped in div.btn e.g. the login block's "login" button
- */
-
-div.c1.btn {
-    display: block;
-    padding: 0;
-    margin-bottom: 0;
-    font-size: inherit;
-    line-height: inherit;
-    text-align: inherit;
-    cursor: default;
-    color: inherit;
-    text-shadow: inherit;
-    background-color: inherit;
-    background-image: none;
-    background-repeat: no-repeat;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-}
 /* .container vs .container
  *
  * bootstrap uses .container to set the width of the layout at 960px or so, Moodle uses it
@@ -161,4 +131,10 @@ body:not(.jsenabled) .langmenu:hover > .dropdown-menu,
 
 ol {
     margin: 0 0 $line-height-base / 2 2.5em;
+}
+
+// Set menus in the fixed header to scroll vertically when they are longer than the page.
+.navbar-static-top .dropdown .dropdown-menu {
+    max-height: calc(100vh - #{$navbar-height});
+    overflow-y: auto;
 }

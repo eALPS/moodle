@@ -25,6 +25,8 @@
 
 // NOTE: no MOODLE_INTERNAL test here, this file may be required by behat before including /config.php.
 
+use Behat\Mink\Exception\ElementNotFoundException as ElementNotFoundException;
+
 require_once(__DIR__ . '/../../../lib/behat/behat_base.php');
 
 /**
@@ -53,6 +55,20 @@ class behat_blocks extends behat_base {
             $this->execute('behat_general::i_click_on_in_the',
                 array(get_string('go'), "button", "#add_block", "css_element")
             );
+        }
+    }
+
+    /**
+     * Adds the selected block if it is not already present. Editing mode must be previously enabled.
+     *
+     * @Given /^I add the "(?P<block_name_string>(?:[^"]|\\")*)" block if not present$/
+     * @param string $blockname
+     */
+    public function i_add_the_block_if_not_present($blockname) {
+        try {
+            $this->get_text_selector_node('block', $blockname);
+        } catch (ElementNotFoundException $e) {
+            $this->execute('behat_blocks::i_add_the_block', [$blockname]);
         }
     }
 
@@ -112,5 +128,25 @@ class behat_blocks extends behat_base {
         $this->execute('behat_general::i_click_on_in_the',
             array("Configure", "link", $this->escape($blockname), "block")
         );
+    }
+
+    /**
+     * Ensures that block can be added to the page but does not actually add it.
+     *
+     * @Then /^the add block selector should contain "(?P<block_name_string>(?:[^"]|\\")*)" block$/
+     * @param string $blockname
+     */
+    public function the_add_block_selector_should_contain_block($blockname) {
+        $this->execute('behat_forms::the_select_box_should_contain', [get_string('addblock'), $blockname]);
+    }
+
+    /**
+     * Ensures that block can not be added to the page.
+     *
+     * @Then /^the add block selector should not contain "(?P<block_name_string>(?:[^"]|\\")*)" block$/
+     * @param string $blockname
+     */
+    public function the_add_block_selector_should_not_contain_block($blockname) {
+        $this->execute('behat_forms::the_select_box_should_not_contain', [get_string('addblock'), $blockname]);
     }
 }

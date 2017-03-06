@@ -1,48 +1,147 @@
-.path-backup .mform .grouped_settings.section_level {
-    @extend .card;
-    padding: 10px 0 0 0;
-    clear: both;
+.path-backup .mform {
+    .grouped_settings {
+        clear: both;
+        overflow: hidden;
+
+        /* Use card styles but avoid extend because that brings in too much. */
+        &.section_level {
+            background-color: $card-bg;
+            @include border-radius($card-border-radius);
+            border: $card-border-width solid $card-border-color;
+            @include clearfix;
+            padding: $card-spacer-x;
+            margin-bottom: $card-spacer-x;
+        }
+    }
+
+    /* These are long labels with checkboxes on the right. */
+    .include_setting {
+        width: 50%;
+        display: inline-block;
+        float: left;
+        padding: $table-sm-cell-padding;
+    }
+    .normal_setting {
+        width: 50%;
+        display: inline-block;
+        float: left;
+        padding: $table-sm-cell-padding;
+    }
 }
 
-.path-backup .mform .grouped_settings {
-    clear: both;
-    overflow: hidden;
+.path-backup {
+    /* Bold section labels */
+    .section_level {
+        font-weight: bold;
+    }
+    .section_level .activity_level {
+        font-weight: normal;
+    }
+
+    .proceedbutton {
+        float: right;
+    }
 }
 
-.path-backup .include_setting,
-.path-backup .grouped_settings .normal_setting {
-    display: inline-block;
+/* Override the columns width to leave more room for the labels. */
+.path-backup .mform {
+    .root_setting,
+    .grouped_settings {
+        /* Striped rows like a table */
+        &:nth-of-type(odd) {
+            background-color: $table-bg-accent;
+        }
+        &:nth-of-type(even) {
+            background-color: $card-bg;
+        }
+        .form-group {
+            /* These checkboxes with no label on the left. */
+            .col-md-3.checkbox {
+                width: 0%;
+            }
+            .col-md-9.checkbox {
+                width: 100%;
+                left: 0;
+            }
+            /* These are labels with a value on the right */
+            .col-md-3 {
+                width: 50%;
+            }
+            .col-md-9 {
+                width: 50%;
+                left: 0;
+            }
+            .icon:first-of-type {
+                margin-left: 1rem;
+            }
+        }
+    }
 }
 
-.path-backup .include_setting.section_level label {
-    font-weight: bold;
+/* Detail pair is (usually) some short label with a longer value */
+.path-backup .detail-pair {
+    .detail-pair-label {
+        width: 25%;
+        float: left;
+        clear: left;
+    }
+    .detail-pair-value {
+        width: 75%;
+        float: left;
+    }
 }
 
-.path-backup .mform .fitem .fitemtitle {
-    width: 260px;
+.path-backup .backup-restore .singlebutton {
+    float: right;
 }
+/* Make these bits full width and work with the detail-pair */
+.path-backup .backup-section {
+    .sub-header,
+    .backup-sub-section,
+    .singlebutton,
+    .header {
+        width: 100%;
+        float: left;
+        clear: both;
+    }
+    /* Fix for nested table headers */
+    th.header {
+        width: auto;
+        float: none;
+    }
 
-.path-backup .mform .fitem .felement {
-    margin-left: 280px;
+    /* Add card styles to backup sections */
+    ::after {
+        content: "";
+        display: table;
+        clear: both;
+    }
+
+    background-color: $card-bg;
+    @include border-radius($card-border-radius);
+    border: $card-border-width solid $card-border-color;
+    @include clearfix;
+    padding: $card-spacer-x;
+    margin-bottom: $card-spacer-x;
 }
 
 .path-backup .notification.dependencies_enforced {
-    text-align: center;
     color: $state-danger-text;
     font-weight: bold;
 }
 
 .path-backup .backup_progress {
-    text-align: center;
-}
+    margin-top: $spacer-y;
+    margin-bottom: $spacer-y;
 
-.path-backup .backup_progress .backup_stage {
-    @extend .text-muted;
-}
+    .backup_stage {
+        @extend .text-muted;
 
-.path-backup .backup_progress .backup_stage.backup_stage_current {
-    font-weight: bold;
-    color: inherit;
+        &.backup_stage_current {
+            font-weight: bold;
+            color: inherit;
+        }
+    }
 }
 
 .path-backup .backup_progress span.backup_stage.backup_stage_complete {
@@ -51,147 +150,12 @@
 
 #page-backup-restore .filealiasesfailures {
     background-color: $state-danger-bg;
-}
 
-#page-backup-restore .filealiasesfailures .aliaseslist {
-    width: 90%;
-    margin: 0.8em auto;
-    background-color: $body-bg;
-    border: 1px dotted #666;
-}
-
-.backup-restore .backup-section > h2.header,
-.backup-restore .backup-section .backup-sub-section h3 {
-    // Copied from bootstrap/forms.less tag legend
-    display: block;
-    width: 100%;
-    padding: 0;
-    margin-bottom: $line-height-base;
-    font-size: $font-size-base * 1.5;
-    line-height: $line-height-base * 2;
-    color: $gray-dark;
-    border: 0;
-    border-bottom: 1px solid #e5e5e5;
-}
-
-.backup-restore .backup-section .noticebox {
-    margin: 1em auto;
-    width: 60%;
-    text-align: center;
-}
-
-.backup-restore .backup-section.settings-section .detail-pair {
-    width: 50%;
-    display: inline-block;
-}
-
-.backup-restore .backup-section.settings-section .detail-pair-label {
-    width: 65%;
-}
-
-.backup-restore .backup-section.settings-section .detail-pair-value {
-    width: 25%;
-}
-
-.backup-restore .activitytable {
-    min-width: 500px;
-}
-
-.backup-restore .activitytable .modulename {
-    width: 100px;
-}
-
-.backup-restore .activitytable .moduleincluded {
-    width: 50px;
-}
-
-.backup-restore .activitytable .userinfoincluded {
-    width: 50px;
-}
-
-.backup-restore .detail-pair-label {
-    display: inline-block;
-    width: 25%;
-    padding: 8px;
-    margin: 0;
-    text-align: right;
-    font-weight: bold;
-    vertical-align: top;
-}
-
-.backup-restore .detail-pair-value {
-    display: inline-block;
-    width: 65%;
-    padding: 8px;
-    margin: 0;
-}
-
-.backup-restore .detail-pair-value > .sub-detail {
-    display: block;
-    font-size: $font-size-sm;
-    @extend .text-muted;
-}
-
-.backup-restore > .singlebutton {
-    text-align: right;
-}
-
-.path-backup .mform .fgroup {
-    .proceedbutton {
-        float: right;
-        margin-right: 5%;
-    }
-
-    .oneclickbackup {
-        float: right;
+    .aliaseslist {
+        background-color: $body-bg;
     }
 }
 
-.restore-course-search .rcs-results {
-    width: 70%;
-    min-width: 400px;
-}
-
-.restore-course-search .rcs-results table {
-    width: 100%;
-    margin: 0;
-    border-width: 0;
-}
-
-.restore-course-search .rcs-results table .no-overflow {
-    max-width: 600px;
-}
-
-.restore-course-search .rcs-results .paging {
-    text-align: left;
-    margin: 0;
-    background-color: #eee;
-    padding: 3px;
-}
-
-.restore-course-category .rcs-results {
-    width: 70%;
-    min-width: 400px;
-    border: 1px solid #ddd;
-    margin: 5px 0;
-}
-
-.restore-course-category .rcs-results table {
-    width: 100%;
-    margin: 0;
-    border-width: 0;
-}
-
-.restore-course-category .rcs-results table .no-overflow {
-    max-width: 600px;
-}
-
-.restore-course-category .rcs-results .paging {
-    text-align: left;
-    margin: 0;
-    background-color: #eee;
-    padding: 3px;
-}
 
 .path-backup .wibbler {
     width: 500px;
@@ -201,79 +165,53 @@
     border-left: 1px solid black;
     position: relative;
     min-height: 4px;
+
+    .wibble {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 4px;
+    }
+
+    .state0 {
+        background: #eee;
+    }
+    .state1 {
+        background: #ddd;
+    }
+    .state2 {
+        background: #ccc;
+    }
+    .state3 {
+        background: #bbb;
+    }
+    .state4 {
+        background: #aaa;
+    }
+    .state5 {
+        background: #999;
+    }
+    .state6 {
+        background: #888;
+    }
+    .state7 {
+        background: #777;
+    }
+    .state8 {
+        background: #666;
+    }
+    .state9 {
+        background: #555;
+    }
+    .state10 {
+        background: #444;
+    }
+    .state11 {
+        background: #333;
+    }
+    .state12 {
+        background: #222;
+    }
 }
 
-.path-backup .wibbler .wibble {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    height: 4px;
-}
-
-.path-backup .wibbler .state0 {
-    background: #eee;
-}
-
-.path-backup .wibbler .state1 {
-    background: #ddd;
-}
-
-.path-backup .wibbler .state2 {
-    background: #ccc;
-}
-
-.path-backup .wibbler .state3 {
-    background: #bbb;
-}
-
-.path-backup .wibbler .state4 {
-    background: #aaa;
-}
-
-.path-backup .wibbler .state5 {
-    background: #999;
-}
-
-.path-backup .wibbler .state6 {
-    background: #888;
-}
-
-.path-backup .wibbler .state7 {
-    background: #777;
-}
-
-.path-backup .wibbler .state8 {
-    background: #666;
-}
-
-.path-backup .wibbler .state9 {
-    background: #555;
-}
-
-.path-backup .wibbler .state10 {
-    background: #444;
-}
-
-.path-backup .wibbler .state11 {
-    background: #333;
-}
-
-.path-backup .wibbler .state12 {
-    background: #222;
-}
-
-.path-backup .backup_log {
-    margin-top: 2em;
-}
-
-.path-backup .backup_log h2 {
-    font-size: 1em;
-}
-
-.path-backup .backup_log_contents {
-    border: 1px solid #ddd;
-    padding: 10px;
-    height: 300px;
-    overflow-y: scroll;
-}

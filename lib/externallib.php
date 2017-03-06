@@ -239,6 +239,7 @@ class external_api {
         } catch (Exception $e) {
             $exception = get_exception_info($e);
             unset($exception->a);
+            $exception->backtrace = format_backtrace($exception->backtrace, true);
             if (!debugging('', DEBUG_DEVELOPER)) {
                 unset($exception->debuginfo);
                 unset($exception->backtrace);
@@ -316,7 +317,7 @@ class external_api {
                     }
                     if ($subdesc->required == VALUE_DEFAULT) {
                         try {
-                            $result[$key] = self::validate_parameters($subdesc, $subdesc->default);
+                            $result[$key] = static::validate_parameters($subdesc, $subdesc->default);
                         } catch (invalid_parameter_exception $e) {
                             //we are only interested by exceptions returned by validate_param() and validate_parameters()
                             //(in order to build the path to the faulty attribut)
@@ -325,7 +326,7 @@ class external_api {
                     }
                 } else {
                     try {
-                        $result[$key] = self::validate_parameters($subdesc, $params[$key]);
+                        $result[$key] = static::validate_parameters($subdesc, $params[$key]);
                     } catch (invalid_parameter_exception $e) {
                         //we are only interested by exceptions returned by validate_param() and validate_parameters()
                         //(in order to build the path to the faulty attribut)
@@ -346,7 +347,7 @@ class external_api {
             }
             $result = array();
             foreach ($params as $param) {
-                $result[] = self::validate_parameters($description->content, $param);
+                $result[] = static::validate_parameters($description->content, $param);
             }
             return $result;
 
@@ -409,7 +410,7 @@ class external_api {
                     if ($subdesc instanceof external_value) {
                         if ($subdesc->required == VALUE_DEFAULT) {
                             try {
-                                    $result[$key] = self::clean_returnvalue($subdesc, $subdesc->default);
+                                    $result[$key] = static::clean_returnvalue($subdesc, $subdesc->default);
                             } catch (invalid_response_exception $e) {
                                 //build the path to the faulty attribut
                                 throw new invalid_response_exception($key." => ".$e->getMessage() . ': ' . $e->debuginfo);
@@ -418,7 +419,7 @@ class external_api {
                     }
                 } else {
                     try {
-                        $result[$key] = self::clean_returnvalue($subdesc, $response[$key]);
+                        $result[$key] = static::clean_returnvalue($subdesc, $response[$key]);
                     } catch (invalid_response_exception $e) {
                         //build the path to the faulty attribut
                         throw new invalid_response_exception($key." => ".$e->getMessage() . ': ' . $e->debuginfo);
@@ -436,7 +437,7 @@ class external_api {
             }
             $result = array();
             foreach ($response as $param) {
-                $result[] = self::clean_returnvalue($description->content, $param);
+                $result[] = static::clean_returnvalue($description->content, $param);
             }
             return $result;
 
@@ -724,6 +725,7 @@ function external_generate_token($tokentype, $serviceorid, $userid, $contextorid
     if (!empty($iprestriction)) {
         $newtoken->iprestriction = $iprestriction;
     }
+    $newtoken->privatetoken = null;
     $DB->insert_record('external_tokens', $newtoken);
     return $newtoken->token;
 }
@@ -1053,17 +1055,24 @@ function external_generate_token_for_current_user($service) {
             $token->externalserviceid = $service->id;
             // MDL-43119 Token valid for 3 months (12 weeks).
             $token->validuntil = $token->timecreated + 12 * WEEKSECS;
+            $token->iprestriction = null;
+            $token->sid = null;
+            $token->lastaccess = null;
+            // Generate the private token, it must be transmitted only via https.
+            $token->privatetoken = random_string(64);
             $token->id = $DB->insert_record('external_tokens', $token);
 
+            $eventtoken = clone $token;
+            $eventtoken->privatetoken = null;
             $params = array(
-                'objectid' => $token->id,
+                'objectid' => $eventtoken->id,
                 'relateduserid' => $USER->id,
                 'other' => array(
                     'auto' => true
                 )
             );
             $event = \core\event\webservice_token_created::create($params);
-            $event->add_record_snapshot('external_tokens', $token);
+            $event->add_record_snapshot('external_tokens', $eventtoken);
             $event->trigger();
         } else {
             throw new moodle_exception('cannotcreatetoken', 'webservice', '', $service->shortname);
@@ -1072,6 +1081,30 @@ function external_generate_token_for_current_user($service) {
     return $token;
 }
 
+/**
+ * Set the last time a token was sent and trigger the \core\event\webservice_token_sent event.
+ *
+ * This function is used when a token is generated by the user via login/token.php or admin/tool/mobile/launch.php.
+ * In order to protect the privatetoken, we remove it from the event params.
+ *
+ * @param  stdClass $token token object
+ * @since  Moodle 3.2
+ */
+function external_log_token_request($token) {
+    global $DB;
+
+    $token->privatetoken = null;
+
+    // Log token access.
+    $DB->set_field('external_tokens', 'lastaccess', time(), array('id' => $token->id));
+
+    $params = array(
+        'objectid' => $token->id,
+    );
+    $event = \core\event\webservice_token_sent::create($params);
+    $event->add_record_snapshot('external_tokens', $token);
+    $event->trigger();
+}
 
 /**
  * Singleton to handle the external settings.

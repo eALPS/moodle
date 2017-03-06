@@ -45,6 +45,7 @@
     * template
     * uniqid
 
+    // This template has no example context because it would trigger real updates to the DB.
     Example context (json):
     {
     }
@@ -92,7 +93,7 @@ require(['core/str'], function(Str) {
         { key: 'comments', component: 'moodle' },
         { key: 'commentscount', component: 'moodle' },
         { key: 'commentsrequirelogin', component: 'moodle' },
-        { key: 'deletecomment', component: 'moodle' },
+        { key: 'deletecommentbyon', component: 'moodle' },
     ]).then(function() {
         // Kick off when strings are loaded.
         Y.use('core_comment', function(Y) {

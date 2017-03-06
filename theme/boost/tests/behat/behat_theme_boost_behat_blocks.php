@@ -38,14 +38,12 @@ require_once(__DIR__ . '/../../../../blocks/tests/behat/behat_blocks.php');
 class behat_theme_boost_behat_blocks extends behat_blocks {
 
     public function i_add_the_block($blockname) {
-        $this->execute('behat_forms::i_set_the_field_to',
-            array("bui_addblock", $this->escape($blockname))
-        );
+        $this->execute('behat_navigation::i_select_from_flat_navigation_drawer', get_string('addblock'));
 
-        // If we are running without javascript we need to submit the form.
         if (!$this->running_javascript()) {
-             $this->execute('behat_general::i_click_on_in_the',
-                 array("Go", "button", "Add a block", "block"));
+            $this->execute('behat_general::i_click_on_in_the', [$blockname, 'link_exact', '#region-main', 'css_element']);
+        } else {
+            $this->execute('behat_general::i_click_on_in_the', [$blockname, 'link_exact', '.modal-body', 'css_element']);
         }
     }
 
@@ -65,6 +63,32 @@ class behat_theme_boost_behat_blocks extends behat_blocks {
         $this->execute('behat_general::i_click_on_in_the',
             array("a[data-toggle='dropdown']", "css_element", $this->escape($blockname), "block")
         );
+    }
+
+    public function the_add_block_selector_should_contain_block($blockname) {
+        $this->execute('behat_navigation::i_select_from_flat_navigation_drawer', get_string('addblock'));
+
+        $cancelstr = get_string('cancel');
+        if (!$this->running_javascript()) {
+            $this->execute('behat_general::should_exist_in_the', [$blockname, 'link_exact', '#region-main', 'css_element']);
+            $this->execute('behat_general::i_click_on_in_the', [$cancelstr, 'link_exact', '#region-main', 'css_element']);
+        } else {
+            $this->execute('behat_general::should_exist_in_the', [$blockname, 'link_exact', '.modal-body', 'css_element']);
+            $this->execute('behat_general::i_click_on_in_the', [$cancelstr, 'link_exact', '.modal-body', 'css_element']);
+        }
+    }
+
+    public function the_add_block_selector_should_not_contain_block($blockname) {
+        $this->execute('behat_navigation::i_select_from_flat_navigation_drawer', get_string('addblock'));
+
+        $cancelstr = get_string('cancel');
+        if (!$this->running_javascript()) {
+            $this->execute('behat_general::should_not_exist_in_the', [$blockname, 'link_exact', '#region-main', 'css_element']);
+            $this->execute('behat_general::i_click_on_in_the', [$cancelstr, 'link_exact', '#region-main', 'css_element']);
+        } else {
+            $this->execute('behat_general::should_not_exist_in_the', [$blockname, 'link_exact', '.modal-body', 'css_element']);
+            $this->execute('behat_general::i_click_on_in_the', [$cancelstr, 'link_exact', '.modal-body', 'css_element']);
+        }
     }
 
 }

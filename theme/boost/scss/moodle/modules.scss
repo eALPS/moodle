@@ -9,16 +9,17 @@ select {
     width: auto;
 }
 
-// Feedback module
-.path-mod-feedback .feedback_form .col-md-9,
-.path-mod-feedback .feedback_form .col-md-3,
-.path-mod-feedback .feedback_form .col-md-3 label {
-    width: 100%;
+.path-mod-feedback .feedback_form .col-form-label {
+    display: block !important; /* stylelint-disable-line declaration-no-important */
 }
 
-.path-mod-feedback .feedback_form .col-md-9 {
-    margin-left: 1rem;
-    margin-bottom: -2rem;
+// Feedback module
+.path-mod-feedback .itemactions {
+    float: right;
+}
+.path-mod-feedback .itemhandle {
+    position: absolute;
+    right: 1rem;
 }
 
 // Forum module
@@ -90,6 +91,17 @@ select {
             }
         }
     }
+
+    // Style for the forum subscription mode node.
+    .subscriptionmode {
+        color: $body-color;
+    }
+
+    // Style for the currently selected subscription mode.
+    .activesetting {
+        color: $body-color;
+        font-weight: bold;
+    }
 }
 
 .forumpost {
@@ -148,10 +160,10 @@ select {
 #page-mod-forum-discuss .discussioncontrols {
     width: auto;
     margin: 0;
-}
 
-#page-footer {
-    border-top: 2px solid $table-border-color;
+    .form-inline input {
+        margin-top: -1px;
+    }
 }
 
 .maincalendar .calendarmonth td,
@@ -180,7 +192,6 @@ select {
 }
 
 .breadcrumb-button {
-    float: right;
     margin-top: 4px;
 }
 
@@ -211,21 +222,6 @@ div#dock {
 }
 
 // Choice module
-
-.path-mod-choice {
-    .horizontal  .choices {
-        margin: 0;
-
-        .option {
-            display: inline-block;
-            padding: 10px;
-        }
-    }
-
-    .results .data {
-        white-space: normal;
-    }
-}
 
 // Lesson module
 
@@ -266,13 +262,6 @@ div#dock {
         }
     }
 
-    .resultgraph,
-    .reportsummary,
-    .studentreport,
-    .reportbuttons,
-    .centerpara {
-        text-align: center;
-    }
 }
 
 .nav .caret {
@@ -284,28 +273,18 @@ div#dock {
     .divider {
         overflow: hidden;
         width: 0;
-        //      height: $navbarHeight;
-        //      border-left: 1px solid $navbarBackground;
-        //     border-right: 1px solid $navbarBackgroundHighlight;
     }
 }
-//.navbar-inverse {
-//    .nav {
-//        .divider {
-//            border-left-color: $navbarInverseBackground;
-//            border-right-color: lighten($navbarInverseBackground, 25%);
-//        }
-//    }
-//}
 
 // Usermenu
 .usermenu {
+    float: right;
+
     .login {
         line-height: 2.25rem;
 
         a {
             color: $link-color;
-
             &:hover,
             &:focus {
                 color: $link-hover-color;
@@ -313,63 +292,56 @@ div#dock {
             }
         }
     }
+}
 
-    .moodle-actionmenu {
-        .toggle-display {
-            display: block;
-            opacity: 1;
-            color: $dropdown-link-color;
-            line-height: 40px;
-            height: 40px;
-
-            &:hover {
-                color: $dropdown-link-hover-color;
+.userloggedinas,
+.userswitchedrole,
+.loginfailures {
+    .usermenu {
+        .usertext {
+            float: left;
+            text-align: right;
+            margin-right: $spacer / 2;
+            height: 35px;
+            .meta {
+                display: block;
+                font-size: $font-size-sm;
             }
+        }
+        .avatar {
+            img {
+                margin: 0;
+            }
+        }
+    }
+}
 
-            .userbutton {
-                height: 40px;
-                line-height: 40px;
-
-                .avatars {
-                    display: inline-block;
-                    height: 36px;
-                    width: 36px;
-                    vertical-align: middle;
-                    margin-right: 6px;
-                    margin-left: 6px;
-
-                    .avatar,
-                    img {
-                        display: block;
-                    }
-                }
-
-                .usertext {
-                    display: inline-block;
-                    vertical-align: middle;
-                    line-height: 1em;
-                    color: inherit;
-
-                    .meta,
-                    .role {
-                        display: block;
-                        font-size: 12px;
-
-                        .value {
-                            font-weight: bold;
-                        }
-                    }
-
-                    .role {
-                        font-weight: bold;
-                    }
+.userloggedinas .usermenu {
+    .userbutton .avatars {
+        position: relative;
+        display: inline-block;
+        .avatar {
+            &.current {
+                display: inline-block;
+                position: absolute;
+                bottom: 0;
+                right: 0;
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                img {
+                    vertical-align: baseline;
                 }
             }
-
-            // Hide caret when JS is disabled.
-            .caret {
-                display: none;
+            img {
+                width: inherit;
+                height: inherit;
             }
+        }
+        .realuser {
+            width: 35px;
+            height: 35px;
+            display: inline-block;
         }
     }
 }
@@ -380,146 +352,35 @@ div#dock {
     }
 }
 
-.jsenabled {
-    .usermenu {
-        .moodle-actionmenu {
-            .toggle-display {
-                display: block;
-
-                &.textmenu {
-                    padding-left: 8px;
-                    padding-right: 8px;
-                }
-
-                // Show caret when JS is enabled.
-                .caret {
-                    display: inline-block;
-                    position: relative;
-                    top: 9px;
-                }
-            }
-
-            > .menubar {
-                display: block;
-                margin: 0;
-            }
-
-            > .menu {
-                min-width: 160px;
-
-                .filler {
-                    display: block;
-
-                    @include nav-divider();
-                }
-            }
-
-            &.show {
-                background-color: $dropdown-link-active-bg;
-
-                .menu {
-                    padding: 5px 0;
-                    margin: 2px 0 0;
-                    background-clip: padding-box;
-
-                    &:before {
-                        content: '';
-                        display: inline-block;
-                        border-left: 7px solid transparent;
-                        border-right: 7px solid transparent;
-                        border-bottom: 7px solid #ccc;
-                        border-bottom-color: $dropdown-border-color;
-                        position: absolute;
-                        top: -7px;
-                    }
-
-                    &:after {
-                        content: '';
-                        display: inline-block;
-                        border-left: 6px solid transparent;
-                        border-right: 6px solid transparent;
-                        border-bottom: 6px solid $dropdown-bg;
-                        position: absolute;
-                        top: -6px;
-                    }
-
-                    a {
-                        border-radius: 0;
-
-                        &:focus {
-                            text-decoration: none;
-                        }
-
-                        &:hover {
-                            text-decoration: none;
-
-                            @include gradient-y($dropdown-link-hover-bg, darken($dropdown-link-hover-bg, 5%));
-                        }
-                    }
-
-                    &.align-tr-br {
-                        margin-top: 2px;
-                    }
-
-                    @include box-shadow(0 5px 10px rgba(0, 0, 0, 0.2));
-                }
-            }
-        }
-    }
-}
-
-.usermenu {
-    float: right;
-
-    > .moodle-actionmenu {
-        > .menu {
-            &:before {
-                right: 9px;
-            }
-
-            &:after {
-                right: 10px;
-            }
-        }
-
-        > .menubar li a {
-            text-align: right;
-        }
-    }
-}
-
-&.userloggedinas .usermenu .userbutton .avatars {
-    .avatar {
-        &.current {
-            left: 16px;
-        }
-    }
-}
-
-.userloggedinas .usermenu .userbutton .avatars {
-    .avatar {
-        &.current {
-            position: relative;
-            top: 4px;
-            left: 4px;
-            width: 20px;
-            height: 20px;
-            margin-top: 11px;
-            margin-bottom: -34px;
-            border: 1px solid #fff;
-            border-radius: 50%;
-            box-shadow: -2px -2px 16px rgba(0, 0, 0, 0.25);
-        }
-
-        img {
-            width: inherit;
-            height: inherit;
-        }
-        overflow: hidden;
-    }
-}
-
 // Quiz module
+.path-mod-quiz .mod-quiz-edit-content {
+    // Force the quiz edit page to always be large enough to prevent scrolling when accessing the menu.
+    margin-bottom: 10rem;
+}
+
+#page-mod-quiz-mod #id_reviewoptionshdr .col-md-3,
+#page-mod-quiz-mod #id_reviewoptionshdr .col-md-9 {
+    width: auto;
+}
+#page-mod-quiz-mod #id_reviewoptionshdr .form-group {
+    float: left;
+    width: 20rem;
+    display: inline-block;
+    min-height: 12rem;
+}
+
+#page-mod-quiz-mod #id_reviewoptionshdr .btn-link {
+    line-height: 1.5;
+    vertical-align: bottom;
+}
+#page-mod-quiz-mod #id_reviewoptionshdr .form-inline {
+    float: left;
+    clear: left;
+}
+#page-mod-quiz-mod #id_reviewoptionshdr .form-check {
+    width: 90%;
+    height: 22px;
+}
 
 // Question navigation block.
 .path-mod-quiz #mod_quiz_navblock {
@@ -528,7 +389,7 @@ div#dock {
         font-size: 14px;
         line-height: 20px;
         font-weight: normal;
-        background-color: $body-color;
+        background-color: $card-bg;
         background-image: none;
         height: 40px;
         width: 30px;
@@ -570,7 +431,7 @@ div#dock {
 
     .qnbutton .trafficlight {
         border: 0;
-        background: $body-color none center / 10px no-repeat scroll;
+        background: $card-bg none center / 10px no-repeat scroll;
         height: 20px;
         margin-top: 20px;
         border-radius: 0 0 3px 3px;
@@ -578,7 +439,7 @@ div#dock {
 
     .qnbutton.notyetanswered .trafficlight,
     .qnbutton.invalidanswer .trafficlight {
-        background-color: $body-color;
+        background-color: $card-bg;
     }
 
     .qnbutton.invalidanswer .trafficlight {
@@ -612,44 +473,81 @@ div#dock {
     }
 }
 
-/**
- * Assign.
- */
+
+// Assign.
 .path-mod-assign [data-region="grade-actions-panel"] [data-region="grade-actions"] .collapse-buttons {
     top: auto;
 }
-
-.path-mod-assign [data-region="grade-panel"] .has-popout {
-    background-color: $card-bg;
-
-    @include border-radius($card-border-radius);
-    border: $card-border-width solid $card-border-color;
+.path-mod-assign .no-overflow {
+    overflow: initial;
 }
+
+// This section removes the responsiveness from the form in the grading panel
+$popout-header-font-size: 1.5 * $font-size-base;
+// This can't be calculated from modal-title-padding because we are mixing px and rem units.
+$popout-header-height: 4rem;
+
+.path-mod-assign #page-content [data-region="grade-panel"] .mform:not(.unresponsive) .fcontainer .fitem.popout .felement {
+    height: calc(100% - #{$popout-header-height});
+}
+
+.path-mod-assign [data-region="grade-panel"] {
+    padding-top: $spacer;
+}
+.path-mod-assign [data-region="grade-panel"] .fitem > .col-md-3,
+.path-mod-assign [data-region="grade-panel"] .fitem > .col-md-9 {
+    width: 100%;
+    padding: 0;
+}
+.path-mod-assign [data-region="grade-panel"] fieldset,
+.path-mod-assign [data-region="grade-panel"] .fitem.row {
+    margin: 0;
+}
+
+.path-mod-assign [data-region="grade-panel"] .fitem > .col-md-3 > .pull-xs-right {
+    float: none !important; /* stylelint-disable-line declaration-no-important */
+}
+
+.path-mod-assign [data-region="grade-panel"] .mform .fitem.has-popout .felement {
+    width: 100%;
+}
+
+.path-mod-assign [data-region="grade-panel"] .mform .fitem .felement {
+    width: auto;
+}
+
+// Now styles for the popout sections.
 
 .path-mod-assign [data-region="grade-panel"] .popout {
     background-color: $modal-content-bg;
 }
 
-.path-mod-assign [data-region="grade-panel"] .col-md-3 {
-    width: 100%;
+.path-mod-assign [data-region="grade-panel"] .fitem.has-popout {
+    background-color: $card-bg;
+    @include border-radius($card-border-radius);
+    border: $card-border-width solid $card-border-color;
+    padding: $card-spacer-x;
+    margin-bottom: $spacer;
 }
+.path-mod-assign [data-region="grade-panel"] .has-popout .col-md-3 {
+    border-bottom: $hr-border-width solid $hr-border-color;
+    margin-bottom: $spacer;
+}
+
 
 .path-mod-assign [data-region="grade-panel"] .popout > .col-md-3 {
     @extend .modal-header;
-    font-size: 1.5rem;
-}
-
-.path-mod-assign [data-region="grade-panel"] [data-region="popout-button"] {
-    margin-top: 0.5rem;
+    font-size: $popout-header-font-size;
 }
 
 .path-mod-assign [data-region="grade-panel"] .popout [data-region="popout-button"] {
     margin-top: 0;
 }
 
-.path-mod-assign [data-region="grade-panel"] h3 {
-    margin: 10px 0;
-    line-height: 40px;
+// Now style the fixed header elements.
+
+.path-mod-assign [data-region="assignment-info"] {
+    overflow-y: hidden;
 }
 
 .path-mod-assign [data-region="grading-navigation"] {
@@ -666,6 +564,15 @@ div#dock {
 
 .path-mod-assign [data-region="grading-navigation-panel"] {
     height: 85px;
+}
+
+@media (max-width: 767px) {
+    .path-mod-assign [data-region="grading-navigation-panel"] {
+        height: auto;
+    }
+    .path-mod-assign [data-region="user-info"] {
+        margin-top: 1rem;
+    }
 }
 
 .path-mod-assign [data-region="grading-navigation"] [data-region="input-field"] input {
@@ -697,3 +604,27 @@ div#dock {
     padding: 0;
 }
 
+.path-mod-assign [data-region="grade-panel"] .gradingform_guide .remark .commentchooser {
+    float: none;
+}
+.path-mod-assign [data-region="grade-panel"] .gradingform_guide .markingguideremark {
+    width: 100%;
+}
+.path-mod-assign [data-region="grade-panel"] .mform .fitem .felement[data-fieldtype="grading"] {
+    padding-left: $spacer;
+    padding-right: $spacer;
+}
+.path-mod-assign [data-region="grade-panel"] .showmarkerdesc,
+.path-mod-assign [data-region="grade-panel"] .showstudentdesc {
+    background-color: $card-bg;
+}
+
+/**
+ * Mod LTI.
+ */
+.path-admin-mod-lti {
+    .btn .loader img,
+    #tool-list-loader-container .loader img {
+        height: auto;
+    }
+}

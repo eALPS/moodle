@@ -15,23 +15,17 @@
 }
 
 .environmenttable {
-    p.warn {
+    .warn {
         background-color: @warningBackground;
         color: @warningText;
     }
-    .error,
-    span.warn,
-    .ok {
-        .label;
-    }
     .error {
-        background-color: @errorText;
-    }
-    span.warn {
-        background-color: @orange;
+        background-color: @errorBackground;
+        color: @errorText;
     }
     .ok {
-        background-color: @successText;
+        background-color: @successBackground;
+        color: @successText;
     }
 }
 
@@ -155,6 +149,12 @@ img.iconsmall {
     margin-left: auto;
     margin-right: auto;
 }
+#page-admin-tool-spamcleaner-index .spamcleanerform input[type="submit"] {
+    margin-bottom: 0;
+}
+.path-admin-roles .capabilitysearchui input[type="button"] {
+    margin-bottom: 0;
+}
 
 #page-admin-roles-define .topfields {
     margin: 1em 0 2em;
@@ -196,12 +196,25 @@ img.iconsmall {
     text-align: left;
 }
 
-#notice {
-    // Would like the use the alert stuff below for this,
-    // but the way buttons are used makes it tricky.
+// Allow in-page modals like bootstrap 4.
+.modal.modal-in-page {
+    position: static;
+    z-index: 0;
+    margin: 0 auto 0 auto;
+}
+
+// We need to keep this rule because confirm messages during upgrade use it. We can never change it because we don't
+// serve new stylesheets until after upgrade.
+#page-admin-index #notice {
     width: 60%;
     min-width: 220px;
     margin: auto;
+
+    .buttons {
+        padding-left: 0;
+        padding-right: 0;
+        text-align: center;
+    }
 }
 
 #page-admin-index .releasenoteslink,
@@ -836,4 +849,8 @@ img.iconsmall {
 #adminsettings .form-overridden {
     color: @infoText;
     background-color: @infoBackground;
+}
+
+#overriderolestable .overriddenpermission {
+    background-color: @warningBackground;
 }

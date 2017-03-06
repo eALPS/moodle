@@ -59,7 +59,7 @@ class auth_email_external extends external_api {
     /**
      * Describes the parameters for get_signup_settings.
      *
-     * @return external_external_function_parameters
+     * @return external_function_parameters
      * @since Moodle 3.2
      */
     public static function get_signup_settings_parameters() {
@@ -169,7 +169,7 @@ class auth_email_external extends external_api {
                 ),
                 'recaptchapublickey' => new external_value(PARAM_RAW, 'Recaptcha public key', VALUE_OPTIONAL),
                 'recaptchachallengehash' => new external_value(PARAM_RAW, 'Recaptcha challenge hash', VALUE_OPTIONAL),
-                'recaptchachallengeimage' => new external_value(PARAM_URL, 'Recaptcha challenge <noscript> image', VALUE_OPTIONAL),
+                'recaptchachallengeimage' => new external_value(PARAM_URL, 'Recaptcha challenge noscript image', VALUE_OPTIONAL),
                 'recaptchachallengejs' => new external_value(PARAM_URL, 'Recaptcha challenge js url', VALUE_OPTIONAL),
                 'warnings'  => new external_warnings(),
             )
@@ -179,7 +179,7 @@ class auth_email_external extends external_api {
     /**
      * Describes the parameters for signup_user.
      *
-     * @return external_external_function_parameters
+     * @return external_function_parameters
      * @since Moodle 3.2
      */
     public static function signup_user_parameters() {
@@ -202,7 +202,9 @@ class auth_email_external extends external_api {
                             'value' => new external_value(PARAM_RAW, 'Custom field value, can be an encoded json if required')
                         )
                     ), 'User custom fields (also known as user profile fields)', VALUE_DEFAULT, array()
-                )
+                ),
+                'redirect' => new external_value(PARAM_LOCALURL, 'Redirect the user to this site url after confirmation.',
+                                                    VALUE_DEFAULT, ''),
             )
         );
     }
@@ -220,13 +222,15 @@ class auth_email_external extends external_api {
      * @param  string $recaptchachallengehash recaptcha challenge hash
      * @param  string $recaptcharesponse      recaptcha response
      * @param  array  $customprofilefields    user custom fields (also known as user profile fields)
+     * @param  string $redirect               Site url to redirect the user after confirmation
      * @return array settings and possible warnings
      * @since Moodle 3.2
      * @throws moodle_exception
      * @throws invalid_parameter_exception
      */
     public static function signup_user($username, $password, $firstname, $lastname, $email, $city = '', $country = '',
-                                        $recaptchachallengehash = '', $recaptcharesponse = '', $customprofilefields = array()) {
+                                        $recaptchachallengehash = '', $recaptcharesponse = '', $customprofilefields = array(),
+                                        $redirect = '') {
         global $CFG, $PAGE;
 
         $warnings = array();
@@ -243,6 +247,7 @@ class auth_email_external extends external_api {
                 'recaptchachallengehash' => $recaptchachallengehash,
                 'recaptcharesponse' => $recaptcharesponse,
                 'customprofilefields' => $customprofilefields,
+                'redirect' => $redirect,
             )
         );
 
@@ -324,7 +329,16 @@ class auth_email_external extends external_api {
             $user = signup_setup_new_user((object) $data);
 
             $authplugin = get_auth_plugin('email');
-            $authplugin->user_signup($user, false);
+
+            // Check if we should redirect the user once the user is confirmed.
+            $confirmationurl = null;
+            if (!empty($params['redirect'])) {
+                // Pass via moodle_url to fix thinks like admin links.
+                $redirect = new moodle_url($params['redirect']);
+
+                $confirmationurl = new moodle_url('/login/confirm.php', array('redirect' => $redirect->out()));
+            }
+            $authplugin->user_signup_with_confirmation($user, false, $confirmationurl);
 
             $result = array(
                 'success' => true,

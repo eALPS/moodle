@@ -48,7 +48,11 @@ class behat_course extends behat_base {
      */
     public function i_turn_editing_mode_on() {
 
-        $this->execute("behat_forms::press_button", get_string('turneditingon'));
+        try {
+            $this->execute("behat_forms::press_button", get_string('turneditingon'));
+        } catch (Exception $e) {
+            $this->execute("behat_navigation::i_navigate_to_in_current_page_administration", [get_string('turneditingon')]);
+        }
     }
 
     /**
@@ -57,7 +61,11 @@ class behat_course extends behat_base {
      */
     public function i_turn_editing_mode_off() {
 
-        $this->execute("behat_forms::press_button", get_string('turneditingoff'));
+        try {
+            $this->execute("behat_forms::press_button", get_string('turneditingoff'));
+        } catch (Exception $e) {
+            $this->execute("behat_navigation::i_navigate_to_in_current_page_administration", [get_string('turneditingoff')]);
+        }
     }
 
     /**
@@ -615,9 +623,67 @@ class behat_course extends behat_base {
                 // All ok.
             }
 
-            // The 'Hide' button should be available.
-            $nohideexception = new ExpectationException('"' . $activityname . '" don\'t have a "' . get_string('hide') . '" icon', $this->getSession());
-            $this->find('named_partial', array('link', get_string('hide')), $nohideexception, $activitynode);
+            // Additional check if this is a teacher in editing mode.
+            if ($this->is_editing_on()) {
+                // The 'Hide' button should be available.
+                $nohideexception = new ExpectationException('"' . $activityname . '" doesn\'t have a "' .
+                    get_string('hide') . '" icon', $this->getSession());
+                $this->find('named_partial', array('link', get_string('hide')), $nohideexception, $activitynode);
+            }
+        }
+    }
+
+    /**
+     * Checks that the specified activity is visible. You need to be in the course page.
+     * It can be used being logged as a student and as a teacher on editing mode.
+     *
+     * @Then /^"(?P<activity_or_resource_string>(?:[^"]|\\")*)" activity should be available but hidden from course page$/
+     * @param string $activityname
+     * @throws ExpectationException
+     */
+    public function activity_should_be_available_but_hidden_from_course_page($activityname) {
+
+        if ($this->is_course_editor()) {
+
+            // The activity must exists and be visible.
+            $activitynode = $this->get_activity_node($activityname);
+
+            // The activity should not be dimmed.
+            try {
+                $xpath = "/descendant-or-self::a[contains(concat(' ', normalize-space(@class), ' '), ' dimmed ')] | " .
+                    "/descendant-or-self::div[contains(concat(' ', normalize-space(@class), ' '), ' dimmed_text ')]";
+                $this->find('xpath', $xpath, false, $activitynode);
+                throw new ExpectationException('"' . $activityname . '" is hidden', $this->getSession());
+            } catch (ElementNotFoundException $e) {
+                // All ok.
+            }
+
+            // Should has "stealth" class.
+            $exception = new ExpectationException('"' . $activityname . '" does not have CSS class "stealth"', $this->getSession());
+            $xpath = "/descendant-or-self::a[contains(concat(' ', normalize-space(@class), ' '), ' stealth ')]";
+            $this->find('xpath', $xpath, $exception, $activitynode);
+
+            // Additional check if this is a teacher in editing mode.
+            if ($this->is_editing_on()) {
+                // Also has either 'Hide' or 'Make unavailable' edit control.
+                $nohideexception = new ExpectationException('"' . $activityname . '" has neither "' . get_string('hide') .
+                    '" nor "' . get_string('makeunavailable') . '" icons', $this->getSession());
+                try {
+                    $this->find('named_partial', array('link', get_string('hide')), false, $activitynode);
+                } catch (ElementNotFoundException $e) {
+                    $this->find('named_partial', array('link', get_string('makeunavailable')), $nohideexception, $activitynode);
+                }
+            }
+
+        } else {
+
+            // Student should not see the activity at all.
+            try {
+                $this->get_activity_node($activityname);
+                throw new ExpectationException('The "' . $activityname . '" should not appear', $this->getSession());
+            } catch (ElementNotFoundException $e) {
+                // This is good, the activity should not be there.
+            }
         }
     }
 
@@ -641,20 +707,48 @@ class behat_course extends behat_base {
                      "/descendant-or-self::div[contains(concat(' ', normalize-space(@class), ' '), ' dimmed_text ')]";
             $this->find('xpath', $xpath, $exception, $activitynode);
 
-            // Also 'Show' icon.
-            $noshowexception = new ExpectationException('"' . $activityname . '" don\'t have a "' . get_string('show') . '" icon', $this->getSession());
-            $this->find('named_partial', array('link', get_string('show')), $noshowexception, $activitynode);
+            // Additional check if this is a teacher in editing mode.
+            if ($this->is_editing_on()) {
+                // Also has either 'Show' or 'Make available' edit control.
+                $noshowexception = new ExpectationException('"' . $activityname . '" has neither "' . get_string('show') .
+                    '" nor "' . get_string('makeavailable') . '" icons', $this->getSession());
+                try {
+                    $this->find('named_partial', array('link', get_string('show')), false, $activitynode);
+                } catch (ElementNotFoundException $e) {
+                    $this->find('named_partial', array('link', get_string('makeavailable')), $noshowexception, $activitynode);
+                }
+            }
 
         } else {
 
             // It should not exist at all.
             try {
-                $this->find_link($activityname);
-                throw new ExpectationException('The "' . $activityname . '" should not appear');
+                $this->get_activity_node($activityname);
+                throw new ExpectationException('The "' . $activityname . '" should not appear', $this->getSession());
             } catch (ElementNotFoundException $e) {
                 // This is good, the activity should not be there.
             }
         }
+
+    }
+
+    /**
+     * Checks that the specified activity is dimmed. You need to be in the course page.
+     *
+     * @Then /^"(?P<activity_or_resource_string>(?:[^"]|\\")*)" activity should be dimmed$/
+     * @param string $activityname
+     * @throws ExpectationException
+     */
+    public function activity_should_be_dimmed($activityname) {
+
+        // The activity should exist.
+        $activitynode = $this->get_activity_node($activityname);
+
+        // Should be hidden.
+        $exception = new ExpectationException('"' . $activityname . '" is not dimmed', $this->getSession());
+        $xpath = "/descendant-or-self::a[contains(concat(' ', normalize-space(@class), ' '), ' dimmed ')] | ".
+            "/descendant-or-self::div[contains(concat(' ', normalize-space(@class), ' '), ' dimmed_text ')]";
+        $this->find('xpath', $xpath, $exception, $activitynode);
 
     }
 
@@ -792,6 +886,42 @@ class behat_course extends behat_base {
         $classes = array_flip(explode(' ', $activitynode->getAttribute('class')));
         if (empty($classes['action-menu-shown'])) {
             throw new ExpectationException(sprintf("The action menu for '%s' is not open", $activityname), $this->getSession());
+        }
+    }
+
+    /**
+     * Checks that the specified activity's action menu contains an item.
+     *
+     * @Then /^"(?P<activity_name_string>(?:[^"]|\\")*)" actions menu should have "(?P<menu_item_string>(?:[^"]|\\")*)" item$/
+     * @throws DriverException The step is not available when Javascript is disabled
+     * @param string $activityname
+     * @param string $menuitem
+     */
+    public function actions_menu_should_have_item($activityname, $menuitem) {
+        $activitynode = $this->get_activity_node($activityname);
+
+        $notfoundexception = new ExpectationException('"' . $activityname . '" doesn\'t have a "' .
+            $menuitem . '" item', $this->getSession());
+        $this->find('named_partial', array('link', $menuitem), $notfoundexception, $activitynode);
+    }
+
+    /**
+     * Checks that the specified activity's action menu does not contains an item.
+     *
+     * @Then /^"(?P<activity_name_string>(?:[^"]|\\")*)" actions menu should not have "(?P<menu_item_string>(?:[^"]|\\")*)" item$/
+     * @throws DriverException The step is not available when Javascript is disabled
+     * @param string $activityname
+     * @param string $menuitem
+     */
+    public function actions_menu_should_not_have_item($activityname, $menuitem) {
+        $activitynode = $this->get_activity_node($activityname);
+
+        try {
+            $this->find('named_partial', array('link', $menuitem), false, $activitynode);
+            throw new ExpectationException('"' . $activityname . '" has a "' . $menuitem .
+                '" item when it should not', $this->getSession());
+        } catch (ElementNotFoundException $e) {
+            // This is good, the menu item should not be there.
         }
     }
 
@@ -1149,6 +1279,15 @@ class behat_course extends behat_base {
         }
 
         return true;
+    }
+
+    /**
+     * Returns whether the user can edit the course contents and the editing mode is on.
+     *
+     * @return bool
+     */
+    protected function is_editing_on() {
+        return $this->getSession()->getPage()->findButton(get_string('turneditingoff')) ? true : false;
     }
 
     /**
@@ -1719,5 +1858,17 @@ class behat_course extends behat_base {
     public function i_click_on_category_in_the_management_category_listing($name) {
         $node = $this->get_management_category_listing_node_by_name($name);
         $node->find('css', 'a.categoryname')->click();
+    }
+
+    /**
+     * Go to the course participants
+     *
+     * @Given /^I navigate to course participants$/
+     */
+    public function i_navigate_to_course_participants() {
+        $coursestr = behat_context_helper::escape(get_string('courses'));
+        $mycoursestr = behat_context_helper::escape(get_string('mycourses'));
+        $xpath = "//div[contains(@class,'block')]//li[p/*[string(.)=$coursestr or string(.)=$mycoursestr]]";
+        $this->execute('behat_general::i_click_on_in_the', [get_string('participants'), 'link', $xpath, 'xpath_element']);
     }
 }

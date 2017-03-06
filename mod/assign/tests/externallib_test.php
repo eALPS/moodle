@@ -438,6 +438,7 @@ class mod_assign_external_testcase extends externallib_advanced_testcase {
         $submission = $assignment['submissions'][0];
         $this->assertEquals($sid, $submission['id']);
         $this->assertCount(1, $submission['plugins']);
+        $this->assertEquals('notgraded', $submission['gradingstatus']);
     }
 
     /**
@@ -2227,6 +2228,7 @@ class mod_assign_external_testcase extends externallib_advanced_testcase {
         $this->assertFalse(fullname($student) == $result['fullname']);
         $this->assertFalse($result['submitted']);
         $this->assertFalse($result['requiregrading']);
+        $this->assertFalse($result['grantedextension']);
         $this->assertTrue($result['blindmarking']);
         // Make sure we don't get any additional info.
         $this->assertTrue(empty($result['user']));
@@ -2279,6 +2281,7 @@ class mod_assign_external_testcase extends externallib_advanced_testcase {
         $this->assertEquals(fullname($student), $result['fullname']);
         $this->assertTrue($result['submitted']);
         $this->assertTrue($result['requiregrading']);
+        $this->assertFalse($result['grantedextension']);
         $this->assertFalse($result['blindmarking']);
         // Make sure we don't get any additional info.
         $this->assertTrue(empty($result['user']));
@@ -2386,7 +2389,7 @@ class mod_assign_external_testcase extends externallib_advanced_testcase {
         $DB->update_record('user', $student);
 
         $this->setUser($teacher);
-        $participants = mod_assign_external::list_participants($assignment->id, 0, '', 0, 0, false);
+        $participants = mod_assign_external::list_participants($assignment->id, 0, '', 0, 0, false, true);
         $this->assertCount(1, $participants);
 
         // Asser that we have a valid response data.
@@ -2401,6 +2404,12 @@ class mod_assign_external_testcase extends externallib_advanced_testcase {
         $this->assertEquals($student->phone2, $participant['phone2']);
         $this->assertEquals($student->department, $participant['department']);
         $this->assertEquals($student->institution, $participant['institution']);
+        $this->assertArrayHasKey('enrolledcourses', $participant);
+
+        $participants = mod_assign_external::list_participants($assignment->id, 0, '', 0, 0, false, false);
+        // Check that the list of courses the participant is enrolled is not returned.
+        $participant = $participants[0];
+        $this->assertArrayNotHasKey('enrolledcourses', $participant);
     }
 
     /**

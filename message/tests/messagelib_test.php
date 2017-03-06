@@ -63,10 +63,15 @@ class core_message_messagelib_testcase extends advanced_testcase {
      * @param stdClass $userto user object of the one receiving the message.
      * @param string $message message to send.
      * @param int $notification if the message is a notification.
+     * @param int $time the time the message was sent
      * @return int the id of the message
      */
-    protected function send_fake_message($userfrom, $userto, $message = 'Hello world!', $notification = 0) {
+    protected function send_fake_message($userfrom, $userto, $message = 'Hello world!', $notification = 0, $time = 0) {
         global $DB;
+
+        if (empty($time)) {
+            $time = time();
+        }
 
         $record = new stdClass();
         $record->useridfrom = $userfrom->id;
@@ -74,7 +79,7 @@ class core_message_messagelib_testcase extends advanced_testcase {
         $record->subject = 'No subject';
         $record->fullmessage = $message;
         $record->smallmessage = $message;
-        $record->timecreated = time();
+        $record->timecreated = $time;
         $record->notification = $notification;
 
         return $DB->insert_record('message', $record);
@@ -155,7 +160,6 @@ class core_message_messagelib_testcase extends advanced_testcase {
         // Noreply user being valid user.
         core_user::reset_internal_users();
         $CFG->noreplyuserid = $user3->id;
-        $noreplyuser = core_user::get_noreply_user();
         list($onlinecontacts, $offlinecontacts, $strangers) = message_get_contacts();
         $this->assertCount(0, $onlinecontacts);
         $this->assertCount(1, $offlinecontacts);
@@ -190,6 +194,59 @@ class core_message_messagelib_testcase extends advanced_testcase {
         $this->assertEquals(1, message_count_unread_messages($userto, $userfrom1));
     }
 
+    /**
+     * Test message_count_unread_messages with notifications.
+     */
+    public function test_message_count_unread_messages_with_notifications() {
+        // Create users to send and receive messages.
+        $userfrom1 = $this->getDataGenerator()->create_user();
+        $userfrom2 = $this->getDataGenerator()->create_user();
+        $userto = $this->getDataGenerator()->create_user();
+
+        $this->assertEquals(0, message_count_unread_messages($userto));
+
+        // Send fake messages.
+        $this->send_fake_message($userfrom1, $userto);
+        $this->send_fake_message($userfrom2, $userto);
+
+        // Send fake notifications.
+        $this->send_fake_message($userfrom1, $userto, 'Notification', 1);
+        $this->send_fake_message($userfrom2, $userto, 'Notification', 1);
+
+        // Should only count the messages.
+        $this->assertEquals(2, message_count_unread_messages($userto));
+        $this->assertEquals(1, message_count_unread_messages($userto, $userfrom1));
+    }
+
+    /**
+     * Test message_count_unread_messages with deleted messages.
+     */
+    public function test_message_count_unread_messages_with_deleted_messages() {
+        global $DB;
+
+        // Create users to send and receive messages.
+        $userfrom1 = $this->getDataGenerator()->create_user();
+        $userfrom2 = $this->getDataGenerator()->create_user();
+        $userto = $this->getDataGenerator()->create_user();
+
+        $this->assertEquals(0, message_count_unread_messages($userto));
+
+        // Send fake messages.
+        $messageid = $this->send_fake_message($userfrom1, $userto);
+        $this->send_fake_message($userfrom2, $userto);
+
+        // Send fake notifications.
+        $this->send_fake_message($userfrom1, $userto, 'Notification', 1);
+        $this->send_fake_message($userfrom2, $userto, 'Notification', 1);
+
+        // Delete a message.
+        $message = $DB->get_record('message', array('id' => $messageid));
+        message_delete_message($message, $userto->id);
+
+        // Should only count the messages that weren't deleted by the current user.
+        $this->assertEquals(1, message_count_unread_messages($userto));
+        $this->assertEquals(0, message_count_unread_messages($userto, $userfrom1));
+    }
 
     /**
      * Test message_add_contact.
@@ -601,6 +658,7 @@ class core_message_messagelib_testcase extends advanced_testcase {
             // Get the recent conversations for the specified user.
             $user = $users[$username];
             $conversations = message_get_recent_conversations($user);
+            $this->assertDebuggingCalled();
             foreach ($data as $expectation) {
                 $otheruser = $users[$expectation['with']];
                 $conversation = $conversations[$expectation['messageposition']];

@@ -1,9 +1,10 @@
 {{< core_form/element-template }}
     {{$element}}
-        <div class="fdate_selector">
+        <span class="fdate_selector">
         {{#element.elements}}
-            {{{.}}}
+            {{{separator}}}
+            {{{html}}}
         {{/element.elements}}
-        </div>
+        </span>
     {{/element}}
 {{/ core_form/element-template }}

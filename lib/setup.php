@@ -84,7 +84,8 @@ if (defined('BEHAT_SITE_RUNNING')) {
     // Update config variables for parallel behat runs.
     behat_update_vars_for_process();
 
-    if (behat_is_test_site()) {
+    // If behat is being installed for parallel run, then we modify params for parallel run only.
+    if (behat_is_test_site() && !(defined('BEHAT_PARALLEL_UTIL') && empty($CFG->behatrunprocess))) {
         clearstatcache();
 
         // Checking the integrity of the provided $CFG->behat_* vars and the
@@ -116,7 +117,8 @@ if (defined('BEHAT_SITE_RUNNING')) {
 
         if (!defined('BEHAT_UTIL') and !defined('BEHAT_TEST')) {
             // Somebody tries to access test site directly, tell them if not enabled.
-            if (!file_exists($CFG->behat_dataroot . '/behat/test_environment_enabled.txt')) {
+            $behatdir = preg_replace("#[/|\\\]" . BEHAT_PARALLEL_SITE_NAME . "\d{0,}$#", '', $CFG->behat_dataroot);
+            if (!file_exists($behatdir . '/test_environment_enabled.txt')) {
                 behat_error(BEHAT_EXITCODE_CONFIG, 'Behat is configured but not enabled on this test site.');
             }
         }
@@ -553,8 +555,8 @@ if (!PHPUNIT_TEST or PHPUNIT_UTIL) {
 }
 
 // Acceptance tests needs special output to capture the errors,
-// but not necessary for behat CLI command.
-if (defined('BEHAT_SITE_RUNNING') && !defined('BEHAT_TEST')) {
+// but not necessary for behat CLI command and init script.
+if (defined('BEHAT_SITE_RUNNING') && !defined('BEHAT_TEST') && !defined('BEHAT_UTIL')) {
     require_once(__DIR__ . '/behat/lib.php');
     set_error_handler('behat_error_handler', E_ALL | E_STRICT);
 }
@@ -837,7 +839,7 @@ unset($urlthemename);
 
 // Ensure a valid theme is set.
 if (!isset($CFG->theme)) {
-    $CFG->theme = 'clean';
+    $CFG->theme = 'boost';
 }
 
 // Set language/locale of printed times.  If user has chosen a language that

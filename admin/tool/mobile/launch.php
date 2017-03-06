@@ -31,6 +31,7 @@ require_once($CFG->libdir . '/externallib.php');
 $serviceshortname  = required_param('service',  PARAM_ALPHANUMEXT);
 $passport          = required_param('passport',  PARAM_RAW);    // Passport send from the app to validate the response URL.
 $urlscheme         = optional_param('urlscheme', 'moodlemobile', PARAM_NOTAGS); // The URL scheme the app supports.
+$confirmed         = optional_param('confirmed', false, PARAM_BOOL);  // If we are being redirected after user confirmation.
 
 // Check web services enabled.
 if (!$CFG->enablewebservices) {
@@ -39,7 +40,8 @@ if (!$CFG->enablewebservices) {
 
 // Check if the plugin is properly configured.
 $typeoflogin = get_config('tool_mobile', 'typeoflogin');
-if ($typeoflogin != tool_mobile\api::LOGIN_VIA_BROWSER and
+if (empty($SESSION->justloggedin) and
+        $typeoflogin != tool_mobile\api::LOGIN_VIA_BROWSER and
         $typeoflogin != tool_mobile\api::LOGIN_VIA_EMBEDDED_BROWSER) {
     throw new moodle_exception('pluginnotenabledorconfigured', 'tool_mobile');
 }
@@ -56,22 +58,27 @@ require_login(0, false);
 core_user::require_active_user($USER);
 
 // Get an existing token or create a new one.
+$timenow = time();
 $token = external_generate_token_for_current_user($service);
+$privatetoken = $token->privatetoken;
+external_log_token_request($token);
 
-// Log token access.
-$DB->set_field('external_tokens', 'lastaccess', time(), array('id' => $token->id));
+// Don't return the private token if the user didn't just log in and a new token wasn't created.
+if (empty($SESSION->justloggedin) and $token->timecreated < $timenow) {
+    $privatetoken = null;
+}
 
-$params = array(
-    'objectid' => $token->id,
-);
-$event = \core\event\webservice_token_sent::create($params);
-$event->add_record_snapshot('external_tokens', $token);
-$event->trigger();
+$siteadmin = has_capability('moodle/site:config', context_system::instance(), $USER->id);
 
 // Passport is generated in the mobile app, so the app opening can be validated using that variable.
 // Passports are valid only one time, it's deleted in the app once used.
 $siteid = md5($CFG->wwwroot . $passport);
-$apptoken = base64_encode($siteid . ':::' . $token->token);
+$apptoken = $siteid . ':::' . $token->token;
+if ($privatetoken and is_https() and !$siteadmin) {
+    $apptoken .= ':::' . $privatetoken;
+}
+
+$apptoken = base64_encode($apptoken);
 
 // Redirect using the custom URL scheme checking first if a URL scheme is forced in the site settings.
 $forcedurlscheme = get_config('tool_mobile', 'forcedurlscheme');
@@ -82,11 +89,25 @@ if (!empty($forcedurlscheme)) {
 $location = "$urlscheme://token=$apptoken";
 
 // For iOS 10 onwards, we have to simulate a user click.
-if (core_useragent::is_ios()) {
-    $PAGE->set_context(null);
-    $PAGE->set_url('/local/mobile/launch.php', array('service' => $serviceshortname, 'passport' => $passport, 'urlscheme' => $urlscheme));
+// If we come from the confirmation page, we should display a nicer page.
+$isios = core_useragent::is_ios();
+if ($confirmed or $isios) {
+    $PAGE->set_context(context_system::instance());
+    $PAGE->set_heading($COURSE->fullname);
+    $params = array('service' => $serviceshortname, 'passport' => $passport, 'urlscheme' => $urlscheme, 'confirmed' => $confirmed);
+    $PAGE->set_url("/$CFG->admin/tool/mobile/launch.php", $params);
 
     echo $OUTPUT->header();
+    if ($confirmed) {
+        $confirmedstr = get_string('confirmed');
+        $PAGE->navbar->add($confirmedstr);
+        $PAGE->set_title($confirmedstr);
+        echo $OUTPUT->notification($confirmedstr, \core\output\notification::NOTIFY_SUCCESS);
+        echo $OUTPUT->box_start('generalbox centerpara boxwidthnormal boxaligncenter');
+        echo $OUTPUT->single_button(new moodle_url('/course/'), get_string('courses'));
+        echo $OUTPUT->box_end();
+    }
+
     $notice = get_string('clickheretolaunchtheapp', 'tool_mobile');
     echo html_writer::link($location, $notice, array('id' => 'launchapp'));
     echo html_writer::script(

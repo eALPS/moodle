@@ -648,52 +648,57 @@ class single_button implements renderable {
     /**
      * @var moodle_url Target url
      */
-    var $url;
+    public $url;
 
     /**
      * @var string Button label
      */
-    var $label;
+    public $label;
 
     /**
      * @var string Form submit method post or get
      */
-    var $method = 'post';
+    public $method = 'post';
 
     /**
      * @var string Wrapping div class
      */
-    var $class = 'singlebutton';
+    public $class = 'singlebutton';
+
+    /**
+     * @var bool True if button is primary button. Used for styling.
+     */
+    public $primary = false;
 
     /**
      * @var bool True if button disabled, false if normal
      */
-    var $disabled = false;
+    public $disabled = false;
 
     /**
      * @var string Button tooltip
      */
-    var $tooltip = null;
+    public $tooltip = null;
 
     /**
      * @var string Form id
      */
-    var $formid;
+    public $formid;
 
     /**
      * @var array List of attached actions
      */
-    var $actions = array();
+    public $actions = array();
 
     /**
      * @var array $params URL Params
      */
-    var $params;
+    public $params;
 
     /**
      * @var string Action id
      */
-    var $actionid;
+    public $actionid;
 
     /**
      * Constructor
@@ -701,10 +706,11 @@ class single_button implements renderable {
      * @param string $label button text
      * @param string $method get or post submit method
      */
-    public function __construct(moodle_url $url, $label, $method='post') {
+    public function __construct(moodle_url $url, $label, $method='post', $primary=false) {
         $this->url    = clone($url);
         $this->label  = $label;
         $this->method = $method;
+        $this->primary = $primary;
     }
 
     /**
@@ -743,6 +749,7 @@ class single_button implements renderable {
         $data->classes = $this->class;
         $data->disabled = $this->disabled;
         $data->tooltip = $this->tooltip;
+        $data->primary = $this->primary;
 
         // Form parameters.
         $params = $this->url->params();
@@ -932,11 +939,11 @@ class single_select implements renderable, templatable {
         $data->name = $this->name;
         $data->method = $this->method;
         $data->action = $this->method === 'get' ? $this->url->out_omit_querystring(true) : $this->url->out_omit_querystring();
-        $data->classes = 'autosubmit ' . $this->class;
+        $data->classes = $this->class;
         $data->label = $this->label;
         $data->disabled = $this->disabled;
         $data->title = $this->tooltip;
-        $data->formid = $this->formid;
+        $data->formid = !empty($this->formid) ? $this->formid : html_writer::random_id('single_select_f');
         $data->id = !empty($attributes['id']) ? $attributes['id'] : html_writer::random_id('single_select');
         unset($attributes['id']);
 
@@ -968,8 +975,6 @@ class single_select implements renderable, templatable {
         } else {
             $options = $this->options;
         }
-        $data->hasnothing = $hasnothing;
-        $data->nothingkey = $hasnothing ? key($nothing) : false;
 
         foreach ($options as $value => $name) {
             if (is_array($options[$value])) {
@@ -1240,9 +1245,6 @@ class url_select implements renderable, templatable {
         unset($attributes['title']);
 
         $data->showbutton = $this->showbutton;
-        if (empty($this->showbutton)) {
-            $data->classes .= ' autosubmit';
-        }
 
         // Select options.
         $nothing = false;
@@ -1256,8 +1258,6 @@ class url_select implements renderable, templatable {
                 $nothing = $this->nothing;
             }
         }
-        $data->hasnothing = !empty($nothing);
-        $data->nothingkey = $data->hasnothing ? key($nothing) : false;
         $data->options = $this->flatten_options($this->urls, $nothing);
 
         // Label attributes.
@@ -1673,7 +1673,7 @@ class html_writer {
             $class = str_replace(']', '', $class);
             $attributes['class'] = $class;
         }
-        $attributes['class'] = 'select ' . $attributes['class']; // Add 'select' selector always
+        $attributes['class'] = 'select custom-select ' . $attributes['class']; // Add 'select' selector always.
 
         $attributes['name'] = $name;
 
@@ -3903,6 +3903,15 @@ class action_menu implements renderable, templatable {
 
     public function set_menu_trigger($trigger) {
         $this->menutrigger = $trigger;
+    }
+
+    /**
+     * Return true if there is at least one visible link in the menu.
+     *
+     * @return bool
+     */
+    public function is_empty() {
+        return !count($this->primaryactions) && !count($this->secondaryactions);
     }
 
     /**

@@ -29,14 +29,29 @@ define(['jquery', 'core_message/message_area_contacts', 'core_message/message_ar
          * Messagearea class.
          *
          * @param {String} selector The selector for the page region containing the message area.
+         * @param {int} pollmin
+         * @param {int} pollmax
+         * @param {int} polltimeout
          */
-        function Messagearea(selector) {
+        function Messagearea(selector, pollmin, pollmax, polltimeout) {
             this.node = $(selector);
+            this.pollmin = pollmin;
+            this.pollmax = pollmax;
+            this.polltimeout = polltimeout;
             this._init();
         }
 
         /** @type {jQuery} The jQuery node for the page region containing the message area. */
         Messagearea.prototype.node = null;
+
+        /** @type {int} The minimum time to poll for messages. */
+        Messagearea.prototype.pollmin = null;
+
+        /** @type {int} The maximum time to poll for messages. */
+        Messagearea.prototype.pollmax = null;
+
+        /** @type {int} The time used once we have reached the maximum polling time. */
+        Messagearea.prototype.polltimeout = null;
 
         /**
          * Initialise the other objects we require.
@@ -100,6 +115,15 @@ define(['jquery', 'core_message/message_area_contacts', 'core_message/message_ar
          */
         Messagearea.prototype.getCurrentUserId = function() {
             return this.node.data('userid');
+        };
+
+        /**
+         * Function to determine if we should be showing contacts initially or messages.
+         *
+         * @return {boolean} True to show contacts first, otherwise show messages.
+         */
+        Messagearea.prototype.showContactsFirst = function() {
+            return !!this.node.data('displaycontacts');
         };
 
         return Messagearea;

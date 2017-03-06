@@ -15,17 +15,20 @@
     along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 }}
 <div class="contact {{#selected}}selected{{/selected}} {{#lastmessage}}{{^isread}}unread{{/isread}}{{/lastmessage}}"
-     data-action="{{#ismessaging}}view-contact-msg{{/ismessaging}}{{^ismessaging}}view-contact-profile{{/ismessaging}}"
-     data-userid="{{userid}}" data-messageid="{{#messageid}}{{.}}{{isread}}{{/messageid}}" data-region="contact" tabindex="0">
+     data-action="view-contact-msg"
+     data-userid="{{userid}}" data-messageid="{{#messageid}}{{.}}{{isread}}{{/messageid}}" data-region="contact" role="button"
+     aria-pressed="{{#selected}}true{{/selected}}{{^selected}}false{{/selected}}" tabindex="0">
     <div class="picture">
         <img src="{{profileimageurl}}" alt="" />
     </div>
     <div class="information">
         <div class="name">
             {{fullname}}
-            <span {{^isonline}}class="hidden"{{/isonline}} data-region="contact-icon-online">
-                {{#pix}} t/go, core, {{#str}} online, message {{/str}} {{/pix}}
-            </span>
+            {{#showonlinestatus}}
+                <span {{^isonline}}class="hidden"{{/isonline}} data-region="contact-icon-online">
+                    {{#pix}} t/go, core, {{#str}} online, message {{/str}} {{/pix}}
+                </span>
+            {{/showonlinestatus}}
             <span {{^isblocked}}class="hidden"{{/isblocked}} data-region="contact-icon-blocked">
                 {{#pix}} t/block, core, {{#str}} contactblocked, message {{/str}} {{/pix}}
             </span>

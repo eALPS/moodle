@@ -442,20 +442,32 @@ if ($action === 'delete') {
     $students->close();
     // Print it all out!
     if (has_capability('mod/lesson:edit', $context)) {
-        echo  "<form id=\"theform\" method=\"post\" action=\"report.php\">\n
+        echo  "<form id=\"mod-lesson-report-form\" method=\"post\" action=\"report.php\">\n
                <input type=\"hidden\" name=\"sesskey\" value=\"".sesskey()."\" />\n
                <input type=\"hidden\" name=\"id\" value=\"$cm->id\" />\n";
     }
     echo html_writer::table($table);
     if (has_capability('mod/lesson:edit', $context)) {
-        $checklinks  = '<a href="javascript: checkall();">'.get_string('selectall').'</a> / ';
-        $checklinks .= '<a href="javascript: checknone();">'.get_string('deselectall').'</a>';
+        $checklinks  = '<a id="checkall" href="#">'.get_string('selectall').'</a> / ';
+        $checklinks .= '<a id="checknone" href="#">'.get_string('deselectall').'</a>';
         $checklinks .= html_writer::label('action', 'menuaction', false, array('class' => 'accesshide'));
-        $checklinks .= html_writer::select(array('delete' => get_string('deleteselected')), 'action', 0, array(''=>'choosedots'), array('id'=>'actionid', 'class' => 'autosubmit'));
-        $PAGE->requires->yui_module('moodle-core-formautosubmit',
-            'M.core.init_formautosubmit',
-            array(array('selectid' => 'actionid', 'nothing' => false))
-        );
+        $options = array('delete' => get_string('deleteselected'));
+        $attributes = array('id' => 'actionid', 'class' => 'custom-select m-l-1');
+        $checklinks .= html_writer::select($options, 'action', 0, array('' => 'choosedots'), $attributes);
+        $PAGE->requires->js_amd_inline("
+        require(['jquery'], function($) {
+            $('#actionid').change(function() {
+                $('#mod-lesson-report-form').submit();
+            });
+            $('#checkall').click(function(e) {
+                $('#mod-lesson-report-form').find('input:checkbox').prop('checked', true);
+                e.preventDefault();
+            });
+            $('#checknone').click(function(e) {
+                $('#mod-lesson-report-form').find('input:checkbox').prop('checked', false);
+                e.preventDefault();
+            });
+        });");
         echo $OUTPUT->box($checklinks, 'center');
         echo '</form>';
     }
@@ -664,7 +676,7 @@ if ($action === 'delete') {
 
         $table->head = array();
         $table->align = array('right', 'left');
-        $table->attributes['class'] = 'compacttable generaltable';
+        $table->attributes['class'] = 'compacttable generaltable form-inline';
 
         $params = array("lessonid"=>$lesson->id, "userid"=>$userid);
         if (!$grades = $DB->get_records_select("lesson_grades", "lessonid = :lessonid and userid = :userid", $params, "completed", "*", $try, 1)) {
@@ -706,7 +718,7 @@ if ($action === 'delete') {
 
     $table->align = array('left', 'left');
     $table->size = array('70%', null);
-    $table->attributes['class'] = 'compacttable generaltable';
+    $table->attributes['class'] = 'compacttable generaltable form-inline';
 
     foreach ($answerpages as $page) {
         unset($table->data);

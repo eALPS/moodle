@@ -3,6 +3,8 @@
 */**/build/
 node_modules/
 vendor/
+admin/tool/usertours/amd/src/tour.js
+admin/tool/usertours/amd/src/popper.js
 auth/cas/CAS/
 auth/fc/fcFPP.php
 enrol/lti/ims-blti/
@@ -22,7 +24,6 @@ lib/htmlpurifier/
 lib/jabber/
 lib/minify/matthiasmullie-minify/
 lib/minify/matthiasmullie-pathconverter/
-lib/flowplayer/
 lib/pear/Auth/RADIUS.php
 lib/pear/Crypt/CHAP.php
 lib/pear/HTML/Common.php
@@ -54,6 +55,10 @@ lib/spout/
 lib/amd/src/chartjs-lazy.js
 lib/maxmind/GeoIp2/
 lib/maxmind/MaxMind/
+lib/ltiprovider/
+media/player/videojs/amd/src/video-lazy.js
+media/player/videojs/amd/src/Youtube-lazy.js
+media/player/videojs/videojs/
 mod/assign/feedback/editpdf/fpdi/
 repository/s3/S3.php
 theme/boost/scss/bootstrap/
@@ -69,9 +74,6 @@ theme/boost/amd/src/tab.js
 theme/boost/amd/src/tooltip.js
 theme/boost/amd/src/util.js
 theme/boost/amd/src/tether.js
-theme/boost/scss/preset-flatly.scss
-theme/boost/scss/preset-paper.scss
-theme/boost/scss/preset-readable.scss
 theme/bootstrapbase/less/bootstrap/
 theme/bootstrapbase/javascript/html5shiv.js
 theme/bootstrapbase/amd/src/bootstrap.js

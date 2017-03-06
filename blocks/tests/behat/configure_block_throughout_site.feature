@@ -50,20 +50,20 @@ Feature: Add and configure blocks throughout the site
 
   Scenario: Blocks on the dashboard page can have roles assigned to them
     Given I log in as "manager1"
-    And I click on "Dashboard" "link" in the "Navigation" "block"
     When I press "Customise this page"
-    Then I should see "Assign roles in Navigation block"
+    Then I should see "Assign roles in Private files block"
 
   Scenario: Blocks on courses can have roles assigned to them
     Given I log in as "teacher1"
     And I follow "Course 1"
     And I follow "Turn editing on"
+    And I add the "Search forums" block
     Then I should see "Assign roles in Search forums block"
 
   @javascript
   Scenario: Blocks can safely be customised
     Given I log in as "admin"
-    And I click on "Dashboard" "link" in the "Navigation" "block"
+    And I am on homepage
     And I press "Customise this page"
     And I add the "HTML" block
     And I configure the "(new HTML block)" block

@@ -69,14 +69,14 @@ class manage_table extends \table_sql {
 
         $this->define_columns(array(
             'name',
-            'url',
-            'secret',
+            'launch',
+            'registration',
             'edit'
         ));
         $this->define_headers(array(
             get_string('name'),
-            get_string('url'),
-            get_string('secret', 'enrol_lti'),
+            get_string('launchdetails', 'enrol_lti'),
+            get_string('registrationurl', 'enrol_lti'),
             get_string('edit')
         ));
         $this->collapsible(false);
@@ -87,6 +87,11 @@ class manage_table extends \table_sql {
         $this->ltienabled = enrol_is_enabled('lti');
         $this->canconfig = has_capability('moodle/course:enrolconfig', \context_course::instance($courseid));
         $this->courseid = $courseid;
+
+        // Set help icons.
+        $launchicon = new \help_icon('launchdetails', 'enrol_lti');
+        $regicon = new \help_icon('registrationurl', 'enrol_lti');
+        $this->define_help_for_headers(['1' => $launchicon, '2' => $regicon]);
     }
 
     /**
@@ -102,27 +107,55 @@ class manage_table extends \table_sql {
     }
 
     /**
-     * Generate the URL column.
+     * Generate the launch column.
      *
-     * @param \stdClass $tool event data.
+     * @param \stdClass $tool instance data.
      * @return string
      */
-    public function col_url($tool) {
+    public function col_launch($tool) {
+        global $OUTPUT;
+
         $url = helper::get_cartridge_url($tool);
 
-        return $this->get_copyable_text($tool, $url);
+        $cartridgeurllabel = get_string('cartridgeurl', 'enrol_lti');
+        $cartridgeurl = $url;
+        $secretlabel = get_string('secret', 'enrol_lti');
+        $secret = $tool->secret;
+
+        $data = [
+                "rows" => [
+                    [ "label" => $cartridgeurllabel, "text" => $cartridgeurl, "id" => "cartridgeurl", "hidelabel" => false ],
+                    [ "label" => $secretlabel, "text" => $secret, "id" => "secret", "hidelabel" => false ],
+                ]
+            ];
+
+        $return = $OUTPUT->render_from_template("enrol_lti/copy_grid", $data);
+        return $return;
     }
 
     /**
-     * Generate the secret column.
+     * Generate the Registration column.
      *
-     * @param \stdClass $tool event data.
+     * @param \stdClass $tool instance data.
      * @return string
      */
-    public function col_secret($tool) {
-        return $this->get_copyable_text($tool, $tool->secret);
-    }
+    public function col_registration($tool) {
+        global $OUTPUT;
 
+        $url = helper::get_proxy_url($tool);
+
+        $toolurllabel = get_string("registrationurl", "enrol_lti");
+        $toolurl = $url;
+
+        $data = [
+                "rows" => [
+                    [ "label" => $toolurllabel, "text" => $toolurl, "id" => "toolurl" , "hidelabel" => true],
+                ]
+            ];
+
+        $return = $OUTPUT->render_from_template("enrol_lti/copy_grid", $data);
+        return $return;
+    }
 
     /**
      * Generate the edit column.
@@ -210,23 +243,5 @@ class manage_table extends \table_sql {
         }
 
         return $text;
-    }
-
-    /**
-     * Returns text to display in the columns.
-     *
-     * @param \stdClass $tool the tool
-     * @param string $text the text to alter
-     * @return string
-     * @since Moodle 3.2
-     */
-    protected function get_copyable_text($tool, $text) {
-        global $OUTPUT;
-        $copyable = $OUTPUT->render_from_template('core/copy_box', array('text' => $text));
-        if ($tool->status != ENROL_INSTANCE_ENABLED) {
-            return \html_writer::tag('span', $copyable, array('class' => 'dimmed_text', 'style' => 'overflow: scroll'));
-        }
-
-        return $copyable;
     }
 }

@@ -213,7 +213,7 @@ class cache implements cache_loader {
         $this->definition = $definition;
         $this->store = $store;
         $this->storetype = get_class($store);
-        $this->perfdebug = !empty($CFG->perfdebug);
+        $this->perfdebug = (!empty($CFG->perfdebug) and $CFG->perfdebug > 7);
         if ($loader instanceof cache_loader) {
             $this->loader = $loader;
             // Mark the loader as a sub (chained) loader.
@@ -386,6 +386,9 @@ class cache implements cache_loader {
         $isusingpersist = $this->use_static_acceleration();
         foreach ($keys as $key) {
             $pkey = $this->parse_key($key);
+            if (is_array($pkey)) {
+                $pkey = $pkey['key'];
+            }
             $keysparsed[$key] = $pkey;
             $parsedkeys[$pkey] = $key;
             $keystofind[$pkey] = $key;

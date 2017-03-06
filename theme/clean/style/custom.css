@@ -1,7 +1,7 @@
 /* Custom CSS
 -------------------------*/
 div.logo {
-    background: url([[setting:logo]]) no-repeat 0 0;
+    background: url([[setting:logo]]) 0 0 no-repeat;
     display: block;
     float: left;
     height: 75px;
@@ -37,4 +37,4 @@ img.small-logo {
 
 /* Custom CSS Settings
 -------------------------*/
-[[setting:customcss]] /* stylelint-disable-line */
+[[setting:customcss]]

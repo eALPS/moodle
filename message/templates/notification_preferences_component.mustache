@@ -36,7 +36,7 @@
         "processors": [
             {
                 "onlinehelphtml": "<p>help button HTML</p>",
-                "offlinehelphtml": "<p>help button HTML</p>",
+                "offlinehelphtml": "<p>help button HTML</p>"
             }
         ],
         "notifications": [
@@ -53,14 +53,14 @@
                             "name": "loggedin",
                             "displayname": "When I'm logged in",
                             "checked": 0,
-                            "disableall": 0,
+                            "disableall": 0
                         },
                         "loggedoff": {
                             "name": "loggedoff",
                             "displayname": "When I'm offline",
                             "checked": 0,
-                            "disableall": 0,
-                        },
+                            "disableall": 0
+                        }
                     }
                 ]
             }
@@ -73,11 +73,11 @@
         <td class="align-bottom">
             <div class="container-fluid">
                 <div class="row-fluid">
-                    <div class="span6">
+                    <div class="span6 col-xs-6">
                         {{#str}} loggedin, message {{/str}}
                         {{#onlinehelphtml}}{{{.}}}{{/onlinehelphtml}}
                     </div>
-                    <div class="span6">
+                    <div class="span6 col-xs-6">
                         {{#str}} loggedoff, message {{/str}}
                         {{#offlinehelphtml}}{{{.}}}{{/offlinehelphtml}}
                     </div>

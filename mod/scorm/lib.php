@@ -1438,8 +1438,13 @@ function scorm_check_mode($scorm, &$newattempt, &$attempt, $userid, &$mode) {
     }
     // Check if the scorm module is incomplete (used to validate user request to start a new attempt).
     $incomplete = true;
-    $tracks = $DB->get_recordset('scorm_scoes_track', array('scormid' => $scorm->id, 'userid' => $userid,
-        'attempt' => $attempt, 'element' => 'cmi.core.lesson_status'));
+    $sql = "SELECT sc.id, t.value
+              FROM {scorm_scoes} sc
+         LEFT JOIN {scorm_scoes_track} t ON sc.scorm = t.scormid AND sc.id = t.scoid
+                   AND t.element = 'cmi.core.lesson_status' AND t.userid = ? AND t.attempt = ?
+             WHERE sc.scormtype = 'sco' AND sc.scorm = ?";
+    $tracks = $DB->get_recordset_sql($sql, array($userid, $attempt, $scorm->id));
+
     foreach ($tracks as $track) {
         if (($track->value == 'completed') || ($track->value == 'passed') || ($track->value == 'failed')) {
             $incomplete = false;
@@ -1493,4 +1498,36 @@ function scorm_view($scorm, $course, $cm, $context) {
     $event->add_record_snapshot('course', $course);
     $event->add_record_snapshot('scorm', $scorm);
     $event->trigger();
+}
+
+/**
+ * Check if the module has any update that affects the current user since a given time.
+ *
+ * @param  cm_info $cm course module data
+ * @param  int $from the time to check updates from
+ * @param  array $filter  if we need to check only specific updates
+ * @return stdClass an object with the different type of areas indicating if they were updated or not
+ * @since Moodle 3.2
+ */
+function scorm_check_updates_since(cm_info $cm, $from, $filter = array()) {
+    global $DB, $USER, $CFG;
+    require_once($CFG->dirroot . '/mod/scorm/locallib.php');
+
+    $scorm = $DB->get_record($cm->modname, array('id' => $cm->instance), '*', MUST_EXIST);
+    $updates = new stdClass();
+    list($available, $warnings) = scorm_get_availability_status($scorm, true, $cm->context);
+    if (!$available) {
+        return $updates;
+    }
+    $updates = course_check_module_updates_since($cm, $from, array('package'), $filter);
+
+    $updates->tracks = (object) array('updated' => false);
+    $select = 'scormid = ? AND userid = ? AND timemodified > ?';
+    $params = array($scorm->id, $USER->id, $from);
+    $tracks = $DB->get_records_select('scorm_scoes_track', $select, $params, '', 'id');
+    if (!empty($tracks)) {
+        $updates->tracks->updated = true;
+        $updates->tracks->itemids = array_keys($tracks);
+    }
+    return $updates;
 }

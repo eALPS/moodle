@@ -35,6 +35,8 @@ class core_scss extends \Leafo\ScssPhp\Compiler {
 
     /** @var string The path to the SCSS file. */
     protected $scssfile;
+    /** @var array Bits of SCSS content to prepend. */
+    protected $scssprepend = array();
     /** @var array Bits of SCSS content. */
     protected $scsscontent = array();
 
@@ -59,6 +61,16 @@ class core_scss extends \Leafo\ScssPhp\Compiler {
     }
 
     /**
+     * Prepend raw SCSS to what's to compile.
+     *
+     * @param string $scss SCSS code.
+     * @return void
+     */
+    public function prepend_raw_scss($scss) {
+        $this->scssprepend[] = $scss;
+    }
+
+    /**
      * Set the file to compile from.
      *
      * The purpose of this method is to provide a way to import the
@@ -78,7 +90,7 @@ class core_scss extends \Leafo\ScssPhp\Compiler {
      * @return string
      */
     public function to_css() {
-        $content = '';
+        $content = implode(';', $this->scssprepend);
         if (!empty($this->scssfile)) {
             $content .= file_get_contents($this->scssfile);
         }
@@ -86,4 +98,58 @@ class core_scss extends \Leafo\ScssPhp\Compiler {
         return $this->compile($content);
     }
 
+    /**
+     * Compile child; returns a value to halt execution
+     *
+     * @param array $child
+     * @param \Leafo\ScssPhp\Formatter\OutputBlock $out
+     *
+     * @return array|null
+     */
+    protected function compileChild($child, \Leafo\ScssPhp\Formatter\OutputBlock $out) {
+        switch($child[0]) {
+            case \Leafo\ScssPhp\Type::T_SCSSPHP_IMPORT_ONCE:
+            case \Leafo\ScssPhp\Type::T_IMPORT:
+                list(, $rawpath) = $child;
+                $rawpath = $this->reduce($rawpath);
+                $path = $this->compileStringContent($rawpath);
+                if ($path = $this->findImport($path)) {
+                    if ($this->is_valid_file($path)) {
+                        return parent::compileChild($child, $out);
+                    } else {
+                        // Sneaky stuff, don't let non scss file in.
+                        debugging("Can't import scss file - " . $path, DEBUG_DEVELOPER);
+                    }
+                }
+                break;
+            default:
+                return parent::compileChild($child, $out);
+        }
+    }
+
+    /**
+     * Is the given file valid for import ?
+     *
+     * @param $path
+     * @return bool
+     */
+    protected function is_valid_file($path) {
+        global $CFG;
+
+        $realpath = realpath($path);
+
+        // Additional theme directory.
+        $addthemedirectory = core_component::get_plugin_types()['theme'];
+        $addrealroot = realpath($addthemedirectory);
+
+        // Original theme directory.
+        $themedirectory = $CFG->dirroot . "/theme";
+        $realroot = realpath($themedirectory);
+
+        // File should end in .scss and must be in sites theme directory, else ignore it.
+        $pathvalid = $realpath !== false;
+        $pathvalid = $pathvalid && (substr($path, -5) === '.scss');
+        $pathvalid = $pathvalid && (strpos($realpath, $realroot) === 0 || strpos($realpath, $addrealroot) === 0);
+        return $pathvalid;
+    }
 }

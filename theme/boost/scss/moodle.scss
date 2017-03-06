@@ -1,7 +1,4 @@
 // Set image location.
-$iconSpritePath:          "[[pix:theme|glyphicons-halflings]]" !default;
-$iconWhiteSpritePath:     "[[pix:theme|glyphicons-halflings-white]]" !default;
-
 $breadcrumb-divider: "▶" !default;
 $breadcrumb-divider-rtl: "◀" !default;
 
@@ -17,14 +14,17 @@ $breadcrumb-divider-rtl: "◀" !default;
 @import "moodle/icons";
 @import "moodle/admin";
 @import "moodle/blocks";
+@import "moodle/bootswatch";
 @import "moodle/calendar";
 @import "moodle/course";
+@import "moodle/drawer";
 @import "moodle/filemanager";
 @import "moodle/message";
 @import "moodle/question";
 @import "moodle/user";
 @import "moodle/search";
 @import "moodle/forms";
+@import "moodle/login";
 @import "moodle/modules";
 @import "moodle/chat";
 @import "moodle/reports";
@@ -38,3 +38,7 @@ $breadcrumb-divider-rtl: "◀" !default;
 @import "moodle/expendable";
 @import "moodle/sticky-footer";
 @import "moodle/popover-region";
+@import "moodle/tool_usertours";
+@import "moodle/responsive-tabs";
+@import "moodle/bs2-compat";
+@import "moodle/print";

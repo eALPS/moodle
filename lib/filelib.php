@@ -2139,11 +2139,14 @@ function file_safe_save_content($content, $destination) {
  * byteranges etc.
  *
  * @category files
- * @param string $path Path of file on disk (including real filename), or actual content of file as string
+ * @param string|stored_file $path Path of file on disk (including real filename),
+ *                                 or actual content of file as string,
+ *                                 or stored_file object
  * @param string $filename Filename to send
  * @param int $lifetime Number of seconds before the file should expire from caches (null means $CFG->filelifetime)
  * @param int $filter 0 (default)=no filtering, 1=all files, 2=html files only
- * @param bool $pathisstring If true (default false), $path is the content to send and not the pathname
+ * @param bool $pathisstring If true (default false), $path is the content to send and not the pathname.
+ *                           Forced to false when $path is a stored_file object.
  * @param bool $forcedownload If true (default false), forces download of file rather than view in browser/plugin
  * @param string $mimetype Include to specify the MIME type; leave blank to have it guess the type from $filename
  * @param bool $dontdie - return control to caller afterwards. this is not recommended and only used for cleanup tasks.
@@ -2152,6 +2155,7 @@ function file_safe_save_content($content, $destination) {
  *                        and should not be reopened.
  * @param array $options An array of options, currently accepts:
  *                       - (string) cacheability: public, or private.
+ *                       - (string|null) immutable
  * @return null script execution stopped unless $dontdie is true
  */
 function send_file($path, $filename, $lifetime = null , $filter=0, $pathisstring=false, $forcedownload=false, $mimetype='',
@@ -2164,6 +2168,10 @@ function send_file($path, $filename, $lifetime = null , $filter=0, $pathisstring
 
     if ($lifetime === 'default' or is_null($lifetime)) {
         $lifetime = $CFG->filelifetime;
+    }
+
+    if (is_object($path)) {
+        $pathisstring = false;
     }
 
     \core\session\manager::write_close(); // Unlock session during file serving.
@@ -2188,6 +2196,14 @@ function send_file($path, $filename, $lifetime = null , $filter=0, $pathisstring
     }
 
     if ($lifetime > 0) {
+        $immutable = '';
+        if (!empty($options['immutable'])) {
+            $immutable = ', immutable';
+            // Overwrite lifetime accordingly:
+            // 90 days only - based on Moodle point release cadence being every 3 months.
+            $lifetimemin = 60 * 60 * 24 * 90;
+            $lifetime = max($lifetime, $lifetimemin);
+        }
         $cacheability = ' public,';
         if (!empty($options['cacheability']) && ($options['cacheability'] === 'public')) {
             // This file must be cache-able by both browsers and proxies.
@@ -2200,7 +2216,7 @@ function send_file($path, $filename, $lifetime = null , $filter=0, $pathisstring
             $cacheability = ' private,';
         }
         $nobyteserving = false;
-        header('Cache-Control:'.$cacheability.' max-age='.$lifetime.', no-transform');
+        header('Cache-Control:'.$cacheability.' max-age='.$lifetime.', no-transform'.$immutable);
         header('Expires: '. gmdate('D, d M Y H:i:s', time() + $lifetime) .' GMT');
         header('Pragma: ');
 
@@ -2231,8 +2247,13 @@ function send_file($path, $filename, $lifetime = null , $filter=0, $pathisstring
             $options = new stdClass();
             $options->noclean = true;
             $options->nocache = true; // temporary workaround for MDL-5136
-            $text = $pathisstring ? $path : implode('', file($path));
-
+            if (is_object($path)) {
+                $text = $path->get_content();
+            } else if ($pathisstring) {
+                $text = $path;
+            } else {
+                $text = implode('', file($path));
+            }
             $output = format_text($text, FORMAT_HTML, $options, $COURSE->id);
 
             readstring_accel($output, $mimetype, false);
@@ -2242,7 +2263,13 @@ function send_file($path, $filename, $lifetime = null , $filter=0, $pathisstring
             $options = new stdClass();
             $options->newlines = false;
             $options->noclean = true;
-            $text = htmlentities($pathisstring ? $path : implode('', file($path)), ENT_QUOTES, 'UTF-8');
+            if (is_object($path)) {
+                $text = $path->get_content();
+            } else if ($pathisstring) {
+                $text = htmlentities($path, ENT_QUOTES, 'UTF-8');
+            } else {
+                $text = htmlentities(implode('', file($path)), ENT_QUOTES, 'UTF-8');
+            }
             $output = '<pre>'. format_text($text, FORMAT_MOODLE, $options, $COURSE->id) .'</pre>';
 
             readstring_accel($output, $mimetype, false);
@@ -2276,6 +2303,8 @@ function send_file($path, $filename, $lifetime = null , $filter=0, $pathisstring
  *  (string|null) cacheability - force the cacheability setting of the HTTP response, "private" or "public",
  *      when $lifetime is greater than 0. Cacheability defaults to "private" when logged in as other than guest; otherwise,
  *      defaults to "public".
+ *  (string|null) immutable - set the immutable cache setting in the HTTP response, when served under HTTPS.
+ *      Note: it's up to the consumer to set it properly i.e. when serving a "versioned" URL.
  *
  * @category files
  * @param stored_file $stored_file local file object
@@ -2343,62 +2372,10 @@ function send_stored_file($stored_file, $lifetime=null, $filter=0, $forcedownloa
         die;
     }
 
-    if ($dontdie) {
-        ignore_user_abort(true);
-    }
-
-    \core\session\manager::write_close(); // Unlock session during file serving.
-
-    $filename     = is_null($filename) ? $stored_file->get_filename() : $filename;
+    $filename = is_null($filename) ? $stored_file->get_filename() : $filename;
 
     // Use given MIME type if specified.
     $mimetype = $stored_file->get_mimetype();
-
-    // Otherwise guess it.
-    if (!$mimetype || $mimetype === 'document/unknown') {
-        $mimetype = get_mimetype_for_sending($filename);
-    }
-
-    // if user is using IE, urlencode the filename so that multibyte file name will show up correctly on popup
-    if (core_useragent::is_ie()) {
-        $filename = rawurlencode($filename);
-    }
-
-    if ($forcedownload) {
-        header('Content-Disposition: attachment; filename="'.$filename.'"');
-    } else if ($mimetype !== 'application/x-shockwave-flash') {
-        // If this is an swf don't pass content-disposition with filename as this makes the flash player treat the file
-        // as an upload and enforces security that may prevent the file from being loaded.
-
-        header('Content-Disposition: inline; filename="'.$filename.'"');
-    }
-
-    if ($lifetime > 0) {
-        $cacheability = ' public,';
-        if (!empty($options['cacheability']) && ($options['cacheability'] === 'public')) {
-            // This file must be cache-able by both browsers and proxies.
-            $cacheability = ' public,';
-        } else if (!empty($options['cacheability']) && ($options['cacheability'] === 'private')) {
-            // This file must be cache-able only by browsers.
-            $cacheability = ' private,';
-        } else if (isloggedin() and !isguestuser()) {
-            $cacheability = ' private,';
-        }
-        header('Cache-Control:'.$cacheability.' max-age='.$lifetime.', no-transform');
-        header('Expires: '. gmdate('D, d M Y H:i:s', time() + $lifetime) .' GMT');
-        header('Pragma: ');
-
-    } else { // Do not cache files in proxies and browsers
-        if (is_https()) { // HTTPS sites - watch out for IE! KB812935 and KB316431.
-            header('Cache-Control: private, max-age=10, no-transform');
-            header('Expires: '. gmdate('D, d M Y H:i:s', 0) .' GMT');
-            header('Pragma: ');
-        } else { //normal http - prevent caching at all cost
-            header('Cache-Control: private, must-revalidate, pre-check=0, post-check=0, max-age=0, no-transform');
-            header('Expires: '. gmdate('D, d M Y H:i:s', 0) .' GMT');
-            header('Pragma: no-cache');
-        }
-    }
 
     // Allow cross-origin requests only for Web Services.
     // This allow to receive requests done by Web Workers or webapps in different domains.
@@ -2406,38 +2383,7 @@ function send_stored_file($stored_file, $lifetime=null, $filter=0, $forcedownloa
         header('Access-Control-Allow-Origin: *');
     }
 
-    if (empty($filter)) {
-        // send the contents
-        readfile_accel($stored_file, $mimetype, !$dontdie);
-
-    } else {     // Try to put the file through filters
-        if ($mimetype == 'text/html' || $mimetype == 'application/xhtml+xml') {
-            $options = new stdClass();
-            $options->noclean = true;
-            $options->nocache = true; // temporary workaround for MDL-5136
-            $text = $stored_file->get_content();
-            $output = format_text($text, FORMAT_HTML, $options, $COURSE->id);
-
-            readstring_accel($output, $mimetype, false);
-
-        } else if (($mimetype == 'text/plain') and ($filter == 1)) {
-            // only filter text if filter all files is selected
-            $options = new stdClass();
-            $options->newlines = false;
-            $options->noclean = true;
-            $text = $stored_file->get_content();
-            $output = '<pre>'. format_text($text, FORMAT_MOODLE, $options, $COURSE->id) .'</pre>';
-
-            readstring_accel($output, $mimetype, false);
-
-        } else {    // Just send it out raw
-            readfile_accel($stored_file, $mimetype, !$dontdie);
-        }
-    }
-    if ($dontdie) {
-        return;
-    }
-    die; //no more chars to output!!!
+    send_file($stored_file, $filename, $lifetime, $filter, false, $forcedownload, $mimetype, $dontdie, $options);
 }
 
 /**
@@ -2789,6 +2735,10 @@ class curl {
     private $cookie   = false;
     /** @var bool tracks multiple headers in response - redirect detection */
     private $responsefinished = false;
+    /** @var security helper class, responsible for checking host/ports against blacklist/whitelist entries.*/
+    private $securityhelper;
+    /** @var bool ignoresecurity a flag which can be supplied to the constructor, allowing security to be bypassed. */
+    private $ignoresecurity;
 
     /**
      * Curl constructor.
@@ -2799,6 +2749,8 @@ class curl {
      *  cookie: (string) path to cookie file, false if none
      *  cache: (bool) use cache
      *  module_cache: (string) type of cache
+     *  securityhelper: (\core\files\curl_security_helper_base) helper object providing URL checking for requests.
+     *  ignoresecurity: (bool) set true to override and ignore the security helper when making requests.
      *
      * @param array $settings
      */
@@ -2863,6 +2815,14 @@ class curl {
         if (!isset($this->emulateredirects)) {
             $this->emulateredirects = ini_get('open_basedir');
         }
+
+        // Curl security setup. Allow injection of a security helper, but if not found, default to the core helper.
+        if (isset($settings['securityhelper']) && $settings['securityhelper'] instanceof \core\files\curl_security_helper_base) {
+            $this->set_security($settings['securityhelper']);
+        } else {
+            $this->set_security(new \core\files\curl_security_helper());
+        }
+        $this->ignoresecurity = isset($settings['ignoresecurity']) ? $settings['ignoresecurity'] : false;
     }
 
     /**
@@ -3042,8 +3002,9 @@ class curl {
                 $this->responsefinished = false;
                 $this->response = array();
             }
-            list($key, $value) = explode(" ", rtrim($header, "\r\n"), 2);
-            $key = rtrim($key, ':');
+            $parts = explode(" ", rtrim($header, "\r\n"), 2);
+            $key = rtrim($parts[0], ':');
+            $value = isset($parts[1]) ? $parts[1] : null;
             if (!empty($this->response[$key])) {
                 if (is_array($this->response[$key])) {
                     $this->response[$key][] = $value;
@@ -3216,6 +3177,29 @@ class curl {
     }
 
     /**
+     * Returns the current curl security helper.
+     *
+     * @return \core\files\curl_security_helper instance.
+     */
+    public function get_security() {
+        return $this->securityhelper;
+    }
+
+    /**
+     * Sets the curl security helper.
+     *
+     * @param \core\files\curl_security_helper $securityobject instance/subclass of the base curl_security_helper class.
+     * @return bool true if the security helper could be set, false otherwise.
+     */
+    public function set_security($securityobject) {
+        if ($securityobject instanceof \core\files\curl_security_helper) {
+            $this->securityhelper = $securityobject;
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Multi HTTP Requests
      * This function could run multi-requests in parallel.
      *
@@ -3265,6 +3249,20 @@ class curl {
     }
 
     /**
+     * Helper function to reset the request state vars.
+     *
+     * @return void.
+     */
+    protected function reset_request_state_vars() {
+        $this->info             = array();
+        $this->error            = '';
+        $this->errno            = 0;
+        $this->response         = array();
+        $this->rawresponse      = array();
+        $this->responsefinished = false;
+    }
+
+    /**
      * Single HTTP Request
      *
      * @param string $url The URL to request
@@ -3272,19 +3270,21 @@ class curl {
      * @return bool
      */
     protected function request($url, $options = array()) {
+        // Reset here so that the data is valid when result returned from cache, or if we return due to a blacklist hit.
+        $this->reset_request_state_vars();
+
+        // If curl security is enabled, check the URL against the blacklist before calling curl_exec.
+        // Note: This will only check the base url. In the case of redirects, the blacklist is also after the curl_exec.
+        if (!$this->ignoresecurity && $this->securityhelper->url_is_blocked($url)) {
+            $this->error = $this->securityhelper->get_blocked_url_string();
+            return $this->error;
+        }
+
         // Set the URL as a curl option.
         $this->setopt(array('CURLOPT_URL' => $url));
 
         // Create curl instance.
         $curl = curl_init();
-
-        // Reset here so that the data is valid when result returned from cache.
-        $this->info             = array();
-        $this->error            = '';
-        $this->errno            = 0;
-        $this->response         = array();
-        $this->rawresponse      = array();
-        $this->responsefinished = false;
 
         $this->apply_opt($curl, $options);
         if ($this->cache && $ret = $this->cache->get($this->options)) {
@@ -3296,6 +3296,15 @@ class curl {
         $this->error = curl_error($curl);
         $this->errno = curl_errno($curl);
         // Note: $this->response and $this->rawresponse are filled by $hits->formatHeader callback.
+
+        // In the case of redirects (which curl blindly follows), check the post-redirect URL against the blacklist entries too.
+        if (intval($this->info['redirect_count']) > 0 && !$this->ignoresecurity
+            && $this->securityhelper->url_is_blocked($this->info['url'])) {
+            $this->reset_request_state_vars();
+            $this->error = $this->securityhelper->get_blocked_url_string();
+            curl_close($curl);
+            return $this->error;
+        }
 
         if ($this->emulateredirects and $this->options['CURLOPT_FOLLOWLOCATION'] and $this->info['http_code'] != 200) {
             $redirects = 0;
