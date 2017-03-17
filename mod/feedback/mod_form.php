@@ -61,12 +61,24 @@ class mod_feedback_mod_form extends moodleform_mod {
         $mform->addElement('header', 'feedbackhdr', get_string('questionandsubmission', 'feedback'));
 
         $options=array();
-        $options[1]  = get_string('anonymous', 'feedback');
-        $options[2]  = get_string('non_anonymous', 'feedback');
+        
+        // Delete by eALPS Developer ユーザ名を記録するのデフォルトを「匿名」から「記録する」に変更
+        // $options[1]  = get_string('anonymous', 'feedback');
+        // $options[2]  = get_string('non_anonymous', 'feedback');
+        // $mform->addElement('select',
+        //                   'anonymous',
+        //                   get_string('anonymous_edit', 'feedback'),
+        //                   $options);
+        // End by eALPS Developer
+        
+        // Add by eALPS Developer ユーザ名を記録するのデフォルトを「匿名」から「記録する」に変更                   
+        $options[1]  = get_string('non_anonymous', 'feedback');
+        $options[2]  = get_string('anonymous', 'feedback');
         $mform->addElement('select',
-                           'anonymous',
+                           'non_anonymous',
                            get_string('anonymous_edit', 'feedback'),
                            $options);
+        // End by eALPS Developer
 
         // check if there is existing responses to this feedback
         if (is_numeric($this->_instance) AND
