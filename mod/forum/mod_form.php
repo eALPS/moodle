@@ -95,7 +95,13 @@ class mod_forum_mod_form extends moodleform_mod {
         $options[FORUM_FORCESUBSCRIBE] = get_string('subscriptionforced', 'forum');
         $options[FORUM_INITIALSUBSCRIBE] = get_string('subscriptionauto', 'forum');
         $options[FORUM_DISALLOWSUBSCRIBE] = get_string('subscriptiondisabled','forum');
-        $mform->addElement('select', 'forcesubscribe', get_string('subscriptionmode', 'forum'), $options);
+        // Delete by eALPS Developer 購読モードのデフォルトを「任意購読」から「購読停止」に変更
+        // $mform->addElement('select', 'forcesubscribe', get_string('subscriptionmode', 'forum'), $options);
+        // End by eALPS Developer
+        
+        // Add by eALPS Developer 購読モードのデフォルトを「任意購読」から「購読停止」に変更 
+        $mform->addElement('select', 'subscriptiondisabled', get_string('subscriptionmode', 'forum'), $options);
+        // End by eALPS Developer
         $mform->addHelpButton('forcesubscribe', 'subscriptionmode', 'forum');
 
         $options = array();
