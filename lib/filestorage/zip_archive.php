@@ -395,7 +395,7 @@ class zip_archive extends file_archive {
         $localname = trim($localname, '/'); // No leading slashes in archives!
         
         // add by eALPS Developer
-        if ( check_browser_operating_system('Windows') ) {
+        if ( core_useragent::check_browser_operating_system('Windows') ) {
             $localname = mb_convert_encoding($localname, 'SJIS-WIN', 'UTF8');
         }
         // end by eALPS Developer
@@ -434,7 +434,7 @@ class zip_archive extends file_archive {
         $localname = trim($localname, '/'); // No leading slashes in archives!
         
         // add by eALPS Developer
-        if ( check_browser_operating_system('Windows') ) {
+        if ( core_useragent::check_browser_operating_system('Windows') ) {
             $localname = mb_convert_encoding($localname, 'SJIS-WIN', 'UTF8');
         }
         // end by eALPS Developer
