@@ -91,16 +91,10 @@ class mod_forum_mod_form extends moodleform_mod {
         $mform->addElement('header', 'subscriptionandtrackinghdr', get_string('subscriptionandtracking', 'forum'));
 
         $options = array();
-        // Add by eALPS Developer 購読モードのデフォルトを「任意購読」から「購読停止」に変更
-        $options[FORUM_DISALLOWSUBSCRIBE] = get_string('subscriptiondisabled','forum');
-        // End by eALPS Developer
         $options[FORUM_CHOOSESUBSCRIBE] = get_string('subscriptionoptional', 'forum');
         $options[FORUM_FORCESUBSCRIBE] = get_string('subscriptionforced', 'forum');
         $options[FORUM_INITIALSUBSCRIBE] = get_string('subscriptionauto', 'forum');
-        // Delete by eALPS Developer 購読モードのデフォルトを「任意購読」から「購読停止」に変更
-        // $options[FORUM_DISALLOWSUBSCRIBE] = get_string('subscriptiondisabled','forum');
-        // End by eALPS Developer
-        
+        $options[FORUM_DISALLOWSUBSCRIBE] = get_string('subscriptiondisabled','forum');
         $mform->addElement('select', 'forcesubscribe', get_string('subscriptionmode', 'forum'), $options);
         $mform->addHelpButton('forcesubscribe', 'subscriptionmode', 'forum');
 
