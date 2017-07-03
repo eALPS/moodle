@@ -396,6 +396,7 @@ class zip_archive extends file_archive {
         
         // add by eALPS Developer
         if ( core_useragent::check_browser_operating_system('Windows') ) {
+            $localname = Normalizer::normalize($localname, Normalizer::FORM_C);
             $localname = mb_convert_encoding($localname, 'SJIS-WIN', 'UTF8');
         }
         // end by eALPS Developer
@@ -435,6 +436,7 @@ class zip_archive extends file_archive {
         
         // add by eALPS Developer
         if ( core_useragent::check_browser_operating_system('Windows') ) {
+            $localname = Normalizer::normalize($localname, Normalizer::FORM_C);
             $localname = mb_convert_encoding($localname, 'SJIS-WIN', 'UTF8');
         }
         // end by eALPS Developer
