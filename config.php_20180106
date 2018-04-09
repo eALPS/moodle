@@ -1,0 +1,402 @@
+<?php  // Moodle configuration file
+
+unset($CFG);
+global $CFG;
+$CFG = new stdClass();
+
+$base_wwwroot   = 'https://moodle-cloud.ealps.shinshu-u.ac.jp';
+
+$host_name = '54.249.250.203';
+$base_wwwroot   = '';
+if ($_SERVER['HTTP_HOST'] === $host_name) {
+  $base_wwwroot   = 'https://54.249.250.203';
+} else {
+  $base_wwwroot   = 'https://moodle-cloud.ealps.shinshu-u.ac.jp';
+}
+
+$base_dataroot  = '/ealps2_data/data';
+$template_base  = '/ealps2_data/template/moodle31';
+$remoteenroltable = '';
+
+$CFG->dbtype    = 'mysqli';
+$CFG->dblibrary = 'native';
+$CFG->dbhost    = 'moodle1.cm1psxga0tvs.ap-northeast-1.rds.amazonaws.com';
+#$CFG->dbname    = '2017_d';
+$CFG->dbuser    = 'moodle';
+$CFG->dbpass    = 'Passw0rd';
+$CFG->prefix    = 'mdl_';
+$CFG->dboptions = array (
+  'dbpersist' => 0,
+  'dbport' => 3306,
+  'dbsocket' => '',
+);
+
+$CFG->wwwroot   = 'https://54.249.250.203/2017/d';
+$CFG->dataroot  = '/ealps2_data/data/2017/d';
+$CFG->admin     = 'admin';
+
+$CFG->directorypermissions = 0777;
+
+$CFG->unicodedb = true;  // Database is utf8
+$CFG->unicodecleanfilename = true; //File name is utf8
+
+$CFG->ealps_helpuri = 'http://moodle.ealps.shinshu-u.ac.jp/support/';
+$CFG->defaultblocks_override = 'quickmail,activity_modules:help_link,news_items,calendar_month,calendar_upcoming,recent_activity';
+$CFG->showuseridentity = '';
+
+#$CFG->block_quickmail_roleselection = '3,4,5,9,11,12';
+$CFG->block_quickmail_prepend_class = 'shortname';
+
+$CFG -> legacyfilesinnewcourses = false;
+$CFG->dbsessions = true;
+
+$nendo_uri = substr($_SERVER['REQUEST_URI'],1,4);
+$site_uri = substr($_SERVER['REQUEST_URI'],6);
+$common_site_uri = substr($_SERVER['REQUEST_URI'],1);
+
+switch ($nendo_uri) {
+  case '2017':
+    $CFG->additionalhtmlfooter = "<script src='https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js'></script><script>$(\"a[href*='/blocks/analytics_graphs/']\").attr('target','_blank');(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');ga('create', 'UA-91564716-7', 'auto');ga('send', 'pageview');</script>";
+    switch (true){
+      case preg_match('/^d\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/d';
+        $CFG->dbname    = '2017_d';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/d';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/d/auth/shibboleth/';
+        $CFG->sessioncookie = '2017d';
+        $CFG->sessioncookiepath = '/2017/d/';
+        break ;
+      case preg_match('/^a\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/a';
+        $CFG->dbname    = '2017_a';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/a';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/a/auth/shibboleth/';
+        $CFG->sessioncookie = '2017a';
+        $CFG->sessioncookiepath = '/2017/a/';
+        $remoteenroltable = 'Relation_2017_a';
+        break ;
+      case preg_match('/^e\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/e';
+        $CFG->dbname    = '2017_e';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/e';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/e/auth/shibboleth/';
+        $CFG->sessioncookie = '2017e';
+        $CFG->sessioncookiepath = '/2017/e/';
+        $remoteenroltable = 'Relation_2017_e';
+        break ;
+      case preg_match('/^f\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/f';
+        $CFG->dbname    = '2017_f';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/f';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/f/auth/shibboleth/';
+        $CFG->sessioncookie = '2017f';
+        $CFG->sessioncookiepath = '/2017/f/';
+        $remoteenroltable = 'Relation_2017_f';
+        break ;
+      case preg_match('/^g\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/g';
+        $CFG->dbname    = '2017_g';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/g';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/g/auth/shibboleth/';
+        $CFG->sessioncookie = '2017g';
+        $CFG->sessioncookiepath = '/2017/g/';
+        $remoteenroltable = 'Relation_2017_g';
+        break ;
+      case preg_match('/^j\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/j';
+        $CFG->dbname    = '2017_j';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/j';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/j/auth/shibboleth/';
+        $CFG->sessioncookie = '2017j';
+        $CFG->sessioncookiepath = '/2017/j/';
+        $remoteenroltable = 'Relation_2017_j';
+        break ;
+      case preg_match('/^k\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/k';
+        $CFG->dbname    = '2017_k';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/k';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/k/auth/shibboleth/';
+        $CFG->sessioncookie = '2017k';
+        $CFG->sessioncookiepath = '/2017/k/';
+        $remoteenroltable = 'Relation_2017_k';
+        break ;
+      case preg_match('/^l\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/l';
+        $CFG->dbname    = '2017_l';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/l';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/l/auth/shibboleth/';
+        $CFG->sessioncookie = '2017l';
+        $CFG->sessioncookiepath = '/2017/l/';
+        $remoteenroltable = 'Relation_2017_l';
+        break ;
+      case preg_match('/^m\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/m';
+        $CFG->dbname    = '2017_m';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/m';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/m/auth/shibboleth/';
+        $CFG->sessioncookie = '2017m';
+        $CFG->sessioncookiepath = '/2017/m/';
+        $remoteenroltable = 'Relation_2017_m';
+        break ;
+      case preg_match('/^s\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/s';
+        $CFG->dbname    = '2017_s';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/s';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/s/auth/shibboleth/';
+        $CFG->sessioncookie = '2017s';
+        $CFG->sessioncookiepath = '/2017/s/';
+        $remoteenroltable = 'Relation_2017_s';
+        break ;
+      case preg_match('/^t\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/t';
+        $CFG->dbname    = '2017_t';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/t';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/t/auth/shibboleth/';
+        $CFG->sessioncookie = '2017t';
+        $CFG->sessioncookiepath = '/2017/t/';
+        $remoteenroltable = 'Relation_2017_t';
+        break ;
+      case preg_match('/^mv\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/mv';
+        $CFG->dbname    = '2017_mv';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/mv';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/mv/auth/shibboleth/';
+        $CFG->sessioncookie = '2017mv';
+        $CFG->sessioncookiepath = '/2017/mv/';
+        $remoteenroltable = 'Relation_2017_mv';
+        break ;
+      case preg_match('/^st\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/st';
+        $CFG->dbname    = '2017_st';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/st';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/st/auth/shibboleth/';
+        $CFG->sessioncookie = '2017st';
+        $CFG->sessioncookiepath = '/2017/st/';
+        $remoteenroltable = 'Relation_2017_st';
+        break ;
+      case preg_match('/^eChes\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/eChes';
+        $CFG->dbname    = '2017_eChes';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/eChes';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/eChes/auth/shibboleth/';
+        $CFG->sessioncookie = '2017eChes';
+        $CFG->sessioncookiepath = '/2017/eChes/';
+        $remoteenroltable = 'Relation_2017_eChes';
+        break ;
+      case preg_match('/^photo\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/photo';
+        $CFG->dbname    = '2017_photo';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/photo';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/photo/auth/shibboleth/';
+        $CFG->sessioncookie = '2017photo';
+        $CFG->sessioncookiepath = '/2017/photo/';
+        $remoteenroltable = 'Relation_2017_photo';
+        break ;
+      case preg_match('/^test\//',$site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/2017/test';
+        $CFG->dbname    = '2017_test';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/2017/test';
+        $CFG->alternateloginurl = $base_wwwroot.'/2017/test/auth/shibboleth/';
+        $CFG->sessioncookie = '2017test';
+        $CFG->sessioncookiepath = '/2017/test/';
+        $remoteenroltable = 'Relation_2017_test';
+        break ;
+    };
+    break ;
+  default:
+    $CFG->additionalhtmlfooter = "<script src='https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js'></script><script>$(\"a[href*='/blocks/analytics_graphs/']\").attr('target','_blank');(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');ga('create', 'UA-91564716-2', 'auto');ga('send', 'pageview');</script>";
+    switch (true){
+      case preg_match('/^common\//',$common_site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/common';
+        $CFG->dbname    = 'common';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/common';
+        $CFG->alternateloginurl = $base_wwwroot.'/common/auth/shibboleth/';
+        $CFG->sessioncookie = 'common';
+        $CFG->sessioncookiepath = '/common/';
+        $remoteenroltable = 'Relation_common';
+        break ;
+      case preg_match('/^help\//',$common_site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/help';
+        $CFG->dbname    = 'help';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/help';
+        $CFG->sessioncookie = 'help';
+        $CFG->sessioncookiepath = '/help/';
+        break ;
+      case preg_match('/^fdsd\//',$common_site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/fdsd';
+        $CFG->dbname    = 'fdsd';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/fdsd';
+        $CFG->alternateloginurl = $base_wwwroot.'/fdsd/auth/shibboleth/';
+        $CFG->sessioncookie = 'fdsd';
+        $CFG->sessioncookiepath = '/fdsd/';
+        break ;
+      case preg_match('/^hospital\//',$common_site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/hospital';
+        $CFG->dbname    = 'hospital';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/hospital';
+        $CFG->alternateloginurl = $base_wwwroot.'/hospital/auth/shibboleth/';
+        $CFG->sessioncookie = 'hospital';
+        $CFG->sessioncookiepath = '/hospital/';
+        break ;
+      case preg_match('/^facility\//',$common_site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/facility';
+        $CFG->dbname    = 'facility';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/facility';
+        $CFG->alternateloginurl = $base_wwwroot.'/facility/auth/shibboleth/';
+        $CFG->sessioncookie = 'facility';
+        $CFG->sessioncookiepath = '/facility/';
+        $remoteenroltable = 'Relation_facility';
+        break ;
+      case preg_match('/^teachingCredential\//',$common_site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/teachingCredential';
+        $CFG->dbname    = 'teachingCredential';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/teachingCredential';
+        $CFG->alternateloginurl = $base_wwwroot.'/teachingCredential/auth/shibboleth/';
+        $CFG->sessioncookie = 'teachingCredential';
+        $CFG->sessioncookiepath = '/teachingCredential/';
+        break ;
+      case preg_match('/^other\//',$common_site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/other';
+        $CFG->dbname    = 'other';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/other';
+        $CFG->alternateloginurl = $base_wwwroot.'/other/auth/shibboleth/';
+        $CFG->sessioncookie = 'other';
+        $CFG->sessioncookiepath = '/other/';
+        $remoteenroltable = 'Relation_other';
+        break ;
+      case preg_match('/^common_31\//',$common_site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/common_31';
+        $CFG->dbname    = 'common_31';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/common_31';
+        $CFG->alternateloginurl = $base_wwwroot.'/common_31/auth/shibboleth/';
+        $CFG->sessioncookie = 'common31';
+        $CFG->sessioncookiepath = '/common_31/';
+        $remoteenroltable = 'Relation_common';
+        break ;
+      case preg_match('/^help_31\//',$common_site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/help_31';
+        $CFG->dbname    = 'help_31';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/help';
+        $CFG->sessioncookie = 'help31';
+        $CFG->sessioncookiepath = '/help_31/';
+        break ;
+      case preg_match('/^fdsd_31\//',$common_site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/fdsd_31';
+        $CFG->dbname    = 'fdsd_31';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/fdsd';
+        $CFG->alternateloginurl = $base_wwwroot.'/fdsd_31/auth/shibboleth/';
+        $CFG->sessioncookie = 'fdsd31';
+        $CFG->sessioncookiepath = '/fdsd_31/';
+        break ;
+      case preg_match('/^hospital_31\//',$common_site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/hospital_31';
+        $CFG->dbname    = 'hospital_31';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/hospital_31';
+        $CFG->alternateloginurl = $base_wwwroot.'/hospital_31/auth/shibboleth/';
+        $CFG->sessioncookie = 'hospital31';
+        $CFG->sessioncookiepath = '/hospital_31/';
+        break ;
+      case preg_match('/^facility_31\//',$common_site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/facility_31';
+        $CFG->dbname    = 'facility_31';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/facility_31';
+        $CFG->alternateloginurl = $base_wwwroot.'/facility_31/auth/shibboleth/';
+        $CFG->sessioncookie = 'facility31';
+        $CFG->sessioncookiepath = '/facility_31/';
+        $remoteenroltable = 'Relation_facility';
+        break ;
+      case preg_match('/^teachingCredential_31\//',$common_site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/teachingCredential_31';
+        $CFG->dbname    = 'teachingCredential_31';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/teachingCredential';
+        $CFG->alternateloginurl = $base_wwwroot.'/teachingCredential_31/auth/shibboleth/';
+        $CFG->sessioncookie = 'teachingCredential31';
+        $CFG->sessioncookiepath = '/teachingCredential_31/';
+        break ;
+      case preg_match('/^other_31\//',$common_site_uri):
+        $CFG->wwwroot   = $base_wwwroot.'/other_31';
+        $CFG->dbname    = 'other_31';
+        $CFG->dirroot = $template_base;
+        $CFG->dataroot  = $base_dataroot.'/other_31';
+        $CFG->alternateloginurl = $base_wwwroot.'/other_31/auth/shibboleth/';
+        $CFG->sessioncookie = 'other31';
+        $CFG->sessioncookiepath = '/other_31/';
+        $remoteenroltable = 'Relation_other';
+        break ;
+    };
+};
+
+$CFG->dirroot = $template_base;
+
+require_once(dirname(__FILE__) . '/lib/setup.php');
+
+$CFG->passwordsaltmain = '3n 8Y:fX[Skm95;PJUI,H<T~?j/';
+
+$CFG->cachetype = 'memcached';
+$CFG->rcache = true;
+$CFG->memcachedhosts = '127.0.0.1';
+$CFG->memcachedpconn = true;
+
+$CFG->smtphosts = 'mta1.shinshu-u.ac.jp:465';
+$CFG->smtpsecure = 'ssl';
+$CFG->smtpauthtype = 'PLAIN';
+$CFG->smtpuser = 'slip';
+$CFG->smtppass = 'giponc';
+$CFG->smtpmaxbulk = 20;
+$CFG->noreplyaddress = 'noreply@shinshu-u.ac.jp';
+$CFG->mailnewline = 'CRLF';
+
+$CFG->forced_plugin_settings = array(
+  'enrol_database'  => array(
+    'dbtype' => 'mysqli',
+    'dbhost' => 'moodle2-1.cm1psxga0tvs.ap-northeast-1.rds.amazonaws.com',
+    'dbuser' => 'moodle',
+    'dbpass' => 'Passw0rd',
+    'dbname' => 'AcademicDB2',
+    'dbencoding' => 'utf-8',
+    'localcoursefield' => 'shortname',
+    'localuserfield' => 'username',
+    'localrolefield' => 'shortname',
+    'localcategoryfield' => 'id',
+    'remoteenroltable' => $remoteenroltable,
+    'remotecoursefield' => 'course',
+    'remoteuserfield' => 'user',
+    'remoterolefield' => 'role',
+  ),
+  'theme_clean' => array(
+    'customcss' => "#page-header .page-context-header{display:none}.navbar-inverse .navbar-inner{background-color:#063;background-image:-moz-linear-gradient(top,#063,#063);background-image:-webkit-gradient(linear,0 0,0 100%,from(#063),to(#063));background-image:-webkit-linear-gradient(top,#063,#063);background-image:-o-linear-gradient(top,#063,#063);background-image:linear-gradient(to bottom,#063,#063);background-repeat:repeat-x;border-color:#252525;filter:progid: DXImageTransform.Microsoft.gradient(startColorstr='#ff006633',endColorstr='#ff006633',GradientType=0)}.navbar-inverse .brand,.navbar-inverse .nav>li>a{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.25)}.navbar-inverse .navbar-text{color:#fff}.navbar-inverse .usermenu .login{color:#fff}.navbar-inverse .usermenu .login a{color:#f1c40f;font-weight:700}.navbar-inverse .usermenu .moodle-actionmenu .userbutton .usertext{color:#f1c40f}.navbar-inverse .usermenu:hover .moodle-actionmenu .userbutton .usertext{text-decoration:underline}.jsenabled .navbar-inverse .usermenu .moodle-actionmenu.show{background-color:#063}.navbar-inverse .btn-navbar,.navbar-inverse .btn-navbar.active,.navbar-inverse .btn-navbar.disabled,.navbar-inverse .btn-navbar:active,.navbar-inverse .btn-navbar:focus,.navbar-inverse .btn-navbar:hover,.navbar-inverse .btn-navbar[disabled],.navbar-inverse .nav li.dropdown.active>.dropdown-toggle,.navbar-inverse .nav li.dropdown.open.active>.dropdown-toggle,.navbar-inverse .nav li.dropdown.open>.dropdown-toggle{color:#fff;background-color:#063}.navbar-inverse .btn-navbar{text-shadow:0 -1px 0 rgba(0,0,0,.25);background-image:-moz-linear-gradient(top,#063,#063);background-image:-webkit-gradient(linear,0 0,0 100%,from(#063),to(#063));background-image:-webkit-linear-gradient(top,#063,#0063);background-image:-o-linear-gradient(top,#063,#063);background-image:linear-gradient(to bottom,#063,#063);background-repeat:repeat-x;border-color:#040404 #040404 #000;border-color:rgba(0,0,0,.1) rgba(0,0,0,.1) rgba(0,0,0,.25);filter:progid: DXImageTransform.Microsoft.gradient(startColorstr='#ff006633',endColorstr='#ff006633',GradientType=0);filter:progid: DXImageTransform.Microsoft.gradient(enabled=false)}#page-footer .helplink,#page-footer .homelink,#page-footer .logininfo{display:none}@media (max-width:979px){body{padding-top:0}.navbar-fixed-top{margin-bottom:0}.navbar-inverse .nav-collapse .dropdown-menu a,.navbar-inverse .nav-collapse .nav>li>a{color:#f1c40f}.navbar-inverse .nav-collapse .dropdown-menu a:focus,.navbar-inverse .nav-collapse .dropdown-menu a:hover,.navbar-inverse .nav-collapse .nav>li>a:focus,.navbar-inverse .nav-collapse .nav>li>a:hover{background-color:#063}.nav-collapse .dropdown-menu a:focus,.nav-collapse .dropdown-menu a:hover,.nav-collapse .dropdown-menu>li>a:focus,.nav-collapse .dropdown-menu>li>a:hover,.nav-collapse .dropdown-submenu a:active,.nav-collapse .dropdown-submenu a:focus,.nav-collapse .dropdown-submenu a:hover,.nav-collapse .nav>li>a:focus,.nav-collapse .nav>li>a:hover{color:#fff;background-image:none}}",
+    'footnote' => 'Copyright © 2006-'.date('Y').' e-Learning Center, Shinshu University. All rights reserved.',
+  ),
+);
+
+// There is no php closing tag in this file,
+// it is intentional because it prevents trailing whitespace problems!
