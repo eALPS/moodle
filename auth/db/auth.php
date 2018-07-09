@@ -134,7 +134,12 @@ class auth_plugin_db extends auth_plugin_base {
             } else if ($this->config->passtype === 'md5') {
                 return (strtolower($fromdb) == md5($extpassword));
             } else if ($this->config->passtype === 'sha1') {
-                return (strtolower($fromdb) == sha1($extpassword));
+              if ( substr($fromdb,0,6) === '{SSHA}' ) {
+                  $salt = substr(base64_decode(substr($fromdb,6)),20);
+                  return ( $fromdb == ('{SSHA}' . base64_encode(sha1($extpassword . $salt, TRUE) . $salt)) );
+              } else {
+                  return (strtolower($fromdb) == sha1($extpassword));
+              }
             } else if ($this->config->passtype === 'saltedcrypt') {
                 require_once($CFG->libdir.'/password_compat/lib/password.php');
                 return password_verify($extpassword, $fromdb);
