@@ -393,6 +393,12 @@ class zip_archive extends file_archive {
             $localname = clean_param($pathname, PARAM_PATH);
         }
         $localname = trim($localname, '/'); // No leading slashes in archives!
+
+        if ( core_useragent::check_browser_operating_system('Windows') ) {
+            $localname = Normalizer::normalize($localname, Normalizer::FORM_C);
+            $localname = mb_convert_encoding($localname, 'SJIS-win', 'UTF8');
+        }
+
         $localname = $this->mangle_pathname($localname);
 
         if ($localname === '') {
@@ -425,6 +431,12 @@ class zip_archive extends file_archive {
         }
 
         $localname = trim($localname, '/'); // No leading slashes in archives!
+
+        if ( core_useragent::check_browser_operating_system('Windows') ) {
+            $localname = Normalizer::normalize($localname, Normalizer::FORM_C);
+            $localname = mb_convert_encoding($localname, 'SJIS-win', 'UTF8');
+        }
+
         $localname = $this->mangle_pathname($localname);
 
         if ($localname === '') {
