@@ -121,11 +121,30 @@ class auth_plugin_shibboleth extends auth_plugin_base {
             }
 
             // Make usename lowercase
+
+            // if ($key == 'username'){
+            //     $result[$key] = strtolower($this->get_first_string($_SERVER[$value]));
+            // } else {
+            //     $result[$key] = $this->get_first_string($_SERVER[$value]);
+            // }
             if ($key == 'username'){
                 $result[$key] = strtolower($this->get_first_string($_SERVER[$value]));
+            } else if ($key == 'firstname'){
+                if ($_SERVER['affiliation'] == 'student') {
+                    $result[$key] = $this->get_first_string($_SERVER['givenName;lang-ja']).' '.$this->get_first_string($_SERVER['sn;lang-ja']);
+                } else {
+                    $result[$key] = $this->get_first_string($_SERVER['sn;lang-ja']);
+                }
+            } else if ($key == 'lastname'){
+                if ($_SERVER['affiliation'] == 'student') {
+                    $result[$key] = $this->get_first_string($_SERVER['id']);
+                } else {
+                    $result[$key] = $this->get_first_string($_SERVER['givenName;lang-ja']);
+                }
             } else {
                 $result[$key] = $this->get_first_string($_SERVER[$value]);
             }
+
         }
 
          // Provide an API to modify the information to fit the Moodle internal
