@@ -91,7 +91,8 @@ class assign_submission_file extends assign_submission_plugin {
         $mform->addHelpButton('assignsubmission_file_maxfiles',
                               'maxfilessubmission',
                               'assignsubmission_file');
-        $mform->setDefault('assignsubmission_file_maxfiles', $defaultmaxfilesubmissions);
+        #$mform->setDefault('assignsubmission_file_maxfiles', $defaultmaxfilesubmissions);
+        $mform->setDefault('assignsubmission_file_maxfiles', 1);
         $mform->disabledIf('assignsubmission_file_maxfiles', 'assignsubmission_file_enabled', 'notchecked');
 
         $choices = get_max_upload_sizes($CFG->maxbytes,
