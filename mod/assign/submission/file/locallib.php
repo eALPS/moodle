@@ -74,7 +74,8 @@ class assign_submission_file extends assign_submission_plugin {
             $defaultmaxsubmissionsizebytes = $this->get_config('maxsubmissionsizebytes');
             $defaultfiletypes = $this->get_config('filetypeslist');
         } else {
-            $defaultmaxfilesubmissions = get_config('assignsubmission_file', 'maxfiles');
+            #$defaultmaxfilesubmissions = get_config('assignsubmission_file', 'maxfiles');
+            $defaultmaxfilesubmissions = 1;
             $defaultmaxsubmissionsizebytes = get_config('assignsubmission_file', 'maxbytes');
             $defaultfiletypes = get_config('assignsubmission_file', 'filetypes');
         }
@@ -91,8 +92,7 @@ class assign_submission_file extends assign_submission_plugin {
         $mform->addHelpButton('assignsubmission_file_maxfiles',
                               'maxfilessubmission',
                               'assignsubmission_file');
-        #$mform->setDefault('assignsubmission_file_maxfiles', $defaultmaxfilesubmissions);
-        $mform->setDefault('assignsubmission_file_maxfiles', 1);
+        $mform->setDefault('assignsubmission_file_maxfiles', $defaultmaxfilesubmissions);
         $mform->disabledIf('assignsubmission_file_maxfiles', 'assignsubmission_file_enabled', 'notchecked');
 
         $choices = get_max_upload_sizes($CFG->maxbytes,
