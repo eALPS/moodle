@@ -99,7 +99,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
      * @return stored_file
      */
     protected function get_stored_file($filecontent, $filename = null, $mockedmethods = null) {
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
         if (empty($filename)) {
             $filename = $contenthash;
         }
@@ -149,7 +149,8 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
             ->chown(\org\bovigo\vfs\vfsStream::OWNER_USER_2);
 
         // This should generate an exception.
-        $this->setExpectedExceptionRegexp('file_exception',
+        $this->expectException('file_exception');
+        $this->expectExceptionMessageRegExp(
             '/Can not create local file pool directories, please verify permissions in dataroot./');
 
         new file_system_filedir();
@@ -170,7 +171,8 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
             ->chown(\org\bovigo\vfs\vfsStream::OWNER_USER_2);
 
         // This should generate an exception.
-        $this->setExpectedExceptionRegexp('file_exception',
+        $this->expectException('file_exception');
+        $this->expectExceptionMessageRegExp(
             '/Can not create local file pool directories, please verify permissions in dataroot./');
 
         new file_system_filedir();
@@ -199,7 +201,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
      */
     public function test_get_remote_path_from_hash() {
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
         $expectedresult = (object) [];
 
         $fs = $this->get_testable_mock([
@@ -408,7 +410,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         global $CFG;
 
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
         $filedircontent = [
             $contenthash => $filecontent,
         ];
@@ -445,7 +447,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         // Setup the filedir.
         // This contains a virtual file which has a cache mismatch.
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
 
         $trashdircontent = [
             '0f' => [
@@ -483,7 +485,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         // Setup the filedir.
         // This contains a virtual file which has a cache mismatch.
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
 
         $filedircontent = $trashdircontent = [
             '0f' => [
@@ -520,7 +522,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         // Setup the filedir.
         // This contains a virtual file which has a cache mismatch.
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
 
         $trashdircontent = [
             '0f' => [
@@ -555,7 +557,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         // Setup the filedir.
         // This contains a virtual file which has a cache mismatch.
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
 
         $trashdircontent = [
             '0f' => [
@@ -591,7 +593,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         // Setup the filedir.
         // This contains a virtual file which has a cache mismatch.
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
 
         $trashdircontent = [
             $contenthash => $filecontent,
@@ -622,7 +624,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         $this->resetAfterTest();
 
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
         $filedircontent = [
             '0f' => [],
         ];
@@ -660,7 +662,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         // Setup the filedir.
         // This contains a virtual file which has a cache mismatch.
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
         $sourcedircontent = [
             'file' => $filecontent,
         ];
@@ -693,7 +695,8 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         // Setup the filedir.
         $vfileroot = $this->setup_vfile_root();
 
-        $this->setExpectedExceptionRegexp('file_exception',
+        $this->expectException('file_exception');
+        $this->expectExceptionMessageRegExp(
             '/Cannot read file\. Either the file does not exist or there is a permission problem\./');
 
         $fs = new file_system_filedir();
@@ -708,7 +711,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         $this->resetAfterTest();
 
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
         $sourcedir = [
             'file' => $filecontent,
         ];
@@ -728,7 +731,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         $this->resetAfterTest();
 
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
         $filedircontent = [
             '0f' => [
                 'f3' => [
@@ -771,7 +774,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         $this->resetAfterTest();
 
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
         $filedircontent = [
             '0f' => [],
         ];
@@ -785,10 +788,9 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
             ->chmod(0444)
             ->chown(\org\bovigo\vfs\vfsStream::OWNER_USER_2);
 
-        $this->setExpectedException(
-            'file_exception',
-            "Can not create local file pool directories, please verify permissions in dataroot."
-        );
+        $this->expectException('file_exception');
+        $this->expectExceptionMessageRegExp(
+            "/Can not create local file pool directories, please verify permissions in dataroot./");
 
         // Attempt to add the file to the file pool.
         $fs = new file_system_filedir();
@@ -804,7 +806,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         global $CFG;
 
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
         $vfileroot = $this->setup_vfile_root();
 
         // Note, the vfs file system does not support locks - prevent file locking here.
@@ -828,7 +830,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         $this->resetAfterTest();
 
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
 
         $filedircontent = [
             '0f' => [],
@@ -840,10 +842,9 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
             ->chmod(0444)
             ->chown(\org\bovigo\vfs\vfsStream::OWNER_USER_2);
 
-        $this->setExpectedException(
-            'file_exception',
-            "Can not create local file pool directories, please verify permissions in dataroot."
-        );
+        $this->expectException('file_exception');
+        $this->expectExceptionMessageRegExp(
+            "/Can not create local file pool directories, please verify permissions in dataroot./");
 
         // Attempt to add the file to the file pool.
         $fs = new file_system_filedir();
@@ -859,7 +860,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         global $CFG;
 
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
         $filedircontent = [
             '0f' => [
                 'f3' => [
@@ -890,7 +891,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         $this->resetAfterTest();
 
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
         $vfileroot = $this->setup_vfile_root();
 
         $fs = new file_system_filedir();
@@ -911,7 +912,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         $this->resetAfterTest();
 
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
 
         $filedircontent = $trashdircontent = [
             '0f' => [
@@ -947,7 +948,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
 
         $fs = new file_system_filedir();
 
-        $result = $fs->remove_file(sha1(''));
+        $result = $fs->remove_file(file_storage::hash_from_string(''));
         $this->assertNull($result);
     }
 
@@ -960,7 +961,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         global $DB;
 
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
         $filedircontent = [
             '0f' => [
                 'f3' => [
@@ -991,7 +992,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         global $DB;
 
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
         $filedircontent = [
             '0f' => [
                 'f3' => [
@@ -1020,7 +1021,7 @@ class core_files_file_system_filedir_testcase extends advanced_testcase {
         $this->resetAfterTest();
 
         $filecontent = 'example content';
-        $contenthash = sha1($filecontent);
+        $contenthash = file_storage::hash_from_string($filecontent);
 
         $filedircontent = $trashdircontent = [
             '0f' => [

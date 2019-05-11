@@ -32,7 +32,7 @@
  */
 class restore_controller extends base_controller {
 
-    protected $tempdir;   // Directory under tempdir/backup awaiting restore
+    protected $tempdir;   // Directory under $CFG->backuptempdir awaiting restore
     protected $restoreid; // Unique identificator for this restore
 
     protected $courseid; // courseid where restore is going to happen
@@ -68,7 +68,7 @@ class restore_controller extends base_controller {
      * while loading the plan, as well as for future use. (You can change it
      * for a different one later using set_progress.)
      *
-     * @param string $tempdir Directory under tempdir/backup awaiting restore
+     * @param string $tempdir Directory under $CFG->backuptempdir awaiting restore
      * @param int $courseid Course id where restore is going to happen
      * @param bool $interactive backup::INTERACTIVE_YES[true] or backup::INTERACTIVE_NO[false]
      * @param int $mode backup::MODE_[ GENERAL | HUB | IMPORT | SAMESITE ]
@@ -141,6 +141,9 @@ class restore_controller extends base_controller {
         } else {
             // Load plan
             $this->load_plan();
+
+            // Apply all default settings (based on type/format/mode).
+            $this->apply_defaults();
 
             // Perform all initial security checks and apply (2nd param) them to settings automatically
             restore_check::check_security($this, true);
@@ -323,11 +326,11 @@ class restore_controller extends base_controller {
         // Basic/initial prevention against time/memory limits
         core_php_time_limit::raise(1 * 60 * 60); // 1 hour for 1 course initially granted
         raise_memory_limit(MEMORY_EXTRA);
-        // If this is not a course restore, inform the plan we are not
+        // If this is not a course restore or single activity restore (e.g. duplicate), inform the plan we are not
         // including all the activities for sure. This will affect any
         // task/step executed conditionally to stop processing information
         // for section and activity restore. MDL-28180.
-        if ($this->get_type() !== backup::TYPE_1COURSE) {
+        if ($this->get_type() !== backup::TYPE_1COURSE && $this->get_type() !== backup::TYPE_1ACTIVITY) {
             $this->log('notifying plan about excluded activities by type', backup::LOG_DEBUG);
             $this->plan->set_excluding_activities();
         }
@@ -509,6 +512,15 @@ class restore_controller extends base_controller {
         $this->plan = new restore_plan($this);
         $this->plan->build(); // Build plan for this controller
         $this->set_status(backup::STATUS_PLANNED);
+    }
+
+    /**
+     * Apply defaults from the global admin settings
+     */
+    protected function apply_defaults() {
+        $this->log('applying restore defaults', backup::LOG_DEBUG);
+        restore_controller_dbops::apply_config_defaults($this);
+        $this->set_status(backup::STATUS_CONFIGURED);
     }
 }
 

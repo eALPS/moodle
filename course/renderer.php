@@ -50,6 +50,14 @@ class core_course_renderer extends plugin_renderer_base {
     protected $strings;
 
     /**
+     * Whether a category content is being initially rendered with children. This is mainly used by the
+     * core_course_renderer::corsecat_tree() to render the appropriate action for the Expand/Collapse all link on
+     * page load.
+     * @var bool
+     */
+    protected $categoryexpandedonload = false;
+
+    /**
      * Override the constructor so that we can initialise the string cache
      *
      * @param moodle_page $page
@@ -448,9 +456,9 @@ class core_course_renderer extends plugin_renderer_base {
      * @return string
      */
     public function course_section_cm_completion($course, &$completioninfo, cm_info $mod, $displayoptions = array()) {
-        global $CFG;
+        global $CFG, $DB;
         $output = '';
-        if (!$mod->is_visible_on_course_page()) {
+        if (!empty($displayoptions['hidecompletion']) || !isloggedin() || isguestuser() || !$mod->uservisible) {
             return $output;
         }
         if ($completioninfo === null) {
@@ -477,16 +485,20 @@ class core_course_renderer extends plugin_renderer_base {
         } else if ($completion == COMPLETION_TRACKING_MANUAL) {
             switch($completiondata->completionstate) {
                 case COMPLETION_INCOMPLETE:
-                    $completionicon = 'manual-n'; break;
+                    $completionicon = 'manual-n' . ($completiondata->overrideby ? '-override' : '');
+                    break;
                 case COMPLETION_COMPLETE:
-                    $completionicon = 'manual-y'; break;
+                    $completionicon = 'manual-y' . ($completiondata->overrideby ? '-override' : '');
+                    break;
             }
         } else { // Automatic
             switch($completiondata->completionstate) {
                 case COMPLETION_INCOMPLETE:
-                    $completionicon = 'auto-n'; break;
+                    $completionicon = 'auto-n' . ($completiondata->overrideby ? '-override' : '');
+                    break;
                 case COMPLETION_COMPLETE:
-                    $completionicon = 'auto-y'; break;
+                    $completionicon = 'auto-y' . ($completiondata->overrideby ? '-override' : '');
+                    break;
                 case COMPLETION_COMPLETE_PASS:
                     $completionicon = 'auto-pass'; break;
                 case COMPLETION_COMPLETE_FAIL:
@@ -494,8 +506,16 @@ class core_course_renderer extends plugin_renderer_base {
             }
         }
         if ($completionicon) {
-            $formattedname = $mod->get_formatted_name();
-            $imgalt = get_string('completion-alt-' . $completionicon, 'completion', $formattedname);
+            $formattedname = html_entity_decode($mod->get_formatted_name(), ENT_QUOTES, 'UTF-8');
+            if ($completiondata->overrideby) {
+                $args = new stdClass();
+                $args->modname = $formattedname;
+                $overridebyuser = \core_user::get_user($completiondata->overrideby, '*', MUST_EXIST);
+                $args->overrideuser = fullname($overridebyuser);
+                $imgalt = get_string('completion-alt-' . $completionicon, 'completion', $args);
+            } else {
+                $imgalt = get_string('completion-alt-' . $completionicon, 'completion', $formattedname);
+            }
 
             if ($this->page->user_is_editing()) {
                 // When editing, the icon is just an image.
@@ -504,7 +524,6 @@ class core_course_renderer extends plugin_renderer_base {
                 $output .= html_writer::tag('span', $this->output->render($completionpixicon),
                         array('class' => 'autocompletion'));
             } else if ($completion == COMPLETION_TRACKING_MANUAL) {
-                $imgtitle = get_string('completion-title-' . $completionicon, 'completion', $formattedname);
                 $newstate =
                     $completiondata->completionstate == COMPLETION_COMPLETE
                     ? COMPLETION_INCOMPLETE
@@ -528,14 +547,12 @@ class core_course_renderer extends plugin_renderer_base {
                 $output .= html_writer::empty_tag('input', array(
                     'type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()));
                 $output .= html_writer::empty_tag('input', array(
-                    'type' => 'hidden', 'name' => 'modulename', 'value' => $mod->name));
+                    'type' => 'hidden', 'name' => 'modulename', 'value' => $formattedname));
                 $output .= html_writer::empty_tag('input', array(
                     'type' => 'hidden', 'name' => 'completionstate', 'value' => $newstate));
-                $output .= html_writer::empty_tag('input', array(
-                    'type' => 'image',
-                    'src' => $this->output->pix_url('i/completion-'.$completionicon),
-                    'alt' => $imgalt, 'title' => $imgtitle,
-                    'aria-live' => 'polite'));
+                $output .= html_writer::tag('button',
+                    $this->output->pix_icon('i/completion-' . $completionicon, $imgalt),
+                        array('class' => 'btn btn-link', 'aria-live' => 'assertive'));
                 $output .= html_writer::end_tag('div');
                 $output .= html_writer::end_tag('form');
             } else {
@@ -631,7 +648,7 @@ class core_course_renderer extends plugin_renderer_base {
             }
         } else {
             $linkclasses .= ' dimmed';
-            $textclasses .= ' dimmed_text';
+            $textclasses .= ' dimmed dimmed_text';
         }
         return array($linkclasses, $textclasses);
     }
@@ -680,7 +697,7 @@ class core_course_renderer extends plugin_renderer_base {
 
         // Display link itself.
         $activitylink = html_writer::empty_tag('img', array('src' => $mod->get_icon_url(),
-                'class' => 'iconlarge activityicon', 'alt' => ' ', 'role' => 'presentation')) .
+                'class' => 'iconlarge activityicon', 'alt' => '', 'role' => 'presentation', 'aria-hidden' => 'true')) .
                 html_writer::tag('span', $instancename . $altname, array('class' => 'instancename'));
         if ($mod->uservisible) {
             $output .= html_writer::link($url, $activitylink, array('class' => $linkclasses, 'onclick' => $onclick));
@@ -731,7 +748,24 @@ class core_course_renderer extends plugin_renderer_base {
      * @return string
      */
     public function availability_info($text, $additionalclasses = '') {
+
         $data = ['text' => $text, 'classes' => $additionalclasses];
+        $additionalclasses = array_filter(explode(' ', $additionalclasses));
+
+        if (in_array('ishidden', $additionalclasses)) {
+            $data['ishidden'] = 1;
+
+        } else if (in_array('isstealth', $additionalclasses)) {
+            $data['isstealth'] = 1;
+
+        } else if (in_array('isrestricted', $additionalclasses)) {
+            $data['isrestricted'] = 1;
+
+            if (in_array('isfullinfo', $additionalclasses)) {
+                $data['isfullinfo'] = 1;
+            }
+        }
+
         return $this->render_from_template('core/availability_info', $data);
     }
 
@@ -755,7 +789,7 @@ class core_course_renderer extends plugin_renderer_base {
             if (!empty($mod->availableinfo)) {
                 $formattedinfo = \core_availability\info::format_info(
                         $mod->availableinfo, $mod->get_course());
-                $output = $this->availability_info($formattedinfo);
+                $output = $this->availability_info($formattedinfo, 'isrestricted');
             }
             return $output;
         }
@@ -778,9 +812,9 @@ class core_course_renderer extends plugin_renderer_base {
             // Display information about conditional availability.
             // Don't add availability information if user is not editing and activity is hidden.
             if ($mod->visible || $this->page->user_is_editing()) {
-                $hidinfoclass = '';
+                $hidinfoclass = 'isrestricted isfullinfo';
                 if (!$mod->visible) {
-                    $hidinfoclass = 'hide';
+                    $hidinfoclass .= ' hide';
                 }
                 $ci = new \core_availability\info_module($mod);
                 $fullinfo = $ci->get_full_information();
@@ -929,6 +963,34 @@ class core_course_renderer extends plugin_renderer_base {
 
         $output .= html_writer::end_tag('div');
         return $output;
+    }
+
+    /**
+     * Message displayed to the user when they try to access unavailable activity following URL
+     *
+     * This method is a very simplified version of {@link course_section_cm()} to be part of the error
+     * notification only. It also does not check if module is visible on course page or not.
+     *
+     * The message will be displayed inside notification!
+     *
+     * @param cm_info $cm
+     * @return string
+     */
+    public function course_section_cm_unavailable_error_message(cm_info $cm) {
+        if ($cm->uservisible) {
+            return null;
+        }
+        if (!$cm->availableinfo) {
+            return get_string('activityiscurrentlyhidden');
+        }
+
+        $altname = get_accesshide(' ' . $cm->modfullname);
+        $name = html_writer::empty_tag('img', array('src' => $cm->get_icon_url(),
+                'class' => 'iconlarge activityicon', 'alt' => ' ', 'role' => 'presentation')) .
+            html_writer::tag('span', ' '.$cm->get_formatted_name() . $altname, array('class' => 'instancename'));
+        $formattedinfo = \core_availability\info::format_info($cm->availableinfo, $cm->get_course());
+        return html_writer::div($name, 'activityinstance-error') .
+        html_writer::div($formattedinfo, 'availabilityinfo-error');
     }
 
     /**
@@ -1107,8 +1169,7 @@ class core_course_renderer extends plugin_renderer_base {
         if ($chelper->get_show_courses() < self::COURSECAT_SHOW_COURSES_EXPANDED) {
             if ($course->has_summary() || $course->has_course_contacts() || $course->has_course_overviewfiles()) {
                 $url = new moodle_url('/course/info.php', array('id' => $course->id));
-                $image = html_writer::empty_tag('img', array('src' => $this->output->pix_url('i/info'),
-                    'alt' => $this->strings->summary));
+                $image = $this->output->pix_icon('i/info', $this->strings->summary);
                 $content .= html_writer::link($url, $image, array('title' => $this->strings->summary));
                 // Make sure JS file to expand course content is included.
                 $this->coursecat_include_js();
@@ -1470,6 +1531,8 @@ class core_course_renderer extends plugin_renderer_base {
             $classes[] = 'loaded';
             if (!empty($categorycontent)) {
                 $classes[] = 'with_children';
+                // Category content loaded with children.
+                $this->categoryexpandedonload = true;
             }
         }
 
@@ -1516,6 +1579,8 @@ class core_course_renderer extends plugin_renderer_base {
      * @return string
      */
     protected function coursecat_tree(coursecat_helper $chelper, $coursecat) {
+        // Reset the category expanded flag for this course category tree first.
+        $this->categoryexpandedonload = false;
         $categorycontent = $this->coursecat_category_content($chelper, $coursecat, 0);
         if (empty($categorycontent)) {
             return '';
@@ -1531,10 +1596,17 @@ class core_course_renderer extends plugin_renderer_base {
                 'collapseexpand',
             );
 
+            // Check if the category content contains subcategories with children's content loaded.
+            if ($this->categoryexpandedonload) {
+                $classes[] = 'collapse-all';
+                $linkname = get_string('collapseall');
+            } else {
+                $linkname = get_string('expandall');
+            }
+
             // Only show the collapse/expand if there are children to expand.
             $content .= html_writer::start_tag('div', array('class' => 'collapsible-actions'));
-            $content .= html_writer::link('#', get_string('expandall'),
-                    array('class' => implode(' ', $classes)));
+            $content .= html_writer::link('#', $linkname, array('class' => implode(' ', $classes)));
             $content .= html_writer::end_tag('div');
             $this->page->requires->strings_for_js(array('collapseall', 'expandall'), 'moodle');
         }
@@ -1917,13 +1989,7 @@ class core_course_renderer extends plugin_renderer_base {
         }
 
         $output = '';
-        if (!empty($CFG->navsortmycoursessort)) {
-            // sort courses the same as in navigation menu
-            $sortorder = 'visible DESC,'. $CFG->navsortmycoursessort.' ASC';
-        } else {
-            $sortorder = 'visible DESC,sortorder ASC';
-        }
-        $courses  = enrol_get_my_courses('summary, summaryformat', $sortorder);
+        $courses  = enrol_get_my_courses('summary, summaryformat');
         $rhosts   = array();
         $rcourses = array();
         if (!empty($CFG->mnet_dispatcher_mode) && $CFG->mnet_dispatcher_mode==='strict') {
@@ -2060,6 +2126,192 @@ class core_course_renderer extends plugin_renderer_base {
         return $this->coursecat_tree($chelper, coursecat::get(0));
     }
 
+    /**
+     * Renders the activity navigation.
+     *
+     * Defer to template.
+     *
+     * @param \core_course\output\activity_navigation $page
+     * @return string html for the page
+     */
+    public function render_activity_navigation(\core_course\output\activity_navigation $page) {
+        $data = $page->export_for_template($this->output);
+        return $this->output->render_from_template('core_course/activity_navigation', $data);
+    }
+
+    /**
+     * Display the selector to advertise or publish a course
+     * @param int $courseid
+     */
+    public function publicationselector($courseid) {
+        $text = '';
+
+        $advertiseurl = new moodle_url("/course/publish/metadata.php",
+            array('sesskey' => sesskey(), 'id' => $courseid, 'advertise' => true));
+        $advertisebutton = new single_button($advertiseurl, get_string('advertise', 'hub'));
+        $text .= $this->output->render($advertisebutton);
+        $text .= html_writer::tag('div', get_string('advertisepublication_help', 'hub'),
+            array('class' => 'publishhelp'));
+
+        $text .= html_writer::empty_tag('br');  // TODO Delete.
+
+        $uploadurl = new moodle_url("/course/publish/metadata.php",
+            array('sesskey' => sesskey(), 'id' => $courseid, 'share' => true));
+        $uploadbutton = new single_button($uploadurl, get_string('share', 'hub'));
+        $text .= $this->output->render($uploadbutton);
+        $text .= html_writer::tag('div', get_string('sharepublication_help', 'hub'),
+            array('class' => 'publishhelp'));
+
+        return $text;
+    }
+
+    /**
+     * Display the listing of hub where a course is registered on
+     * @param int $courseid
+     * @param array $publications
+     */
+    public function registeredonhublisting($courseid, $publications) {
+        global $CFG;
+        $table = new html_table();
+        $table->head = array(get_string('type', 'hub'),
+            get_string('date'), get_string('status', 'hub'), get_string('operation', 'hub'));
+        $table->size = array('20%', '30%', '%20', '%25');
+
+        $brtag = html_writer::empty_tag('br');
+
+        foreach ($publications as $publication) {
+
+            $params = array('id' => $publication->courseid, 'publicationid' => $publication->id);
+            $cancelurl = new moodle_url("/course/publish/index.php", $params);
+            $cancelbutton = new single_button($cancelurl, get_string('removefromhub', 'hub'));
+            $cancelbutton->class = 'centeredbutton';
+            $cancelbuttonhtml = $this->output->render($cancelbutton);
+
+            if ($publication->enrollable) {
+                $params = array('sesskey' => sesskey(), 'id' => $publication->courseid, 'publicationid' => $publication->id);
+                $updateurl = new moodle_url("/course/publish/metadata.php", $params);
+                $updatebutton = new single_button($updateurl, get_string('update', 'hub'));
+                $updatebutton->class = 'centeredbutton';
+                $updatebuttonhtml = $this->output->render($updatebutton);
+
+                $operations = $updatebuttonhtml . $brtag . $cancelbuttonhtml;
+            } else {
+                $operations = $cancelbuttonhtml;
+            }
+
+            // If the publication check time if bigger than May 2010, it has been checked.
+            if ($publication->timechecked > 1273127954) {
+                if ($publication->status == 0) {
+                    $status = get_string('statusunpublished', 'hub');
+                } else {
+                    $status = get_string('statuspublished', 'hub');
+                    if (!empty($publication->link)) {
+                        $status = html_writer::link($publication->link, $status);
+                    }
+                }
+
+                $status .= $brtag . html_writer::tag('a', get_string('updatestatus', 'hub'),
+                        array('href' => $CFG->wwwroot . '/course/publish/index.php?id='
+                            . $courseid . "&updatestatusid=" . $publication->id
+                            . "&sesskey=" . sesskey())) .
+                    $brtag . get_string('lasttimechecked', 'hub') . ": "
+                    . format_time(time() - $publication->timechecked);
+            } else {
+                $status = get_string('neverchecked', 'hub') . $brtag
+                    . html_writer::tag('a', get_string('updatestatus', 'hub'),
+                        array('href' => $CFG->wwwroot . '/course/publish/index.php?id='
+                            . $courseid . "&updatestatusid=" . $publication->id
+                            . "&sesskey=" . sesskey()));
+            }
+            // Add button cells.
+            $cells = array($publication->enrollable ?
+                get_string('advertised', 'hub') : get_string('shared', 'hub'),
+                userdate($publication->timepublished,
+                    get_string('strftimedatetimeshort')), $status, $operations);
+            $row = new html_table_row($cells);
+            $table->data[] = $row;
+        }
+
+        $contenthtml = html_writer::table($table);
+
+        return $contenthtml;
+    }
+
+    /**
+     * Display unpublishing confirmation page
+     * @param stdClass $publication
+     *      $publication->courseshortname
+     *      $publication->courseid
+     *      $publication->hubname
+     *      $publication->huburl
+     *      $publication->id
+     */
+    public function confirmunpublishing($publication) {
+        $optionsyes = array('sesskey' => sesskey(), 'id' => $publication->courseid,
+            'hubcourseid' => $publication->hubcourseid,
+            'cancel' => true, 'publicationid' => $publication->id, 'confirm' => true);
+        $optionsno = array('sesskey' => sesskey(), 'id' => $publication->courseid);
+        $publication->hubname = html_writer::tag('a', 'Moodle.net',
+            array('href' => HUB_MOODLEORGHUBURL));
+        $formcontinue = new single_button(new moodle_url("/course/publish/index.php",
+            $optionsyes), get_string('unpublish', 'hub'), 'post');
+        $formcancel = new single_button(new moodle_url("/course/publish/index.php",
+            $optionsno), get_string('cancel'), 'get');
+        return $this->output->confirm(get_string('unpublishconfirmation', 'hub', $publication),
+            $formcontinue, $formcancel);
+    }
+
+    /**
+     * Display waiting information about backup size during uploading backup process
+     * @param object $backupfile the backup stored_file
+     * @return $html string
+     */
+    public function sendingbackupinfo($backupfile) {
+        $sizeinfo = new stdClass();
+        $sizeinfo->total = number_format($backupfile->get_filesize() / 1000000, 2);
+        $html = html_writer::tag('div', get_string('sendingsize', 'hub', $sizeinfo),
+            array('class' => 'courseuploadtextinfo'));
+        return $html;
+    }
+
+    /**
+     * Display upload successfull message and a button to the publish index page
+     * @param int $id the course id
+     * @return $html string
+     */
+    public function sentbackupinfo($id) {
+        $html = html_writer::tag('div', get_string('sent', 'hub'),
+            array('class' => 'courseuploadtextinfo'));
+        $publishindexurl = new moodle_url('/course/publish/index.php',
+            array('sesskey' => sesskey(), 'id' => $id,
+                'published' => true));
+        $continue = $this->output->render(
+            new single_button($publishindexurl, get_string('continue')));
+        $html .= html_writer::tag('div', $continue, array('class' => 'sharecoursecontinue'));
+        return $html;
+    }
+
+    /**
+     * Hub information (logo - name - description - link)
+     * @param object $hubinfo
+     * @return string html code
+     */
+    public function hubinfo($hubinfo) {
+        $screenshothtml = html_writer::empty_tag('img',
+            array('src' => $hubinfo['imgurl'], 'alt' => $hubinfo['name']));
+        $hubdescription = html_writer::tag('div', $screenshothtml,
+            array('class' => 'hubscreenshot'));
+
+        $hubdescription .= html_writer::tag('a', $hubinfo['name'],
+            array('class' => 'hublink', 'href' => $hubinfo['url'],
+                'onclick' => 'this.target="_blank"'));
+
+        $hubdescription .= html_writer::tag('div', format_text($hubinfo['description'], FORMAT_PLAIN),
+            array('class' => 'hubdescription'));
+        $hubdescription = html_writer::tag('div', $hubdescription, array('class' => 'hubinfo clearfix'));
+
+        return $hubdescription;
+    }
 }
 
 /**

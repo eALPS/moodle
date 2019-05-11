@@ -114,6 +114,8 @@ class behat_form_field {
             // If the JS handler attached to keydown or keypress destroys the element
             // the later events may trigger errors because form element no longer exist
             // or is not visible. Ignore such exceptions here.
+        } catch (\Behat\Mink\Exception\ElementNotFoundException $e) {
+            // Other Mink drivers can throw this for the same reason as above.
         }
     }
 
@@ -132,6 +134,16 @@ class behat_form_field {
         // dealing with a fgroup element.
         $instance = $this->guess_type();
         return $instance->matches($expectedvalue);
+    }
+
+    /**
+     * Get the value of an attribute set on this field.
+     *
+     * @param string $name The attribute name
+     * @return string The attribute value
+     */
+    public function get_attribute($name) {
+        return $this->field->getAttribute($name);
     }
 
     /**
@@ -168,6 +180,20 @@ class behat_form_field {
      */
     protected function running_javascript() {
         return get_class($this->session->getDriver()) !== 'Behat\Mink\Driver\GoutteDriver';
+    }
+
+    /**
+     * Waits for all the JS activity to be completed.
+     *
+     * @return bool Whether any JS is still pending completion.
+     */
+    protected function wait_for_pending_js() {
+        if (!$this->running_javascript()) {
+            // JS is not available therefore there is nothing to wait for.
+            return false;
+        }
+
+        return behat_base::wait_for_pending_js_in_session($this->session);
     }
 
     /**

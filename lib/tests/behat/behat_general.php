@@ -143,7 +143,7 @@ class behat_general extends behat_base {
 
         // Wait until the URL change is executed.
         if ($this->running_javascript()) {
-            $this->getSession()->wait($waittime * 1000, false);
+            $this->getSession()->wait($waittime * 1000);
 
         } else if (!empty($url)) {
             // We redirect directly as we can not wait for an automatic redirection.
@@ -174,7 +174,7 @@ class behat_general extends behat_base {
                 return true;
             },
             $iframename,
-            self::EXTENDED_TIMEOUT
+            behat_base::get_extended_timeout()
         );
     }
 
@@ -253,7 +253,7 @@ class behat_general extends behat_base {
      */
     public function i_wait_seconds($seconds) {
         if ($this->running_javascript()) {
-            $this->getSession()->wait($seconds * 1000, false);
+            $this->getSession()->wait($seconds * 1000);
         } else {
             sleep($seconds);
         }
@@ -271,7 +271,7 @@ class behat_general extends behat_base {
             return;
         }
 
-        $this->getSession()->wait(self::TIMEOUT * 1000, self::PAGE_READY_JS);
+        $this->getSession()->wait(self::get_timeout() * 1000, self::PAGE_READY_JS);
     }
 
     /**
@@ -604,10 +604,10 @@ class behat_general extends behat_base {
             "[count(descendant::*[contains(., $xpathliteral)]) = 0]";
 
         // We should wait a while to ensure that the page is not still loading elements.
-        // Waiting less than self::TIMEOUT as we already waited for the DOM to be ready and
+        // Waiting less than self::get_timeout() as we already waited for the DOM to be ready and
         // all JS to be executed.
         try {
-            $nodes = $this->find_all('xpath', $xpath, false, false, self::REDUCED_TIMEOUT);
+            $nodes = $this->find_all('xpath', $xpath, false, false, self::get_reduced_timeout());
         } catch (ElementNotFoundException $e) {
             // All ok.
             return;
@@ -624,8 +624,19 @@ class behat_general extends behat_base {
             function($context, $args) {
 
                 foreach ($args['nodes'] as $node) {
-                    if ($node->isVisible()) {
-                        throw new ExpectationException('"' . $args['text'] . '" text was found in the page', $context->getSession());
+                    // If element is removed from dom, then just exit.
+                    try {
+                        // If element is visible then throw exception, so we keep spinning.
+                        if ($node->isVisible()) {
+                            throw new ExpectationException('"' . $args['text'] . '" text was found in the page',
+                                $context->getSession());
+                        }
+                    } catch (WebDriver\Exception\NoSuchElement $e) {
+                        // Do nothing just return, as element is no more on page.
+                        return true;
+                    } catch (ElementNotFoundException $e) {
+                        // Do nothing just return, as element is no more on page.
+                        return true;
                     }
                 }
 
@@ -633,11 +644,10 @@ class behat_general extends behat_base {
                 return true;
             },
             array('nodes' => $nodes, 'text' => $text),
-            self::REDUCED_TIMEOUT,
+            behat_base::get_reduced_timeout(),
             false,
             true
         );
-
     }
 
     /**
@@ -718,7 +728,7 @@ class behat_general extends behat_base {
         // We should wait a while to ensure that the page is not still loading elements.
         // Giving preference to the reliability of the results rather than to the performance.
         try {
-            $nodes = $this->find_all('xpath', $xpath, false, $container, self::REDUCED_TIMEOUT);
+            $nodes = $this->find_all('xpath', $xpath, false, $container, self::get_reduced_timeout());
         } catch (ElementNotFoundException $e) {
             // All ok.
             return;
@@ -744,7 +754,7 @@ class behat_general extends behat_base {
                 return true;
             },
             array('nodes' => $nodes, 'text' => $text, 'element' => $element),
-            self::REDUCED_TIMEOUT,
+            behat_base::get_reduced_timeout(),
             false,
             true
         );
@@ -922,7 +932,7 @@ class behat_general extends behat_base {
                     return $context->getSession()->getPage()->findAll($args['selector'], $args['locator']);
                 },
                 $params,
-                self::REDUCED_TIMEOUT,
+                behat_base::get_reduced_timeout(),
                 $exception,
                 false
             );
@@ -961,6 +971,9 @@ class behat_general extends behat_base {
      * @param string $taskname Name of task e.g. 'mod_whatever\task\do_something'
      */
     public function i_run_the_scheduled_task($taskname) {
+        global $CFG;
+        require_once("{$CFG->libdir}/cronlib.php");
+
         $task = \core\task\manager::get_scheduled_task($taskname);
         if (!$task) {
             throw new DriverException('The "' . $taskname . '" scheduled task does not exist');
@@ -987,16 +1000,26 @@ class behat_general extends behat_base {
         }
 
         try {
+            // Prepare the renderer.
+            cron_prepare_core_renderer();
+
             // Discard task output as not appropriate for Behat output!
             ob_start();
             $task->execute();
             ob_end_clean();
 
+            // Restore the previous renderer.
+            cron_prepare_core_renderer(true);
+
             // Mark task complete.
             \core\task\manager::scheduled_task_complete($task);
         } catch (Exception $e) {
+            // Restore the previous renderer.
+            cron_prepare_core_renderer(true);
+
             // Mark task failed and throw exception.
             \core\task\manager::scheduled_task_failed($task);
+
             throw new DriverException('The "' . $taskname . '" scheduled task failed', 0, $e);
         }
     }
@@ -1015,24 +1038,35 @@ class behat_general extends behat_base {
      * @throws DriverException
      */
     public function i_run_all_adhoc_tasks() {
+        global $CFG, $DB;
+        require_once("{$CFG->libdir}/cronlib.php");
+
         // Do setup for cron task.
         cron_setup_user();
 
-        // Run tasks. Locking is handled by get_next_adhoc_task.
-        $now = time();
-        ob_start(); // Discard task output as not appropriate for Behat output!
-        while (($task = \core\task\manager::get_next_adhoc_task($now)) !== null) {
+        // Discard task output as not appropriate for Behat output!
+        ob_start();
 
-            try {
-                $task->execute();
+        // Run all tasks which have a scheduled runtime of before now.
+        $timenow = time();
 
-                // Mark task complete.
-                \core\task\manager::adhoc_task_complete($task);
-            } catch (Exception $e) {
-                // Mark task failed and throw exception.
-                \core\task\manager::adhoc_task_failed($task);
-                ob_end_clean();
-                throw new DriverException('An adhoc task failed', 0, $e);
+        while (!\core\task\manager::static_caches_cleared_since($timenow) &&
+                $task = \core\task\manager::get_next_adhoc_task($timenow)) {
+            // Clean the output buffer between tasks.
+            ob_clean();
+
+            // Run the task.
+            cron_run_inner_adhoc_task($task);
+
+            // Check whether the task record still exists.
+            // If a task was successful it will be removed.
+            // If it failed then it will still exist.
+            if ($DB->record_exists('task_adhoc', ['id' => $task->get_id()])) {
+                // End ouptut buffering and flush the current buffer.
+                // This should be from just the current task.
+                ob_end_flush();
+
+                throw new DriverException('An adhoc task failed', 0);
             }
         }
         ob_end_clean();
@@ -1090,7 +1124,7 @@ class behat_general extends behat_base {
             // Would be better to use a 1 second sleep because the element should not be there,
             // but we would need to duplicate the whole find_all() logic to do it, the benefit of
             // changing to 1 second sleep is not significant.
-            $this->find($selector, $locator, false, $containernode, self::REDUCED_TIMEOUT);
+            $this->find($selector, $locator, false, $containernode, behat_base::get_reduced_timeout());
         } catch (ElementNotFoundException $e) {
             // It passes.
             return;
@@ -1246,7 +1280,6 @@ class behat_general extends behat_base {
 
     /**
      * Checks that the provided value exist in table.
-     * More info in http://docs.moodle.org/dev/Acceptance_testing#Providing_values_to_steps.
      *
      * First row may contain column headers or numeric indexes of the columns
      * (syntax -1- is also considered to be column index). Column indexes are
@@ -1275,8 +1308,7 @@ class behat_general extends behat_base {
     }
 
     /**
-     * Checks that the provided value exist in table.
-     * More info in http://docs.moodle.org/dev/Acceptance_testing#Providing_values_to_steps.
+     * Checks that the provided values do not exist in a table.
      *
      * @Then /^the following should not exist in the "(?P<table_string>[^"]*)" table:$/
      * @throws ExpectationException
@@ -1356,7 +1388,7 @@ class behat_general extends behat_base {
                 return $this->download_file_from_link($link);
             },
             array('link' => $link),
-            self::EXTENDED_TIMEOUT,
+            behat_base::get_extended_timeout(),
             $exception
         );
 
@@ -1399,7 +1431,7 @@ class behat_general extends behat_base {
                 return $this->download_file_from_link($link);
             },
             array('link' => $link),
-            self::EXTENDED_TIMEOUT,
+            behat_base::get_extended_timeout(),
             $exception
         );
 
@@ -1603,7 +1635,12 @@ class behat_general extends behat_base {
         }
         // Gets the node based on the requested selector type and locator.
         $node = $this->get_selected_node($selectortype, $element);
-        $this->getSession()->getDriver()->post_key("\xEE\x80\x84", $node->getXpath());
+        $driver = $this->getSession()->getDriver();
+        if ($driver instanceof \Moodle\BehatExtension\Driver\MoodleSelenium2Driver) {
+            $driver->post_key("\xEE\x80\x84", $node->getXpath());
+        } else {
+            $driver->keyDown($node->getXpath(), "\t");
+        }
     }
 
     /**
@@ -1627,5 +1664,84 @@ class behat_general extends behat_base {
         }
 
         throw new \Moodle\BehatExtension\Exception\SkippedException();
+    }
+
+    /**
+     * Checks focus is with the given element.
+     *
+     * @Then /^the focused element is( not)? "(?P<node_string>(?:[^"]|\\")*)" "(?P<node_selector_string>[^"]*)"$/
+     * @param string $not optional step verifier
+     * @param string $nodeelement Element identifier
+     * @param string $nodeselectortype Element type
+     * @throws DriverException If not using JavaScript
+     * @throws ExpectationException
+     */
+    public function the_focused_element_is($not, $nodeelement, $nodeselectortype) {
+        if (!$this->running_javascript()) {
+            throw new DriverException('Checking focus on an element requires JavaScript');
+        }
+        list($a, $b) = $this->transform_selector($nodeselectortype, $nodeelement);
+        $element = $this->find($a, $b);
+        $xpath = addslashes_js($element->getXpath());
+        $script = 'return (function() { return document.activeElement === document.evaluate("' . $xpath . '",
+                document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; })(); ';
+        $targetisfocused = $this->getSession()->evaluateScript($script);
+        if ($not == ' not') {
+            if ($targetisfocused) {
+                throw new ExpectationException("$nodeelement $nodeselectortype is focused", $this->getSession());
+            }
+        } else {
+            if (!$targetisfocused) {
+                throw new ExpectationException("$nodeelement $nodeselectortype is not focused", $this->getSession());
+            }
+        }
+    }
+
+    /**
+     * Checks focus is with the given element.
+     *
+     * @Then /^the focused element is( not)? "(?P<n>(?:[^"]|\\")*)" "(?P<ns>[^"]*)" in the "(?P<c>(?:[^"]|\\")*)" "(?P<cs>[^"]*)"$/
+     * @param string $not string optional step verifier
+     * @param string $element Element identifier
+     * @param string $selectortype Element type
+     * @param string $nodeelement Element we look in
+     * @param string $nodeselectortype The type of selector where we look in
+     * @throws DriverException If not using JavaScript
+     * @throws ExpectationException
+     */
+    public function the_focused_element_is_in_the($not, $element, $selectortype, $nodeelement, $nodeselectortype) {
+        if (!$this->running_javascript()) {
+            throw new DriverException('Checking focus on an element requires JavaScript');
+        }
+        $element = $this->get_node_in_container($selectortype, $element, $nodeselectortype, $nodeelement);
+        $xpath = addslashes_js($element->getXpath());
+        $script = 'return (function() { return document.activeElement === document.evaluate("' . $xpath . '",
+                document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; })(); ';
+        $targetisfocused = $this->getSession()->evaluateScript($script);
+        if ($not == ' not') {
+            if ($targetisfocused) {
+                throw new ExpectationException("$nodeelement $nodeselectortype is focused", $this->getSession());
+            }
+        } else {
+            if (!$targetisfocused) {
+                throw new ExpectationException("$nodeelement $nodeselectortype is not focused", $this->getSession());
+            }
+        }
+    }
+
+    /**
+     * Manually press tab key.
+     *
+     * @When /^I press( shift)? tab$/
+     * @param string $shift string optional step verifier
+     * @throws DriverException
+     */
+    public function i_manually_press_tab($shift = '') {
+        if (!$this->running_javascript()) {
+            throw new DriverException($shift . ' Tab press step is not available with Javascript disabled');
+        }
+
+        $value = ($shift == ' shift') ? [\WebDriver\Key::SHIFT . \WebDriver\Key::TAB] : [\WebDriver\Key::TAB];
+        $this->getSession()->getDriver()->getWebDriverSession()->activeElement()->postValue(['value' => $value]);
     }
 }

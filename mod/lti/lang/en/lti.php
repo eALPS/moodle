@@ -70,7 +70,6 @@ $string['addnewapp'] = 'Enable external application';
 $string['addserver'] = 'Add new trusted server';
 $string['addtype'] = 'Add preconfigured tool';
 $string['allow'] = 'Allow';
-$string['allowinstructorcustom'] = 'Allow teachers to add custom parameters';
 $string['allowsetting'] = 'Allow tool to store 8K of settings in Moodle';
 $string['always'] = 'Always';
 $string['automatic'] = 'Automatic, based on tool URL';
@@ -114,7 +113,7 @@ $string['courseinformation'] = 'Course information';
 $string['courselink'] = 'Go to course';
 $string['coursemisconf'] = 'Course is misconfigured';
 $string['createdon'] = 'Created on';
-$string['curllibrarymissing'] = 'PHP Curl library must be installed to use LTI';
+$string['curllibrarymissing'] = 'PHP cURL extension required for the External tool.';
 $string['custom'] = 'Custom parameters';
 $string['custom_config'] = 'Using custom tool configuration.';
 $string['custom_help'] = 'Custom parameters are settings used by the tool provider. For example, a custom parameter may be used to display
@@ -183,10 +182,10 @@ $string['external_tool_type_help'] = '* **Automatic, based on tool URL** - The b
 
 ### Preconfigured tool editing
 
-Three icons are available after the preconfigured tool dropdown list:
+Three icons are available after the preconfigured tool drop-down menu:
 
 * **Add** - Create a course level tool configuration. All External tool instances in this course may use the tool configuration.
-* **Edit** - Select a course level tool from the dropdown, then click this icon. The details of the tool configuration may be edited.
+* **Edit** - Select a course level tool from the drop-down menu, then click this icon. The details of the tool configuration may be edited.
 * **Delete** - Remove the selected course level tool.';
 $string['external_tool_types'] = 'Preconfigured tools';
 $string['failedtoconnect'] = 'Moodle was unable to communicate with the "{$a}" system';
@@ -213,9 +212,13 @@ $string['grading'] = 'Grade routing';
 $string['icon_url'] = 'Icon URL';
 $string['icon_url_help'] = 'The icon URL allows the icon that shows up in the course listing for this activity to be modified. Instead of using the default
 LTI icon, an icon which conveys the type of activity may be specified.';
-$string['id'] = 'id';
+$string['id'] = 'ID';
+$string['indicator:cognitivedepth'] = 'LTI cognitive';
+$string['indicator:cognitivedepth_help'] = 'This indicator is based on the cognitive depth reached by the student in an LTI activity.';
+$string['indicator:socialbreadth'] = 'LTI social';
+$string['indicator:socialbreadth_help'] = 'This indicator is based on the social breadth reached by the student in an LTI activity.';
 $string['invalidid'] = 'LTI ID was incorrect';
-$string['launch_in_moodle'] = 'Launch tool in moodle';
+$string['launch_in_moodle'] = 'Launch tool in Moodle';
 $string['launch_in_popup'] = 'Launch tool in a pop-up';
 $string['launch_url'] = 'Tool URL';
 $string['launch_url_help'] = 'The tool URL indicates the web address of the External Tool, and may contain additional information, such as the resource to show.
@@ -243,6 +246,7 @@ $string['lti:addinstance'] = 'Add new external tool activities';
 $string['lti:addcoursetool'] = 'Add course-specific tool configurations';
 $string['lti:grade'] = 'View grades returned by the external tool';
 $string['lti:manage'] = 'Be an Instructor when the tool is launched';
+$string['lti:admin'] = 'Be an administrator when the tool is launched';
 $string['lti:requesttooladd'] = 'Request a tool is configured site-wide';
 $string['lti:view'] = 'Launch external tool activities';
 $string['ltisettings'] = 'LTI settings';
@@ -352,6 +356,32 @@ $string['preferwidget'] = 'Prefer widget launch';
 $string['preferwidth'] = 'Preferred width';
 $string['press_to_submit'] = 'Press to launch this activity';
 $string['privacy'] = 'Privacy';
+$string['privacy:metadata:courseid'] = 'The ID of the course the user is accessing the LTI Consumer from';
+$string['privacy:metadata:courseidnumber'] = 'The ID number of the course the user is accessing the LTI Consumer from';
+$string['privacy:metadata:coursefullname'] = 'The fullname of the course the user is accessing the LTI Consumer from';
+$string['privacy:metadata:courseshortname'] = 'The shortname of the course the user is accessing the LTI Consumer from';
+$string['privacy:metadata:createdby'] = 'The user who created the record';
+$string['privacy:metadata:email'] = 'The email address of the user accessing the LTI Consumer';
+$string['privacy:metadata:externalpurpose'] = 'The LTI Consumer provides user information and context to the LTI Tool Provider.';
+$string['privacy:metadata:firstname'] = 'The firstname of the user accessing the LTI Consumer';
+$string['privacy:metadata:fullname'] = 'The fullname of the user accessing the LTI Consumer';
+$string['privacy:metadata:lastname'] = 'The lastname of the user accessing the LTI Consumer';
+$string['privacy:metadata:lti_submission'] = 'LTI submission';
+$string['privacy:metadata:lti_submission:datesubmitted'] = 'The timestamp indicating when the submission was made';
+$string['privacy:metadata:lti_submission:dateupdated'] = 'The timestamp indicating when the submission was modified';
+$string['privacy:metadata:lti_submission:gradepercent'] = 'The grade for the user as a percentage';
+$string['privacy:metadata:lti_submission:originalgrade'] = 'The original grade for the user';
+$string['privacy:metadata:lti_submission:userid'] = 'The ID of the user who submitted for the LTI activity';
+$string['privacy:metadata:lti_tool_proxies'] = 'LTI proxies';
+$string['privacy:metadata:lti_tool_proxies:name'] = 'LTI proxy name';
+$string['privacy:metadata:lti_types'] = 'LTI types';
+$string['privacy:metadata:lti_types:name'] = 'LTI type name';
+$string['privacy:metadata:role'] = 'The role in the course for the user accessing the LTI Consumer';
+$string['privacy:metadata:timecreated'] = 'The time when the record was created';
+$string['privacy:metadata:timemodified'] = 'The time when the record was modified';
+$string['privacy:metadata:userid'] = 'The ID of the user accessing the LTI Consumer';
+$string['privacy:metadata:useridnumber'] = 'The ID number of the user accessing the LTI Consumer';
+$string['privacy:metadata:username'] = 'The username of the user accessing the LTI Consumer';
 $string['quickgrade'] = 'Allow quick grading';
 $string['quickgrade_help'] = 'If enabled, multiple tools can be graded on one page. Add grades and comments then click the "Save all my feedback" button to save all changes for that page.';
 $string['redirect'] = 'You will be redirected in few seconds. If you are not, press the button.';
@@ -395,8 +425,7 @@ $string['return_to_course'] = 'Click <a href="{$a->link}" target="_top">here</a>
 $string['saveallfeedback'] = 'Save all my feedback';
 $string['search:activity'] = 'External tool - activity information';
 $string['secure_icon_url'] = 'Secure icon URL';
-$string['secure_icon_url_help'] = 'Similar to the icon URL, but used if the user accessing Moodle securely through SSL. The main purpose for this field is to prevent
-the browser from warning the user if the underlying page was accessed over SSL, but requesting to show an unsecure image.';
+$string['secure_icon_url_help'] = 'Similar to the icon URL, but used when the site is accessed securely through SSL. This field is to prevent the browser from displaying a warning about an insecure image.';
 $string['secure_launch_url'] = 'Secure tool URL';
 $string['secure_launch_url_help'] = 'Similar to the tool URL, but used instead of the tool URL if high security is required. Moodle will use the secure tool URL instead of the tool URL if the Moodle site is accessed through SSL, or if the tool configuration is set to always launch through SSL.
 
@@ -433,9 +462,9 @@ $string['share_roster_help'] = 'Specify whether the tool can access the list of 
 Note that this setting may be overridden in the tool configuration.';
 $string['show_in_course_activity_chooser'] = 'Show in activity chooser and as a preconfigured tool';
 $string['show_in_course_lti1'] = 'Tool configuration usage';
-$string['show_in_course_lti1_help'] = 'This tool may be shown in the activity chooser for a teacher to select to add to a course. Alternatively, it may be shown in the preconfigured tool dropdown menu when adding an external tool to a course. A further option is for the tool configuration to only be used if the exact tool URL is entered when adding an external tool to a course.';
+$string['show_in_course_lti1_help'] = 'This tool may be shown in the activity chooser for a teacher to select to add to a course. Alternatively, it may be shown in the preconfigured tool drop-down menu when adding an external tool to a course. A further option is for the tool configuration to only be used if the exact tool URL is entered when adding an external tool to a course.';
 $string['show_in_course_lti2'] = 'Tool configuration usage';
-$string['show_in_course_lti2_help'] = 'This tool can be shown in the activity chooser for a teacher to select to add to a course or in the preconfigured tool dropdown menu when adding an external tool to a course.';
+$string['show_in_course_lti2_help'] = 'This tool can be shown in the activity chooser for a teacher to select to add to a course or in the preconfigured tool drop-down menu when adding an external tool to a course.';
 $string['show_in_course_no'] = 'Do not show; use only when a matching tool URL is entered';
 $string['show_in_course_preconfigured'] = 'Show as preconfigured tool when adding an external tool';
 $string['size'] = 'Size parameters';
@@ -506,9 +535,10 @@ A base URL of *quiz.tool.com* would match the following:
 If two different tool configurations are for the same domain, the most specific match will be used.
 
 You can also insert a cartridge URL if you have one and the details for the tool will be automatically filled.';
+$string['toolurl_contentitemselectionrequest'] = 'Content Selection URL';
+$string['toolurl_contentitemselectionrequest_help'] = 'The Content Selection URL will be used to launch the content selection page from the tool provider. If it is empty, the Tool URL will be used';
 $string['typename'] = 'Tool name';
-$string['typename_help'] = 'The tool name is used to identify the tool provider within Moodle. The name entered will be visible
-to teachers when adding external tools within courses.';
+$string['typename_help'] = 'The tool name is used to identify the tool provider within Moodle. The name entered will be visible to teachers when adding external tools within courses.';
 $string['types'] = 'Types';
 $string['unabletocreatetooltype'] = 'Unable to create tool';
 $string['unabletofindtooltype'] = 'Unable to find tool for {$a->id}';

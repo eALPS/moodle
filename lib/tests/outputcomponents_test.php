@@ -125,8 +125,7 @@ class core_outputcomponents_testcase extends advanced_testcase {
         $this->assertEquals(1, $CFG->slasharguments);
         $this->assertEquals(1, $CFG->themerev);
         $this->assertEquals(0, $CFG->themedesignermode);
-        $this->assertSame('http://www.example.com/moodle', $CFG->wwwroot);
-        $this->assertSame($CFG->wwwroot, $CFG->httpswwwroot);
+        $this->assertSame('https://www.example.com/moodle', $CFG->wwwroot);
         $this->assertEquals(0, $CFG->enablegravatar);
         $this->assertSame('mm', $CFG->gravatardefaulturl);
 
@@ -205,6 +204,9 @@ class core_outputcomponents_testcase extends advanced_testcase {
         $up3 = new user_picture($user3);
         $this->assertSame($CFG->wwwroot.'/theme/image.php/boost/core/1/u/f2', $up3->get_url($page, $renderer)->out(false));
 
+        // Http version.
+        $CFG->wwwroot = str_replace('https:', 'http:', $CFG->wwwroot);
+
         // Verify defaults to misteryman (mm).
         $up2 = new user_picture($user2);
         $this->assertSame('http://www.gravatar.com/avatar/ab53a2911ddf9b4817ac01ddcd3d975f?s=35&d=mm', $up2->get_url($page, $renderer)->out(false));
@@ -218,13 +220,13 @@ class core_outputcomponents_testcase extends advanced_testcase {
         $this->assertSame($CFG->wwwroot.'/pluginfile.php/'.$context1->id.'/user/icon/boost/f2?rev=11', $up1->get_url($page, $renderer)->out(false));
 
         // Https version.
-        $CFG->httpswwwroot = str_replace('http:', 'https:', $CFG->wwwroot);
+        $CFG->wwwroot = str_replace('http:', 'https:', $CFG->wwwroot);
 
         $up1 = new user_picture($user1);
-        $this->assertSame($CFG->httpswwwroot.'/pluginfile.php/'.$context1->id.'/user/icon/boost/f2?rev=11', $up1->get_url($page, $renderer)->out(false));
+        $this->assertSame($CFG->wwwroot.'/pluginfile.php/'.$context1->id.'/user/icon/boost/f2?rev=11', $up1->get_url($page, $renderer)->out(false));
 
         $up3 = new user_picture($user3);
-        $this->assertSame($CFG->httpswwwroot.'/theme/image.php/boost/core/1/u/f2', $up3->get_url($page, $renderer)->out(false));
+        $this->assertSame($CFG->wwwroot.'/theme/image.php/boost/core/1/u/f2', $up3->get_url($page, $renderer)->out(false));
 
         $up2 = new user_picture($user2);
         $this->assertSame('https://secure.gravatar.com/avatar/ab53a2911ddf9b4817ac01ddcd3d975f?s=35&d=https%3A%2F%2Fwww.example.com%2Fmoodle%2Fpix%2Fu%2Ff2.png', $up2->get_url($page, $renderer)->out(false));
@@ -267,7 +269,7 @@ class core_outputcomponents_testcase extends advanced_testcase {
 
         // Test non-slashargument images.
         set_config('theme', 'clean');
-        $CFG->httpswwwroot = $CFG->wwwroot;
+        $CFG->wwwroot = str_replace('https:', 'http:', $CFG->wwwroot);
         $CFG->slasharguments = 0;
         $page = new moodle_page();
         $page->set_url('/user/profile.php');
@@ -433,5 +435,198 @@ EOF;
 
         $this->assertEquals($expecteda, $pbara->pagelinks);
         $this->assertEquals($expectedb, $pbarb->pagelinks);
+    }
+
+    public function test_pix_icon() {
+        $this->resetAfterTest();
+
+        $page = new moodle_page();
+
+        set_config('theme', 'boost');
+        // Need to reset after changing theme.
+        $page->reset_theme_and_output();
+        $renderer = $page->get_renderer('core');
+
+        $reason = 'An icon with no alt text is hidden from screenreaders.';
+        $this->assertContains('aria-hidden="true"', $renderer->pix_icon('t/print', ''), $reason);
+
+        $reason = 'An icon with alt text is not hidden from screenreaders.';
+        $this->assertNotContains('aria-hidden="true"', $renderer->pix_icon('t/print', 'Print'), $reason);
+
+        // Test another theme with a different icon system.
+        set_config('theme', 'clean');
+        // Need to reset after changing theme.
+        $page->reset_theme_and_output();
+        $renderer = $page->get_renderer('core');
+
+        $reason = 'An icon with no alt text is hidden from screenreaders.';
+        $this->assertContains('aria-hidden="true"', $renderer->pix_icon('t/print', ''), $reason);
+
+        $reason = 'An icon with alt text is not hidden from screenreaders.';
+        $this->assertNotContains('aria-hidden="true"', $renderer->pix_icon('t/print', 'Print'), $reason);
+    }
+
+    /**
+     * Test for checking the template context data for the single_select element.
+     */
+    public function test_single_select() {
+        global $PAGE;
+
+        $fakename = 'fakename';
+        $fakeclass = 'fakeclass';
+        $faketitle = 'faketitle';
+        $fakedisabled = true;
+        $fakefor = 'fakefor';
+
+        $someid = 'someid';
+        $realname = 'realname';
+        $realclass = 'realclass';
+        $realtitle = 'realtitle';
+        $realdisabled = false;
+        $reallabel = 'Some cool label';
+        $labelclass = 'somelabelclass';
+        $labelstyle = 'font-weight: bold';
+
+        $dataaction = 'actiondata';
+        $dataother = 'otherdata';
+
+        $attributes = [
+            'id' => $someid,
+            'class' => $fakeclass,
+            'title' => $faketitle,
+            'disabled' => $fakedisabled,
+            'name' => $fakename,
+            'data-action' => $dataaction,
+            'data-other' => $dataother,
+        ];
+        $labelattributes = [
+            'for' => $fakefor,
+            'class' => $labelclass,
+            'style' => $labelstyle
+        ];
+
+        $options = [ "Option A", "Option B", "Option C" ];
+        $nothing = ['' => 'choosedots'];
+
+        $url = new moodle_url('/');
+
+        $singleselect = new single_select($url, $realname, $options, null, $nothing, 'someformid');
+        $singleselect->class = $realclass;
+        $singleselect->tooltip = $realtitle;
+        $singleselect->disabled = $realdisabled;
+        $singleselect->attributes = $attributes;
+        $singleselect->label = $reallabel;
+        $singleselect->labelattributes = $labelattributes;
+
+        $renderer = $PAGE->get_renderer('core');
+        $data = $singleselect->export_for_template($renderer);
+
+        $this->assertEquals($realtitle, $data->title);
+        $this->assertEquals($singleselect->class, $data->classes);
+        $this->assertEquals($realname, $data->name);
+        $this->assertEquals($reallabel, $data->label);
+        $this->assertEquals($realdisabled, $data->disabled);
+        $this->assertEquals($someid, $data->id);
+
+        // Validate attributes array.
+        // The following should not be included: id, class, name, disabled.
+        $this->assertFalse(in_array(['name' => 'id', 'value' => $someid], $data->attributes));
+        $this->assertFalse(in_array(['name' => 'class', 'value' => $fakeclass], $data->attributes));
+        $this->assertFalse(in_array(['name' => 'name', 'value' => $fakeclass], $data->attributes));
+        $this->assertFalse(in_array(['name' => 'disabled', 'value' => $fakedisabled], $data->attributes));
+        // The rest should be fine.
+        $this->assertTrue(in_array(['name' => 'data-action', 'value' => $dataaction], $data->attributes));
+        $this->assertTrue(in_array(['name' => 'data-other', 'value' => $dataother], $data->attributes));
+
+        // Validate label attributes.
+        // The for attribute should not be included.
+        $this->assertFalse(in_array(['name' => 'for', 'value' => $someid], $data->labelattributes));
+        // The rest should be fine.
+        $this->assertTrue(in_array(['name' => 'class', 'value' => $labelclass], $data->labelattributes));
+        $this->assertTrue(in_array(['name' => 'style', 'value' => $labelstyle], $data->labelattributes));
+    }
+
+    /**
+     * Test for checking the template context data for the url_select element.
+     */
+    public function test_url_select() {
+        global $PAGE;
+
+        $fakename = 'fakename';
+        $fakeclass = 'fakeclass';
+        $faketitle = 'faketitle';
+        $fakedisabled = true;
+        $fakefor = 'fakefor';
+
+        $someid = 'someid';
+        $realclass = 'realclass';
+        $realtitle = 'realtitle';
+        $realdisabled = false;
+        $reallabel = 'Some cool label';
+        $labelclass = 'somelabelclass';
+        $labelstyle = 'font-weight: bold';
+
+        $dataaction = 'actiondata';
+        $dataother = 'otherdata';
+
+        $attributes = [
+            'id' => $someid,
+            'class' => $fakeclass,
+            'title' => $faketitle,
+            'disabled' => $fakedisabled,
+            'name' => $fakename,
+            'data-action' => $dataaction,
+            'data-other' => $dataother,
+        ];
+        $labelattributes = [
+            'for' => $fakefor,
+            'class' => $labelclass,
+            'style' => $labelstyle
+        ];
+
+        $url1 = new moodle_url("/#a");
+        $url2 = new moodle_url("/#b");
+        $url3 = new moodle_url("/#c");
+
+        $urls = [
+            $url1->out() => 'A',
+            $url2->out() => 'B',
+            $url3->out() => 'C',
+        ];
+        $nothing = ['' => 'choosedots'];
+
+        $urlselect = new url_select($urls, null, $nothing, 'someformid');
+        $urlselect->class = $realclass;
+        $urlselect->tooltip = $realtitle;
+        $urlselect->disabled = $realdisabled;
+        $urlselect->attributes = $attributes;
+        $urlselect->label = $reallabel;
+        $urlselect->labelattributes = $labelattributes;
+
+        $renderer = $PAGE->get_renderer('core');
+        $data = $urlselect->export_for_template($renderer);
+
+        $this->assertEquals($realtitle, $data->title);
+        $this->assertEquals($urlselect->class, $data->classes);
+        $this->assertEquals($reallabel, $data->label);
+        $this->assertEquals($realdisabled, $data->disabled);
+        $this->assertEquals($someid, $data->id);
+
+        // Validate attributes array.
+        // The following should not be included: id, class, name, disabled.
+        $this->assertFalse(in_array(['name' => 'id', 'value' => $someid], $data->attributes));
+        $this->assertFalse(in_array(['name' => 'class', 'value' => $fakeclass], $data->attributes));
+        $this->assertFalse(in_array(['name' => 'name', 'value' => $fakeclass], $data->attributes));
+        $this->assertFalse(in_array(['name' => 'disabled', 'value' => $fakedisabled], $data->attributes));
+        // The rest should be fine.
+        $this->assertTrue(in_array(['name' => 'data-action', 'value' => $dataaction], $data->attributes));
+        $this->assertTrue(in_array(['name' => 'data-other', 'value' => $dataother], $data->attributes));
+
+        // Validate label attributes.
+        // The for attribute should not be included.
+        $this->assertFalse(in_array(['name' => 'for', 'value' => $someid], $data->labelattributes));
+        // The rest should be fine.
+        $this->assertTrue(in_array(['name' => 'class', 'value' => $labelclass], $data->labelattributes));
+        $this->assertTrue(in_array(['name' => 'style', 'value' => $labelstyle], $data->labelattributes));
     }
 }

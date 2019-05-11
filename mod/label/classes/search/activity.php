@@ -39,15 +39,29 @@ defined('MOODLE_INTERNAL') || die();
 class activity extends \core_search\base_activity {
 
     /**
+     * Returns true if this area uses file indexing.
+     *
+     * @return bool
+     */
+    public function uses_file_indexing() {
+        return true;
+    }
+
+    /**
      * Overwritten as labels are displayed in-course.
      *
      * @param \core_search\document $doc
      * @return \moodle_url
      */
     public function get_doc_url(\core_search\document $doc) {
+        // Get correct URL to section that contains label, from course format.
         $cminfo = $this->get_cm($this->get_module_name(), strval($doc->get('itemid')), $doc->get('courseid'));
-        return new \moodle_url('/course/view.php', array('id' => $doc->get('courseid')), 'module-' . $cminfo->id);
+        $format = course_get_format($cminfo->get_course());
+        $url = $format->get_view_url($cminfo->sectionnum);
 
+        // Add the ID of the label to the section URL.
+        $url->set_anchor('module-' . $cminfo->id);
+        return $url;
     }
 
     /**

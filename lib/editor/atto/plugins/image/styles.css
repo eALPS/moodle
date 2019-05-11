@@ -6,30 +6,13 @@
 }
 
 .atto_image_preview_box {
-    max-height: 200px;
+    max-height: 150px;
     margin-bottom: 1em;
     overflow: auto;
 }
 
 .editor_atto_content img {
     cursor: pointer;
-}
-
-.atto_image_size {
-    display: inline-block;
-}
-
-.atto_image_size input[type=checkbox] {
-    margin-left: 1em;
-    margin-right: 1em;
-}
-
-.atto_image_size input[type=text] {
-    width: 3em;
-}
-
-.atto_image_size label {
-    display: inline-block;
 }
 
 .atto_image_button_text-top {
@@ -50,6 +33,8 @@
 .atto_image_button_text-top.img-responsive,
 .atto_image_button_middle.img-responsive,
 .atto_image_button_text-bottom.img-responsive {
+    /* If the image is display: block then linking the image to URLs won't work. */
+    display: inline-block;
     max-width: calc(100% - 1em);
 }
 

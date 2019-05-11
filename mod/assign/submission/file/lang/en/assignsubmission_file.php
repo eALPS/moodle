@@ -23,10 +23,13 @@
  */
 
 
+$string['acceptedfiletypes'] = 'Accepted file types';
+$string['acceptedfiletypes_help'] = 'Accepted file types can be restricted by entering a list of file extensions. If the field is left empty, then all file types are allowed.';
 $string['configmaxbytes'] = 'Maximum file size';
 $string['countfiles'] = '{$a} files';
 $string['default'] = 'Enabled by default';
 $string['default_help'] = 'If set, this submission method will be enabled by default for all new assignments.';
+$string['defaultacceptedfiletypes'] = 'Default accepted file types';
 $string['enabled'] = 'File submissions';
 $string['enabled_help'] = 'If enabled, students are able to upload one or more files as their submission.';
 $string['eventassessableuploaded'] = 'A file has been uploaded.';
@@ -40,5 +43,10 @@ $string['maximumsubmissionsize'] = 'Maximum submission size';
 $string['maximumsubmissionsize_help'] = 'Files uploaded by students may be up to this size.';
 $string['numfilesforlog'] = 'The number of file(s) : {$a} file(s).';
 $string['pluginname'] = 'File submissions';
+$string['privacy:metadata:filepurpose'] = 'The files loaded for this assignment submission';
 $string['siteuploadlimit'] = 'Site upload limit';
 $string['submissionfilearea'] = 'Uploaded submission files';
+// Deprecated since Moodle 3.4.
+$string['filesofthesetypes'] = 'Files of these types may be added to the submission:';
+$string['filetypewithexts'] = '{$a->name} &mdash; {$a->extlist}';
+$string['nonexistentfiletypes'] = 'The following file types were not recognised: {$a}';

@@ -1240,7 +1240,7 @@ function wiki_delete_page_versions($deleteversions, $context = null) {
             list($insql, $param) = $DB->get_in_or_equal($versions);
             $insql .= ' AND pageid = ?';
             array_push($param, $params['pageid']);
-            $oldversions = $DB->get_recordset_select('wiki_versions', 'version ' . $insql, $param);
+            $oldversions = $DB->get_records_select('wiki_versions', 'version ' . $insql, $param);
             $DB->delete_records_select('wiki_versions', 'version ' . $insql, $param);
         }
         foreach ($oldversions as $version) {
@@ -1382,7 +1382,7 @@ function wiki_print_page_content($page, $context, $subwikiid) {
         }
     }
     $html = file_rewrite_pluginfile_urls($page->cachedcontent, 'pluginfile.php', $context->id, 'mod_wiki', 'attachments', $subwikiid);
-    $html = format_text($html, FORMAT_MOODLE, array('overflowdiv'=>true, 'allowid'=>true));
+    $html = format_text($html, FORMAT_HTML, array('overflowdiv' => true, 'allowid' => true));
     echo $OUTPUT->box($html);
 
     echo $OUTPUT->tag_list(core_tag_tag::get_item_tags('mod_wiki', 'wiki_pages', $page->id),
@@ -1451,10 +1451,12 @@ function wiki_print_edit_form_default_fields($format, $pageid, $version = -1, $u
 
     echo "</fieldset>";
 
-    echo '<input class="wiki_button" type="submit" name="editoption" value="' . get_string('save', 'wiki') . '"/>';
-    echo '<input class="wiki_button" type="submit" name="editoption" value="' . get_string('upload', 'wiki') . '"/>';
-    echo '<input class="wiki_button" type="submit" name="editoption" value="' . get_string('preview') . '"/>';
-    echo '<input class="wiki_button" type="submit" name="editoption" value="' . get_string('cancel') . '" />';
+    echo '<input class="wiki_button btn btn-secondary" type="submit" name="editoption" value="'
+        . get_string('save', 'wiki') . '" />';
+    echo '<input class="wiki_button btn btn-secondary" type="submit" name="editoption" value="'
+        . get_string('upload', 'wiki') . '" />';
+    echo '<input class="wiki_button btn btn-secondary" type="submit" name="editoption" value="' . get_string('preview') . '" />';
+    echo '<input class="wiki_button btn btn-secondary" type="submit" name="editoption" value="' . get_string('cancel') . '" />';
 }
 
 /**

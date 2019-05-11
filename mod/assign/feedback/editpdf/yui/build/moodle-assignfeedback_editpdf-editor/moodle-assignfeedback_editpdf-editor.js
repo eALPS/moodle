@@ -30,6 +30,7 @@ var AJAXBASE = M.cfg.wwwroot + '/mod/assign/feedback/editpdf/ajax.php',
         PREVIOUSBUTTON:  '.navigate-previous-button',
         NEXTBUTTON:  ' .navigate-next-button',
         SEARCHCOMMENTSBUTTON: '.searchcommentsbutton',
+        EXPCOLCOMMENTSBUTTON: '.expcolcommentsbutton',
         SEARCHFILTER: '.assignfeedback_editpdf_commentsearch input',
         SEARCHCOMMENTSLIST: '.assignfeedback_editpdf_commentsearch ul',
         PAGESELECT: '.navigate-page-select',
@@ -42,9 +43,12 @@ var AJAXBASE = M.cfg.wwwroot + '/mod/assign/feedback/editpdf/ajax.php',
         COMMENTMENU: '.commentdrawable a',
         ANNOTATIONCOLOURBUTTON:  '.annotationcolourbutton',
         DELETEANNOTATIONBUTTON: '.deleteannotationbutton',
-        UNSAVEDCHANGESDIV: '.assignfeedback_editpdf_unsavedchanges',
+        WARNINGMESSAGECONTAINER: '.warningmessages',
+        ICONMESSAGECONTAINER: '.infoicon',
+        UNSAVEDCHANGESDIV: '.assignfeedback_editpdf_warningmessages',
         UNSAVEDCHANGESINPUT: 'input[name="assignfeedback_editpdf_haschanges"]',
         STAMPSBUTTON: '.currentstampbutton',
+        USERINFOREGION: '[data-region="user-info"]',
         DIALOGUE: '.' + CSS.DIALOGUE
     },
     SELECTEDBORDERCOLOUR = 'rgba(200, 200, 255, 0.9)',
@@ -1570,8 +1574,9 @@ Y.extend(ANNOTATIONSTAMP, M.assignfeedback_editpdf.annotation, {
 
         position = this.editor.get_window_coordinates(new M.assignfeedback_editpdf.point(this.x, this.y));
         node = Y.Node.create('<div/>');
+        // If these are absolutely positioned, they escape their scroll container.
         node.setStyles({
-            'position': 'absolute',
+            'position': 'relative',
             'display': 'inline-block',
             'backgroundImage': 'url(' + this.editor.get_stamp_image_url(this.path) + ')',
             'width': (this.endx - this.x),
@@ -2161,13 +2166,14 @@ Y.extend(COMMENTMENU, M.assignfeedback_editpdf.dropdown, {
                                                '<img src="' + M.util.image_url('t/delete', 'core') + '" ' +
                                                'alt="' + M.util.get_string('deletecomment', 'assignfeedback_editpdf') + '"/>' +
                                                '</a>');
+            linkitem.setAttribute('title', quickcomment.rawtext);
             listitem.append(linkitem);
             listitem.append(deletelinkitem);
 
             commentlinks.append(listitem);
 
-            linkitem.on('click', comment.set_from_quick_comment, comment, quickcomment);
-            linkitem.on('key', comment.set_from_quick_comment, 'space,enter', comment, quickcomment);
+            listitem.on('click', comment.set_from_quick_comment, comment, quickcomment);
+            listitem.on('key', comment.set_from_quick_comment, 'space,enter', comment, quickcomment);
 
             deletelinkitem.on('click', comment.remove_from_quicklist, comment, quickcomment);
             deletelinkitem.on('key', comment.remove_from_quicklist, 'space,enter', comment, quickcomment);
@@ -2247,7 +2253,7 @@ Y.extend(COMMENTSEARCH, M.core.dialogue, {
         placeholder = M.util.get_string('filter', 'assignfeedback_editpdf');
         commentfilter = Y.Node.create('<input type="text" size="20" placeholder="' + placeholder + '"/>');
         container.append(commentfilter);
-        commentlist = Y.Node.create('<ul role="menu" class="assignfeedback_editpdf_menu"/>');
+        commentlist = Y.Node.create('<ul role="menu" class="assignfeedback_editpdf_search"/>');
         container.append(commentlist);
 
         commentfilter.on('keyup', this.filter_search_comments, this);
@@ -2298,18 +2304,20 @@ Y.extend(COMMENTSEARCH, M.core.dialogue, {
         e.preventDefault();
         var target = e.target.ancestor('li'),
             comment = target.getData('comment'),
-            editor = this.get('editor'),
-            pageselect = editor.get_dialogue_element(SELECTOR.PAGESELECT);
+            editor = this.get('editor');
 
         this.hide();
 
-        editor.currentpage = parseInt(pageselect.get('value'), 10);
+        comment.pageno = comment.clean().pageno;
         if (comment.pageno !== editor.currentpage) {
             // Comment is on a different page.
             editor.currentpage = comment.pageno;
             editor.change_page();
         }
-        comment.drawable.nodes[0].one('textarea').focus();
+
+        comment.node = comment.drawable.nodes[0].one('textarea');
+        comment.node.ancestor('div').removeClass('commentcollapsed');
+        comment.node.focus();
     },
 
     /**
@@ -2519,7 +2527,7 @@ var COMMENT = function(editor, gradeid, pageno, x, y, width, colour, rawtext) {
             y: parseInt(this.y, 10),
             width: parseInt(this.width, 10),
             rawtext: this.rawtext,
-            pageno: this.currentpage,
+            pageno: parseInt(this.pageno, 10),
             colour: this.colour
         };
     };
@@ -2536,6 +2544,8 @@ var COMMENT = function(editor, gradeid, pageno, x, y, width, colour, rawtext) {
             node,
             drawingregion = this.editor.get_dialogue_element(SELECTOR.DRAWINGREGION),
             container,
+            label,
+            marker,
             menu,
             position,
             scrollheight;
@@ -2543,10 +2553,21 @@ var COMMENT = function(editor, gradeid, pageno, x, y, width, colour, rawtext) {
         // Lets add a contenteditable div.
         node = Y.Node.create('<textarea/>');
         container = Y.Node.create('<div class="commentdrawable"/>');
+        label = Y.Node.create('<label/>');
+        marker = Y.Node.create('<svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.5 -0.5 13 13" ' +
+                'preserveAspectRatio="xMinYMin meet">' +
+                '<path d="M11 0H1C.4 0 0 .4 0 1v6c0 .6.4 1 1 1h1v4l4-4h5c.6 0 1-.4 1-1V1c0-.6-.4-1-1-1z" ' +
+                'fill="currentColor" opacity="0.9" stroke="rgb(153, 153, 153)" stroke-width="0.5"/></svg>');
         menu = Y.Node.create('<a href="#"><img src="' + M.util.image_url('t/contextmenu', 'core') + '"/></a>');
 
         this.menulink = menu;
-        container.append(node);
+        container.append(label);
+        label.append(node);
+        container.append(marker);
+        container.setAttribute('tabindex', '-1');
+        label.setAttribute('tabindex', '0');
+        node.setAttribute('tabindex', '-1');
+        menu.setAttribute('tabindex', '0');
 
         if (!this.editor.get('readonly')) {
             container.append(menu);
@@ -2565,7 +2586,7 @@ var COMMENT = function(editor, gradeid, pageno, x, y, width, colour, rawtext) {
         });
 
         drawingregion.append(container);
-        container.setStyle('position', 'absolute');
+        container.setStyle('position', 'relative');
         container.setX(position.x);
         container.setY(position.y);
         drawable.store_position(container, position.x, position.y);
@@ -2576,11 +2597,12 @@ var COMMENT = function(editor, gradeid, pageno, x, y, width, colour, rawtext) {
             'height': scrollheight + 'px',
             'overflow': 'hidden'
         });
-        if (!this.editor.get('readonly')) {
-            this.attach_events(node, menu);
-        }
+        marker.setStyle('color', COMMENTCOLOUR[this.colour]);
+        this.attach_events(node, menu);
         if (focus) {
             node.focus();
+        } else if (editor.collapsecomments) {
+            container.addClass('commentcollapsed');
         }
         this.drawable = drawable;
 
@@ -2608,88 +2630,240 @@ var COMMENT = function(editor, gradeid, pageno, x, y, width, colour, rawtext) {
      * @param menu - The Y.Node representing the menu.
      */
     this.attach_events = function(node, menu) {
-        // Save the text on blur.
-        node.on('blur', function() {
-            // Save the changes back to the comment.
-            this.rawtext = node.get('value');
-            this.width = parseInt(node.getStyle('width'), 10);
+        var container = node.ancestor('div'),
+            label = node.ancestor('label'),
+            marker = label.next('svg');
 
-            // Trim.
-            if (this.rawtext.replace(/^\s+|\s+$/g, "") === '') {
-                // Delete empty comments.
-                this.deleteme = true;
-                Y.later(400, this, this.delete_comment_later);
+        // Function to collapse a comment to a marker icon.
+        node.collapse = function(delay) {
+            node.collapse.delay = Y.later(delay, node, function() {
+                if (editor.collapsecomments) {
+                    container.addClass('commentcollapsed');
+                }
+            });
+        };
+
+        // Function to expand a comment.
+        node.expand = function() {
+            if (node.getData('dragging') !== true) {
+                if (node.collapse.delay) {
+                    node.collapse.delay.cancel();
+                }
+                container.removeClass('commentcollapsed');
             }
-            this.editor.save_current_page();
-            this.editor.editingcomment = false;
+        };
+
+        // Expand comment on mouse over (under certain conditions) or click/tap.
+        container.on('mouseenter', function() {
+            if (editor.currentedit.tool === 'comment' || editor.currentedit.tool === 'select' || this.editor.get('readonly')) {
+                node.expand();
+            }
+        }, this);
+        container.on('click|tap', function() {
+            node.expand();
+            node.focus();
         }, this);
 
-        // For delegated event handler.
-        menu.setData('comment', this);
-
-        node.on('keyup', function() {
-            var scrollheight = node.get('scrollHeight'),
-                height = parseInt(node.getStyle('height'), 10);
-
-            // Webkit scrollheight fix.
-            if (scrollheight === height + 8) {
-                scrollheight -= 8;
+        // Functions to capture reverse tabbing events.
+        node.on('keyup', function(e) {
+            if (e.keyCode === 9 && e.shiftKey && menu.getAttribute('tabindex') === '0') {
+                // User landed here via Shift+Tab (but not from this comment's menu).
+                menu.focus();
             }
-            node.setStyle('height', scrollheight + 'px');
-
-        });
-
-        node.on('gesturemovestart', function(e) {
-            if (editor.currentedit.tool === 'select') {
-                e.preventDefault();
-                node.setData('dragging', true);
-                node.setData('offsetx', e.clientX - node.getX());
-                node.setData('offsety', e.clientY - node.getY());
+            menu.setAttribute('tabindex', '0');
+        }, this);
+        menu.on('keydown', function(e) {
+            if (e.keyCode === 9 && e.shiftKey) {
+                // User is tabbing back to the comment node from its own menu.
+                menu.setAttribute('tabindex', '-1');
             }
-        });
-        node.on('gesturemoveend', function() {
-            if (editor.currentedit.tool === 'select') {
-                node.setData('dragging', false);
+        }, this);
+
+        // Comment becomes "active" on label or menu focus.
+        label.on('focus', function() {
+            node.active = true;
+            if (node.collapse.delay) {
+                node.collapse.delay.cancel();
+            }
+            // Give comment a tabindex to prevent focus outline being suppressed.
+            node.setAttribute('tabindex', '0');
+            // Expand comment and pass focus to it.
+            node.expand();
+            node.focus();
+            // Now remove label tabindex so user can reverse tab past it.
+            label.setAttribute('tabindex', '-1');
+        }, this);
+        menu.on('focus', function() {
+            node.active = true;
+            if (node.collapse.delay) {
+                node.collapse.delay.cancel();
+            }
+            this.deleteme = false;
+            // Restore label tabindex so user can tab back to it from menu.
+            label.setAttribute('tabindex', '0');
+        }, this);
+
+        // Always restore the default tabindex states when moving away.
+        node.on('blur', function() {
+            node.setAttribute('tabindex', '-1');
+        }, this);
+        label.on('blur', function() {
+            label.setAttribute('tabindex', '0');
+        }, this);
+
+        // Collapse comment on mouse out if not currently active.
+        container.on('mouseleave', function() {
+            if (editor.collapsecomments && node.active !== true) {
+                node.collapse(400);
+            }
+        }, this);
+
+        // Collapse comment on blur.
+        container.on('blur', function() {
+            node.active = false;
+            node.collapse(800);
+        }, this);
+
+        if (!this.editor.get('readonly')) {
+            // Save the text on blur.
+            node.on('blur', function() {
+                // Save the changes back to the comment.
+                this.rawtext = node.get('value');
+                this.width = parseInt(node.getStyle('width'), 10);
+
+                // Trim.
+                if (this.rawtext.replace(/^\s+|\s+$/g, "") === '') {
+                    // Delete empty comments.
+                    this.deleteme = true;
+                    Y.later(400, this, this.delete_comment_later);
+                }
                 this.editor.save_current_page();
-            }
-        }, null, this);
-        node.on('gesturemove', function(e) {
-            if (editor.currentedit.tool === 'select') {
-                var x = e.clientX - node.getData('offsetx'),
-                    y = e.clientY - node.getData('offsety'),
-                    nodewidth,
-                    nodeheight,
-                    newlocation,
-                    windowlocation,
-                    bounds;
+                this.editor.editingcomment = false;
+            }, this);
 
-                nodewidth = parseInt(node.getStyle('width'), 10);
-                nodeheight = parseInt(node.getStyle('height'), 10);
+            // For delegated event handler.
+            menu.setData('comment', this);
 
-                newlocation = this.editor.get_canvas_coordinates(new M.assignfeedback_editpdf.point(x, y));
-                bounds = this.editor.get_canvas_bounds(true);
-                bounds.x = 0;
-                bounds.y = 0;
+            node.on('keyup', function() {
+                node.setStyle('height', 'auto');
+                var scrollheight = node.get('scrollHeight'),
+                    height = parseInt(node.getStyle('height'), 10);
 
-                bounds.width -= nodewidth + 42;
-                bounds.height -= nodeheight + 8;
-                // Clip to the window size - the comment size.
-                newlocation.clip(bounds);
+                // Webkit scrollheight fix.
+                if (scrollheight === height + 8) {
+                    scrollheight -= 8;
+                }
+                node.setStyle('height', scrollheight + 'px');
+            });
 
-                this.x = newlocation.x;
-                this.y = newlocation.y;
+            node.on('gesturemovestart', function(e) {
+                if (editor.currentedit.tool === 'select') {
+                    e.preventDefault();
+                    if (editor.collapsecomments) {
+                        node.setData('offsetx', 8);
+                        node.setData('offsety', 8);
+                    } else {
+                        node.setData('offsetx', e.clientX - container.getX());
+                        node.setData('offsety', e.clientY - container.getY());
+                    }
+                }
+            });
+            node.on('gesturemove', function(e) {
+                if (editor.currentedit.tool === 'select') {
+                    var x = e.clientX - node.getData('offsetx'),
+                        y = e.clientY - node.getData('offsety'),
+                        newlocation,
+                        windowlocation,
+                        bounds;
 
-                windowlocation = this.editor.get_window_coordinates(newlocation);
-                node.ancestor().setX(windowlocation.x);
-                node.ancestor().setY(windowlocation.y);
-                this.drawable.store_position(node.ancestor(), windowlocation.x, windowlocation.y);
-            }
-        }, null, this);
+                    if (node.getData('dragging') !== true) {
+                        // Collapse comment during move.
+                        node.collapse(0);
+                        node.setData('dragging', true);
+                    }
 
-        this.menu = new M.assignfeedback_editpdf.commentmenu({
-            buttonNode: this.menulink,
-            comment: this
-        });
+                    newlocation = this.editor.get_canvas_coordinates(new M.assignfeedback_editpdf.point(x, y));
+                    bounds = this.editor.get_canvas_bounds(true);
+                    bounds.x = 0;
+                    bounds.y = 0;
+
+                    bounds.width -= 24;
+                    bounds.height -= 24;
+                    // Clip to the window size - the comment icon size.
+                    newlocation.clip(bounds);
+
+                    this.x = newlocation.x;
+                    this.y = newlocation.y;
+
+                    windowlocation = this.editor.get_window_coordinates(newlocation);
+                    container.setX(windowlocation.x);
+                    container.setY(windowlocation.y);
+                    this.drawable.store_position(container, windowlocation.x, windowlocation.y);
+                }
+            }, null, this);
+            node.on('gesturemoveend', function() {
+                if (editor.currentedit.tool === 'select') {
+                    if (node.getData('dragging') === true) {
+                        node.setData('dragging', false);
+                    }
+                    this.editor.save_current_page();
+                }
+            }, null, this);
+            marker.on('gesturemovestart', function(e) {
+                if (editor.currentedit.tool === 'select') {
+                    e.preventDefault();
+                    node.setData('offsetx', e.clientX - container.getX());
+                    node.setData('offsety', e.clientY - container.getY());
+                    node.expand();
+                }
+            });
+            marker.on('gesturemove', function(e) {
+                if (editor.currentedit.tool === 'select') {
+                    var x = e.clientX - node.getData('offsetx'),
+                        y = e.clientY - node.getData('offsety'),
+                        newlocation,
+                        windowlocation,
+                        bounds;
+
+                    if (node.getData('dragging') !== true) {
+                        // Collapse comment during move.
+                        node.collapse(100);
+                        node.setData('dragging', true);
+                    }
+
+                    newlocation = this.editor.get_canvas_coordinates(new M.assignfeedback_editpdf.point(x, y));
+                    bounds = this.editor.get_canvas_bounds(true);
+                    bounds.x = 0;
+                    bounds.y = 0;
+
+                    bounds.width -= 24;
+                    bounds.height -= 24;
+                    // Clip to the window size - the comment icon size.
+                    newlocation.clip(bounds);
+
+                    this.x = newlocation.x;
+                    this.y = newlocation.y;
+
+                    windowlocation = this.editor.get_window_coordinates(newlocation);
+                    container.setX(windowlocation.x);
+                    container.setY(windowlocation.y);
+                    this.drawable.store_position(container, windowlocation.x, windowlocation.y);
+                }
+            }, null, this);
+            marker.on('gesturemoveend', function() {
+                if (editor.currentedit.tool === 'select') {
+                    if (node.getData('dragging') === true) {
+                        node.setData('dragging', false);
+                    }
+                    this.editor.save_current_page();
+                }
+            }, null, this);
+
+            this.menu = new M.assignfeedback_editpdf.commentmenu({
+                buttonNode: this.menulink,
+                comment: this
+            });
+        }
     };
 
     /**
@@ -2719,6 +2893,7 @@ var COMMENT = function(editor, gradeid, pageno, x, y, width, colour, rawtext) {
      */
     this.remove_from_quicklist = function(e, quickcomment) {
         e.preventDefault();
+        e.stopPropagation();
 
         this.menu.hide();
 
@@ -2736,6 +2911,7 @@ var COMMENT = function(editor, gradeid, pageno, x, y, width, colour, rawtext) {
         e.preventDefault();
 
         this.menu.hide();
+        this.deleteme = false;
 
         this.rawtext = quickcomment.rawtext;
         this.width = quickcomment.width;
@@ -2744,6 +2920,10 @@ var COMMENT = function(editor, gradeid, pageno, x, y, width, colour, rawtext) {
         this.editor.save_current_page();
 
         this.editor.redraw();
+
+        this.node = this.drawable.nodes[0].one('textarea');
+        this.node.ancestor('div').removeClass('commentcollapsed');
+        this.node.focus();
     };
 
     /**
@@ -2976,6 +3156,9 @@ var QUICKCOMMENTLIST = function(editor) {
                                                                                      jsondata.width,
                                                                                      jsondata.colour);
                             this.comments.push(quickcomment);
+                            this.comments.sort(function(a, b) {
+                                return a.rawtext.localeCompare(b.rawtext);
+                            });
                         }
                     } catch (e) {
                         return new M.core.exception(e);
@@ -3072,6 +3255,10 @@ var QUICKCOMMENTLIST = function(editor) {
                                                                                              comment.colour);
                                 this.comments.push(quickcomment);
                             }, this);
+
+                            this.comments.sort(function(a, b) {
+                                return a.rawtext.localeCompare(b.rawtext);
+                            });
                         }
                     } catch (e) {
                         return new M.core.exception(e);
@@ -3172,6 +3359,15 @@ EDITOR.prototype = {
     pages: [],
 
     /**
+     * The reported status of the document.
+     *
+     * @property documentstatus
+     * @type int
+     * @protected
+     */
+    documentstatus: 0,
+
+    /**
      * The yui node for the loading icon.
      *
      * @property loadingicon
@@ -3242,6 +3438,14 @@ EDITOR.prototype = {
     currentannotation: null,
 
     /**
+     * Track the previous annotation so we can remove selection highlights.
+     * @property lastannotation
+     * @type M.assignfeedback_editpdf.annotation
+     * @protected
+     */
+    lastannotation: null,
+
+    /**
      * Last selected annotation tool
      * @property lastannotationtool
      * @type String
@@ -3291,6 +3495,15 @@ EDITOR.prototype = {
      * @public
      */
     editingcomment: false,
+
+    /**
+     * Should inactive comments be collapsed?
+     *
+     * @property collapsecomments
+     * @type Boolean
+     * @public
+     */
+    collapsecomments: true,
 
     /**
      * Called during the initialisation process of the object.
@@ -3430,7 +3643,7 @@ EDITOR.prototype = {
             this.refresh_button_state();
         }
 
-        this.load_all_pages();
+        this.start_generation();
     },
 
     /**
@@ -3472,7 +3685,7 @@ EDITOR.prototype = {
                 this.refresh_button_state();
             }
 
-            this.load_all_pages();
+            this.start_generation();
             drawingcanvas.on('windowresize', this.resize, this);
 
             resize = false;
@@ -3489,21 +3702,29 @@ EDITOR.prototype = {
 
     /**
      * Called to load the information and annotations for all pages.
-     * @method load_all_pages
+     *
+     * @method start_generation
      */
-    load_all_pages: function() {
-        var ajaxurl = AJAXBASE,
-            config,
-            checkconversionstatus,
-            ajax_error_total;
+    start_generation: function() {
+        this.poll_document_conversion_status();
+    },
 
-        config = {
+    /**
+     * Poll the current document conversion status and start the next step
+     * in the process.
+     *
+     * @method poll_document_conversion_status
+     */
+    poll_document_conversion_status: function() {
+        var requestUserId = this.get('userid');
+
+        Y.io(AJAXBASE, {
             method: 'get',
             context: this,
             sync: false,
             data: {
                 sesskey: M.cfg.sesskey,
-                action: 'loadallpages',
+                action: 'pollconversions',
                 userid: this.get('userid'),
                 attemptnumber: this.get('attemptnumber'),
                 assignmentid: this.get('assignmentid'),
@@ -3511,109 +3732,154 @@ EDITOR.prototype = {
             },
             on: {
                 success: function(tid, response) {
-                    this.all_pages_loaded(response.responseText);
+                    var currentUserRegion = Y.one(SELECTOR.USERINFOREGION);
+                    if (currentUserRegion) {
+                        var currentUserId = currentUserRegion.getAttribute('data-userid');
+                        if (currentUserId && (currentUserId != requestUserId)) {
+                            // Polling conversion status needs to abort because
+                            // the current user changed.
+                            return;
+                        }
+                    }
+                    var data = this.handle_response_data(response),
+                        poll = false;
+                    if (data) {
+                        this.documentstatus = data.status;
+                        if (data.status === 0) {
+                            // The combined document is still waiting for input to be ready.
+                            poll = true;
+
+                        } else if (data.status === 1 || data.status === 3) {
+                            // The combine document is ready for conversion into a single PDF.
+                            poll = true;
+
+                        } else if (data.status === 2 || data.status === -1) {
+                            // The combined PDF is ready.
+                            // We now know the page count and can convert it to a set of images.
+                            this.pagecount = data.pagecount;
+
+                            if (data.pageready == data.pagecount) {
+                                this.prepare_pages_for_display(data);
+                            } else {
+                                // Some pages are not ready yet.
+                                // Note: We use a different polling process here which does not block.
+                                this.update_page_load_progress();
+
+                                // Fetch the images for the combined document.
+                                this.start_document_to_image_conversion();
+                            }
+                        }
+
+                        if (poll) {
+                            // Check again in 1 second.
+                            Y.later(1000, this, this.poll_document_conversion_status);
+                        }
+                    }
                 },
                 failure: function(tid, response) {
                     return new M.core.exception(response.responseText);
                 }
             }
-        };
+        });
+    },
 
-        Y.io(ajaxurl, config);
-
-        // If pages are not loaded, check PDF conversion status for the progress bar.
-        if (this.pagecount <= 0) {
-            checkconversionstatus = {
-                method: 'get',
-                context: this,
-                sync: false,
-                data: {
-                    sesskey: M.cfg.sesskey,
-                    action: 'conversionstatus',
-                    userid: this.get('userid'),
-                    attemptnumber: this.get('attemptnumber'),
-                    assignmentid: this.get('assignmentid')
-                },
-                on: {
-                    success: function(tid, response) {
-                        ajax_error_total = 0;
-                        if (this.pagecount === 0) {
-                            var pagetotal = this.get('pagetotal');
-
-                            // Update the progress bar.
-                            var progressbarcontainer = this.get_dialogue_element(SELECTOR.PROGRESSBARCONTAINER);
-                            var progressbar = progressbarcontainer.one('.bar');
-                            if (progressbar) {
-                                // Calculate progress.
-                                var progress = (response.response / pagetotal) * 100;
-                                progressbar.setStyle('width', progress + '%');
-                                progressbarcontainer.setAttribute('aria-valuenow', progress);
-                            }
-
-                            // New ajax request delayed of a second.
-                            M.util.js_pending('checkconversionstatus');
-                            Y.later(1000, this, function() {
-                                M.util.js_complete('checkconversionstatus');
-                                Y.io(AJAXBASEPROGRESS, checkconversionstatus);
-                            });
+    /**
+     * Spwan the PDF to Image conversion on the server.
+     *
+     * @method get_images_for_documents
+     */
+    start_document_to_image_conversion: function() {
+        Y.io(AJAXBASE, {
+            method: 'get',
+            context: this,
+            sync: false,
+            data: {
+                sesskey: M.cfg.sesskey,
+                action: 'pollconversions',
+                userid: this.get('userid'),
+                attemptnumber: this.get('attemptnumber'),
+                assignmentid: this.get('assignmentid'),
+                readonly: this.get('readonly') ? 1 : 0
+            },
+            on: {
+                success: function(tid, response) {
+                    var data = this.handle_response_data(response);
+                    if (data) {
+                        this.documentstatus = data.status;
+                        if (data.status === 2) {
+                            // The pages are ready. Add all of the annotations to them.
+                            this.prepare_pages_for_display(data);
                         }
-                    },
-                    failure: function(tid, response) {
-                        ajax_error_total = ajax_error_total + 1;
-                        // We only continue on error if the all pages were not generated,
-                        // and if the ajax call did not produce 5 errors in the row.
-                        if (this.pagecount === 0 && ajax_error_total < 5) {
-                            M.util.js_pending('checkconversionstatus');
-                            Y.later(1000, this, function() {
-                                M.util.js_complete('checkconversionstatus');
-                                Y.io(AJAXBASEPROGRESS, checkconversionstatus);
-                            });
-                        }
-                        return new M.core.exception(response.responseText);
                     }
+                },
+                failure: function(tid, response) {
+                    return new M.core.exception(response.responseText);
                 }
-            };
-            // We start the AJAX "generated page total number" call a second later to give a chance to
-            // the AJAX "combined pdf generation" call to clean the previous submission images.
-            M.util.js_pending('checkconversionstatus');
-            Y.later(1000, this, function() {
-                ajax_error_total = 0;
-                M.util.js_complete('checkconversionstatus');
-                Y.io(AJAXBASEPROGRESS, checkconversionstatus);
-            });
+            }
+        });
+    },
+
+    /**
+     * Display an error in a small part of the page (don't block everything).
+     *
+     * @param string The error text.
+     * @param boolean dismissable Not critical messages can be removed after a short display.
+     * @protected
+     * @method warning
+     */
+    warning: function(message, dismissable) {
+        var icontemplate = this.get_dialogue_element(SELECTOR.ICONMESSAGECONTAINER);
+        var warningregion = this.get_dialogue_element(SELECTOR.WARNINGMESSAGECONTAINER);
+        var delay = 15, duration = 1;
+        var messageclasses = 'assignfeedback_editpdf_warningmessages alert alert-warning';
+        if (dismissable) {
+            delay = 4;
+            messageclasses = 'assignfeedback_editpdf_warningmessages alert alert-info';
         }
+        var warningelement = Y.Node.create('<div class="' + messageclasses + '" role="alert"></div>');
+
+        // Copy info icon template.
+        warningelement.append(icontemplate.one('*').cloneNode());
+
+        // Append the message.
+        warningelement.append(message);
+
+        // Add the entire warning to the container.
+        warningregion.prepend(warningelement);
+
+        // Remove the message after a short delay.
+        warningelement.transition(
+            {
+                duration: duration,
+                delay: delay,
+                opacity: 0
+            },
+            function() {
+                warningelement.remove();
+            }
+        );
     },
 
     /**
      * The info about all pages in the pdf has been returned.
+     *
      * @param string The ajax response as text.
      * @protected
-     * @method all_pages_loaded
+     * @method prepare_pages_for_display
      */
-    all_pages_loaded: function(responsetext) {
-        var data, i, j, comment, error;
-        try {
-            data = Y.JSON.parse(responsetext);
-            if (data.error || !data.pagecount) {
-                if (this.dialogue) {
-                    this.dialogue.hide();
-                }
-                // Display alert dialogue.
-                error = new M.core.alert({message: M.util.get_string('cannotopenpdf', 'assignfeedback_editpdf')});
-                error.show();
-                return;
-            }
-        } catch (e) {
+    prepare_pages_for_display: function(data) {
+        var i, j, comment, error, annotation, readonly;
+
+        if (!data.pagecount) {
             if (this.dialogue) {
                 this.dialogue.hide();
             }
             // Display alert dialogue.
-            error = new M.core.alert({title: M.util.get_string('cannotopenpdf', 'assignfeedback_editpdf')});
+            error = new M.core.alert({message: M.util.get_string('cannotopenpdf', 'assignfeedback_editpdf')});
             error.show();
             return;
         }
 
-        this.pagecount = data.pagecount;
         this.pages = data.pages;
 
         for (i = 0; i < this.pages.length; i++) {
@@ -3629,9 +3895,15 @@ EDITOR.prototype = {
                                                                                  comment.rawtext);
             }
             for (j = 0; j < this.pages[i].annotations.length; j++) {
-                data = this.pages[i].annotations[j];
-                this.pages[i].annotations[j] = this.create_annotation(data.type, data);
+                annotation = this.pages[i].annotations[j];
+                this.pages[i].annotations[j] = this.create_annotation(annotation.type, annotation);
             }
+        }
+
+        readonly = this.get('readonly');
+        if (!readonly && data.partial) {
+            // Warn about non converted files, but only for teachers.
+            this.warning(M.util.get_string('partialwarning', 'assignfeedback_editpdf'), false);
         }
 
         // Update the ui.
@@ -3641,6 +3913,116 @@ EDITOR.prototype = {
         this.setup_navigation();
         this.setup_toolbar();
         this.change_page();
+    },
+
+    /**
+     * Fetch the page images.
+     *
+     * @method update_page_load_progress
+     */
+    update_page_load_progress: function() {
+        var checkconversionstatus,
+            ajax_error_total = 0,
+            progressbar = this.get_dialogue_element(SELECTOR.PROGRESSBARCONTAINER + ' .bar');
+
+        if (!progressbar) {
+            return;
+        }
+
+        // If pages are not loaded, check PDF conversion status for the progress bar.
+        checkconversionstatus = {
+            method: 'get',
+            context: this,
+            sync: false,
+            data: {
+                sesskey: M.cfg.sesskey,
+                action: 'conversionstatus',
+                userid: this.get('userid'),
+                attemptnumber: this.get('attemptnumber'),
+                assignmentid: this.get('assignmentid')
+            },
+            on: {
+                success: function(tid, response) {
+                    ajax_error_total = 0;
+
+                    var progress = 0;
+                    var progressbar = this.get_dialogue_element(SELECTOR.PROGRESSBARCONTAINER + ' .bar');
+                    if (progressbar) {
+                        // Calculate progress.
+                        progress = (response.response / this.pagecount) * 100;
+                        progressbar.setStyle('width', progress + '%');
+                        progressbar.ancestor(SELECTOR.PROGRESSBARCONTAINER).setAttribute('aria-valuenow', progress);
+
+                        if (progress < 100) {
+                            // Keep polling until all pages are generated.
+                            M.util.js_pending('checkconversionstatus');
+                            Y.later(1000, this, function() {
+                                M.util.js_complete('checkconversionstatus');
+                                Y.io(AJAXBASEPROGRESS, checkconversionstatus);
+                            });
+                        }
+                    }
+                },
+                failure: function(tid, response) {
+                    ajax_error_total = ajax_error_total + 1;
+                    // We only continue on error if the all pages were not generated,
+                    // and if the ajax call did not produce 5 errors in the row.
+                    if (this.pagecount === 0 && ajax_error_total < 5) {
+                        M.util.js_pending('checkconversionstatus');
+                        Y.later(1000, this, function() {
+                            M.util.js_complete('checkconversionstatus');
+                            Y.io(AJAXBASEPROGRESS, checkconversionstatus);
+                        });
+                    }
+                    return new M.core.exception(response.responseText);
+                }
+            }
+        };
+        // We start the AJAX "generated page total number" call a second later to give a chance to
+        // the AJAX "combined pdf generation" call to clean the previous submission images.
+        M.util.js_pending('checkconversionstatus');
+        Y.later(1000, this, function() {
+            ajax_error_total = 0;
+            M.util.js_complete('checkconversionstatus');
+            Y.io(AJAXBASEPROGRESS, checkconversionstatus);
+        });
+    },
+
+    /**
+     * Handle response data.
+     *
+     * @method  handle_response_data
+     * @param   {object} response
+     * @return  {object}
+     */
+    handle_response_data: function(response) {
+        var data;
+        try {
+            data = Y.JSON.parse(response.responseText);
+            if (data.error) {
+                if (this.dialogue) {
+                    this.dialogue.hide();
+                }
+
+                new M.core.alert({
+                    message: M.util.get_string('cannotopenpdf', 'assignfeedback_editpdf'),
+                    visible: true
+                });
+            } else {
+                return data;
+            }
+        } catch (e) {
+            if (this.dialogue) {
+                this.dialogue.hide();
+            }
+
+            new M.core.alert({
+                title: M.util.get_string('cannotopenpdf', 'assignfeedback_editpdf'),
+                visible: true
+            });
+        }
+
+        return;
     },
 
     /**
@@ -3673,6 +4055,7 @@ EDITOR.prototype = {
             commentcolourbutton,
             annotationcolourbutton,
             searchcommentsbutton,
+            expcolcommentsbutton,
             currentstampbutton,
             stampfiles,
             picker,
@@ -3682,9 +4065,15 @@ EDITOR.prototype = {
         searchcommentsbutton.on('click', this.open_search_comments, this);
         searchcommentsbutton.on('key', this.open_search_comments, 'down:13', this);
 
+        expcolcommentsbutton = this.get_dialogue_element(SELECTOR.EXPCOLCOMMENTSBUTTON);
+        expcolcommentsbutton.on('click', this.expandCollapseComments, this);
+        expcolcommentsbutton.on('key', this.expandCollapseComments, 'down:13', this);
+
         if (this.get('readonly')) {
             return;
         }
+        this.disable_touch_scroll();
+
         // Setup the tool buttons.
         Y.each(TOOLSELECTOR, function(selector, tool) {
             toolnode = this.get_dialogue_element(selector);
@@ -3778,6 +4167,7 @@ EDITOR.prototype = {
         if (tool !== "comment" && tool !== "select" && tool !== "drag" && tool !== "stamp") {
             this.lastannotationtool = tool;
         }
+
         this.refresh_button_state();
     },
 
@@ -3864,15 +4254,13 @@ EDITOR.prototype = {
      * @method edit_start
      */
     edit_start: function(e) {
-        e.preventDefault();
         var canvas = this.get_dialogue_element(SELECTOR.DRAWINGCANVAS),
             offset = canvas.getXY(),
             scrolltop = canvas.get('docScrollY'),
             scrollleft = canvas.get('docScrollX'),
             point = {x: e.clientX - offset[0] + scrollleft,
                      y: e.clientY - offset[1] + scrolltop},
-            selected = false,
-            lastannotation;
+            selected = false;
 
         // Ignore right mouse click.
         if (e.button === 3) {
@@ -3904,13 +4292,13 @@ EDITOR.prototype = {
             });
 
             if (selected) {
-                lastannotation = this.currentannotation;
+                this.lastannotation = this.currentannotation;
                 this.currentannotation = selected;
-                if (lastannotation && lastannotation !== selected) {
+                if (this.lastannotation && this.lastannotation !== selected) {
                     // Redraw the last selected annotation to remove the highlight.
-                    if (lastannotation.drawable) {
-                        lastannotation.drawable.erase();
-                        this.drawables.push(lastannotation.draw());
+                    if (this.lastannotation.drawable) {
+                        this.lastannotation.drawable.erase();
+                        this.drawables.push(this.lastannotation.draw());
                     }
                 }
                 // Redraw the newly selected annotation to show the highlight.
@@ -3918,6 +4306,15 @@ EDITOR.prototype = {
                     this.currentannotation.drawable.erase();
                 }
                 this.drawables.push(this.currentannotation.draw());
+            } else {
+                this.lastannotation = this.currentannotation;
+                this.currentannotation = null;
+
+                // Redraw the last selected annotation to remove the highlight.
+                if (this.lastannotation && this.lastannotation.drawable) {
+                    this.lastannotation.drawable.erase();
+                    this.drawables.push(this.lastannotation.draw());
+                }
             }
         }
         if (this.currentannotation) {
@@ -4083,11 +4480,9 @@ EDITOR.prototype = {
      * @method save_current_page
      */
     save_current_page: function() {
+        this.clear_warnings(false);
         var ajaxurl = AJAXBASE,
-            pageselect = this.get_dialogue_element(SELECTOR.PAGESELECT),
             config;
-
-        this.currentpage = parseInt(pageselect.get('value'), 10);
 
         config = {
             method: 'post',
@@ -4110,16 +4505,9 @@ EDITOR.prototype = {
                         if (jsondata.error) {
                             return new M.core.ajaxException(jsondata);
                         }
+                        // Show warning that we have not saved the feedback.
                         Y.one(SELECTOR.UNSAVEDCHANGESINPUT).set('value', 'true');
-                        Y.one(SELECTOR.UNSAVEDCHANGESDIV).setStyle('opacity', 1);
-                        Y.one(SELECTOR.UNSAVEDCHANGESDIV).setStyle('display', 'inline-block');
-                        Y.one(SELECTOR.UNSAVEDCHANGESDIV).transition({
-                            duration: 1,
-                            delay: 2,
-                            opacity: 0
-                        }, function() {
-                            Y.one(SELECTOR.UNSAVEDCHANGESDIV).setStyle('display', 'none');
-                        });
+                        this.warning(M.util.get_string('draftchangessaved', 'assignfeedback_editpdf'), true);
                     } catch (e) {
                         return new M.core.exception(e);
                     }
@@ -4131,7 +4519,6 @@ EDITOR.prototype = {
         };
 
         Y.io(ajaxurl, config);
-
     },
 
     /**
@@ -4150,6 +4537,24 @@ EDITOR.prototype = {
 
         this.searchcommentswindow.show();
         e.preventDefault();
+    },
+
+    /**
+     * Toggle function to expand/collapse all comments on page.
+     *
+     * @protected
+     * @method expandCollapseComments
+     */
+    expandCollapseComments: function() {
+        var comments = Y.all('.commentdrawable');
+
+        if (this.collapsecomments) {
+            this.collapsecomments = false;
+            comments.removeClass('commentcollapsed');
+        } else {
+            this.collapsecomments = true;
+            comments.addClass('commentcollapsed');
+        }
     },
 
     /**
@@ -4174,6 +4579,22 @@ EDITOR.prototype = {
         }
         for (i = 0; i < page.comments.length; i++) {
             this.drawables.push(page.comments[i].draw(false));
+        }
+    },
+
+    /**
+     * Clear all current warning messages from display.
+     * @protected
+     * @method clear_warnings
+     * @param {Boolean} allwarnings If true, all previous warnings are removed.
+     */
+    clear_warnings: function(allwarnings) {
+        // Remove all warning messages, they may not relate to the current document or page anymore.
+        var warningregion = this.get_dialogue_element(SELECTOR.WARNINGMESSAGECONTAINER);
+        if (allwarnings) {
+            warningregion.empty();
+        } else {
+            warningregion.all('.alert-info').remove(true);
         }
     },
 
@@ -4203,10 +4624,13 @@ EDITOR.prototype = {
         }
 
         page = this.pages[this.currentpage];
-        this.loadingicon.hide();
+        if (this.loadingicon) {
+            this.loadingicon.hide();
+        }
         drawingcanvas.setStyle('backgroundImage', 'url("' + page.url + '")');
         drawingcanvas.setStyle('width', page.width + 'px');
         drawingcanvas.setStyle('height', page.height + 'px');
+        drawingcanvas.scrollIntoView();
 
         // Update page select.
         this.get_dialogue_element(SELECTOR.PAGESELECT).set('selectedIndex', this.currentpage);
@@ -4243,6 +4667,7 @@ EDITOR.prototype = {
         pageselect.removeAttribute('disabled');
         pageselect.on('change', function() {
             this.currentpage = pageselect.get('value');
+            this.clear_warnings(false);
             this.change_page();
         }, this);
 
@@ -4262,12 +4687,11 @@ EDITOR.prototype = {
      */
     previous_page: function(e) {
         e.preventDefault();
-        var pageselect = this.get_dialogue_element(SELECTOR.PAGESELECT);
-
-        this.currentpage = parseInt(pageselect.get('value'), 10) - 1;
+        this.currentpage--;
         if (this.currentpage < 0) {
             this.currentpage = 0;
         }
+        this.clear_warnings(false);
         this.change_page();
     },
 
@@ -4278,12 +4702,11 @@ EDITOR.prototype = {
      */
     next_page: function(e) {
         e.preventDefault();
-        var pageselect = this.get_dialogue_element(SELECTOR.PAGESELECT);
-
-        this.currentpage = parseInt(pageselect.get('value'), 10) + 1;
+        this.currentpage++;
         if (this.currentpage >= this.pages.length) {
             this.currentpage = this.pages.length - 1;
         }
+        this.clear_warnings(false);
         this.change_page();
     },
 
@@ -4301,6 +4724,58 @@ EDITOR.prototype = {
 
         for (i = 0; i < this.drawables.length; i++) {
             this.drawables[i].scroll_update(x, y);
+        }
+    },
+
+    /**
+     * Test the browser support for options objects on event listeners.
+     * @return Boolean
+     */
+    event_listener_options_supported: function() {
+        var passivesupported = false,
+            options,
+            testeventname = "testpassiveeventoptions";
+
+        // Options support testing example from:
+        // https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener
+
+        try {
+            options = Object.defineProperty({}, "passive", {
+                get: function() {
+                    passivesupported = true;
+                }
+            });
+
+            // We use an event name that is not likely to conflict with any real event.
+            document.addEventListener(testeventname, options, options);
+            // We remove the event listener as we have tested the options already.
+            document.removeEventListener(testeventname, options, options);
+        } catch(err) {
+            // It's already false.
+            passivesupported = false;
+        }
+        return passivesupported;
+    },
+
+    /**
+     * Disable Touch Move scrolling
+     */
+    disable_touch_scroll: function() {
+        if (this.event_listener_options_supported()) {
+            document.addEventListener('touchmove', this.stop_touch_scroll.bind(this), {passive: false});
+        }
+    },
+
+    /**
+     * Stop Touch Scrolling
+     * @param {Object} e
+     */
+    stop_touch_scroll: function(e) {
+        var drawingregion = this.get_dialogue_element(SELECTOR.DRAWINGREGION);
+
+        if (drawingregion.contains(e.target)) {
+            e.stopPropagation();
+            e.preventDefault();
         }
     }
 
@@ -4348,10 +4823,6 @@ Y.extend(EDITOR, Y.Base, EDITOR.prototype, {
         stampfiles: {
             validator: Y.Lang.isArray,
             value: ''
-        },
-        pagetotal: {
-            validator: Y.Lang.isInteger,
-            value: 0
         }
     }
 });
@@ -4384,6 +4855,8 @@ M.assignfeedback_editpdf.editor.init = M.assignfeedback_editpdf.editor.init || f
         "transition",
         "querystring-stringify-simple",
         "moodle-core-notification-dialog",
+        "moodle-core-notification-alert",
+        "moodle-core-notification-warning",
         "moodle-core-notification-exception",
         "moodle-core-notification-ajaxexception"
     ]

@@ -62,7 +62,7 @@ class mod_assign_external extends external_api {
             $message = 'Unknown warning type.';
         }
 
-        return array('item'=>$detail,
+        return array('item' => s($detail),
                      'itemid'=>$assignmentid,
                      'warningcode'=>$warningcode,
                      'message'=>$message);
@@ -115,7 +115,8 @@ class mod_assign_external extends external_api {
             try {
                 $context = context_module::instance($cm->id);
                 self::validate_context($context);
-                require_capability('mod/assign:grade', $context);
+                $assign = new assign($context, null, null);
+                $assign->require_view_grades();
             } catch (Exception $e) {
                 $requestedassignmentids = array_diff($requestedassignmentids, array($cm->instance));
                 $warning = array();
@@ -369,6 +370,7 @@ class mod_assign_external extends external_api {
                      'm.timemodified, '.
                      'm.completionsubmit, ' .
                      'm.cutoffdate, ' .
+                     'm.gradingduedate, ' .
                      'm.teamsubmission, ' .
                      'm.requireallteammemberssubmit, '.
                      'm.teamsubmissiongroupingid, ' .
@@ -441,6 +443,7 @@ class mod_assign_external extends external_api {
                         'timemodified' => $module->timemodified,
                         'completionsubmit' => $module->completionsubmit,
                         'cutoffdate' => $assign->get_instance()->cutoffdate,
+                        'gradingduedate' => $assign->get_instance()->gradingduedate,
                         'teamsubmission' => $module->teamsubmission,
                         'requireallteammemberssubmit' => $module->requireallteammemberssubmit,
                         'teamsubmissiongroupingid' => $module->teamsubmissiongroupingid,
@@ -517,6 +520,7 @@ class mod_assign_external extends external_api {
                 'timemodified' => new external_value(PARAM_INT, 'last time assignment was modified'),
                 'completionsubmit' => new external_value(PARAM_INT, 'if enabled, set activity as complete following submission'),
                 'cutoffdate' => new external_value(PARAM_INT, 'date after which submission is not accepted without an extension'),
+                'gradingduedate' => new external_value(PARAM_INT, 'the expected date for marking the submissions'),
                 'teamsubmission' => new external_value(PARAM_INT, 'if enabled, students submit as a team'),
                 'requireallteammemberssubmit' => new external_value(PARAM_INT, 'if enabled, all team members must submit'),
                 'teamsubmissiongroupingid' => new external_value(PARAM_INT, 'the grouping id for the team submission groups'),
@@ -711,8 +715,8 @@ class mod_assign_external extends external_api {
             try {
                 $context = context_module::instance($cm->id);
                 self::validate_context($context);
-                require_capability('mod/assign:grade', $context);
                 $assign = new assign($context, null, null);
+                $assign->require_view_grades();
                 $assigns[] = $assign;
             } catch (Exception $e) {
                 $warnings[] = array(
@@ -768,7 +772,10 @@ class mod_assign_external extends external_api {
                         'plugins' => self::get_plugins_data($assign, $submissionplugins, $submissionrecord),
                         'gradingstatus' => $assign->get_grading_status($submissionrecord->userid)
                     );
-                    $submissions[] = $submission;
+
+                    if ($assign->can_view_submission($submissionrecord->userid)) {
+                        $submissions[] = $submission;
+                    }
                 }
             } else {
                 $warnings[] = array(
@@ -815,7 +822,7 @@ class mod_assign_external extends external_api {
                     new external_single_structure(
                         array(
                             'name' => new external_value(PARAM_TEXT, 'field name'),
-                            'description' => new external_value(PARAM_TEXT, 'field description'),
+                            'description' => new external_value(PARAM_RAW, 'field description'),
                             'text' => new external_value (PARAM_RAW, 'field value'),
                             'format' => new external_format_value ('text')
                         )
@@ -2282,6 +2289,8 @@ class mod_assign_external extends external_api {
             array(
                 'assignid' => new external_value(PARAM_INT, 'assignment instance id'),
                 'userid' => new external_value(PARAM_INT, 'user id (empty for current user)', VALUE_DEFAULT, 0),
+                'groupid' => new external_value(PARAM_INT, 'filter by users in group (used for generating the grading summary).
+                    Empty or 0 for all groups information.', VALUE_DEFAULT, 0),
             )
         );
     }
@@ -2291,11 +2300,12 @@ class mod_assign_external extends external_api {
      *
      * @param int $assignid assignment instance id
      * @param int $userid user id (empty for current user)
+     * @param int $groupid filter by users in group id (used for generating the grading summary). Use 0 for all groups information.
      * @return array of warnings and grading, status, feedback and previous attempts information
      * @since Moodle 3.1
      * @throws required_capability_exception
      */
-    public static function get_submission_status($assignid, $userid = 0) {
+    public static function get_submission_status($assignid, $userid = 0, $groupid = 0) {
         global $USER;
 
         $warnings = array();
@@ -2303,6 +2313,7 @@ class mod_assign_external extends external_api {
         $params = array(
             'assignid' => $assignid,
             'userid' => $userid,
+            'groupid' => $groupid,
         );
         $params = self::validate_parameters(self::get_submission_status_parameters(), $params);
 
@@ -2322,8 +2333,18 @@ class mod_assign_external extends external_api {
         $gradingsummary = $lastattempt = $feedback = $previousattempts = null;
 
         // Get the renderable since it contais all the info we need.
-        if ($assign->can_view_grades()) {
-            $gradingsummary = $assign->get_assign_grading_summary_renderable();
+        if (!empty($params['groupid'])) {
+            $groupid = $params['groupid'];
+            // Determine is the group is visible to user.
+            if (!groups_group_visible($groupid, $course, $cm)) {
+                throw new moodle_exception('notingroup');
+            }
+        } else {
+            // A null gorups means that following functions will calculate the current group.
+            $groupid = null;
+        }
+        if ($assign->can_view_grades($groupid)) {
+            $gradingsummary = $assign->get_assign_grading_summary_renderable($groupid);
         }
 
         // Retrieve the rest of the renderable objects.
@@ -2772,7 +2793,9 @@ class mod_assign_external extends external_api {
         // Skip the expensive lookup of user detail if we're blind marking or the caller
         // hasn't asked for user details to be embedded.
         if (!$assign->is_blind_marking() && $embeduser) {
-            $return['user'] = user_get_user_details($participant, $course);
+            if ($userdetails = user_get_user_details($participant, $course)) {
+                $return['user'] = $userdetails;
+            }
         }
 
         return $return;

@@ -57,6 +57,7 @@ class user_search_testcase extends advanced_testcase {
      * @return void
      */
     public function test_users_indexing() {
+        global $SITE;
 
         // Returns the instance as long as the area is supported.
         $searcharea = \core_search\manager::get_search_area($this->userareaid);
@@ -87,6 +88,15 @@ class user_search_testcase extends advanced_testcase {
         // No new records.
         $this->assertFalse($recordset->valid());
         $recordset->close();
+
+        // Context support; first, try an unsupported context type.
+        $coursecontext = context_course::instance($SITE->id);
+        $this->assertNull($searcharea->get_document_recordset(0, $coursecontext));
+
+        // Try a specific user, will only return 1 record (that user).
+        $rs = $searcharea->get_document_recordset(0, context_user::instance($user1->id));
+        $this->assertEquals(1, iterator_count($rs));
+        $rs->close();
     }
 
     /**
@@ -109,7 +119,7 @@ class user_search_testcase extends advanced_testcase {
         $this->assertEquals(SITEID, $doc->get('courseid'));
         $this->assertFalse($doc->is_set('userid'));
         $this->assertEquals(\core_search\manager::NO_OWNER_ID, $doc->get('owneruserid'));
-        $this->assertEquals(content_to_text(fullname($user), false), $doc->get('title'));
+        $this->assertEquals(content_to_text(fullname($user), false), $searcharea->get_document_display_title($doc));
         $this->assertEquals(content_to_text($user->description, $user->descriptionformat), $doc->get('content'));
     }
 
@@ -119,6 +129,7 @@ class user_search_testcase extends advanced_testcase {
      * @return void
      */
     public function test_users_access() {
+        global $CFG;
 
         // Returns the instance as long as the area is supported.
         $searcharea = \core_search\manager::get_search_area($this->userareaid);
@@ -127,6 +138,8 @@ class user_search_testcase extends advanced_testcase {
         $user2 = self::getDataGenerator()->create_user();
         $user3 = self::getDataGenerator()->create_user();
         $user4 = self::getDataGenerator()->create_user();
+        $user5 = self::getDataGenerator()->create_user();
+        $user5->id = 0; // Visitor (not guest).
 
         $deleteduser = self::getDataGenerator()->create_user(array('deleted' => 1));
         $unconfirmeduser = self::getDataGenerator()->create_user(array('confirmed' => 0));
@@ -182,6 +195,22 @@ class user_search_testcase extends advanced_testcase {
         $this->assertEquals(\core_search\manager::ACCESS_DENIED, $searcharea->check_access($suspendeduser->id));
 
         $this->setGuestUser();
+        $this->assertEquals(\core_search\manager::ACCESS_DENIED, $searcharea->check_access($user1->id));
+        $this->assertEquals(\core_search\manager::ACCESS_DENIED, $searcharea->check_access($user2->id));
+        $this->assertEquals(\core_search\manager::ACCESS_DENIED, $searcharea->check_access($user3->id));
+
+        $CFG->forceloginforprofiles = 0;
+        $this->assertEquals(\core_search\manager::ACCESS_GRANTED, $searcharea->check_access($user1->id));
+        $this->assertEquals(\core_search\manager::ACCESS_GRANTED, $searcharea->check_access($user2->id));
+        $this->assertEquals(\core_search\manager::ACCESS_GRANTED, $searcharea->check_access($user3->id));
+
+        $this->setUser($user5);
+        $CFG->forceloginforprofiles = 1;
+        $this->assertEquals(\core_search\manager::ACCESS_DENIED, $searcharea->check_access($user1->id));
+        $this->assertEquals(\core_search\manager::ACCESS_DENIED, $searcharea->check_access($user2->id));
+        $this->assertEquals(\core_search\manager::ACCESS_DENIED, $searcharea->check_access($user3->id));
+
+        $CFG->forceloginforprofiles = 0;
         $this->assertEquals(\core_search\manager::ACCESS_GRANTED, $searcharea->check_access($user1->id));
         $this->assertEquals(\core_search\manager::ACCESS_GRANTED, $searcharea->check_access($user2->id));
         $this->assertEquals(\core_search\manager::ACCESS_GRANTED, $searcharea->check_access($user3->id));

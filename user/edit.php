@@ -29,9 +29,6 @@ require_once($CFG->dirroot.'/user/editlib.php');
 require_once($CFG->dirroot.'/user/profile/lib.php');
 require_once($CFG->dirroot.'/user/lib.php');
 
-// HTTPS is required in this page when $CFG->loginhttps enabled.
-$PAGE->https_required();
-
 $userid = optional_param('id', $USER->id, PARAM_INT);    // User id.
 $course = optional_param('course', SITEID, PARAM_INT);   // Course id (defaults to Site).
 $returnto = optional_param('returnto', null, PARAM_ALPHA);  // Code determining where to return to after save.
@@ -47,7 +44,7 @@ if ($course->id != SITEID) {
     require_login($course);
 } else if (!isloggedin()) {
     if (empty($SESSION->wantsurl)) {
-        $SESSION->wantsurl = $CFG->httpswwwroot.'/user/edit.php';
+        $SESSION->wantsurl = $CFG->wwwroot.'/user/edit.php';
     }
     redirect(get_login_url());
 } else {
@@ -179,18 +176,20 @@ $userform = new user_edit_form(new moodle_url($PAGE->url, array('returnto' => $r
 
 $emailchanged = false;
 
-if ($usernew = $userform->get_data()) {
-
-    // Deciding where to send the user back in most cases.
-    if ($returnto === 'profile') {
-        if ($course->id != SITEID) {
-            $returnurl = new moodle_url('/user/view.php', array('id' => $user->id, 'course' => $course->id));
-        } else {
-            $returnurl = new moodle_url('/user/profile.php', array('id' => $user->id));
-        }
+// Deciding where to send the user back in most cases.
+if ($returnto === 'profile') {
+    if ($course->id != SITEID) {
+        $returnurl = new moodle_url('/user/view.php', array('id' => $user->id, 'course' => $course->id));
     } else {
-        $returnurl = new moodle_url('/user/preferences.php', array('userid' => $user->id));
+        $returnurl = new moodle_url('/user/profile.php', array('id' => $user->id));
     }
+} else {
+    $returnurl = new moodle_url('/user/preferences.php', array('userid' => $user->id));
+}
+
+if ($userform->is_cancelled()) {
+    redirect($returnurl);
+} else if ($usernew = $userform->get_data()) {
 
     $emailchangedhtml = '';
 
@@ -199,14 +198,16 @@ if ($usernew = $userform->get_data()) {
         // Other users require a confirmation email.
         if (isset($usernew->email) and $user->email != $usernew->email && !has_capability('moodle/user:update', $systemcontext)) {
             $a = new stdClass();
-            $a->newemail = $usernew->preference_newemail = $usernew->email;
-            $usernew->preference_newemailkey = random_string(20);
-            $usernew->preference_newemailattemptsleft = 3;
+            $emailchangedkey = random_string(20);
+            set_user_preference('newemail', $usernew->email, $user->id);
+            set_user_preference('newemailkey', $emailchangedkey, $user->id);
+            set_user_preference('newemailattemptsleft', 3, $user->id);
+
+            $a->newemail = $emailchanged = $usernew->email;
             $a->oldemail = $usernew->email = $user->email;
 
             $emailchangedhtml = $OUTPUT->box(get_string('auth_changingemailaddress', 'auth', $a), 'generalbox', 'notice');
             $emailchangedhtml .= $OUTPUT->continue_button($returnurl);
-            $emailchanged = true;
         }
     }
 
@@ -254,14 +255,14 @@ if ($usernew = $userform->get_data()) {
     \core\event\user_updated::create_from_userid($user->id)->trigger();
 
     // If email was changed and confirmation is required, send confirmation email now to the new address.
-    if ($emailchanged && $CFG->emailchangeconfirmation) {
+    if ($emailchanged !== false && $CFG->emailchangeconfirmation) {
         $tempuser = $DB->get_record('user', array('id' => $user->id), '*', MUST_EXIST);
-        $tempuser->email = $usernew->preference_newemail;
+        $tempuser->email = $emailchanged;
 
         $supportuser = core_user::get_support_user();
 
         $a = new stdClass();
-        $a->url = $CFG->wwwroot . '/user/emailupdate.php?key=' . $usernew->preference_newemailkey . '&id=' . $user->id;
+        $a->url = $CFG->wwwroot . '/user/emailupdate.php?key=' . $emailchangedkey . '&id=' . $user->id;
         $a->site = format_string($SITE->fullname, true, array('context' => context_course::instance(SITEID)));
         $a->fullname = fullname($tempuser, true);
         $a->supportemail = $supportuser->email;
@@ -301,9 +302,6 @@ if ($usernew = $userform->get_data()) {
         redirect($returnurl);
     }
 }
-
-// Make sure we really are on the https page when https login required.
-$PAGE->verify_https_required();
 
 
 // Display page header.

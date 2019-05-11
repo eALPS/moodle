@@ -51,6 +51,10 @@ define('LASTATTEMPT', '3');
 define('TOCJSLINK', 1);
 define('TOCFULLURL', 2);
 
+define('SCORM_FORCEATTEMPT_NO', 0);
+define('SCORM_FORCEATTEMPT_ONCOMPLETE', 1);
+define('SCORM_FORCEATTEMPT_ALWAYS', 2);
+
 // Local Library of functions for module scorm.
 
 /**
@@ -194,6 +198,17 @@ function scorm_get_attemptstatus_array() {
                  SCORM_DISPLAY_ATTEMPTSTATUS_ALL => get_string('attemptstatusall', 'scorm'),
                  SCORM_DISPLAY_ATTEMPTSTATUS_MY => get_string('attemptstatusmy', 'scorm'),
                  SCORM_DISPLAY_ATTEMPTSTATUS_ENTRY => get_string('attemptstatusentry', 'scorm'));
+}
+
+/**
+ * Returns an array of the force attempt options
+ *
+ * @return array an array of attempt options
+ */
+function scorm_get_forceattempt_array() {
+    return array(SCORM_FORCEATTEMPT_NO => get_string('no'),
+                 SCORM_FORCEATTEMPT_ONCOMPLETE => get_string('forceattemptoncomplete', 'scorm'),
+                 SCORM_FORCEATTEMPT_ALWAYS => get_string('forceattemptalways', 'scorm'));
 }
 
 /**
@@ -765,7 +780,7 @@ function scorm_grade_user($scorm, $userid) {
 
     switch ($scorm->whatgrade) {
         case FIRSTATTEMPT:
-            return scorm_grade_user_attempt($scorm, $userid, 1);
+            return scorm_grade_user_attempt($scorm, $userid, scorm_get_first_attempt($scorm->id, $userid));
         break;
         case LASTATTEMPT:
             return scorm_grade_user_attempt($scorm, $userid, scorm_get_last_completed_attempt($scorm->id, $userid));
@@ -827,6 +842,30 @@ function scorm_get_last_attempt($scormid, $userid) {
     $sql = "SELECT MAX(attempt)
               FROM {scorm_scoes_track}
              WHERE userid = ? AND scormid = ?";
+    $lastattempt = $DB->get_field_sql($sql, array($userid, $scormid));
+    if (empty($lastattempt)) {
+        return '1';
+    } else {
+        return $lastattempt;
+    }
+}
+
+/**
+ * Returns the first attempt used - if no attempts yet, returns 1 for first attempt.
+ *
+ * @param int $scormid the id of the scorm.
+ * @param int $userid the id of the user.
+ *
+ * @return int The first attempt number.
+ */
+function scorm_get_first_attempt($scormid, $userid) {
+    global $DB;
+
+    // Find the first attempt number for the given user id and scorm id.
+    $sql = "SELECT MIN(attempt)
+              FROM {scorm_scoes_track}
+             WHERE userid = ? AND scormid = ?";
+
     $lastattempt = $DB->get_field_sql($sql, array($userid, $scormid));
     if (empty($lastattempt)) {
         return '1';
@@ -931,8 +970,8 @@ function scorm_print_launch ($user, $scorm, $action, $cm) {
 
     $result = scorm_get_toc($user, $scorm, $cm->id, TOCFULLURL, $orgidentifier);
     $incomplete = $result->incomplete;
-    // Get latest incomplete sco to launch first.
-    if (!empty($result->sco->id)) {
+    // Get latest incomplete sco to launch first if force new attempt isn't set to always.
+    if (!empty($result->sco->id) && $scorm->forcenewattempt != SCORM_FORCEATTEMPT_ALWAYS) {
         $launchsco = $result->sco->id;
     } else {
         // Use launch defined by SCORM package.
@@ -969,8 +1008,9 @@ function scorm_print_launch ($user, $scorm, $action, $cm) {
         } else {
             echo html_writer::empty_tag('input', array('type' => 'hidden', 'name' => 'mode', 'value' => 'normal'));
         }
-        if ($scorm->forcenewattempt == 1) {
-            if ($incomplete === false) {
+        if (!empty($scorm->forcenewattempt)) {
+            if ($scorm->forcenewattempt == SCORM_FORCEATTEMPT_ALWAYS ||
+                    ($scorm->forcenewattempt == SCORM_FORCEATTEMPT_ONCOMPLETE && $incomplete === false)) {
                 echo html_writer::empty_tag('input', array('type' => 'hidden', 'name' => 'newattempt', 'value' => 'on'));
             }
         } else if (!empty($attemptcount) && ($incomplete === false) && (($result->attemptleft > 0)||($scorm->maxattempt == 0))) {
@@ -1023,19 +1063,18 @@ function scorm_simple_play($scorm, $user, $context, $cmid) {
             $result = scorm_get_toc($user, $scorm, $cmid, TOCFULLURL, $orgidentifier);
             $url = new moodle_url('/mod/scorm/player.php', array('a' => $scorm->id, 'currentorg' => $orgidentifier));
 
-            // Set last incomplete sco to launch first.
-            if (!empty($result->sco->id)) {
+            // Set last incomplete sco to launch first if forcenewattempt not set to always.
+            if (!empty($result->sco->id) && $scorm->forcenewattempt != SCORM_FORCEATTEMPT_ALWAYS) {
                 $url->param('scoid', $result->sco->id);
             } else {
                 $url->param('scoid', $sco->id);
             }
 
             if ($scorm->skipview == SCORM_SKIPVIEW_ALWAYS || !scorm_has_tracks($scorm->id, $user->id)) {
-                if (!empty($scorm->forcenewattempt)) {
+                if ($scorm->forcenewattempt == SCORM_FORCEATTEMPT_ALWAYS ||
+                   ($result->incomplete === false && $scorm->forcenewattempt == SCORM_FORCEATTEMPT_ONCOMPLETE)) {
 
-                    if ($result->incomplete === false) {
-                        $url->param('newattempt', 'on');
-                    }
+                    $url->param('newattempt', 'on');
                 }
                 redirect($url);
             }
@@ -1546,11 +1585,9 @@ function scorm_get_toc_object($user, $scorm, $currentorg='', $scoid='', $mode='n
                         $strstatus = get_string($usertrack->status, 'scorm');
 
                         if ($sco->scormtype == 'sco') {
-                            $statusicon = html_writer::img($OUTPUT->pix_url($usertrack->status, 'scorm'), $strstatus,
-                                                            array('title' => $strstatus));
+                            $statusicon = $OUTPUT->pix_icon($usertrack->status, $strstatus, 'scorm');
                         } else {
-                            $statusicon = html_writer::img($OUTPUT->pix_url('asset', 'scorm'), get_string('assetlaunched', 'scorm'),
-                                                            array('title' => get_string('assetlaunched', 'scorm')));
+                            $statusicon = $OUTPUT->pix_icon('asset', get_string('assetlaunched', 'scorm'), 'scorm');
                         }
 
                         if (($usertrack->status == 'notattempted') ||
@@ -1571,8 +1608,7 @@ function scorm_get_toc_object($user, $scorm, $currentorg='', $scoid='', $mode='n
                         }
 
                         if ($incomplete && isset($usertrack->{$exitvar}) && ($usertrack->{$exitvar} == 'suspend')) {
-                            $statusicon = html_writer::img($OUTPUT->pix_url('suspend', 'scorm'), $strstatus.' - '.$strsuspended,
-                                                            array('title' => $strstatus.' - '.$strsuspended));
+                            $statusicon = $OUTPUT->pix_icon('suspend', $strstatus.' - '.$strsuspended, 'scorm');
                         }
 
                     } else {
@@ -1583,20 +1619,16 @@ function scorm_get_toc_object($user, $scorm, $currentorg='', $scoid='', $mode='n
                         $incomplete = true;
 
                         if ($sco->scormtype == 'sco') {
-                            $statusicon = html_writer::img($OUTPUT->pix_url('notattempted', 'scorm'),
-                                                            get_string('notattempted', 'scorm'),
-                                                            array('title' => get_string('notattempted', 'scorm')));
+                            $statusicon = $OUTPUT->pix_icon('notattempted', get_string('notattempted', 'scorm'), 'scorm');
                         } else {
-                            $statusicon = html_writer::img($OUTPUT->pix_url('asset', 'scorm'), get_string('asset', 'scorm'),
-                                                            array('title' => get_string('asset', 'scorm')));
+                            $statusicon = $OUTPUT->pix_icon('asset', get_string('asset', 'scorm'), 'scorm');
                         }
                     }
                 }
             }
 
             if (empty($statusicon)) {
-                $sco->statusicon = html_writer::img($OUTPUT->pix_url('notattempted', 'scorm'), get_string('notattempted', 'scorm'),
-                                                    array('title' => get_string('notattempted', 'scorm')));
+                $sco->statusicon = $OUTPUT->pix_icon('notattempted', get_string('notattempted', 'scorm'), 'scorm');
             } else {
                 $sco->statusicon = $statusicon;
             }
@@ -2090,10 +2122,11 @@ function scorm_check_launchable_sco($scorm, $scoid) {
  * @param  stdClass  $scorm            SCORM record
  * @param  boolean $checkviewreportcap Check the scorm:viewreport cap
  * @param  stdClass  $context          Module context, required if $checkviewreportcap is set to true
+ * @param  int  $userid                User id override
  * @return array                       status (available or not and possible warnings)
  * @since  Moodle 3.0
  */
-function scorm_get_availability_status($scorm, $checkviewreportcap = false, $context = null) {
+function scorm_get_availability_status($scorm, $checkviewreportcap = false, $context = null, $userid = null) {
     $open = true;
     $closed = false;
     $warnings = array();
@@ -2107,7 +2140,7 @@ function scorm_get_availability_status($scorm, $checkviewreportcap = false, $con
     }
 
     if (!$open or $closed) {
-        if ($checkviewreportcap and !empty($context) and has_capability('mod/scorm:viewreport', $context)) {
+        if ($checkviewreportcap and !empty($context) and has_capability('mod/scorm:viewreport', $context, $userid)) {
             return array(true, $warnings);
         }
 
@@ -2358,4 +2391,102 @@ function scorm_eval_prerequisites($prerequisites, $usertracks) {
         $stack[] = ' '.$element.' ';
     }
     return eval('return '.implode($stack).';');
+}
+
+/**
+ * Update the calendar entries for this scorm activity.
+ *
+ * @param stdClass $scorm the row from the database table scorm.
+ * @param int $cmid The coursemodule id
+ * @return bool
+ */
+function scorm_update_calendar(stdClass $scorm, $cmid) {
+    global $DB, $CFG;
+
+    require_once($CFG->dirroot.'/calendar/lib.php');
+
+    // Scorm start calendar events.
+    $event = new stdClass();
+    $event->eventtype = SCORM_EVENT_TYPE_OPEN;
+    // The SCORM_EVENT_TYPE_OPEN event should only be an action event if no close time is specified.
+    $event->type = empty($scorm->timeclose) ? CALENDAR_EVENT_TYPE_ACTION : CALENDAR_EVENT_TYPE_STANDARD;
+    if ($event->id = $DB->get_field('event', 'id',
+        array('modulename' => 'scorm', 'instance' => $scorm->id, 'eventtype' => $event->eventtype))) {
+        if ((!empty($scorm->timeopen)) && ($scorm->timeopen > 0)) {
+            // Calendar event exists so update it.
+            $event->name = get_string('calendarstart', 'scorm', $scorm->name);
+            $event->description = format_module_intro('scorm', $scorm, $cmid);
+            $event->timestart = $scorm->timeopen;
+            $event->timesort = $scorm->timeopen;
+            $event->visible = instance_is_visible('scorm', $scorm);
+            $event->timeduration = 0;
+
+            $calendarevent = calendar_event::load($event->id);
+            $calendarevent->update($event, false);
+        } else {
+            // Calendar event is on longer needed.
+            $calendarevent = calendar_event::load($event->id);
+            $calendarevent->delete();
+        }
+    } else {
+        // Event doesn't exist so create one.
+        if ((!empty($scorm->timeopen)) && ($scorm->timeopen > 0)) {
+            $event->name = get_string('calendarstart', 'scorm', $scorm->name);
+            $event->description = format_module_intro('scorm', $scorm, $cmid);
+            $event->courseid = $scorm->course;
+            $event->groupid = 0;
+            $event->userid = 0;
+            $event->modulename = 'scorm';
+            $event->instance = $scorm->id;
+            $event->timestart = $scorm->timeopen;
+            $event->timesort = $scorm->timeopen;
+            $event->visible = instance_is_visible('scorm', $scorm);
+            $event->timeduration = 0;
+
+            calendar_event::create($event, false);
+        }
+    }
+
+    // Scorm end calendar events.
+    $event = new stdClass();
+    $event->type = CALENDAR_EVENT_TYPE_ACTION;
+    $event->eventtype = SCORM_EVENT_TYPE_CLOSE;
+    if ($event->id = $DB->get_field('event', 'id',
+        array('modulename' => 'scorm', 'instance' => $scorm->id, 'eventtype' => $event->eventtype))) {
+        if ((!empty($scorm->timeclose)) && ($scorm->timeclose > 0)) {
+            // Calendar event exists so update it.
+            $event->name = get_string('calendarend', 'scorm', $scorm->name);
+            $event->description = format_module_intro('scorm', $scorm, $cmid);
+            $event->timestart = $scorm->timeclose;
+            $event->timesort = $scorm->timeclose;
+            $event->visible = instance_is_visible('scorm', $scorm);
+            $event->timeduration = 0;
+
+            $calendarevent = calendar_event::load($event->id);
+            $calendarevent->update($event, false);
+        } else {
+            // Calendar event is on longer needed.
+            $calendarevent = calendar_event::load($event->id);
+            $calendarevent->delete();
+        }
+    } else {
+        // Event doesn't exist so create one.
+        if ((!empty($scorm->timeclose)) && ($scorm->timeclose > 0)) {
+            $event->name = get_string('calendarend', 'scorm', $scorm->name);
+            $event->description = format_module_intro('scorm', $scorm, $cmid);
+            $event->courseid = $scorm->course;
+            $event->groupid = 0;
+            $event->userid = 0;
+            $event->modulename = 'scorm';
+            $event->instance = $scorm->id;
+            $event->timestart = $scorm->timeclose;
+            $event->timesort = $scorm->timeclose;
+            $event->visible = instance_is_visible('scorm', $scorm);
+            $event->timeduration = 0;
+
+            calendar_event::create($event, false);
+        }
+    }
+
+    return true;
 }

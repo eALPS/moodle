@@ -22,11 +22,10 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-$string['choosereadme'] = '
-<div class="clearfix">
+$string['choosereadme'] = '<div class="clearfix">
 <div class="well">
 <h2>Clean</h2>
-<p><img class=img-polaroid src="clean/pix/screenshot.jpg" /></p>
+<p><img class="img-polaroid "src="clean/pix/screenshot.jpg" /></p>
 </div>
 <div class="well">
 <h3>About</h3>
@@ -60,7 +59,7 @@ $string['logo'] = 'Logo';
 $string['logodesc'] = 'The logo is only displayed in the header of the front page and login page.<br /> If the height of your logo is more than 75px add div.logo {height: 100px;} to the Custom CSS box below, amending accordingly if the height is other than 100px. If a logo is not added here, the logo in Appearance > Logos will be used.';
 
 $string['pluginname'] = 'Clean';
-
+$string['privacy:metadata'] = 'The Clean theme does not store any personal data about any user.';
 $string['region-side-post'] = 'Right';
 $string['region-side-pre'] = 'Left';
 

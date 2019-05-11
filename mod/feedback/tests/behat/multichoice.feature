@@ -22,7 +22,7 @@ Feature: Testing multichoice questions in feedback
       | activity   | name                | course | idnumber    |
       | feedback   | Learning experience | C1     | feedback0   |
     And I log in as "teacher1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
     And I click on "Edit questions" "link" in the "[role=main]" "css_element"
 
@@ -57,9 +57,9 @@ Feature: Testing multichoice questions in feedback
       | Contents | this is the third page of the feedback |
     And I log out
     And I log in as "student1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     # Examine the first page, select nothing, go to the next page
     Then the following fields match these values:
       | Not selected | 1 |
@@ -124,9 +124,9 @@ Feature: Testing multichoice questions in feedback
     # Student 2 tries to trick - he answers the third question and then
     # goes back and changes dependency question. Analysis should not show this answer!
     And I log in as "student2"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I set the field "option a" to "1"
     And I press "Next page"
     And I set the field "option d" to "1"
@@ -139,7 +139,7 @@ Feature: Testing multichoice questions in feedback
     And I log out
     # Login as teacher and check analysis
     And I log in as "teacher1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
     And I navigate to "Analysis" in current page administration
     And I should see "Submitted answers: 2"
@@ -201,9 +201,9 @@ Feature: Testing multichoice questions in feedback
     And I log out
     # Login as the first student.
     And I log in as "student1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     # Examine the first page, select nothing, go to the next page
     And I should not see "Not selected"
     And the following fields match these values:
@@ -266,9 +266,9 @@ Feature: Testing multichoice questions in feedback
     # Student 2 tries to trick - he answers the third question and then
     # goes back and changes dependency question. Analysis should not show this answer!
     And I log in as "student2"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I set the field "option a" to "1"
     And I set the field "option b" to "1"
     And I press "Next page"
@@ -283,7 +283,7 @@ Feature: Testing multichoice questions in feedback
     And I log out
     # Login as teacher and check analysis
     And I log in as "teacher1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
     And I navigate to "Analysis" in current page administration
     And I should see "Submitted answers: 2"
@@ -318,7 +318,7 @@ Feature: Testing multichoice questions in feedback
     When I add a "Multiple choice" question to the feedback with:
       | Question         | this is a multiple choice 1 |
       | Label            | multichoice1                |
-      | Multiple choice type | Multiple choice - single answer allowed (dropdownlist) |
+      | Multiple choice type | Multiple choice - single answer allowed (drop-down menu) |
       | Multiple choice values | option a\noption b\noption c  |
     And I add a "Label" question to the feedback with:
       | Contents | this is the first page of the feedback |
@@ -326,7 +326,7 @@ Feature: Testing multichoice questions in feedback
     And I add a "Multiple choice" question to the feedback with:
       | Question         | this is a multiple choice 2 |
       | Label            | multichoice2                |
-      | Multiple choice type | Multiple choice - single answer allowed (dropdownlist) |
+      | Multiple choice type | Multiple choice - single answer allowed (drop-down menu) |
       | Multiple choice values | option d\noption e\noption f  |
       | Required | 1 |
     And I add a "Label" question to the feedback with:
@@ -335,7 +335,7 @@ Feature: Testing multichoice questions in feedback
     And I add a "Multiple choice" question to the feedback with:
       | Question         | this is a multiple choice 3 |
       | Label            | multichoice3                |
-      | Multiple choice type | Multiple choice - single answer allowed (dropdownlist) |
+      | Multiple choice type | Multiple choice - single answer allowed (drop-down menu) |
       | Multiple choice values | option g\noption h\noption i  |
       | Dependence item                | multichoice2          |
       | Dependence value               | option d              |
@@ -343,9 +343,9 @@ Feature: Testing multichoice questions in feedback
       | Contents | this is the third page of the feedback |
     And I log out
     And I log in as "student1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     # Examine the first page, select nothing, go to the next page
     Then the following fields match these values:
       | this is a multiple choice 1 | 0 |
@@ -391,9 +391,9 @@ Feature: Testing multichoice questions in feedback
     # Student 2 tries to trick - he answers the third question and then
     # goes back and changes dependency question. Analysis should not show this answer!
     And I log in as "student2"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I set the field "this is a multiple choice 1" to "option a"
     And I press "Next page"
     And I set the field "this is a multiple choice 2" to "option d"
@@ -406,7 +406,7 @@ Feature: Testing multichoice questions in feedback
     And I log out
     # Login as teacher and check analysis
     And I log in as "teacher1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
     And I navigate to "Analysis" in current page administration
     And I should see "Submitted answers: 2"

@@ -262,8 +262,13 @@ if (empty($parallelrun)) {
     behat_config_manager::set_behat_run_config_value('lasttorun', $options['torun']);
     behat_config_manager::set_behat_run_config_value('lastfromrun', $options['fromrun']);
 
+    // Keep no delay by default, between each parallel, let user decide.
+    if (!defined('BEHAT_PARALLEL_START_DELAY')) {
+        define('BEHAT_PARALLEL_START_DELAY', 0);
+    }
+
     // Execute all commands, relative to moodle root directory.
-    $processes = cli_execute_parallel($cmds, __DIR__ . "/../../../../");
+    $processes = cli_execute_parallel($cmds, __DIR__ . "/../../../../", BEHAT_PARALLEL_START_DELAY);
     $stoponfail = empty($options['stop-on-failure']) ? false : true;
 
     // Print header.
@@ -320,6 +325,7 @@ if ($verbose || $status) {
         }
 
         // Update status after auto-rerun finished.
+        $status = 0;
         foreach ($exitcodes as $name => $exitcode) {
             if ($exitcode) {
                 if (!empty($parallelrun)) {

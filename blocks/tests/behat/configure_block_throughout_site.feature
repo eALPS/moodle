@@ -36,7 +36,7 @@ Feature: Add and configure blocks throughout the site
     And I set the following fields to these values:
       | Page contexts | Display throughout the entire site |
     And I press "Save changes"
-    When I follow "Course 1"
+    When I am on "Course 1" course homepage
     Then I should see "Comments" in the "Comments" "block"
     And I should see "Save comment" in the "Comments" "block"
     And I am on site homepage
@@ -44,7 +44,7 @@ Feature: Add and configure blocks throughout the site
     And I set the following fields to these values:
       | Default weight | -10 (first) |
     And I press "Save changes"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     # The first block matching the pattern should be top-left block
     And I should see "Comments" in the "//*[@id='region-pre' or @id='block-region-side-pre']/descendant::*[contains(concat(' ', normalize-space(@class), ' '), ' block ')]" "xpath_element"
 
@@ -55,8 +55,7 @@ Feature: Add and configure blocks throughout the site
 
   Scenario: Blocks on courses can have roles assigned to them
     Given I log in as "teacher1"
-    And I follow "Course 1"
-    And I follow "Turn editing on"
+    And I am on "Course 1" course homepage with editing mode on
     And I add the "Search forums" block
     Then I should see "Assign roles in Search forums block"
 
@@ -68,7 +67,7 @@ Feature: Add and configure blocks throughout the site
     And I add the "HTML" block
     And I configure the "(new HTML block)" block
     And I set the following fields to these values:
-      | Block title | Foo " onload="document.getElementsByTagName('body')[0].remove()" alt=" |
+      | HTML block title | Foo " onload="document.getElementsByTagName('body')[0].remove()" alt=" |
       | Content     | Example |
     When I press "Save changes"
     Then I should see "Course overview"

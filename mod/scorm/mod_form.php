@@ -137,12 +137,6 @@ class mod_scorm_mod_form extends moodleform_mod {
 
         // Skip view page.
         $skipviewoptions = scorm_get_skip_view_array();
-        if ($COURSE->format == 'singleactivity') { // Remove option that would cause a constant redirect.
-            unset($skipviewoptions[SCORM_SKIPVIEW_ALWAYS]);
-            if ($cfgscorm->skipview == SCORM_SKIPVIEW_ALWAYS) {
-                $cfgscorm->skipview = SCORM_SKIPVIEW_FIRST;
-            }
-        }
         $mform->addElement('select', 'skipview', get_string('skipview', 'scorm'), $skipviewoptions);
         $mform->addHelpButton('skipview', 'skipview', 'scorm');
         $mform->setDefault('skipview', $cfgscorm->skipview);
@@ -234,8 +228,9 @@ class mod_scorm_mod_form extends moodleform_mod {
         $mform->setDefault('whatgrade', $cfgscorm->whatgrade);
 
         // Force new attempt.
-        $mform->addElement('selectyesno', 'forcenewattempt', get_string('forcenewattempt', 'scorm'));
-        $mform->addHelpButton('forcenewattempt', 'forcenewattempt', 'scorm');
+        $newattemptselect = scorm_get_forceattempt_array();
+        $mform->addElement('select', 'forcenewattempt', get_string('forcenewattempts', 'scorm'), $newattemptselect);
+        $mform->addHelpButton('forcenewattempt', 'forcenewattempts', 'scorm');
         $mform->setDefault('forcenewattempt', $cfgscorm->forcenewattempt);
 
         // Last attempt lock - lock the enter button after the last available attempt has been made.
@@ -337,15 +332,19 @@ class mod_scorm_mod_form extends moodleform_mod {
         }
 
         // Set some completion default data.
-        if (!empty($defaultvalues['completionstatusrequired']) && !is_array($defaultvalues['completionstatusrequired'])) {
+        $cvalues = array();
+        if (empty($this->_instance)) {
+            // When in add mode, set a default completion rule that requires the SCORM's status be set to "Completed".
+            $cvalues[4] = 1;
+        } else if (!empty($defaultvalues['completionstatusrequired']) && !is_array($defaultvalues['completionstatusrequired'])) {
             // Unpack values.
-            $cvalues = array();
             foreach (scorm_status_options() as $key => $value) {
                 if (($defaultvalues['completionstatusrequired'] & $key) == $key) {
                     $cvalues[$key] = 1;
                 }
             }
-
+        }
+        if (!empty($cvalues)) {
             $defaultvalues['completionstatusrequired'] = $cvalues;
         }
 
@@ -487,7 +486,6 @@ class mod_scorm_mod_form extends moodleform_mod {
             }
         }
 
-        $this->data_preprocessing($defaultvalues);
         parent::set_data($defaultvalues);
     }
 
@@ -540,13 +538,16 @@ class mod_scorm_mod_form extends moodleform_mod {
         return $status || $score;
     }
 
-    public function get_data($slashed = true) {
-        $data = parent::get_data($slashed);
-
-        if (!$data) {
-            return false;
-        }
-
+    /**
+     * Allows module to modify the data returned by form get_data().
+     * This method is also called in the bulk activity completion form.
+     *
+     * Only available on moodleform_mod.
+     *
+     * @param stdClass $data the form data to be modified.
+     */
+    public function data_postprocessing($data) {
+        parent::data_postprocessing($data);
         // Convert completionstatusrequired to a proper integer, if any.
         $total = 0;
         if (isset($data->completionstatusrequired) && is_array($data->completionstatusrequired)) {
@@ -570,7 +571,5 @@ class mod_scorm_mod_form extends moodleform_mod {
                 $data->completionscorerequired = null;
             }
         }
-
-        return $data;
     }
 }

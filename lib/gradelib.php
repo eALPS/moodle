@@ -1112,7 +1112,7 @@ function grade_recover_history_grades($userid, $courseid) {
  *
  * @param int $courseid The course ID
  * @param int $userid If specified try to do a quick regrading of the grades of this user only
- * @param object $updated_item Optional grade item to be marked for regrading
+ * @param object $updated_item Optional grade item to be marked for regrading. It is required if $userid is set.
  * @param \core\progress\base $progress If provided, will be used to update progress on this long operation.
  * @return bool true if ok, array of errors if problems found. Grade item id => error message
  */
@@ -1246,7 +1246,7 @@ function grade_regrade_final_grades($courseid, $userid=null, $updated_item=null,
                 if ($updateddependencies === false) {
                     // If no direct descendants are marked as updated, then we don't need to update this grade item. We then mark it
                     // as final.
-
+                    $count++;
                     $finalids[] = $gid;
                     continue;
                 }
@@ -1379,9 +1379,10 @@ function grade_update_mod_grades($modinstance, $userid=0) {
         //new grading supported, force updating of grades
         $updateitemfunc($modinstance);
         $updategradesfunc($modinstance, $userid);
-
-    } else {
+    } else if (function_exists($updategradesfunc) xor function_exists($updateitemfunc)) {
         // Module does not support grading?
+        debugging("You have declared one of $updateitemfunc and $updategradesfunc but not both. " .
+                  "This will cause broken behaviour.", DEBUG_DEVELOPER);
     }
 
     return true;
@@ -1398,7 +1399,16 @@ function remove_grade_letters($context, $showfeedback) {
 
     $strdeleted = get_string('deleted');
 
-    $DB->delete_records('grade_letters', array('contextid'=>$context->id));
+    $records = $DB->get_records('grade_letters', array('contextid' => $context->id));
+    foreach ($records as $record) {
+        $DB->delete_records('grade_letters', array('id' => $record->id));
+        // Trigger the letter grade deleted event.
+        $event = \core\event\grade_letter_deleted::create(array(
+            'objectid' => $record->id,
+            'context' => $context,
+        ));
+        $event->trigger();
+    }
     if ($showfeedback) {
         echo $OUTPUT->notification($strdeleted.' - '.get_string('letters', 'grades'), 'notifysuccess');
     }
@@ -1461,7 +1471,16 @@ function grade_course_category_delete($categoryid, $newparentid, $showfeedback) 
     global $DB;
 
     $context = context_coursecat::instance($categoryid);
-    $DB->delete_records('grade_letters', array('contextid'=>$context->id));
+    $records = $DB->get_records('grade_letters', array('contextid' => $context->id));
+    foreach ($records as $record) {
+        $DB->delete_records('grade_letters', array('id' => $record->id));
+        // Trigger the letter grade deleted event.
+        $event = \core\event\grade_letter_deleted::create(array(
+            'objectid' => $record->id,
+            'context' => $context,
+        ));
+        $event->trigger();
+    }
 }
 
 /**

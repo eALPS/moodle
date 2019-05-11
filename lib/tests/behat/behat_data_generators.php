@@ -174,10 +174,22 @@ class behat_data_generators extends behat_base {
             'datagenerator' => 'tag',
             'required' => array('name')
         ),
+        'events' => array(
+            'datagenerator' => 'event',
+            'required' => array('name', 'eventtype'),
+            'switchids' => array(
+                'user' => 'userid',
+                'course' => 'courseid',
+                'category' => 'categoryid',
+            )
+        ),
     );
 
     /**
-     * Creates the specified element. More info about available elements in http://docs.moodle.org/dev/Acceptance_testing#Fixtures.
+     * Creates the specified element.
+     *
+     * The most reliable list of what types of thing can be created is the
+     * $elements array defined above.
      *
      * @Given /^the following "(?P<element_string>(?:[^"]|\\")*)" exist:$/
      *

@@ -20,22 +20,27 @@ M.core_completion.init = function(Y) {
             var current = args.state.get('value');
             var modulename = args.modulename.get('value'),
                 altstr,
-                titlestr;
+                iconkey,
+                button = args.image.get('parentNode');
+
             if (current == 1) {
                 altstr = M.util.get_string('completion-alt-manual-y', 'completion', modulename);
-                titlestr = M.util.get_string('completion-title-manual-y', 'completion', modulename);
+                iconkey = 'i/completion-manual-y';
                 args.state.set('value', 0);
-                args.image.set('src', M.util.image_url('i/completion-manual-y', 'moodle'));
-                args.image.set('alt', altstr);
-                args.image.set('title', titlestr);
             } else {
                 altstr = M.util.get_string('completion-alt-manual-n', 'completion', modulename);
-                titlestr = M.util.get_string('completion-title-manual-n', 'completion', modulename);
+                iconkey = 'i/completion-manual-n';
                 args.state.set('value', 1);
-                args.image.set('src', M.util.image_url('i/completion-manual-n', 'moodle'));
-                args.image.set('alt', altstr);
-                args.image.set('title', titlestr);
             }
+
+            require(['core/templates', 'core/notification'], function(Templates, Notification) {
+                Templates.renderPix(iconkey, 'core', altstr).then(function(html) {
+                    var id = button.get('id'),
+                        postFocus = '$(document.getElementById("' + id + '")).focus();';
+
+                    Templates.replaceNode(args.image.getDOMNode(), html, postFocus);
+                }).catch(Notification.exception);
+            });
         }
 
         args.ajax.remove();
@@ -70,10 +75,8 @@ M.core_completion.init = function(Y) {
                      modulename = Y.one(inputs[i]);
                      break;
             }
-            if (inputs[i].type == 'image') {
-                image = Y.one(inputs[i]);
-            }
         }
+        image = form.one('button .icon');
 
         // start spinning the ajax indicator
         var ajax = Y.Node.create('<div class="ajaxworking" />');

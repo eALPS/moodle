@@ -24,6 +24,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+define('NO_OUTPUT_BUFFERING', true);
+
 require('../../../config.php');
 
 require_once($CFG->libdir.'/cronlib.php');
@@ -36,12 +38,6 @@ require_once($CFG->libdir.'/cronlib.php');
  */
 function tool_task_mtrace_wrapper($message, $eol) {
     echo s($message . $eol);
-    // Both types of flush may be necessary in order to actually output progressively to browser.
-    // It depends on the theme.
-    if (ob_get_status()) {
-        ob_flush();
-    }
-    flush();
 }
 
 // Allow execution of single task. This requires login and has different rules.
@@ -92,7 +88,8 @@ echo html_writer::start_tag('pre');
 $CFG->mtrace_wrapper = 'tool_task_mtrace_wrapper';
 
 // Run the specified task (this will output an error if it doesn't exist).
-cron_run_single_task($task);
+\tool_task\run_from_cli::execute($task);
+
 echo html_writer::end_tag('pre');
 
 $output = $PAGE->get_renderer('tool_task');

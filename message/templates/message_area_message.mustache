@@ -19,7 +19,7 @@
         {{blocktime}}
     </div>
 {{/displayblocktime}}
-<div class="message row-fluid"
+<div class="message d-flex row-fluid"
     data-region="message"
     data-blocktime="{{blocktime}}"
     data-id="{{id}}{{isread}}"
@@ -31,7 +31,7 @@
     tabindex="0">
 
     <div class="content {{position}}">
-        <span class="text" data-region="message-text">
+        <span dir="auto" align="initial" class="text" data-region="message-text">
             {{{text}}}
         </span>
         <span class="timesent">

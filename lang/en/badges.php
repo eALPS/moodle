@@ -27,9 +27,13 @@
 $string['actions'] = 'Actions';
 $string['activate'] = 'Enable access';
 $string['activatesuccess'] = 'Access to the badges was successfully enabled.';
+$string['addbadge'] = 'Add badges';
+$string['addbadge_help'] = 'Select all badges that should be added to this badge requirement. Hold CTRL key to select multiple items.';
 $string['addbadgecriteria'] = 'Add badge criteria';
 $string['addcriteria'] = 'Add criteria';
 $string['addcriteriatext'] = 'To start adding criteria, please select one of the options from the drop-down menu.';
+$string['addcohort'] = 'Add cohort';
+$string['addcohort_help'] = 'Select all cohorts that should be added to this badge requirement. Hold CTRL key to select multiple items.';
 $string['addcourse'] = 'Add courses';
 $string['addcourse_help'] = 'Select all courses that should be added to this badge requirement. Hold CTRL key to select multiple items.';
 $string['addtobackpack'] = 'Add to backpack';
@@ -39,6 +43,8 @@ $string['aggregationmethod'] = 'Aggregation method';
 $string['all'] = 'All';
 $string['allmethod'] = 'All of the selected conditions are met';
 $string['allmethodactivity'] = 'All of the selected activities are complete';
+$string['allmethodbadges'] = 'All of the selected badges have been earned';
+$string['allmethodcohort'] = 'Membership in all the selected cohorts';
 $string['allmethodcourseset'] = 'All of the selected courses are complete';
 $string['allmethodmanual'] = 'All of the selected roles award the badge';
 $string['allmethodprofile'] = 'All of the selected profile fields have been completed';
@@ -51,6 +57,8 @@ Note: It is recommended to leave this option disabled if the website cannot be a
 $string['any'] = 'Any';
 $string['anymethod'] = 'Any of the selected conditions is met';
 $string['anymethodactivity'] = 'Any of the selected activities is complete';
+$string['anymethodbadges'] = 'Any of the selected badges have been earned';
+$string['anymethodcohort'] = 'Membership in any of the selected cohorts';
 $string['anymethodcourseset'] = 'Any of the selected courses is complete';
 $string['anymethodmanual'] = 'Any of the selected roles awards the badge';
 $string['anymethodprofile'] = 'Any of the selected profile fields has been completed';
@@ -79,17 +87,35 @@ You should fix this issue on any production site where you are planning to issue
 
 The only URL required for verification is [your-site-url]/badges/assertion.php so if you are able to modify your firewall to allow external access to that file, badge verification will still work.';
 $string['backpackbadges'] = 'You have {$a->totalbadges} badge(s) displayed from {$a->totalcollections} collection(s). <a href="mybackpack.php">Change backpack settings</a>.';
+$string['backpackcannotsendverification'] = 'Cannot send verification email';
 $string['backpackconnection'] = 'Backpack connection';
 $string['backpackconnection_help'] = 'This page allows you to set up connection to an external backpack provider. Connecting to a backpack lets you display external badges within this site and push badges earned here to your backpack.
 
 Currently, only <a href="http://backpack.openbadges.org">Mozilla OpenBadges Backpack</a> is supported. You need to sign up for a backpack service before trying to set up backpack connection on this page.';
+$string['backpackconnectioncancelattempt'] = 'Connect using a different email address';
+$string['backpackconnectionconnect'] = 'Connect to backpack';
+$string['backpackconnectionresendemail'] = 'Resend verification email';
+$string['backpackconnectionunexpectedresult'] = 'There was a problem connecting to your backpack. Please try again.<br><br>If the problem persists, contact your administrator.';
 $string['backpackdetails'] = 'Backpack settings';
 $string['backpackemail'] = 'Email address';
 $string['backpackemail_help'] = 'The email address associated with your backpack. While you are connected, any badges earned on this site will be associated with this email address.';
-$string['personaconnection'] = 'Sign in with your email';
-$string['personaconnection_help'] = 'Persona is a system for identifying yourself across the web, using an email address that you own. The Open Badges backpack uses Persona as a login system, so to be able to connect to a backpack you will need a Persona account.
+$string['backpackemailverificationpending'] = 'Verification pending';
+$string['backpackemailverifyemailbody'] = 'Hi,
 
-For more information about Persona visit <a href="https://login.persona.org/about">https://login.persona.org/about</a>.';
+A new connection to your OpenBadges backpack has been requested from \'{$a->sitename}\' using your email address.
+
+To confirm and activate the connection to your backpack, please go to
+
+{$a->link}
+
+In most mail programs, this should appear as a blue link which you can just click on. If that doesn\'t work, then cut and paste the address into the address line at the top of your web browser.
+
+If you need help, please contact the site administrator,
+{$a->admin}';
+$string['backpackemailverifyemailsubject'] = '{$a}: OpenBadges Backpack email verification';
+$string['backpackemailverifypending'] = 'A verification email has been sent to <strong>{$a}</strong>. Click on the verification link in the email to activate your Backpack connection.';
+$string['backpackemailverifysuccess'] = 'Thanks for verifying your email address. You are now connected to your backpack.';
+$string['backpackemailverifytokenmismatch'] = 'The token in the link you clicked does not match the stored token. Make sure you clicked the link in most recent email you received.';
 $string['backpackimport'] = 'Badge import settings';
 $string['backpackimport_help'] = 'After the backpack connection is successfully established, badges from your backpack can be displayed on your badges page and your profile page.
 
@@ -158,22 +184,30 @@ $string['criteria_descr_short2'] = 'Awarded by <strong>{$a}</strong> of: ';
 $string['criteria_descr_short4'] = 'Complete the course ';
 $string['criteria_descr_short5'] = 'Complete <strong>{$a}</strong> of: ';
 $string['criteria_descr_short6'] = 'Complete <strong>{$a}</strong> of: ';
+$string['criteria_descr_short7'] = 'Complete <strong>{$a}</strong> of: ';
+$string['criteria_descr_short8'] = 'Cohort membership in <strong>{$a}</strong> of: ';
 $string['criteria_descr_single_short1'] = 'Complete: ';
 $string['criteria_descr_single_short2'] = 'Awarded by: ';
 $string['criteria_descr_single_short4'] = 'Complete the course ';
 $string['criteria_descr_single_short5'] = 'Complete: ';
 $string['criteria_descr_single_short6'] = 'Complete: ';
+$string['criteria_descr_single_short7'] = 'Complete: ';
+$string['criteria_descr_single_short8'] = 'Membership in: ';
 $string['criteria_descr_single_1'] = 'The following activity has to be completed:';
 $string['criteria_descr_single_2'] = 'This badge has to be awarded by a user with the following role:';
 $string['criteria_descr_single_4'] = 'Users must complete the course';
 $string['criteria_descr_single_5'] = 'The following course has to be completed:';
 $string['criteria_descr_single_6'] = 'The following user profile field has to be completed:';
+$string['criteria_descr_single_7'] = 'The following badge has to be earned:';
+$string['criteria_descr_single_8'] = 'Membership in the following cohort is required:';
 $string['criteria_descr_0'] = 'Users are awarded this badge when they complete <strong>{$a}</strong> of the listed requirements.';
 $string['criteria_descr_1'] = '<strong>{$a}</strong> of the following activities are completed:';
 $string['criteria_descr_2'] = 'This badge has to be awarded by the users with <strong>{$a}</strong> of the following roles:';
 $string['criteria_descr_4'] = 'Users must complete the course';
 $string['criteria_descr_5'] = '<strong>{$a}</strong> of the following courses have to be completed:';
 $string['criteria_descr_6'] = '<strong>{$a}</strong> of the following user profile fields have to be completed:';
+$string['criteria_descr_7'] = '<strong>{$a}</strong> of the following badges have to be earned:';
+$string['criteria_descr_8'] = 'Membership in <strong>{$a}</strong> of the following cohorts is required:';
 $string['criteria_0'] = 'This badge is awarded when...';
 $string['criteria_1'] = 'Activity completion';
 $string['criteria_1_help'] = 'Allows a badge to be awarded to users based on the completion of a set of activities within a course.';
@@ -187,6 +221,10 @@ $string['criteria_5'] = 'Completing a set of courses';
 $string['criteria_5_help'] = 'Allows a badge to be awarded to users who have completed a set of courses. Each course can have additional parameters such as minimum grade and date of course completion. ';
 $string['criteria_6'] = 'Profile completion';
 $string['criteria_6_help'] = 'Allows a badge to be awarded to users for completing certain fields in their profile. You can select from default and custom profile fields that are available to users. ';
+$string['criteria_7'] = 'Awarded badges';
+$string['criteria_7_help'] = 'Allows a badge to be awarded to users based on the other badges thay have earned.';
+$string['criteria_8'] = 'Cohort membership';
+$string['criteria_8_help'] = 'Allows a badge to be awarded to users based on cohort membership.';
 $string['criterror'] = 'Current parameters issues';
 $string['criterror_help'] = 'This fieldset shows all parameters that were initially added to this badge requirement but are no longer available. It is recommended that you un-check such parameters to make sure that users can earn this badge in the future.';
 $string['currentimage'] = 'Current image';
@@ -214,11 +252,9 @@ $string['enablebadges'] = 'Enable badges';
 $string['error:backpackdatainvalid'] = 'The data return from the backpack was invalid.';
 $string['error:backpackemailnotfound'] = 'The email \'{$a}\' is not associated with a backpack. You need to <a href="http://backpack.openbadges.org">create a backpack</a> for that account or sign in with another email address.';
 $string['error:backpacknotavailable'] = 'Your site is not accessible from the Internet, so any badges issued from this site cannot be verified by external backpack services.';
-$string['error:backpackloginfailed'] = 'You could not be connected to an external backpack for the following reason: {$a}';
 $string['error:backpackproblem'] = 'There was a problem connecting to your backpack service provider. Please try again later.';
 $string['error:badgeawardnotfound'] = 'Cannot verify this awarded badge.  This badge may have been revoked.';
 $string['error:badgenotfound'] = 'Badge not found';
-$string['error:badjson'] = 'The connection attempt returned invalid data.';
 $string['error:cannotact'] = 'Cannot activate the badge. ';
 $string['error:cannotawardbadge'] = 'Cannot award badge to a user.';
 $string['error:cannotrevokebadge'] = 'Cannot revoke badge from a user.';
@@ -232,13 +268,18 @@ $string['error:invalidbadgeurl'] = 'Invalid badge issuer URL format.';
 $string['error:invalidcriteriatype'] = 'Invalid criteria type.';
 $string['error:invalidexpiredate'] = 'Expiry date has to be in the future.';
 $string['error:invalidexpireperiod'] = 'Expiry period cannot be negative or equal 0.';
+$string['error:invalidparambadge'] = 'Badge does not exist. ';
 $string['error:noactivities'] = 'There are no activities with completion criteria enabled in this course.';
-$string['error:noassertion'] = 'No assertion was returned by Persona. You may have closed the dialog before completing the login process.';
+$string['error:nobadges'] = 'There are no course or site badges with access enabled to be added as criteria.';
+$string['error:invalidparamcohort'] = 'Cohort does not exist. ';
+$string['error:noactivities'] = 'There are no activities with completion criteria enabled in this course.';
+$string['error:nocohorts'] = 'No cohorts';
 $string['error:nocourses'] = 'Course completion is not enabled for any of the courses in this site, so none can be displayed. Course completion may be enabled in the course settings.';
 $string['error:nogroups'] = '<p>There are no public collections of badges available in your backpack. </p>
 <p>Only public collections are shown, <a href="http://backpack.openbadges.org">visit your backpack</a> to create some public collections.</p>';
 $string['error:nopermissiontoview'] = 'You have no permissions to view badge recipients';
 $string['error:nosuchbadge'] = 'Badge with id {$a} does not exist.';
+$string['error:nosuchcohort'] = 'Warning: This cohort is no longer available.';
 $string['error:nosuchcourse'] = 'Warning: This course is no longer available.';
 $string['error:nosuchfield'] = 'Warning: This user profile field is no longer available.';
 $string['error:nosuchmod'] = 'Warning: This activity is no longer available.';
@@ -246,7 +287,6 @@ $string['error:nosuchrole'] = 'Warning: This role is no longer available.';
 $string['error:nosuchuser'] = 'User with this email address does not have an account with the current backpack provider.';
 $string['error:notifycoursedate'] = 'Warning: Badges associated with course and activity completions will not be issued until the course start date.';
 $string['error:parameter'] = 'Warning: At least one parameter should be selected to ensure correct badge issuing workflow.';
-$string['error:personaneedsjs'] = 'Currently, Javascript is required to connect to your backpack. If you can, enable Javascript and reload the page.';
 $string['error:requesttimeout'] = 'The connection request timed out before it could complete.';
 $string['error:requesterror'] = 'The connection request failed (error code {$a}).';
 $string['error:save'] = 'Cannot save the badge.';
@@ -348,13 +388,43 @@ $string['numawardstat'] = 'This badge has been issued {$a} user(s).';
 $string['overallcrit'] = 'of the selected criteria are complete.';
 $string['potentialrecipients'] = 'Potential badge recipients';
 $string['preferences'] = 'Badge preferences';
+$string['privacy:metadata:backpack'] = 'A record of user\'s backpacks';
+$string['privacy:metadata:backpack:backpackuid'] = 'The backpack unique identifier';
+$string['privacy:metadata:backpack:backpackurl'] = 'The backpack URL';
+$string['privacy:metadata:backpack:email'] = 'The email associated with the backpack';
+$string['privacy:metadata:backpack:userid'] = 'The ID of the user whose backpack it is';
+$string['privacy:metadata:badge'] = 'A collection of badges';
+$string['privacy:metadata:badge:timecreated'] = 'The time when the badge was created';
+$string['privacy:metadata:badge:timemodified'] = 'The time when the badge was last modified';
+$string['privacy:metadata:badge:usercreated'] = 'The ID of the user who created the badge';
+$string['privacy:metadata:badge:usermodified'] = 'The ID of the user who modified the badge';
+$string['privacy:metadata:criteriamet'] = 'A collection of criteria which have been met';
+$string['privacy:metadata:criteriamet:datemet'] = 'The date when the criteria was met';
+$string['privacy:metadata:criteriamet:userid'] = 'The ID of the user who has met the criteria';
+$string['privacy:metadata:external:backpacks'] = 'Information shared when users submit their badges to an external backpack';
+$string['privacy:metadata:external:backpacks:badge'] = 'The name of the badge';
+$string['privacy:metadata:external:backpacks:description'] = 'The description of the badge';
+$string['privacy:metadata:external:backpacks:image'] = 'The image of the badge';
+$string['privacy:metadata:external:backpacks:issuer'] = 'Some information about the issuer';
+$string['privacy:metadata:external:backpacks:url'] = 'The Moodle URL where the issued badge information can be seen';
+$string['privacy:metadata:issued'] = 'A record of badges awarded';
+$string['privacy:metadata:issued:dateexpire'] = 'The date when the badge expires';
+$string['privacy:metadata:issued:dateissued'] = 'The date of the award';
+$string['privacy:metadata:issued:userid'] = 'The ID of the user who was awarded a badge';
+$string['privacy:metadata:manualaward'] = 'A record of manual awards';
+$string['privacy:metadata:manualaward:datemet'] = 'The date when the user was awarded the badge';
+$string['privacy:metadata:manualaward:issuerid'] = 'The ID of the user awarding the badge';
+$string['privacy:metadata:manualaward:issuerrole'] = 'The role of the user awarding the badge';
+$string['privacy:metadata:manualaward:recipientid'] = 'The ID of the user who is manually awarded a badge';
 $string['recipients'] = 'Badge recipients';
 $string['recipientdetails'] = 'Recipient details';
 $string['recipientidentificationproblem'] = 'Cannot find a recipient of this badge among the existing users.';
 $string['recipientvalidationproblem'] = 'Current user cannot be verified as a recipient of this badge.';
 $string['relative'] = 'Relative date';
 $string['revoke'] = 'Revoke badge';
+$string['requiredcohort'] = 'At least one cohort should be added to the cohort criterion.';
 $string['requiredcourse'] = 'At least one course should be added to the courseset criterion.';
+$string['requiredbadge'] = 'At least one badge should be added to the badge criterion.';
 $string['reviewbadge'] = 'Changes in badge access';
 $string['reviewconfirm'] = '<p>This will make your badge visible to users and allow them to start earning it.</p>
 
@@ -370,7 +440,6 @@ $string['selectgroup_end'] = 'Only public collections are shown, <a href="http:/
 $string['selectgroup_start'] = 'Select collections from your backpack to display on this site:';
 $string['selecting'] = 'With selected badges...';
 $string['setup'] = 'Set up connection';
-$string['signinwithyouremail'] = 'Sign in with your email';
 $string['sitebadges'] = 'Site badges';
 $string['sitebadges_help'] = 'Site badges can only be awarded to users for site-related activities. These include completing a set of courses or parts of user profiles. Site badges can also be issued manually by one user to another.
 
@@ -409,3 +478,13 @@ $string['visible'] = 'Visible';
 $string['warnexpired'] = ' (This badge has expired!)';
 $string['year'] = 'Year(s)';
 
+// Deprecated since Moodle 3.3.
+$string['personaconnection'] = 'Sign in with your email';
+$string['personaconnection_help'] = 'Persona is a system for identifying yourself across the web, using an email address that you own. The Open Badges backpack uses Persona as a login system, so to be able to connect to a backpack you will need a Persona account.
+
+For more information about Persona visit <a href="https://login.persona.org/about">https://login.persona.org/about</a>.';
+$string['error:backpackloginfailed'] = 'You could not be connected to an external backpack for the following reason: {$a}';
+$string['error:badjson'] = 'The connection attempt returned invalid data.';
+$string['error:noassertion'] = 'No assertion was returned by Persona. You may have closed the dialog before completing the login process.';
+$string['error:personaneedsjs'] = 'Currently, Javascript is required to connect to your backpack. If you can, enable Javascript and reload the page.';
+$string['signinwithyouremail'] = 'Sign in with your email';

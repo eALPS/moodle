@@ -51,6 +51,14 @@ class cache implements cache_loader {
     protected static $now;
 
     /**
+     * A purge token used to distinguish between multiple cache purges in the same second.
+     * This is in the format <microtime>-<random string>.
+     *
+     * @var string
+     */
+    protected static $purgetoken;
+
+    /**
      * The definition used when loading this cache if there was one.
      * @var cache_definition
      */
@@ -272,6 +280,90 @@ class cache implements cache_loader {
                 $this->staticaccelerationkeys = array();
                 $this->staticaccelerationcount = 0;
             }
+        }
+    }
+
+    /**
+     * Process any outstanding invalidation events for the cache we are registering,
+     *
+     * Identifiers and event invalidation are not compatible with each other at this time.
+     * As a result the cache does not need to consider identifiers when working out what to invalidate.
+     */
+    protected function handle_invalidation_events() {
+        if (!$this->definition->has_invalidation_events()) {
+            return;
+        }
+
+        // Each cache stores the current 'lastinvalidation' value within the cache itself.
+        $lastinvalidation = $this->get('lastinvalidation');
+        if ($lastinvalidation === false) {
+            // There is currently no  value for the lastinvalidation token, therefore the token is not set, and there
+            // can be nothing to invalidate.
+            // Set the lastinvalidation value to the current purge token and return early.
+            $this->set('lastinvalidation', self::get_purge_token());
+            return;
+        } else if ($lastinvalidation == self::get_purge_token()) {
+            // The current purge request has already been fully handled by this cache.
+            return;
+        }
+
+        /*
+         * Now that the whole cache check is complete, we check the meaning of any specific cache invalidation events.
+         * These are stored in the core/eventinvalidation cache as an multi-dimensinoal array in the form:
+         *  [
+         *      eventname => [
+         *          keyname => purgetoken,
+         *      ]
+         *  ]
+         *
+         * The 'keyname' value is used to delete a specific key in the cache.
+         * If the keyname is set to the special value 'purged', then the whole cache is purged instead.
+         *
+         * The 'purgetoken' is the token that this key was last purged.
+         * a) If the purgetoken matches the last invalidation, then the key/cache is not purged.
+         * b) If the purgetoken is newer than the last invalidation, then the key/cache is not purged.
+         * c) If the purge token is older than the last invalidation, or it has a different token component, then the
+         *    cache is purged.
+         *
+         * Option b should not happen under normal operation, but may happen in race condition whereby a long-running
+         * request's cache is cleared in another process during that request, and prior to that long-running request
+         * creating the cache. In such a condition, it would be incorrect to clear that cache.
+         */
+        $cache = self::make('core', 'eventinvalidation');
+        $events = $cache->get_many($this->definition->get_invalidation_events());
+        $todelete = array();
+        $purgeall = false;
+
+        // Iterate the returned data for the events.
+        foreach ($events as $event => $keys) {
+            if ($keys === false) {
+                // No data to be invalidated yet.
+                continue;
+            }
+
+            // Look at each key and check the timestamp.
+            foreach ($keys as $key => $purgetoken) {
+                // If the timestamp of the event is more than or equal to the last invalidation (happened between the last
+                // invalidation and now), then we need to invaliate the key.
+                if (self::compare_purge_tokens($purgetoken, $lastinvalidation) > 0) {
+                    if ($key === 'purged') {
+                        $purgeall = true;
+                        break;
+                    } else {
+                        $todelete[] = $key;
+                    }
+                }
+            }
+        }
+        if ($purgeall) {
+            $this->purge();
+        } else if (!empty($todelete)) {
+            $todelete = array_unique($todelete);
+            $this->delete_many($todelete);
+        }
+        // Set the time of the last invalidation.
+        if ($purgeall || !empty($todelete)) {
+            $this->set('lastinvalidation', self::get_purge_token(true));
         }
     }
 
@@ -1018,7 +1110,7 @@ class cache implements cache_loader {
                 $result = $data;
             }
         }
-        if ($result) {
+        if ($result !== false) {
             if ($this->perfdebug) {
                 cache_helper::record_cache_hit('** static acceleration **', $this->definition);
             }
@@ -1127,13 +1219,77 @@ class cache implements cache_loader {
      * This stamp needs to be used for all ttl and time based operations to ensure that we don't end up with
      * timing issues.
      *
-     * @return int
+     * @param   bool    $float Whether to use floating precision accuracy.
+     * @return  int|float
      */
-    public static function now() {
+    public static function now($float = false) {
         if (self::$now === null) {
-            self::$now = time();
+            self::$now = microtime(true);
         }
-        return self::$now;
+
+        if ($float) {
+            return self::$now;
+        } else {
+            return (int) self::$now;
+        }
+    }
+
+    /**
+     * Get a 'purge' token used for cache invalidation handling.
+     *
+     * Note: This function is intended for use from within the Cache API only and not by plugins, or cache stores.
+     *
+     * @param   bool    $reset  Whether to reset the token and generate a new one.
+     * @return  string
+     */
+    public static function get_purge_token($reset = false) {
+        if (self::$purgetoken === null || $reset) {
+            self::$now = null;
+            self::$purgetoken = self::now(true) . '-' . uniqid('', true);
+        }
+
+        return self::$purgetoken;
+    }
+
+    /**
+     * Compare a pair of purge tokens.
+     *
+     * If the two tokens are identical, then the return value is 0.
+     * If the time component of token A is newer than token B, then a positive value is returned.
+     * If the time component of token B is newer than token A, then a negative value is returned.
+     *
+     * Note: This function is intended for use from within the Cache API only and not by plugins, or cache stores.
+     *
+     * @param   string  $tokena
+     * @param   string  $tokenb
+     * @return  int
+     */
+    public static function compare_purge_tokens($tokena, $tokenb) {
+        if ($tokena === $tokenb) {
+            // There is an exact match.
+            return 0;
+        }
+
+        // The token for when the cache was last invalidated.
+        list($atime) = explode('-', "{$tokena}-", 2);
+
+        // The token for this cache.
+        list($btime) = explode('-', "{$tokenb}-", 2);
+
+        if ($atime >= $btime) {
+            // Token A is newer.
+            return 1;
+        } else {
+            // Token A is older.
+            return -1;
+        }
+    }
+
+    /**
+     * Subclasses may support purging cache of all data belonging to the
+     * current user.
+     */
+    public function purge_current_user() {
     }
 }
 
@@ -1214,54 +1370,7 @@ class cache_application extends cache implements cache_loader_with_locking {
             $this->requirelockingwrite = $definition->require_locking_write();
         }
 
-        if ($definition->has_invalidation_events()) {
-            $lastinvalidation = $this->get('lastinvalidation');
-            if ($lastinvalidation === false) {
-                // This is a new session, there won't be anything to invalidate. Set the time of the last invalidation and
-                // move on.
-                $this->set('lastinvalidation', cache::now());
-                return;
-            } else if ($lastinvalidation == cache::now()) {
-                // We've already invalidated during this request.
-                return;
-            }
-
-            // Get the event invalidation cache.
-            $cache = cache::make('core', 'eventinvalidation');
-            $events = $cache->get_many($definition->get_invalidation_events());
-            $todelete = array();
-            $purgeall = false;
-            // Iterate the returned data for the events.
-            foreach ($events as $event => $keys) {
-                if ($keys === false) {
-                    // No data to be invalidated yet.
-                    continue;
-                }
-                // Look at each key and check the timestamp.
-                foreach ($keys as $key => $timestamp) {
-                    // If the timestamp of the event is more than or equal to the last invalidation (happened between the last
-                    // invalidation and now)then we need to invaliate the key.
-                    if ($timestamp >= $lastinvalidation) {
-                        if ($key === 'purged') {
-                            $purgeall = true;
-                            break;
-                        } else {
-                            $todelete[] = $key;
-                        }
-                    }
-                }
-            }
-            if ($purgeall) {
-                $this->purge();
-            } else if (!empty($todelete)) {
-                $todelete = array_unique($todelete);
-                $this->delete_many($todelete);
-            }
-            // Set the time of the last invalidation.
-            if ($purgeall || !empty($todelete)) {
-                $this->set('lastinvalidation', cache::now());
-            }
-        }
+        $this->handle_invalidation_events();
     }
 
     /**
@@ -1610,59 +1719,13 @@ class cache_session extends cache {
     public function __construct(cache_definition $definition, cache_store $store, $loader = null) {
         // First up copy the loadeduserid to the current user id.
         $this->currentuserid = self::$loadeduserid;
+        $this->set_session_id();
         parent::__construct($definition, $store, $loader);
 
         // This will trigger check tracked user. If this gets removed a call to that will need to be added here in its place.
         $this->set(self::LASTACCESS, cache::now());
 
-        if ($definition->has_invalidation_events()) {
-            $lastinvalidation = $this->get('lastsessioninvalidation');
-            if ($lastinvalidation === false) {
-                // This is a new session, there won't be anything to invalidate. Set the time of the last invalidation and
-                // move on.
-                $this->set('lastsessioninvalidation', cache::now());
-                return;
-            } else if ($lastinvalidation == cache::now()) {
-                // We've already invalidated during this request.
-                return;
-            }
-
-            // Get the event invalidation cache.
-            $cache = cache::make('core', 'eventinvalidation');
-            $events = $cache->get_many($definition->get_invalidation_events());
-            $todelete = array();
-            $purgeall = false;
-            // Iterate the returned data for the events.
-            foreach ($events as $event => $keys) {
-                if ($keys === false) {
-                    // No data to be invalidated yet.
-                    continue;
-                }
-                // Look at each key and check the timestamp.
-                foreach ($keys as $key => $timestamp) {
-                    // If the timestamp of the event is more than or equal to the last invalidation (happened between the last
-                    // invalidation and now)then we need to invaliate the key.
-                    if ($timestamp >= $lastinvalidation) {
-                        if ($key === 'purged') {
-                            $purgeall = true;
-                            break;
-                        } else {
-                            $todelete[] = $key;
-                        }
-                    }
-                }
-            }
-            if ($purgeall) {
-                $this->purge();
-            } else if (!empty($todelete)) {
-                $todelete = array_unique($todelete);
-                $this->delete_many($todelete);
-            }
-            // Set the time of the last invalidation.
-            if ($purgeall || !empty($todelete)) {
-                $this->set('lastsessioninvalidation', cache::now());
-            }
-        }
+        $this->handle_invalidation_events();
     }
 
     /**
@@ -1716,8 +1779,6 @@ class cache_session extends cache {
                 // Purge the data we have for the old user.
                 // This way we don't bloat the session.
                 $this->purge();
-                // Update the session id just in case!
-                $this->set_session_id();
             }
             self::$loadeduserid = $new;
             $this->currentuserid = $new;
@@ -1725,8 +1786,6 @@ class cache_session extends cache {
             // The current user matches the loaded user but not the user last used by this cache.
             $this->purge_current_user();
             $this->currentuserid = $new;
-            // Update the session id just in case!
-            $this->set_session_id();
         }
     }
 

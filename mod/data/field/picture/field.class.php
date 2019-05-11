@@ -32,7 +32,6 @@ class data_field_picture extends data_field_base {
 
         $file        = false;
         $content     = false;
-        $displayname = '';
         $alttext     = '';
         $itemid = null;
         $fs = get_file_storage();
@@ -45,29 +44,25 @@ class data_field_picture extends data_field_base {
                 $alttext = $formdata->$fieldname;
             }
         } else if ($recordid) {
-            if ($content = $DB->get_record('data_content', array('fieldid'=>$this->field->id, 'recordid'=>$recordid))) {
-                file_prepare_draft_area($itemid, $this->context->id, 'mod_data', 'content', $content->id);
-                if (!empty($content->content)) {
-                    if ($file = $fs->get_file($this->context->id, 'mod_data', 'content', $content->id, '/', $content->content)) {
-                        $usercontext = context_user::instance($USER->id);
-                        if (!$files = $fs->get_area_files($usercontext->id, 'user', 'draft', $itemid, 'id DESC', false)) {
-                            return false;
-                        }
-                        if ($thumbfile = $fs->get_file($usercontext->id, 'user', 'draft', $itemid, '/', 'thumb_'.$content->content)) {
-                            $thumbfile->delete();
-                        }
-                        if (empty($content->content1)) {
-                            // Print icon if file already exists
-                            $src = moodle_url::make_draftfile_url($itemid, '/', $file->get_filename());
-                            $displayname = $OUTPUT->pix_icon(file_file_icon($file), get_mimetype_description($file), 'moodle', array('class' => 'icon')). '<a href="'.$src.'" >'.s($file->get_filename()).'</a>';
+            if (!$content = $DB->get_record('data_content', array('fieldid' => $this->field->id, 'recordid' => $recordid))) {
+                // Quickly make one now!
+                $content = new stdClass();
+                $content->fieldid  = $this->field->id;
+                $content->recordid = $recordid;
+                $id = $DB->insert_record('data_content', $content);
+                $content = $DB->get_record('data_content', array('id' => $id));
+            }
+            file_prepare_draft_area($itemid, $this->context->id, 'mod_data', 'content', $content->id);
+            if (!empty($content->content)) {
+                if ($file = $fs->get_file($this->context->id, 'mod_data', 'content', $content->id, '/', $content->content)) {
+                    $usercontext = context_user::instance($USER->id);
 
-                        } else {
-                            $displayname = get_string('nofilesattached', 'repository');
-                        }
+                    if ($thumbfile = $fs->get_file($usercontext->id, 'user', 'draft', $itemid, '/', 'thumb_'.$content->content)) {
+                        $thumbfile->delete();
                     }
                 }
-                $alttext = $content->content1;
             }
+            $alttext = $content->content1;
         } else {
             $itemid = file_get_unused_draft_itemid();
         }
@@ -76,8 +71,7 @@ class data_field_picture extends data_field_base {
 
         if ($this->field->required) {
             $str .= '&nbsp;' . get_string('requiredelement', 'form') . '</span></legend>';
-            $image = html_writer::img($OUTPUT->pix_url('req'), get_string('requiredelement', 'form'),
-                                      array('class' => 'req', 'title' => get_string('requiredelement', 'form')));
+            $image = $OUTPUT->pix_icon('req', get_string('requiredelement', 'form'));
             $str .= html_writer::div($image, 'inline-req');
         } else {
             $str .= '</span></legend>';
@@ -146,8 +140,12 @@ class data_field_picture extends data_field_base {
                'value="' . s($value) . '" class="form-control"/>';
     }
 
-    function parse_search_field() {
-        return optional_param('f_'.$this->field->id, '', PARAM_NOTAGS);
+    public function parse_search_field($defaults = null) {
+        $param = 'f_'.$this->field->id;
+        if (empty($defaults[$param])) {
+            $defaults = array($param => '');
+        }
+        return optional_param($param, $defaults[$param], PARAM_NOTAGS);
     }
 
     function generate_sql($tablealias, $value) {
@@ -225,13 +223,11 @@ class data_field_picture extends data_field_base {
     function update_content($recordid, $value, $name='') {
         global $CFG, $DB, $USER;
 
-        if (!$content = $DB->get_record('data_content', array('fieldid'=>$this->field->id, 'recordid'=>$recordid))) {
-        // Quickly make one now!
-            $content = new stdClass();
-            $content->fieldid  = $this->field->id;
-            $content->recordid = $recordid;
-            $id = $DB->insert_record('data_content', $content);
-            $content = $DB->get_record('data_content', array('id'=>$id));
+        // Should always be available since it is set by display_add_field before initializing the draft area.
+        $content = $DB->get_record('data_content', array('fieldid' => $this->field->id, 'recordid' => $recordid));
+        if (!$content) {
+            $content = (object)array('fieldid' => $this->field->id, 'recordid' => $recordid);
+            $content->id = $DB->insert_record('data_content', $content);
         }
 
         $names = explode('_', $name);
@@ -324,5 +320,20 @@ class data_field_picture extends data_field_base {
             return count($files) >= 2;
         }
         return false;
+    }
+
+    /**
+     * Return the plugin configs for external functions.
+     *
+     * @return array the list of config parameters
+     * @since Moodle 3.3
+     */
+    public function get_config_for_external() {
+        // Return all the config parameters.
+        $configs = [];
+        for ($i = 1; $i <= 10; $i++) {
+            $configs["param$i"] = $this->field->{"param$i"};
+        }
+        return $configs;
     }
 }

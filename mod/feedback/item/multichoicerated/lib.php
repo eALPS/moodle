@@ -76,9 +76,10 @@ class feedback_item_multichoicerated extends feedback_item_base {
     public function save_item() {
         global $DB;
 
-        if (!$item = $this->item_form->get_data()) {
+        if (!$this->get_data()) {
             return false;
         }
+        $item = $this->item;
 
         if (isset($item->clone_item) AND $item->clone_item) {
             $item->id = ''; //to clone this item
@@ -278,8 +279,10 @@ class feedback_item_multichoicerated extends feedback_item_base {
         $options = array();
         foreach ($lines as $idx => $line) {
             list($weight, $optiontext) = explode(FEEDBACK_MULTICHOICERATED_VALUE_SEP, $line);
-            $options[$idx + 1] = format_text("<span class=\"weight\">($weight) </span>".$optiontext,
-                    FORMAT_HTML, array('noclean' => true, 'para' => false));
+            $a = new stdclass();
+            $a->weight = $weight;
+            $a->name = format_text($optiontext, FORMAT_HTML, array('noclean' => true, 'para' => false));
+            $options[$idx + 1] = get_string('multichoiceoption', 'feedback', $a);
         }
         if ($info->subtype === 'r' && !$this->hidenoselect($item)) {
             $options = array(0 => get_string('not_selected', 'feedback')) + $options;
@@ -467,5 +470,27 @@ class feedback_item_multichoicerated extends feedback_item_base {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Return the analysis data ready for external functions.
+     *
+     * @param stdClass $item     the item (question) information
+     * @param int      $groupid  the group id to filter data (optional)
+     * @param int      $courseid the course id (optional)
+     * @return array an array of data with non scalar types json encoded
+     * @since  Moodle 3.3
+     */
+    public function get_analysed_for_external($item, $groupid = false, $courseid = false) {
+
+        $externaldata = array();
+        $data = $this->get_analysed($item, $groupid, $courseid);
+
+        if (!empty($data[2]) && is_array($data[2])) {
+            foreach ($data[2] as $d) {
+                $externaldata[] = json_encode($d);
+            }
+        }
+        return $externaldata;
     }
 }

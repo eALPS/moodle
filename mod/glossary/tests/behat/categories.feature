@@ -23,14 +23,10 @@ Feature: Glossary entries can be organised in categories
     And the following "activities" exist:
       | activity | name       | intro                                                           | course | idnumber  |
       | label    | name       | check autolinking of CategoryAutoLinks and CategoryNoLinks text | C1     | label1    |
-# Log in as admin and enable autolinking filter
-    And I log in as "admin"
-    And I navigate to "Plugins > Filters > Manage filters" in site administration
-    And I click on "On" "option" in the "Glossary auto-linking" "table_row"
-    And I log out
+    And the "glossary" filter is "on"
 # Log in as a teacher and make sure nothing is yet autolinked
     And I log in as "teacher1"
-    When I follow "Course 1"
+    When I am on "Course 1" course homepage
     Then I should see "CategoryAutoLinks"
     And I should see "CategoryNoLinks"
     And "a.glossary.autolink" "css_element" should not exist
@@ -38,16 +34,16 @@ Feature: Glossary entries can be organised in categories
     And I follow "MyGlossary"
     And I follow "Browse by category"
     And I press "Edit categories"
-    And I press "Add Category"
+    And I press "Add category"
     And I set the field "name" to "CategoryNoLinks"
     And I press "Save changes"
     And I should see "0 Entries" in the "CategoryNoLinks" "table_row"
-    And I press "Add Category"
+    And I press "Add category"
     And I set the field "name" to "CategoryAutoLinks"
     And I set the field "usedynalink" to "Yes"
     And I press "Save changes"
     And I should see "0 Entries" in the "CategoryAutoLinks" "table_row"
-    And I press "Add Category"
+    And I press "Add category"
     And I set the field "name" to "Category2"
     And I press "Save changes"
     And I click on "Edit" "link" in the "Category2" "table_row"
@@ -95,13 +91,13 @@ Feature: Glossary entries can be organised in categories
     And I should not see "EntryCategoryAL"
     And I should not see "EntryCategoryBoth"
 # Check that category is autolinked from the text in the course
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I should see "CategoryAutoLinks"
     And I should see "CategoryAutoLinks" in the "a.glossary.autolink" "css_element"
     And I should see "CategoryNoLinks"
     And "//a[contains(.,'CategoryNoLinks')]" "xpath_element" should not exist
 # Delete a category with entries
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "MyGlossary"
     And I follow "Browse by category"
     And I press "Edit categories"

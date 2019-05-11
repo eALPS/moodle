@@ -30,7 +30,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$string['admindirname'] = 'Rendszergazdakönyvtár';
+$string['admindirname'] = 'Rendszergazda-könyvtár';
 $string['availablelangs'] = 'Elérhető nyelvek listája';
 $string['chooselanguagehead'] = 'Nyelv kiválasztása';
 $string['chooselanguagesub'] = 'Válasszon nyelvet a telepítéshez! Ez lesz a portál alapbeállítás szerinti nyelve, de később módosíthatja.';
@@ -59,19 +59,18 @@ $string['pathsroparentdataroot'] = 'A felettes könyvtár ({$a->parent}) nem ír
 $string['pathssubadmindir'] = 'Egy pár webes gazdagép esetén az /admin speciális URL pl. a vezérlőpanel eléréséhez. Ez ütközik a Moodle admin oldalainak standard helyével. Javítás: a telepítésben nevezze át a rendszergazda könyvtárát, az új nevet pedig írja be ide. Például: <em>moodleadmin</em>. Ezzel helyrehozhatók a Moodle rendszergazdai ugrópontjai.';
 $string['pathssubdataroot'] = 'Szüksége van egy helyre, ahol a Moodle mentheti a feltöltött állományokat. Ez a könyvtár a webszerver felhasználója (általában \'nobody\' vagy \'apache\') számára legyen mind olvasható, MIND ÍRHATÓ. Ha nem létezik, a telepítő megpróbálja létrehozni.';
 $string['pathssubdirroot'] = 'Teljes útvonal a Moodle telepítéséhez. ';
-$string['pathssubwwwroot'] = 'A Moodle elérésére használandó teljes webcím. A Moodle egyszerre több
-címről nem érhető el. Ha portálja több címet használ, a jelen cím kivételével az összeshez állandó
-átirányítást kell beállítania. Ha portálja mind intranetről, mind az internetről elérhető, a nyilvános
-címet itt adja meg, a DNS-t pedig úgy állítsa be, hogy az intranetről a
-nyilvános cím is elérhető legyen. Ha a cím hibás, módosítsa böngészőjében az URL-t, hogy a telepítés egy másik értékkel induljon újra.';
+$string['pathssubwwwroot'] = 'A Moodle elérésére használandó teljes webcím. A Moodle egyszerre több címről nem érhető el. Ha portálja több címet használ, a jelen cím kivételével az összeshez állandó
+átirányítást kell beállítania. Ha portálja mind intranetről, mind az internetről elérhető, a nyilvános címet itt adja meg, a DNS-t pedig úgy állítsa be, hogy az intranetről a nyilvános cím is elérhető legyen. Ha a cím hibás, módosítsa böngészőjében a webcímet, hogy a telepítés egy másik értékkel induljon újra.';
 $string['pathsunsecuredataroot'] = 'Az adatok gyökérkönyvtára nem biztonságos.';
 $string['pathswrongadmindir'] = 'Nem létezik az admin könyvtár.';
 $string['phpextension'] = '{$a} PHP-bővítmény';
 $string['phpversion'] = 'PHP-verzió';
-$string['phpversionhelp'] = 'A Moodle használatához legalább a PHP 4.3.0 vagy 5.1.0 verziója szükséges
- (az 5.0.x több ismert gond miatt nem ajánlott). Az Ön által használt
-verzió {$a}. Frissítse a PHP-verziót, vagy térjen át újabb PHP-verziót
-működtető gazdagépre! (5.0.x esetén visszatérhet a 4.4.x verzióhoz is)';
+$string['phpversionhelp'] = 'A Moodle használatához legalább a PHP 5.6.5 vagy 7.1 verziója szükséges
+ (a 7.0.x bizonyos korlátokkal rendelkezik).</p>
+<p> Az Ön által használt
+verzió {$a}. </p>
+<p>Frissítse a PHP-verziót, vagy térjen át újabb PHP-verziót
+működtető gazdagépre!</p>';
 $string['welcomep10'] = '{$a->installername} ({$a->installerversion})';
 $string['welcomep20'] = 'Azért látja ezt az oldalt, mert sikeresen telepítette és futtatja az {$a->packname} {$a->packversion} csomagot számítógépén. Gratulálunk!';
 $string['welcomep30'] = 'A {$a->installername} tartalmazza azokat az alkalmazásokat, amelyekkel a Moodle számára kialakítható a működési környezet, azaz:';

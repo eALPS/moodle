@@ -98,6 +98,9 @@ class mod_forum_external extends external_api {
                 $forum->cmid = $forum->coursemodule;
                 $forum->cancreatediscussions = forum_user_can_post_discussion($forum, null, -1, $cm, $context);
                 $forum->istracked = forum_tp_is_tracked($forum);
+                if ($forum->istracked) {
+                    $forum->unreadpostscount = forum_tp_count_forum_unread_posts($cm, $course);
+                }
 
                 // Add the forum to the array to return.
                 $arrforums[$forum->id] = $forum;
@@ -146,6 +149,8 @@ class mod_forum_external extends external_api {
                     'cancreatediscussions' => new external_value(PARAM_BOOL, 'If the user can create discussions', VALUE_OPTIONAL),
                     'lockdiscussionafter' => new external_value(PARAM_INT, 'After what period a discussion is locked', VALUE_OPTIONAL),
                     'istracked' => new external_value(PARAM_BOOL, 'If the user is tracking the forum', VALUE_OPTIONAL),
+                    'unreadpostscount' => new external_value(PARAM_INT, 'The number of unread posts for tracked forums',
+                        VALUE_OPTIONAL),
                 ), 'forum'
             )
         );
@@ -244,8 +249,7 @@ class mod_forum_external extends external_api {
         $allposts = forum_get_all_discussion_posts($discussion->id, $sort, $forumtracked);
 
         foreach ($allposts as $post) {
-
-            if (!forum_user_can_see_post($forum, $discussion, $post, null, $cm)) {
+            if (!forum_user_can_see_post($forum, $discussion, $post, null, $cm, false)) {
                 $warning = array();
                 $warning['item'] = 'post';
                 $warning['itemid'] = $post->id;
@@ -269,6 +273,23 @@ class mod_forum_external extends external_api {
             } else {
                 $post->children = array();
             }
+
+            if (!forum_user_can_see_post($forum, $discussion, $post, null, $cm)) {
+                // The post is available, but has been marked as deleted.
+                // It will still be available but filled with a placeholder.
+                $post->userid = null;
+                $post->userfullname = null;
+                $post->userpictureurl = null;
+
+                $post->subject = get_string('privacy:request:delete:post:subject', 'mod_forum');
+                $post->message = get_string('privacy:request:delete:post:message', 'mod_forum');
+
+                $post->deleted = true;
+                $posts[] = $post;
+
+                continue;
+            }
+            $post->deleted = false;
 
             if (forum_is_author_hidden($post, $forum)) {
                 $post->userid = null;
@@ -304,6 +325,7 @@ class mod_forum_external extends external_api {
 
         $result = array();
         $result['posts'] = $posts;
+        $result['ratinginfo'] = \core_rating\external\util::get_rating_info($forum, $modcontext, 'mod_forum', 'post', $posts);
         $result['warnings'] = $warnings;
         return $result;
     }
@@ -340,10 +362,12 @@ class mod_forum_external extends external_api {
                                 'canreply' => new external_value(PARAM_BOOL, 'The user can reply to posts?'),
                                 'postread' => new external_value(PARAM_BOOL, 'The post was read'),
                                 'userfullname' => new external_value(PARAM_TEXT, 'Post author full name'),
-                                'userpictureurl' => new external_value(PARAM_URL, 'Post author picture.', VALUE_OPTIONAL)
+                                'userpictureurl' => new external_value(PARAM_URL, 'Post author picture.', VALUE_OPTIONAL),
+                                'deleted' => new external_value(PARAM_BOOL, 'This post has been removed.'),
                             ), 'post'
                         )
                     ),
+                'ratinginfo' => \core_rating\external\util::external_ratings_structure(),
                 'warnings' => new external_warnings()
             )
         );
@@ -775,36 +799,13 @@ class mod_forum_external extends external_api {
         require_once($CFG->dirroot . "/mod/forum/lib.php");
 
         $params = self::validate_parameters(self::add_discussion_post_parameters(),
-                                            array(
-                                                'postid' => $postid,
-                                                'subject' => $subject,
-                                                'message' => $message,
-                                                'options' => $options
-                                            ));
-        // Validate options.
-        $options = array(
-            'discussionsubscribe' => true,
-            'inlineattachmentsid' => 0,
-            'attachmentsid' => null
+            array(
+                'postid' => $postid,
+                'subject' => $subject,
+                'message' => $message,
+                'options' => $options
+            )
         );
-        foreach ($params['options'] as $option) {
-            $name = trim($option['name']);
-            switch ($name) {
-                case 'discussionsubscribe':
-                    $value = clean_param($option['value'], PARAM_BOOL);
-                    break;
-                case 'inlineattachmentsid':
-                    $value = clean_param($option['value'], PARAM_INT);
-                    break;
-                case 'attachmentsid':
-                    $value = clean_param($option['value'], PARAM_INT);
-                    break;
-                default:
-                    throw new moodle_exception('errorinvalidparam', 'webservice', '', $name);
-            }
-            $options[$name] = $value;
-        }
-
         $warnings = array();
 
         if (!$parent = forum_get_post_full($params['postid'])) {
@@ -822,6 +823,34 @@ class mod_forum_external extends external_api {
         $context = context_module::instance($cm->id);
         self::validate_context($context);
 
+        // Validate options.
+        $options = array(
+            'discussionsubscribe' => true,
+            'inlineattachmentsid' => 0,
+            'attachmentsid' => null
+        );
+        foreach ($params['options'] as $option) {
+            $name = trim($option['name']);
+            switch ($name) {
+                case 'discussionsubscribe':
+                    $value = clean_param($option['value'], PARAM_BOOL);
+                    break;
+                case 'inlineattachmentsid':
+                    $value = clean_param($option['value'], PARAM_INT);
+                    break;
+                case 'attachmentsid':
+                    $value = clean_param($option['value'], PARAM_INT);
+                    // Ensure that the user has permissions to create attachments.
+                    if (!has_capability('mod/forum:createattachment', $context)) {
+                        $value = 0;
+                    }
+                    break;
+                default:
+                    throw new moodle_exception('errorinvalidparam', 'webservice', '', $name);
+            }
+            $options[$name] = $value;
+        }
+
         if (!forum_user_can_post($forum, $discussion, $USER, $cm, $course, $context)) {
             throw new moodle_exception('nopostforum', 'forum');
         }
@@ -838,7 +867,8 @@ class mod_forum_external extends external_api {
         $post->messageformat = FORMAT_HTML;   // Force formatting for now.
         $post->messagetrust = trusttext_trusted($context);
         $post->itemid = $options['inlineattachmentsid'];
-        $post->attachments   = $options['attachmentsid'];
+        $post->attachments = $options['attachmentsid'];
+        $post->deleted = 0;
         $fakemform = $post->attachments;
         if ($postid = forum_add_new_post($post, $fakemform)) {
 
@@ -950,6 +980,16 @@ class mod_forum_external extends external_api {
                                                 'groupid' => $groupid,
                                                 'options' => $options
                                             ));
+
+        $warnings = array();
+
+        // Request and permission validation.
+        $forum = $DB->get_record('forum', array('id' => $params['forumid']), '*', MUST_EXIST);
+        list($course, $cm) = get_course_and_cm_from_instance($forum, 'forum');
+
+        $context = context_module::instance($cm->id);
+        self::validate_context($context);
+
         // Validate options.
         $options = array(
             'discussionsubscribe' => true,
@@ -971,21 +1011,16 @@ class mod_forum_external extends external_api {
                     break;
                 case 'attachmentsid':
                     $value = clean_param($option['value'], PARAM_INT);
+                    // Ensure that the user has permissions to create attachments.
+                    if (!has_capability('mod/forum:createattachment', $context)) {
+                        $value = 0;
+                    }
                     break;
                 default:
                     throw new moodle_exception('errorinvalidparam', 'webservice', '', $name);
             }
             $options[$name] = $value;
         }
-
-        $warnings = array();
-
-        // Request and permission validation.
-        $forum = $DB->get_record('forum', array('id' => $params['forumid']), '*', MUST_EXIST);
-        list($course, $cm) = get_course_and_cm_from_instance($forum, 'forum');
-
-        $context = context_module::instance($cm->id);
-        self::validate_context($context);
 
         // Normalize group.
         if (!groups_get_activity_groupmode($cm)) {
@@ -1129,6 +1164,8 @@ class mod_forum_external extends external_api {
 
         $result = array();
         $result['status'] = $status;
+        $result['canpindiscussions'] = has_capability('mod/forum:pindiscussions', $context);
+        $result['cancreateattachment'] = forum_can_create_attachment($forum, $context);
         $result['warnings'] = $warnings;
         return $result;
     }
@@ -1143,6 +1180,10 @@ class mod_forum_external extends external_api {
         return new external_single_structure(
             array(
                 'status' => new external_value(PARAM_BOOL, 'True if the user can add discussions, false otherwise.'),
+                'canpindiscussions' => new external_value(PARAM_BOOL, 'True if the user can pin discussions, false otherwise.',
+                    VALUE_OPTIONAL),
+                'cancreateattachment' => new external_value(PARAM_BOOL, 'True if the user can add attachments, false otherwise.',
+                    VALUE_OPTIONAL),
                 'warnings' => new external_warnings()
             )
         );

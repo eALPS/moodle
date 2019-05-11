@@ -52,19 +52,15 @@ function folder_supports($feature) {
 }
 
 /**
- * Returns all other caps used in module
- * @return array
- */
-function folder_get_extra_capabilities() {
-    return array('moodle/site:accessallgroups');
-}
-
-/**
  * This function is used by the reset_course_userdata function in moodlelib.
  * @param $data the data submitted from the reset course.
  * @return array status array
  */
 function folder_reset_userdata($data) {
+
+    // Any changes to the list of dates that needs to be rolled should be same during course restore and course reset.
+    // See MDL-9367.
+
     return array();
 }
 
@@ -109,6 +105,10 @@ function folder_add_instance($data, $mform) {
     $draftitemid = $data->files;
 
     $data->timemodified = time();
+    // If 'showexpanded' is not set, apply the site config.
+    if (!isset($data->showexpanded)) {
+        $data->showexpanded = get_config('folder', 'showexpanded');
+    }
     $data->id = $DB->insert_record('folder', $data);
 
     // we need to use context now, so we need to make sure all needed info is already in db
@@ -118,6 +118,9 @@ function folder_add_instance($data, $mform) {
     if ($draftitemid) {
         file_save_draft_area_files($draftitemid, $context->id, 'mod_folder', 'content', 0, array('subdirs'=>true));
     }
+
+    $completiontimeexpected = !empty($data->completionexpected) ? $data->completionexpected : null;
+    \core_completion\api::update_completion_date_event($data->coursemodule, 'folder', $data->id, $completiontimeexpected);
 
     return $data->id;
 }
@@ -145,6 +148,9 @@ function folder_update_instance($data, $mform) {
         file_save_draft_area_files($draftitemid, $context->id, 'mod_folder', 'content', 0, array('subdirs'=>true));
     }
 
+    $completiontimeexpected = !empty($data->completionexpected) ? $data->completionexpected : null;
+    \core_completion\api::update_completion_date_event($data->coursemodule, 'folder', $data->id, $completiontimeexpected);
+
     return true;
 }
 
@@ -159,6 +165,9 @@ function folder_delete_instance($id) {
     if (!$folder = $DB->get_record('folder', array('id'=>$id))) {
         return false;
     }
+
+    $cm = get_coursemodule_from_instance('folder', $id);
+    \core_completion\api::update_completion_date_event($cm->id, 'folder', $folder->id, null);
 
     // note: all context files are deleted automatically
 
@@ -317,6 +326,11 @@ function folder_export_contents($cm, $baseurl) {
         $file['userid']       = $fileinfo->get_userid();
         $file['author']       = $fileinfo->get_author();
         $file['license']      = $fileinfo->get_license();
+        $file['mimetype']     = $fileinfo->get_mimetype();
+        $file['isexternalfile'] = $fileinfo->is_external_file();
+        if ($file['isexternalfile']) {
+            $file['repositorytype'] = $fileinfo->get_repository_type();
+        }
         $contents[] = $file;
     }
 
@@ -452,7 +466,7 @@ function folder_cm_info_view(cm_info $cm) {
         }
         // display folder
         $renderer = $PAGE->get_renderer('mod_folder');
-        $cm->set_content($renderer->display_folder($folder));
+        $cm->set_content($renderer->display_folder($folder), true);
     }
 }
 
@@ -760,4 +774,47 @@ function folder_print_recent_activity($course, $viewfullnames, $timestart) {
 function folder_check_updates_since(cm_info $cm, $from, $filter = array()) {
     $updates = course_check_module_updates_since($cm, $from, array('content'), $filter);
     return $updates;
+}
+
+/**
+ * This function receives a calendar event and returns the action associated with it, or null if there is none.
+ *
+ * This is used by block_myoverview in order to display the event appropriately. If null is returned then the event
+ * is not displayed on the block.
+ *
+ * @param calendar_event $event
+ * @param \core_calendar\action_factory $factory
+ * @param int $userid User id to use for all capability checks, etc. Set to 0 for current user (default).
+ * @return \core_calendar\local\event\entities\action_interface|null
+ */
+function mod_folder_core_calendar_provide_event_action(calendar_event $event,
+                                                       \core_calendar\action_factory $factory,
+                                                       int $userid = 0) {
+    global $USER;
+
+    if (!$userid) {
+        $userid = $USER->id;
+    }
+
+    $cm = get_fast_modinfo($event->courseid, $userid)->instances['folder'][$event->instance];
+
+    if (!$cm->uservisible) {
+        // The module is not visible to the user for any reason.
+        return null;
+    }
+
+    $completion = new \completion_info($cm->get_course());
+
+    $completiondata = $completion->get_data($cm, false, $userid);
+
+    if ($completiondata->completionstate != COMPLETION_INCOMPLETE) {
+        return null;
+    }
+
+    return $factory->create_instance(
+        get_string('view'),
+        new \moodle_url('/mod/folder/view.php', ['id' => $cm->id]),
+        1,
+        true
+    );
 }

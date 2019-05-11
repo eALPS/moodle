@@ -132,7 +132,7 @@ class enrol_ldap_plugin extends enrol_plugin {
      */
     public function can_hide_show_instance($instance) {
         $context = context_course::instance($instance->courseid);
-        return has_capability('enrol/ldap:config', $context);
+        return has_capability('enrol/ldap:manage', $context);
     }
 
     /**
@@ -328,7 +328,7 @@ class enrol_ldap_plugin extends enrol_plugin {
             return;
         }
 
-        $ldap_pagedresults = ldap_paged_results_supported($this->get_config('ldap_version'));
+        $ldap_pagedresults = ldap_paged_results_supported($this->get_config('ldap_version'), $this->ldapconnection);
 
         // we may need a lot of memory here
         core_php_time_limit::raise();
@@ -761,7 +761,7 @@ class enrol_ldap_plugin extends enrol_plugin {
 
         // Get all contexts and look for first matching user
         $ldap_contexts = explode(';', $ldap_contexts);
-        $ldap_pagedresults = ldap_paged_results_supported($this->get_config('ldap_version'));
+        $ldap_pagedresults = ldap_paged_results_supported($this->get_config('ldap_version'), $this->ldapconnection);
         foreach ($ldap_contexts as $context) {
             $context = trim($context);
             if (empty($context)) {

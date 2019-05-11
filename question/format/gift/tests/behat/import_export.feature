@@ -15,7 +15,7 @@ Feature: Test importing questions from GIFT format.
       | user    | course | role           |
       | teacher | C1     | editingteacher |
     And I log in as "teacher"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
 
   @javascript @_file_upload
   Scenario: import some GIFT questions
@@ -33,4 +33,4 @@ Feature: Test importing questions from GIFT format.
     And I navigate to "Export" node in "Course administration > Question bank"
     And I set the field "id_format_gift" to "1"
     And I press "Export questions to file"
-    And following "click here" should download between "1550" and "1650" bytes
+    And following "click here" should download between "1650" and "1800" bytes

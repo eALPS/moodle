@@ -157,7 +157,7 @@ abstract class exporter {
                 $formatparams = $this->get_format_parameters($property);
                 $format = $record->$propertyformat;
 
-                list($text, $format) = external_format_text($data->$property, $format, $formatparams['context']->id,
+                list($text, $format) = external_format_text($data->$property, $format, $formatparams['context'],
                     $formatparams['component'], $formatparams['filearea'], $formatparams['itemid'], $formatparams['options']);
 
                 $data->$property = $text;
@@ -168,11 +168,11 @@ abstract class exporter {
 
                 if (!empty($definition['multiple'])) {
                     foreach ($data->$property as $key => $value) {
-                        $data->{$property}[$key] = external_format_string($value, $formatparams['context']->id,
+                        $data->{$property}[$key] = external_format_string($value, $formatparams['context'],
                             $formatparams['striplinks'], $formatparams['options']);
                     }
                 } else {
-                    $data->$property = external_format_string($data->$property, $formatparams['context']->id,
+                    $data->$property = external_format_string($data->$property, $formatparams['context'],
                             $formatparams['striplinks'], $formatparams['options']);
                 }
             }
@@ -394,7 +394,8 @@ abstract class exporter {
      */
     final protected static function get_format_field($definitions, $property) {
         $formatproperty = $property . 'format';
-        if ($definitions[$property]['type'] == PARAM_RAW && isset($definitions[$formatproperty])
+        if (($definitions[$property]['type'] == PARAM_RAW || $definitions[$property]['type'] == PARAM_CLEANHTML)
+                && isset($definitions[$formatproperty])
                 && $definitions[$formatproperty]['type'] == PARAM_INT) {
             return $formatproperty;
         }
@@ -512,7 +513,7 @@ abstract class exporter {
                 // This is a nested array of more properties.
                 $thisvalue = self::get_read_structure_from_properties($type, $proprequired, $propdefault);
             } else {
-                if ($definition['type'] == PARAM_TEXT) {
+                if ($definition['type'] == PARAM_TEXT || $definition['type'] == PARAM_CLEANHTML) {
                     // PARAM_TEXT always becomes PARAM_RAW because filters may be applied.
                     $type = PARAM_RAW;
                 }

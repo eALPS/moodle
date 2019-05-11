@@ -60,8 +60,8 @@ function add_moduleinfo($moduleinfo, $course, $mform = null) {
     $newcm->module           = $moduleinfo->module;
     $newcm->instance         = 0; // Not known yet, will be updated later (this is similar to restore code).
     $newcm->visible          = $moduleinfo->visible;
-    $newcm->visibleoncoursepage = $moduleinfo->visibleoncoursepage;
     $newcm->visibleold       = $moduleinfo->visible;
+    $newcm->visibleoncoursepage = $moduleinfo->visibleoncoursepage;
     if (isset($moduleinfo->cmidnumber)) {
         $newcm->idnumber         = $moduleinfo->cmidnumber;
     }
@@ -407,6 +407,9 @@ function set_moduleinfo_defaults($moduleinfo) {
     }
     if (!isset($moduleinfo->conditionfieldgroup)) {
         $moduleinfo->conditionfieldgroup = array();
+    }
+    if (!isset($moduleinfo->visibleoncoursepage)) {
+        $moduleinfo->visibleoncoursepage = 1;
     }
 
     return $moduleinfo;
@@ -759,6 +762,12 @@ function prepare_new_moduleinfo_data($course, $modulename, $section) {
     $data->id               = '';
     $data->instance         = '';
     $data->coursemodule     = '';
+
+    // Apply completion defaults.
+    $defaults = \core_completion\manager::get_default_completion($course, $module);
+    foreach ($defaults as $key => $value) {
+        $data->$key = $value;
+    }
 
     if (plugin_supports('mod', $data->modulename, FEATURE_MOD_INTRO, true)) {
         $draftid_editor = file_get_submitted_draft_itemid('introeditor');

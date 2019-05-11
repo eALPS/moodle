@@ -68,13 +68,9 @@ div.editor_atto_toolbar button::-moz-focus-inner {
     padding: 0;
 }
 
-div.editor_atto_toolbar button img.icon {
+div.editor_atto_toolbar button .icon {
     padding: 0;
     margin: 2px 0;
-    /* The following is dedicated to the beloved IE8, clashing with Bootstrap. God bless you IE. */
-    vertical-align: text-bottom;
-    width: auto;
-    height: auto;
 }
 
 div.editor_atto_toolbar div.atto_group {
@@ -96,7 +92,7 @@ div.editor_atto_toolbar div.atto_group {
     white-space: nowrap;
 }
 
-.atto_menuentry img {
+.atto_menuentry .icon {
     width: 16px;
     height: 16px;
 }
@@ -111,10 +107,10 @@ div.editor_atto_toolbar div.atto_group {
     margin: 4px;
 }
 
-.atto_form label.sameline {
+/*.atto_form label.sameline {
     display: inline-block;
     min-width: 10em;
-}
+}*/
 
 .atto_form textarea.fullwidth,
 .atto_form input.fullwidth {
@@ -122,14 +118,13 @@ div.editor_atto_toolbar div.atto_group {
 }
 
 .atto_form {
-    padding-left: 30px;
-    padding-right: 30px;
+    padding: 0.5rem;
 }
 
-.atto_form label {
+/*.atto_form label {
     display: block;
     margin: 0 0 5px 0;
-}
+}*/
 
 .atto_control {
     position: absolute;
@@ -139,7 +134,7 @@ div.editor_atto_toolbar div.atto_group {
     cursor: pointer;
 }
 
-.atto_control img {
+.atto_control .icon {
     background-color: white;
 }
 
@@ -166,7 +161,7 @@ div.editor_atto_content:hover .atto_control {
 }
 
 .editor_atto_menu .dropdown-menu > li > a {
-    padding: 3px 14px;
+    margin: 3px 14px;
 }
 
 .editor_atto_menu .open ul.dropdown-menu {
@@ -180,14 +175,6 @@ div.editor_atto_content:hover .atto_control {
 /*rtl:ignore*/
 .editor_atto_wrap textarea {
     direction: ltr;
-}
-
-.editor_atto_notification {
-    position: absolute;
-    bottom: -1.5em;
-    height: 1.5em;
-    margin-top: 1px;
-    cursor: pointer;
 }
 
 .editor_atto_notification .atto_info,

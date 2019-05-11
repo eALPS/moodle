@@ -7,8 +7,7 @@ Feature: Forms manipulation
   @javascript
   Scenario: Basic forms manipulation
     Given I log in as "admin"
-    And I follow "Preferences" in the user menu
-    And I click on "Edit profile" "link" in the "region-main" "region"
+    And I open my profile in edit mode
     When I set the field "First name" to "Field value"
     And I set the field "Select a country" to "Japan"
     And I set the field "New password" to "TestPass"
@@ -24,9 +23,7 @@ Feature: Forms manipulation
       | fullname | shortname | category |
       | Course 1 | C1 | 0 |
     And I log in as "admin"
-    And I am on site homepage
-    And I follow "Course 1"
-    And I turn editing mode on
+    And I am on "Course 1" course homepage with editing mode on
     And I add a "Quiz" to section "1"
     When I expand all fieldsets
     Then I should see "Close the quiz"

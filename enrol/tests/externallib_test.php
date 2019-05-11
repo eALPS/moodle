@@ -359,10 +359,13 @@ class core_enrol_externallib_testcase extends externallib_advanced_testcase {
      * Test get_users_courses
      */
     public function test_get_users_courses() {
-        global $USER;
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/completion/criteria/completion_criteria_self.php');
 
         $this->resetAfterTest(true);
+        $CFG->enablecompletion = 1;
 
+        $timenow = time();
         $coursedata1 = array(
             'fullname'         => '<b>Course 1</b>',                // Adding tags here to check that external_format_string works.
             'shortname'         => '<b>Course 1</b>',               // Adding tags here to check that external_format_string works.
@@ -370,27 +373,43 @@ class core_enrol_externallib_testcase extends externallib_advanced_testcase {
             'summaryformat'    => FORMAT_MOODLE,
             'lang'             => 'en',
             'enablecompletion' => true,
-            'showgrades'       => true
+            'showgrades'       => true,
+            'startdate'        => $timenow,
+            'enddate'          => $timenow + WEEKSECS
+        );
+
+        $coursedata2 = array(
+            'lang'             => 'kk', // Check invalid language pack.
         );
 
         $course1 = self::getDataGenerator()->create_course($coursedata1);
-        $course2 = self::getDataGenerator()->create_course();
+        $course2 = self::getDataGenerator()->create_course($coursedata2);
         $courses = array($course1, $course2);
+        $contexts = array ($course1->id => context_course::instance($course1->id),
+            $course2->id => context_course::instance($course2->id));
 
-        // Enrol $USER in the courses.
-        // We use the manual plugin.
-        $roleid = null;
-        $contexts = array();
-        foreach ($courses as $course) {
-            $contexts[$course->id] = context_course::instance($course->id);
-            $roleid = $this->assignUserCapability('moodle/course:viewparticipants',
-                    $contexts[$course->id]->id, $roleid);
+        $student = $this->getDataGenerator()->create_user();
+        $otherstudent = $this->getDataGenerator()->create_user();
+        $studentroleid = $DB->get_field('role', 'id', array('shortname' => 'student'));
+        $this->getDataGenerator()->enrol_user($student->id, $course1->id, $studentroleid);
+        $this->getDataGenerator()->enrol_user($otherstudent->id, $course1->id, $studentroleid);
+        $this->getDataGenerator()->enrol_user($student->id, $course2->id, $studentroleid);
 
-            $this->getDataGenerator()->enrol_user($USER->id, $course->id, $roleid, 'manual');
-        }
+        // Force completion, setting at least one criteria.
+        $criteriadata = new stdClass();
+        $criteriadata->id = $course1->id;
+        // Self completion.
+        $criteriadata->criteria_self = 1;
 
+        $criterion = new completion_criteria_self();
+        $criterion->update_config($criteriadata);
+
+        $ccompletion = new completion_completion(array('course' => $course1->id, 'userid' => $student->id));
+        $ccompletion->mark_complete();
+
+        $this->setUser($student);
         // Call the external function.
-        $enrolledincourses = core_enrol_external::get_users_courses($USER->id);
+        $enrolledincourses = core_enrol_external::get_users_courses($student->id);
 
         // We need to execute the return values cleaning process to simulate the web service server.
         $enrolledincourses = external_api::clean_returnvalue(core_enrol_external::get_users_courses_returns(), $enrolledincourses);
@@ -411,8 +430,38 @@ class core_enrol_externallib_testcase extends externallib_advanced_testcase {
                 foreach ($coursedata1 as $fieldname => $value) {
                     $this->assertEquals($courseenrol[$fieldname], $course1->$fieldname);
                 }
+                // Check progress.
+                $this->assertEquals(100.0, $courseenrol['progress']);
+            } else {
+                // Check language pack. Should be empty since an incorrect one was used when creating the course.
+                $this->assertEmpty($courseenrol['lang']);
+                // Check progress.
+                $this->assertEquals(0, $courseenrol['progress']);
             }
         }
+
+        // Now check that admin users can see all the info.
+        $this->setAdminUser();
+
+        $enrolledincourses = core_enrol_external::get_users_courses($student->id);
+        $enrolledincourses = external_api::clean_returnvalue(core_enrol_external::get_users_courses_returns(), $enrolledincourses);
+        $this->assertEquals(2, count($enrolledincourses));
+        foreach ($enrolledincourses as $courseenrol) {
+            if ($courseenrol['id'] == $course1->id) {
+                $this->assertEquals(100.0, $courseenrol['progress']);
+            } else {
+                $this->assertEquals(0, $courseenrol['progress']);
+            }
+        }
+
+        // Check other users can't see private info.
+        $this->setUser($otherstudent);
+
+        $enrolledincourses = core_enrol_external::get_users_courses($student->id);
+        $enrolledincourses = external_api::clean_returnvalue(core_enrol_external::get_users_courses_returns(), $enrolledincourses);
+        $this->assertEquals(1, count($enrolledincourses));  // I see only the course I share.
+
+        $this->assertEquals(null, $enrolledincourses[0]['progress']);   // I can't see this, private.
     }
 
     /**
@@ -679,4 +728,151 @@ class core_enrol_externallib_testcase extends externallib_advanced_testcase {
         $this->assertEquals($data->student1->id, $expecteduser['id']);
     }
 
+    /**
+     * Test for core_enrol_external::edit_user_enrolment().
+     */
+    public function test_edit_user_enrolment() {
+        global $DB;
+
+        $this->resetAfterTest(true);
+        $datagen = $this->getDataGenerator();
+
+        /** @var enrol_manual_plugin $manualplugin */
+        $manualplugin = enrol_get_plugin('manual');
+        $this->assertNotNull($manualplugin);
+
+        $studentroleid = $DB->get_field('role', 'id', ['shortname' => 'student'], MUST_EXIST);
+        $teacherroleid = $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        $course = $datagen->create_course();
+        $user = $datagen->create_user();
+        $teacher = $datagen->create_user();
+
+        $instanceid = null;
+        $instances = enrol_get_instances($course->id, true);
+        foreach ($instances as $inst) {
+            if ($inst->enrol == 'manual') {
+                $instanceid = (int)$inst->id;
+                break;
+            }
+        }
+        if (empty($instanceid)) {
+            $instanceid = $manualplugin->add_default_instance($course);
+            if (empty($instanceid)) {
+                $instanceid = $manualplugin->add_instance($course);
+            }
+        }
+        $this->assertNotNull($instanceid);
+
+        $instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
+        $manualplugin->enrol_user($instance, $user->id, $studentroleid, 0, 0, ENROL_USER_ACTIVE);
+        $manualplugin->enrol_user($instance, $teacher->id, $teacherroleid, 0, 0, ENROL_USER_ACTIVE);
+        $ueid = (int)$DB->get_field(
+            'user_enrolments',
+            'id',
+            ['enrolid' => $instance->id, 'userid' => $user->id],
+            MUST_EXIST
+        );
+
+        // Login as teacher.
+        $this->setUser($teacher);
+
+        $now = new DateTime();
+        $nowtime = $now->getTimestamp();
+
+        // Invalid data.
+        $data = core_enrol_external::edit_user_enrolment($course->id, $ueid, ENROL_USER_ACTIVE, $nowtime, $nowtime);
+        $data = external_api::clean_returnvalue(core_enrol_external::edit_user_enrolment_returns(), $data);
+        $this->assertFalse($data['result']);
+        $this->assertNotEmpty($data['errors']);
+
+        // Valid data.
+        $nextmonth = clone($now);
+        $nextmonth->add(new DateInterval('P1M'));
+        $nextmonthtime = $nextmonth->getTimestamp();
+        $data = core_enrol_external::edit_user_enrolment($course->id, $ueid, ENROL_USER_ACTIVE, $nowtime, $nextmonthtime);
+        $data = external_api::clean_returnvalue(core_enrol_external::edit_user_enrolment_returns(), $data);
+        $this->assertTrue($data['result']);
+        $this->assertEmpty($data['errors']);
+
+        // Check updated user enrolment.
+        $ue = $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST);
+        $this->assertEquals(ENROL_USER_ACTIVE, $ue->status);
+        $this->assertEquals($nowtime, $ue->timestart);
+        $this->assertEquals($nextmonthtime, $ue->timeend);
+
+        // Suspend user.
+        $data = core_enrol_external::edit_user_enrolment($course->id, $ueid, ENROL_USER_SUSPENDED);
+        $data = external_api::clean_returnvalue(core_enrol_external::edit_user_enrolment_returns(), $data);
+        $this->assertTrue($data['result']);
+        $this->assertEmpty($data['errors']);
+
+        // Check updated user enrolment.
+        $ue = $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST);
+        $this->assertEquals(ENROL_USER_SUSPENDED, $ue->status);
+    }
+
+    /**
+     * Test for core_enrol_external::unenrol_user_enrolment().
+     */
+    public function test_unenerol_user_enrolment() {
+        global $DB;
+
+        $this->resetAfterTest(true);
+        $datagen = $this->getDataGenerator();
+
+        /** @var enrol_manual_plugin $manualplugin */
+        $manualplugin = enrol_get_plugin('manual');
+        $this->assertNotNull($manualplugin);
+
+        $studentroleid = $DB->get_field('role', 'id', ['shortname' => 'student'], MUST_EXIST);
+        $teacherroleid = $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        $course = $datagen->create_course();
+        $user = $datagen->create_user();
+        $teacher = $datagen->create_user();
+
+        $instanceid = null;
+        $instances = enrol_get_instances($course->id, true);
+        foreach ($instances as $inst) {
+            if ($inst->enrol == 'manual') {
+                $instanceid = (int)$inst->id;
+                break;
+            }
+        }
+        if (empty($instanceid)) {
+            $instanceid = $manualplugin->add_default_instance($course);
+            if (empty($instanceid)) {
+                $instanceid = $manualplugin->add_instance($course);
+            }
+        }
+        $this->assertNotNull($instanceid);
+
+        $instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
+        $manualplugin->enrol_user($instance, $user->id, $studentroleid, 0, 0, ENROL_USER_ACTIVE);
+        $manualplugin->enrol_user($instance, $teacher->id, $teacherroleid, 0, 0, ENROL_USER_ACTIVE);
+        $ueid = (int)$DB->get_field(
+            'user_enrolments',
+            'id',
+            ['enrolid' => $instance->id, 'userid' => $user->id],
+            MUST_EXIST
+        );
+
+        // Login as teacher.
+        $this->setUser($teacher);
+
+        // Invalid data by passing invalid ueid.
+        $data = core_enrol_external::unenrol_user_enrolment(101010);
+        $data = external_api::clean_returnvalue(core_enrol_external::unenrol_user_enrolment_returns(), $data);
+        $this->assertFalse($data['result']);
+        $this->assertNotEmpty($data['errors']);
+
+        // Valid data.
+        $data = core_enrol_external::unenrol_user_enrolment($ueid);
+        $data = external_api::clean_returnvalue(core_enrol_external::unenrol_user_enrolment_returns(), $data);
+        $this->assertTrue($data['result']);
+        $this->assertEmpty($data['errors']);
+
+        // Check unenrol user enrolment.
+        $ue = $DB->count_records('user_enrolments', ['id' => $ueid]);
+        $this->assertEquals(0, $ue);
+    }
 }

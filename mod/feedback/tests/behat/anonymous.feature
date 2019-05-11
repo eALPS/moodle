@@ -40,7 +40,7 @@ Feature: Anonymous feedback
 
   Scenario: Guests can see anonymous feedback on front page but can not complete
     When I follow "Site feedback"
-    Then I should not see "Answer the questions..."
+    Then I should not see "Answer the questions"
     And I follow "Preview"
     And I should see "Do you like our site?"
     And I press "Continue"
@@ -52,7 +52,7 @@ Feature: Anonymous feedback
     And I follow "Preview"
     And I should see "Do you like our site?"
     And I press "Continue"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I should see "Do you like our site?"
     And I set the following fields to these values:
       | Yes | 1 |
@@ -73,7 +73,7 @@ Feature: Anonymous feedback
     And I follow "Preview"
     And I should see "Do you like our site?"
     And I press "Continue"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I should see "Do you like our site?"
     And I set the following fields to these values:
       | Yes | 1 |
@@ -85,7 +85,7 @@ Feature: Anonymous feedback
     And I follow "Preview"
     And I should see "Do you like our site?"
     And I press "Continue"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I set the following fields to these values:
       | No | 1 |
     And I press "Submit your answers"
@@ -118,7 +118,7 @@ Feature: Anonymous feedback
     And I follow "Preview"
     And I should see "Do you like our site?"
     And I press "Continue"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I should see "Do you like our site?"
     And I set the following fields to these values:
       | Yes | 1 |
@@ -139,7 +139,7 @@ Feature: Anonymous feedback
     And I follow "Preview"
     And I should see "Do you like our site?"
     And I press "Continue"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I should see "Do you like our site?"
     And I set the following fields to these values:
       | Yes | 1 |
@@ -150,7 +150,7 @@ Feature: Anonymous feedback
     And I follow "Preview"
     And I should see "Do you like our site?"
     And I press "Continue"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I should see "Do you like our site?"
     And I set the following fields to these values:
       | No | 1 |
@@ -176,7 +176,7 @@ Feature: Anonymous feedback
   Scenario: Anonymous feedback in a course
     # Teacher can not
     When I log in as "teacher"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Course feedback"
     And I click on "Edit questions" "link" in the "[role=main]" "css_element"
     And I add a "Multiple choice" question to the feedback with:
@@ -187,24 +187,24 @@ Feature: Anonymous feedback
       | Multiple choice values         | Yes\nNo\nI don't know              |
     And I log out
     And I log in as "user1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Course feedback"
     And I follow "Preview"
     Then I should see "Do you like this course?"
     And I press "Continue"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I should see "Do you like this course?"
     And I set the following fields to these values:
       | Yes | 1 |
     And I press "Submit your answers"
     And I log out
     And I log in as "user2"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Course feedback"
     And I follow "Preview"
     And I should see "Do you like this course?"
     And I press "Continue"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I should see "Do you like this course?"
     And I set the following fields to these values:
       | No | 1 |
@@ -219,12 +219,12 @@ Feature: Anonymous feedback
     And I should see "1 (50.00 %)" in the "No" "table_row"
     And I log out
     And I log in as "teacher"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Course feedback"
     And I follow "Preview"
     And I should see "Do you like this course?"
     And I press "Continue"
-    And I should not see "Answer the questions..."
+    And I should not see "Answer the questions"
     And I navigate to "Show responses" in current page administration
     And I should not see "Username"
     And I should see "Anonymous entries (2)"
@@ -244,3 +244,58 @@ Feature: Anonymous feedback
     And I should not see "Response number: 1"
     And I should see "Response number: 2"
     And I log out
+
+  Scenario: Collecting new non-anonymous feedback from a previously anonymous feedback activity
+    When I log in as "teacher"
+    And I am on "Course 1" course homepage
+    And I follow "Course feedback"
+    And I navigate to "Edit settings" in current page administration
+    And I set the following fields to these values:
+      | Allow multiple submissions | Yes |
+    And I press "Save and display"
+    And I follow "Edit questions"
+    And I add a "Short text answer" question to the feedback with:
+      | Question               | this is a short text answer |
+      | Label                  | shorttext                   |
+      | Maximum characters accepted | 200                    |
+    And I log out
+    When I log in as "user1"
+    And I am on "Course 1" course homepage
+    And I follow "Course feedback"
+    And I follow "Answer the questions"
+    And I set the following fields to these values:
+      | this is a short text answer  | anontext |
+    And I press "Submit your answers"
+    And I log out
+    # Switch to non-anon responses.
+    And I log in as "teacher"
+    And I am on "Course 1" course homepage
+    And I follow "Course feedback"
+    And I navigate to "Edit settings" in current page administration
+    And I set the following fields to these values:
+        | Record user names | User's name will be logged and shown with answers |
+    And I press "Save and display"
+    And I log out
+    # Now leave a non-anon feedback as user1
+    When I log in as "user1"
+    And I am on "Course 1" course homepage
+    And I follow "Course feedback"
+    And I follow "Answer the questions"
+    And I set the following fields to these values:
+      | this is a short text answer  | usertext |
+    And I press "Submit your answers"
+    And I log out
+    # Now check the responses are correct.
+    When I log in as "teacher"
+    And I am on "Course 1" course homepage
+    And I follow "Course feedback"
+    And I follow "Show responses"
+    And I should see "Anonymous entries (1)"
+    And I should see "Non anonymous entries (1)"
+    And I click on "," "link" in the "Username 1" "table_row"
+    And I should see "(Username 1)"
+    And I should see "usertext"
+    And I follow "Back"
+    And I follow "Response number: 1"
+    And I should see "Response number: 1 (Anonymous)"
+    Then I should see "anontext"

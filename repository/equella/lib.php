@@ -214,9 +214,7 @@ class repository_equella extends repository {
             $path = $this->prepare_file('');
             $result = $c->download_one($url, null, array('filepath' => $path, 'followlocation' => true, 'timeout' => $CFG->repositorysyncimagetimeout));
             if ($result === true) {
-                $fs = get_file_storage();
-                list($contenthash, $filesize, $newfile) = $fs->add_file_to_pool($path);
-                $file->set_synchronized($contenthash, $filesize);
+                $file->set_synchronised_content_from_file($path);
                 return true;
             }
         } else {
@@ -293,7 +291,7 @@ class repository_equella extends repository {
 
         foreach (self::get_all_editing_roles() as $role) {
             $mform->addElement('header', 'groupheader_'.$role->shortname, get_string('group', 'repository_equella',
-                format_string($role->name)));
+                role_get_name($role)));
             $mform->addElement('text', "equella_{$role->shortname}_shareid", get_string('sharedid', 'repository_equella'));
             $mform->setType("equella_{$role->shortname}_shareid", PARAM_RAW);
             $mform->addElement('text', "equella_{$role->shortname}_sharedsecret",

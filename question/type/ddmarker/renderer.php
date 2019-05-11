@@ -69,7 +69,7 @@ class qtype_ddmarker_renderer extends qtype_ddtoimage_renderer_base {
                 $classes[] = 'dragno'.$drag->noofdrags;
             }
             $targeticonhtml =
-                $OUTPUT->pix_icon('crosshairs', '', $componentname, array('class' => 'target'));
+                $OUTPUT->image_icon('crosshairs', '', $componentname, array('class' => 'target'));
 
             $markertextattrs = array('class' => 'markertext');
             $markertext = html_writer::tag('span', $drag->text, $markertextattrs);
@@ -96,7 +96,7 @@ class qtype_ddmarker_renderer extends qtype_ddtoimage_renderer_base {
             $visibledropzones = array();
         }
 
-        $topnode = 'div#q'.$qa->get_slot();
+        $topnode = 'div#' . $qa->get_outer_question_div_unique_id();
         $params = array('dropzones' => $visibledropzones,
                         'topnode' => $topnode,
                         'readonly' => $options->readonly);

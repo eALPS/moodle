@@ -21,7 +21,7 @@ Feature: Test exporting drag and drop onto image questions
       | questioncategory | qtype         | name            | template |
       | Test questions   | ddimageortext | Drag onto image | xsection |
     And I log in as "teacher1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
 
   @javascript
   Scenario: Export a drag and drop onto image question
@@ -29,7 +29,7 @@ Feature: Test exporting drag and drop onto image questions
     When I navigate to "Export" node in "Course administration > Question bank"
     And I set the field "id_format_xml" to "1"
     And I press "Export questions to file"
-    And following "click here" should download between "18500" and "19000" bytes
+    And following "click here" should download between "18600" and "19150" bytes
     # If the download step is the last in the scenario then we can sometimes run
     # into the situation where the download page causes a http redirect but behat
     # has already conducted its reset (generating an error). By putting a logout

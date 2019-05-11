@@ -109,6 +109,17 @@ require_once(__DIR__ . '/../../../../lib/behat/lib.php');
 require_once(__DIR__ . '/../../../../lib/behat/classes/behat_command.php');
 require_once(__DIR__ . '/../../../../lib/behat/classes/behat_config_manager.php');
 
+// Remove error handling overrides done in config.php. This is consistent with admin/tool/behat/cli/util_single_run.php.
+$CFG->debug = (E_ALL | E_STRICT);
+$CFG->debugdisplay = 1;
+error_reporting($CFG->debug);
+ini_set('display_errors', '1');
+ini_set('log_errors', '1');
+
+// Import the necessary libraries.
+require_once($CFG->libdir . '/setuplib.php');
+require_once($CFG->libdir . '/behat/classes/util.php');
+
 // For drop option check if parallel site.
 if ((empty($options['parallel'])) && ($options['drop']) || $options['updatesteps']) {
     $options['parallel'] = behat_config_manager::get_behat_run_config_value('parallel');
@@ -398,7 +409,7 @@ function print_combined_install_output($processes) {
     // Show process name in first row.
     foreach ($processes as $name => $process) {
         // If we don't have enough space to show full run name then show runX.
-        if ($lengthofprocessline < strlen($name + 2)) {
+        if ($lengthofprocessline < strlen($name) + 2) {
             $name = substr($name, -5);
         }
         // One extra padding as we are adding | separator for rest of the data.

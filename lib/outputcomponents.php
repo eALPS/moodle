@@ -202,6 +202,11 @@ class user_picture implements renderable {
     public $visibletoscreenreaders = true;
 
     /**
+     * @var bool Whether to include the fullname in the user picture link.
+     */
+    public $includefullname = false;
+
+    /**
      * User picture constructor.
      *
      * @param stdClass $user user record with at least id, picture, imagealt, firstname and lastname set.
@@ -359,7 +364,7 @@ class user_picture implements renderable {
             $size = (int)$this->size;
         }
 
-        $defaulturl = $renderer->pix_url('u/'.$filename); // default image
+        $defaulturl = $renderer->image_url('u/'.$filename); // default image
 
         if ((!empty($CFG->forcelogin) and !isloggedin()) ||
             (!empty($CFG->forceloginforprofileimage) && (!isloggedin() || isguestuser()))) {
@@ -427,7 +432,6 @@ class user_picture implements renderable {
             // If the currently requested page is https then we'll return an
             // https gravatar page.
             if (is_https()) {
-                $gravatardefault = str_replace($CFG->wwwroot, $CFG->httpswwwroot, $gravatardefault); // Replace by secure url.
                 return new moodle_url("https://secure.gravatar.com/avatar/{$md5}", array('s' => $size, 'd' => $gravatardefault));
             } else {
                 return new moodle_url("http://www.gravatar.com/avatar/{$md5}", array('s' => $size, 'd' => $gravatardefault));
@@ -515,17 +519,114 @@ class help_icon implements renderable, templatable {
         $data->icon = (new pix_icon('help', $alt, 'core', ['class' => 'iconhelp']))->export_for_template($output);
         $data->linktext = $this->linktext;
         $data->title = get_string('helpprefix2', '', trim($title, ". \t"));
-        $data->url = (new moodle_url($CFG->httpswwwroot . '/help.php', [
+
+        $options = [
             'component' => $this->component,
             'identifier' => $this->identifier,
             'lang' => current_language()
-        ]))->out(false);
+        ];
 
+        // Debugging feature lets you display string identifier and component.
+        if (isset($CFG->debugstringids) && $CFG->debugstringids && optional_param('strings', 0, PARAM_INT)) {
+            $options['strings'] = 1;
+        }
+
+        $data->url = (new moodle_url('/help.php', $options))->out(false);
         $data->ltr = !right_to_left();
         return $data;
     }
 }
 
+
+/**
+ * Data structure representing an icon font.
+ *
+ * @copyright 2016 Damyon Wiese
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package core
+ * @category output
+ */
+class pix_icon_font implements templatable {
+
+    /**
+     * @var pix_icon $pixicon The original icon.
+     */
+    private $pixicon = null;
+
+    /**
+     * @var string $key The mapped key.
+     */
+    private $key;
+
+    /**
+     * @var bool $mapped The icon could not be mapped.
+     */
+    private $mapped;
+
+    /**
+     * Constructor
+     *
+     * @param pix_icon $pixicon The original icon
+     */
+    public function __construct(pix_icon $pixicon) {
+        global $PAGE;
+
+        $this->pixicon = $pixicon;
+        $this->mapped = false;
+        $iconsystem = \core\output\icon_system::instance();
+
+        $this->key = $iconsystem->remap_icon_name($pixicon->pix, $pixicon->component);
+        if (!empty($this->key)) {
+            $this->mapped = true;
+        }
+    }
+
+    /**
+     * Return true if this pix_icon was successfully mapped to an icon font.
+     *
+     * @return bool
+     */
+    public function is_mapped() {
+        return $this->mapped;
+    }
+
+    /**
+     * Export this data so it can be used as the context for a mustache template.
+     *
+     * @param renderer_base $output Used to do a final render of any components that need to be rendered for export.
+     * @return array
+     */
+    public function export_for_template(renderer_base $output) {
+
+        $pixdata = $this->pixicon->export_for_template($output);
+
+        $title = isset($this->pixicon->attributes['title']) ? $this->pixicon->attributes['title'] : '';
+        $alt = isset($this->pixicon->attributes['alt']) ? $this->pixicon->attributes['alt'] : '';
+        if (empty($title)) {
+            $title = $alt;
+        }
+        $data = array(
+            'extraclasses' => $pixdata['extraclasses'],
+            'title' => $title,
+            'alt' => $alt,
+            'key' => $this->key
+        );
+
+        return $data;
+    }
+}
+
+/**
+ * Data structure representing an icon subtype.
+ *
+ * @copyright 2016 Damyon Wiese
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package core
+ * @category output
+ */
+class pix_icon_fontawesome extends pix_icon_font {
+
+}
 
 /**
  * Data structure representing an icon.
@@ -562,12 +663,19 @@ class pix_icon implements renderable, templatable {
      * @param array $attributes html attributes
      */
     public function __construct($pix, $alt, $component='moodle', array $attributes = null) {
-        $this->pix        = $pix;
+        global $PAGE;
+
+        $this->pix = $pix;
         $this->component  = $component;
         $this->attributes = (array)$attributes;
 
         if (empty($this->attributes['class'])) {
-            $this->attributes['class'] = 'smallicon';
+            $this->attributes['class'] = '';
+        }
+
+        // Set an additional class for big icons so that they can be styled properly.
+        if (substr($pix, 0, 2) === 'b/') {
+            $this->attributes['class'] .= ' iconsize-big';
         }
 
         // If the alt is empty, don't place it in the attributes, otherwise it will override parent alt text.
@@ -587,6 +695,11 @@ class pix_icon implements renderable, templatable {
             // and some browsers might overwrite it with an empty title.
             unset($this->attributes['title']);
         }
+
+        // Hide icons from screen readers that have no alt.
+        if (empty($this->attributes['alt'])) {
+            $this->attributes['aria-hidden'] = 'true';
+        }
     }
 
     /**
@@ -597,15 +710,62 @@ class pix_icon implements renderable, templatable {
      */
     public function export_for_template(renderer_base $output) {
         $attributes = $this->attributes;
-        $attributes['src'] = $output->pix_url($this->pix, $this->component)->out(false);
+        $extraclasses = '';
+
+        foreach ($attributes as $key => $item) {
+            if ($key == 'class') {
+                $extraclasses = $item;
+                unset($attributes[$key]);
+                break;
+            }
+        }
+
+        $attributes['src'] = $output->image_url($this->pix, $this->component)->out(false);
         $templatecontext = array();
         foreach ($attributes as $name => $value) {
             $templatecontext[] = array('name' => $name, 'value' => $value);
         }
-        $data = array('attributes' => $templatecontext);
+        $title = isset($attributes['title']) ? $attributes['title'] : '';
+        if (empty($title)) {
+            $title = isset($attributes['alt']) ? $attributes['alt'] : '';
+        }
+        $data = array(
+            'attributes' => $templatecontext,
+            'extraclasses' => $extraclasses
+        );
 
         return $data;
     }
+
+    /**
+     * Much simpler version of export that will produce the data required to render this pix with the
+     * pix helper in a mustache tag.
+     *
+     * @return array
+     */
+    public function export_for_pix() {
+        $title = isset($this->attributes['title']) ? $this->attributes['title'] : '';
+        if (empty($title)) {
+            $title = isset($this->attributes['alt']) ? $this->attributes['alt'] : '';
+        }
+        return [
+            'key' => $this->pix,
+            'component' => $this->component,
+            'title' => $title
+        ];
+    }
+}
+
+/**
+ * Data structure representing an activity icon.
+ *
+ * The difference is that activity icons will always render with the standard icon system (no font icons).
+ *
+ * @copyright 2017 Damyon Wiese
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package core
+ */
+class image_icon extends pix_icon {
 }
 
 /**
@@ -854,7 +1014,7 @@ class single_select implements renderable, templatable {
     var $formid = null;
 
     /**
-     * @var array List of attached actions
+     * @var help_icon The help icon for this element.
      */
     var $helpicon = null;
 
@@ -945,7 +1105,19 @@ class single_select implements renderable, templatable {
         $data->title = $this->tooltip;
         $data->formid = !empty($this->formid) ? $this->formid : html_writer::random_id('single_select_f');
         $data->id = !empty($attributes['id']) ? $attributes['id'] : html_writer::random_id('single_select');
+
+        // Select element attributes.
+        // Unset attributes that are already predefined in the template.
         unset($attributes['id']);
+        unset($attributes['class']);
+        unset($attributes['name']);
+        unset($attributes['title']);
+        unset($attributes['disabled']);
+
+        // Map the attributes.
+        $data->attributes = array_map(function($key) use ($attributes) {
+            return ['name' => $key, 'value' => $attributes[$key]];
+        }, array_keys($attributes));
 
         // Form parameters.
         $params = $this->url->params();
@@ -961,6 +1133,7 @@ class single_select implements renderable, templatable {
         if (is_string($this->nothing) && $this->nothing !== '') {
             $nothing = ['' => $this->nothing];
             $hasnothing = true;
+            $nothingkey = '';
         } else if (is_array($this->nothing)) {
             $nothingvalue = reset($this->nothing);
             if ($nothingvalue === 'choose' || $nothingvalue === 'choosedots') {
@@ -969,6 +1142,7 @@ class single_select implements renderable, templatable {
                 $nothing = $this->nothing;
             }
             $hasnothing = true;
+            $nothingkey = key($this->nothing);
         }
         if ($hasnothing) {
             $options = $nothing + $this->options;
@@ -981,11 +1155,17 @@ class single_select implements renderable, templatable {
                 foreach ($options[$value] as $optgroupname => $optgroupvalues) {
                     $sublist = [];
                     foreach ($optgroupvalues as $optvalue => $optname) {
-                        $sublist[] = [
+                        $option = [
                             'value' => $optvalue,
                             'name' => $optname,
                             'selected' => strval($this->selected) === strval($optvalue),
                         ];
+
+                        if ($hasnothing && $nothingkey === $optvalue) {
+                            $option['ignore'] = 'data-ignore';
+                        }
+
+                        $sublist[] = $option;
                     }
                     $data->options[] = [
                         'name' => $optgroupname,
@@ -994,19 +1174,28 @@ class single_select implements renderable, templatable {
                     ];
                 }
             } else {
-                $data->options[] = [
+                $option = [
                     'value' => $value,
                     'name' => $options[$value],
                     'selected' => strval($this->selected) === strval($value),
                     'optgroup' => false
                 ];
+
+                if ($hasnothing && $nothingkey === $value) {
+                    $option['ignore'] = 'data-ignore';
+                }
+
+                $data->options[] = $option;
             }
         }
 
         // Label attributes.
         $data->labelattributes = [];
+        // Unset label attributes that are already in the template.
+        unset($this->labelattributes['for']);
+        // Map the label attributes.
         foreach ($this->labelattributes as $key => $value) {
-            $data->labelattributes = ['name' => $key, 'value' => $value];
+            $data->labelattributes[] = ['name' => $key, 'value' => $value];
         }
 
         // Help icon.
@@ -1080,7 +1269,7 @@ class url_select implements renderable, templatable {
     var $formid = null;
 
     /**
-     * @var array List of attached actions
+     * @var help_icon The help icon for this element.
      */
     var $helpicon = null;
 
@@ -1243,6 +1432,7 @@ class url_select implements renderable, templatable {
         unset($attributes['id']);
         unset($attributes['name']);
         unset($attributes['title']);
+        unset($attributes['disabled']);
 
         $data->showbutton = $this->showbutton;
 
@@ -1262,6 +1452,9 @@ class url_select implements renderable, templatable {
 
         // Label attributes.
         $data->labelattributes = [];
+        // Unset label attributes that are already in the template.
+        unset($this->labelattributes['for']);
+        // Map the label attributes.
         foreach ($this->labelattributes as $key => $value) {
             $data->labelattributes[] = ['name' => $key, 'value' => $value];
         }
@@ -1271,8 +1464,8 @@ class url_select implements renderable, templatable {
 
         // Finally all the remaining attributes.
         $data->attributes = [];
-        foreach ($this->attributes as $key => $value) {
-            $data->attributes = ['name' => $key, 'value' => $value];
+        foreach ($attributes as $key => $value) {
+            $data->attributes[] = ['name' => $key, 'value' => $value];
         }
 
         return $data;
@@ -1400,7 +1593,7 @@ class action_link implements renderable {
 
         $data->text = $this->text instanceof renderable ? $output->render($this->text) : (string) $this->text;
         $data->url = $this->url ? $this->url->out(false) : '';
-        $data->icon = $this->icon ? $this->icon->export_for_template($output) : null;
+        $data->icon = $this->icon ? $this->icon->export_for_pix() : null;
         $data->classes = isset($attributes['class']) ? $attributes['class'] : '';
         unset($attributes['class']);
 
@@ -2491,7 +2684,7 @@ class html_table {
      * $row2->cells = array($cell2, $cell3);
      * $t->data = array($row1, $row2);
      */
-    public $data;
+    public $data = [];
 
     /**
      * @deprecated since Moodle 2.0. Styling should be in the CSS.
@@ -2923,6 +3116,121 @@ class paging_bar implements renderable, templatable {
 }
 
 /**
+ * Component representing initials bar.
+ *
+ * @copyright 2017 Ilya Tregubov
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @since Moodle 3.3
+ * @package core
+ * @category output
+ */
+class initials_bar implements renderable, templatable {
+
+    /**
+     * @var string Currently selected letter.
+     */
+    public $current;
+
+    /**
+     * @var string Class name to add to this initial bar.
+     */
+    public $class;
+
+    /**
+     * @var string The name to put in front of this initial bar.
+     */
+    public $title;
+
+    /**
+     * @var string URL parameter name for this initial.
+     */
+    public $urlvar;
+
+    /**
+     * @var string URL object.
+     */
+    public $url;
+
+    /**
+     * @var array An array of letters in the alphabet.
+     */
+    public $alpha;
+
+    /**
+     * Constructor initials_bar with only the required params.
+     *
+     * @param string $current the currently selected letter.
+     * @param string $class class name to add to this initial bar.
+     * @param string $title the name to put in front of this initial bar.
+     * @param string $urlvar URL parameter name for this initial.
+     * @param string $url URL object.
+     * @param array $alpha of letters in the alphabet.
+     */
+    public function __construct($current, $class, $title, $urlvar, $url, $alpha = null) {
+        $this->current       = $current;
+        $this->class    = $class;
+        $this->title    = $title;
+        $this->urlvar    = $urlvar;
+        $this->url    = $url;
+        $this->alpha    = $alpha;
+    }
+
+    /**
+     * Export for template.
+     *
+     * @param renderer_base $output The renderer.
+     * @return stdClass
+     */
+    public function export_for_template(renderer_base $output) {
+        $data = new stdClass();
+
+        if ($this->alpha == null) {
+            $this->alpha = explode(',', get_string('alphabet', 'langconfig'));
+        }
+
+        if ($this->current == 'all') {
+            $this->current = '';
+        }
+
+        // We want to find a letter grouping size which suits the language so
+        // find the largest group size which is less than 15 chars.
+        // The choice of 15 chars is the largest number of chars that reasonably
+        // fits on the smallest supported screen size. By always using a max number
+        // of groups which is a factor of 2, we always get nice wrapping, and the
+        // last row is always the shortest.
+        $groupsize = count($this->alpha);
+        $groups = 1;
+        while ($groupsize > 15) {
+            $groups *= 2;
+            $groupsize = ceil(count($this->alpha) / $groups);
+        }
+
+        $groupsizelimit = 0;
+        $groupnumber = 0;
+        foreach ($this->alpha as $letter) {
+            if ($groupsizelimit++ > 0 && $groupsizelimit % $groupsize == 1) {
+                $groupnumber++;
+            }
+            $groupletter = new stdClass();
+            $groupletter->name = $letter;
+            $groupletter->url = $this->url->out(false, array($this->urlvar => $letter));
+            if ($letter == $this->current) {
+                $groupletter->selected = $this->current;
+            }
+            $data->group[$groupnumber]->letter[] = $groupletter;
+        }
+
+        $data->class = $this->class;
+        $data->title = $this->title;
+        $data->url = $this->url->out(false, array($this->urlvar => ''));
+        $data->current = $this->current;
+        $data->all = get_string('all');
+
+        return $data;
+    }
+}
+
+/**
  * This class represents how a block appears on a page.
  *
  * During output, each block instance is asked to return a block_contents object,
@@ -3027,7 +3335,7 @@ class block_contents {
     /**
      * @var array A (possibly empty) array of editing controls. Each element of
      * this array should be an array('url' => $url, 'icon' => $icon, 'caption' => $caption).
-     * $icon is the icon name. Fed to $OUTPUT->pix_url.
+     * $icon is the icon name. Fed to $OUTPUT->image_url.
      */
     public $controls = array();
 
@@ -3851,6 +4159,12 @@ class action_menu implements renderable, templatable {
     public $actiontext = null;
 
     /**
+     * The string to use for the accessible label for the menu.
+     * @var array
+     */
+    public $actionlabel = null;
+
+    /**
      * An icon to use for the toggling the secondary menu (dropdown).
      * @var actionicon
      */
@@ -3861,6 +4175,12 @@ class action_menu implements renderable, templatable {
      * @var menutrigger
      */
     public $menutrigger = '';
+
+    /**
+     * Any extra classes for toggling to the secondary menu.
+     * @var triggerextraclasses
+     */
+    public $triggerextraclasses = '';
 
     /**
      * Place the action menu before all other actions.
@@ -3901,8 +4221,26 @@ class action_menu implements renderable, templatable {
         }
     }
 
-    public function set_menu_trigger($trigger) {
+    /**
+     * Sets the label for the menu trigger.
+     *
+     * @param string $label The text
+     * @return null
+     */
+    public function set_action_label($label) {
+        $this->actionlabel = $label;
+    }
+
+    /**
+     * Sets the menu trigger text.
+     *
+     * @param string $trigger The text
+     * @param string $extraclasses Extra classes to style the secondary menu toggle.
+     * @return null
+     */
+    public function set_menu_trigger($trigger, $extraclasses = '') {
         $this->menutrigger = $trigger;
+        $this->triggerextraclasses = $extraclasses;
     }
 
     /**
@@ -3996,7 +4334,7 @@ class action_menu implements renderable, templatable {
             $pixicon = '<b class="caret"></b>';
             $linkclasses[] = 'textmenu';
         } else {
-            $title = new lang_string('actions', 'moodle');
+            $title = new lang_string('actionsmenu', 'moodle');
             $this->actionicon = new pix_icon(
                 't/edit_menu',
                 '',
@@ -4015,10 +4353,17 @@ class action_menu implements renderable, templatable {
         if ($this->actiontext) {
             $string = $this->actiontext;
         }
+        $label = '';
+        if ($this->actionlabel) {
+            $label = $this->actionlabel;
+        } else {
+            $label = $title;
+        }
         $actions = $this->primaryactions;
         $attributes = array(
             'class' => implode(' ', $linkclasses),
             'title' => $title,
+            'aria-label' => $label,
             'id' => 'action-menu-toggle-'.$this->instance,
             'role' => 'menuitem'
         );
@@ -4091,6 +4436,9 @@ class action_menu implements renderable, templatable {
      *
      * The constraint is applied when the dialogue is shown and limits the display of the dialogue to within the
      * element the constraint identifies.
+     *
+     * This is required whenever the action menu is displayed inside any CSS element with the .no-overflow class
+     * (flexible_table and any of it's child classes are a likely candidate).
      *
      * @param string $ancestorselector A snippet of CSS used to identify the ancestor to contrain the dialogue to.
      */
@@ -4180,14 +4528,24 @@ class action_menu implements renderable, templatable {
         $actionicon = $this->actionicon;
         if (!empty($this->menutrigger)) {
             $primary->menutrigger = $this->menutrigger;
+            $primary->triggerextraclasses = $this->triggerextraclasses;
+            if ($this->actionlabel) {
+                $primary->title = $this->actionlabel;
+            } else if ($this->actiontext) {
+                $primary->title = $this->actiontext;
+            } else {
+                $primary->title = strip_tags($this->menutrigger);
+            }
         } else {
-            $primary->title = get_string('actions');
-            $actionicon = new pix_icon('t/edit_menu', '', 'moodle', ['class' => 'iconsmall actionmenu', 'title' => '']);
+            $primary->title = get_string('actionsmenu');
+            $actionicon = new pix_icon('t/edit_menu', '', 'moodle', ['class' => 'iconsmall actionmenu', 'title' => $primary->title]);
         }
 
         if ($actionicon instanceof pix_icon) {
-            $primary->icon = $actionicon->export_for_template($output);
-            $primary->title = !empty($actionicon->attributes['alt']) ? $this->actionicon->attributes['alt'] : '';
+            $primary->icon = $actionicon->export_for_pix();
+            if (!empty($actionicon->attributes['alt'])) {
+                $primary->title = $actionicon->attributes['alt'];
+            }
         } else {
             $primary->iconraw = $actionicon ? $output->render($actionicon) : '';
         }
@@ -4319,12 +4677,9 @@ class action_menu_link extends action_link implements renderable {
         unset($attributes['class']);
 
         // Handle text being a renderable.
-        $comparetoalt = $this->text;
         if ($this->text instanceof renderable) {
             $data->text = $this->render($this->text);
-            $comparetoalt = '';
         }
-        $comparetoalt = (string) $comparetoalt;
 
         $data->showtext = (!$this->icon || $this->primary === false);
 
@@ -4334,15 +4689,7 @@ class action_menu_link extends action_link implements renderable {
             if ($this->primary || !$this->actionmenu->will_be_enhanced()) {
                 $attributes['title'] = $data->text;
             }
-            if (!$this->primary && $this->actionmenu->will_be_enhanced()) {
-                if ((string) $icon->attributes['alt'] === $comparetoalt) {
-                    $icon->attributes['alt'] = '';
-                }
-                if (isset($icon->attributes['title']) && (string) $icon->attributes['title'] === $comparetoalt) {
-                    unset($icon->attributes['title']);
-                }
-            }
-            $data->icon = $icon ? $icon->export_for_template($output) : null;
+            $data->icon = $icon ? $icon->export_for_pix() : null;
         }
 
         $data->disabled = !empty($attributes['disabled']);
@@ -4499,6 +4846,10 @@ class progress_bar implements renderable, templatable {
      * @param bool $autostart Whether to start the progress bar right away.
      */
     public function __construct($htmlid = '', $width = 500, $autostart = false) {
+        if (!CLI_SCRIPT && !NO_OUTPUT_BUFFERING) {
+            debugging('progress_bar used in a non-CLI script without setting NO_OUTPUT_BUFFERING.', DEBUG_DEVELOPER);
+        }
+
         if (!empty($htmlid)) {
             $this->html_id  = $htmlid;
         } else {

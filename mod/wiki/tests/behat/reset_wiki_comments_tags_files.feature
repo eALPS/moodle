@@ -1,4 +1,4 @@
-@mod @mod_wiki @javascript
+@mod @mod_wiki @javascript @_file_upload
 Feature: Teachers can reset wiki pages, tags and files
   In order to remove wiki pages, tags and files
   As a teacher
@@ -15,8 +15,7 @@ Feature: Teachers can reset wiki pages, tags and files
       | user | course | role |
       | teacher1 | C1 | editingteacher |
     And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
+    And I am on "Course 1" course homepage with editing mode on
     And I add a "Wiki" to section "1" and I fill the form with:
       | Wiki name | Test wiki |
       | Description | Test wiki description |

@@ -51,7 +51,7 @@ Feature: We can use Single view
       | moodle/grade:edit           | Allow      | teacher  | Course        | C1        |
       | gradereport/singleview:view | Allow      | teacher  | Course        | C1        |
     And I log in as "teacher1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     Given I navigate to "View > Grader report" in the course gradebook
 
   @javascript
@@ -96,7 +96,7 @@ Feature: We can use Single view
         | james (Student) 1 | Very good |
     And I log out
     And I log in as "teacher2"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     Given I navigate to "View > Single view" in the course gradebook
     And I click on "Student 4" "option"
     And the "Exclude for Test assignment one" "checkbox" should be disabled
@@ -116,7 +116,7 @@ Feature: We can use Single view
     And I set the field "Insert value" to "1.0"
     And I set the field "Perform bulk insert" to "1"
     And I press "Save"
-    Then I should see "Grades were set for 8 items"
+    Then I should see "Grades were set for 6 items"
 
   Scenario: Navigation works in the Single view.
     Given I follow "Single view for Student 1"

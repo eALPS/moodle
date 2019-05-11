@@ -21,13 +21,13 @@ Feature: Test exporting True/False questions
       | questioncategory | qtype     | name           | template |
       | Test questions   | truefalse | true-false-001 | true     |
     And I log in as "teacher1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
 
   Scenario: Export a True/False question
     When I navigate to "Export" node in "Course administration > Question bank"
     And I set the field "id_format_xml" to "1"
     And I press "Export questions to file"
-    Then following "click here" should download between "950" and "1050" bytes
+    Then following "click here" should download between "1050" and "1200" bytes
     # If the download step is the last in the scenario then we can sometimes run
     # into the situation where the download page causes a http redirect but behat
     # has already conducted its reset (generating an error). By putting a logout

@@ -59,8 +59,7 @@ if (!has_capability('mod/feedback:edititems', $context) &&
 }
 
 // Trigger module viewed event.
-$event = \mod_feedback\event\course_module_viewed::create_from_record($feedback, $cm, $course);
-$event->trigger();
+$feedbackcompletion->trigger_module_viewed();
 
 /// Print the page header
 echo $OUTPUT->header();
@@ -140,7 +139,7 @@ if ($feedbackcompletion->can_complete()) {
         } else {
             $label = get_string('complete_the_form', 'feedback');
         }
-        echo html_writer::div(html_writer::link($completeurl, $label), 'complete-feedback');
+        echo html_writer::div(html_writer::link($completeurl, $label, array('class' => 'btn btn-default')), 'complete-feedback');
     } else {
         // Feedback was already submitted.
         echo $OUTPUT->notification(get_string('this_feedback_is_already_submitted', 'feedback'));

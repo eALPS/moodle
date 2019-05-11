@@ -130,12 +130,7 @@ class assign_grading_table extends table_sql implements renderable {
         $params['assignmentid1'] = (int)$this->assignment->get_instance()->id;
         $params['assignmentid2'] = (int)$this->assignment->get_instance()->id;
         $params['assignmentid3'] = (int)$this->assignment->get_instance()->id;
-
-        $params['assignmentid5'] = (int)$this->assignment->get_instance()->id;
-        $params['assignmentid6'] = (int)$this->assignment->get_instance()->id;
-        $params['assignmentid7'] = (int)$this->assignment->get_instance()->id;
-        $params['assignmentid8'] = (int)$this->assignment->get_instance()->id;
-        $params['assignmentid9'] = (int)$this->assignment->get_instance()->id;
+        $params['newstatus'] = ASSIGN_SUBMISSION_STATUS_NEW;
 
         $extrauserfields = get_extra_user_fields($this->assignment->get_context());
 
@@ -144,7 +139,7 @@ class assign_grading_table extends table_sql implements renderable {
         $fields .= 's.status as status, ';
         $fields .= 's.id as submissionid, ';
         $fields .= 's.timecreated as firstsubmission, ';
-        $fields .= 's.timemodified as timesubmitted, ';
+        $fields .= "CASE WHEN status <> :newstatus THEN s.timemodified ELSE NULL END as timesubmitted, ";
         $fields .= 's.attemptnumber as attemptnumber, ';
         $fields .= 'g.id as gradeid, ';
         $fields .= 'g.grade as grade, ';
@@ -160,25 +155,13 @@ class assign_grading_table extends table_sql implements renderable {
                          LEFT JOIN {assign_submission} s
                                 ON u.id = s.userid
                                AND s.assignment = :assignmentid1
-                               AND s.latest = 1
-                         LEFT JOIN {assign_grades} g
-                                ON u.id = g.userid
-                               AND g.assignment = :assignmentid2 ';
+                               AND s.latest = 1 ';
 
-        // For group submissions we don't immediately create an entry in the assign_submission table for each user,
-        // instead the userid is set to 0. In this case we use a different query to retrieve the grade for the user.
-        if ($this->assignment->get_instance()->teamsubmission) {
-            $params['assignmentid4'] = (int) $this->assignment->get_instance()->id;
-            $grademaxattempt = 'SELECT mxg.userid, MAX(mxg.attemptnumber) AS maxattempt
-                                  FROM {assign_grades} mxg
-                                 WHERE mxg.assignment = :assignmentid4
-                              GROUP BY mxg.userid';
-            $from .= 'LEFT JOIN (' . $grademaxattempt . ') gmx
-                             ON u.id = gmx.userid
-                            AND g.attemptnumber = gmx.maxattempt ';
-        } else {
-            $from .= 'AND g.attemptnumber = s.attemptnumber ';
-        }
+        // For group assignments, there can be a grade with no submission.
+        $from .= ' LEFT JOIN {assign_grades} g
+                            ON g.assignment = :assignmentid2
+                           AND u.id = g.userid
+                           AND (g.attemptnumber = s.attemptnumber OR s.attemptnumber IS NULL) ';
 
         $from .= 'LEFT JOIN {assign_user_flags} uf
                          ON u.id = uf.userid
@@ -187,6 +170,12 @@ class assign_grading_table extends table_sql implements renderable {
         $hasoverrides = $this->assignment->has_overrides();
 
         if ($hasoverrides) {
+            $params['assignmentid5'] = (int)$this->assignment->get_instance()->id;
+            $params['assignmentid6'] = (int)$this->assignment->get_instance()->id;
+            $params['assignmentid7'] = (int)$this->assignment->get_instance()->id;
+            $params['assignmentid8'] = (int)$this->assignment->get_instance()->id;
+            $params['assignmentid9'] = (int)$this->assignment->get_instance()->id;
+
             $fields .= ', priority.priority, ';
             $fields .= 'effective.allowsubmissionsfromdate, ';
             $fields .= 'effective.duedate, ';
@@ -209,14 +198,13 @@ class assign_grading_table extends table_sql implements renderable {
                       JOIN {groups_members} gm ON gm.groupid = g.id
                      WHERE go.assignid = :assignmentid6
                   )
-                ) AS merged
+                ) merged
                 GROUP BY merged.userid
               ) priority ON priority.userid = u.id
 
             JOIN (
               (SELECT 9999999 AS priority,
                       u.id AS userid,
-
                       a.allowsubmissionsfromdate,
                       a.duedate,
                       a.cutoffdate
@@ -226,7 +214,6 @@ class assign_grading_table extends table_sql implements renderable {
               UNION
               (SELECT 0 AS priority,
                       uo.userid,
-
                       uo.allowsubmissionsfromdate,
                       uo.duedate,
                       uo.cutoffdate
@@ -236,7 +223,6 @@ class assign_grading_table extends table_sql implements renderable {
               UNION
               (SELECT go.sortorder AS priority,
                       gm.userid,
-
                       go.allowsubmissionsfromdate,
                       go.duedate,
                       go.cutoffdate
@@ -246,14 +232,14 @@ class assign_grading_table extends table_sql implements renderable {
                 WHERE go.assignid = :assignmentid9
               )
 
-            ) AS effective ON effective.priority = priority.priority AND effective.userid = priority.userid ';
+            ) effective ON effective.priority = priority.priority AND effective.userid = priority.userid ';
         }
 
         if (!empty($this->assignment->get_instance()->blindmarking)) {
             $from .= 'LEFT JOIN {assign_user_mapping} um
                              ON u.id = um.userid
-                            AND um.assignment = :assignmentid5 ';
-            $params['assignmentid5'] = (int)$this->assignment->get_instance()->id;
+                            AND um.assignment = :assignmentidblind ';
+            $params['assignmentidblind'] = (int)$this->assignment->get_instance()->id;
             $fields .= ', um.id as recordid ';
         }
 
@@ -272,14 +258,15 @@ class assign_grading_table extends table_sql implements renderable {
                 $params['submitted'] = ASSIGN_SUBMISSION_STATUS_SUBMITTED;
 
             } else if ($filter == ASSIGN_FILTER_NOT_SUBMITTED) {
-                $where .= ' AND (s.timemodified IS NULL OR s.status != :submitted) ';
+                $where .= ' AND (s.timemodified IS NULL OR s.status <> :submitted) ';
                 $params['submitted'] = ASSIGN_SUBMISSION_STATUS_SUBMITTED;
             } else if ($filter == ASSIGN_FILTER_REQUIRE_GRADING) {
                 $where .= ' AND (s.timemodified IS NOT NULL AND
                                  s.status = :submitted AND
                                  (s.timemodified >= g.timemodified OR g.timemodified IS NULL OR g.grade IS NULL';
 
-                if ($this->assignment->get_grade_item()->gradetype == GRADE_TYPE_SCALE) {
+                // Assignment grade is set to the negative grade scale id when scales are used.
+                if ($this->assignment->get_instance()->grade < 0) {
                     // Scale grades are set to -1 when not graded.
                     $where .= ' OR g.grade = -1';
                 }
@@ -412,10 +399,11 @@ class assign_grading_table extends table_sql implements renderable {
         $columns[] = 'grade';
         $headers[] = get_string('grade');
         if ($this->is_downloading()) {
-            if ($this->assignment->get_instance()->grade >= 0) {
+            $gradetype = $this->assignment->get_instance()->grade;
+            if ($gradetype > 0) {
                 $columns[] = 'grademax';
                 $headers[] = get_string('maxgrade', 'assign');
-            } else {
+            } else if ($gradetype < 0) {
                 // This is a custom scale.
                 $columns[] = 'scale';
                 $headers[] = get_string('scale', 'assign');
@@ -426,7 +414,7 @@ class assign_grading_table extends table_sql implements renderable {
                 $columns[] = 'workflowstate';
                 $headers[] = get_string('markingworkflowstate', 'assign');
             }
-            // Add a column for the list of valid marking workflow states.
+            // Add a column to show if this grade can be changed.
             $columns[] = 'gradecanbechanged';
             $headers[] = get_string('gradecanbechanged', 'assign');
         }
@@ -649,8 +637,9 @@ class assign_grading_table extends table_sql implements renderable {
         static $markers = null;
         static $markerlist = array();
         if ($markers === null) {
-            list($sort, $params) = users_order_by_sql();
-            $markers = get_users_by_capability($this->assignment->get_context(), 'mod/assign:grade', '', $sort);
+            list($sort, $params) = users_order_by_sql('u');
+            // Only enrolled users could be assigned as potential markers.
+            $markers = get_enrolled_users($this->assignment->get_context(), 'mod/assign:grade', 0, 'u.*', $sort);
             $markerlist[0] = get_string('choosemarker', 'assign');
             $viewfullnames = has_capability('moodle/site:viewfullnames', $this->assignment->get_context());
             foreach ($markers as $marker) {
@@ -855,8 +844,7 @@ class assign_grading_table extends table_sql implements renderable {
 
         if (!$this->assignment->is_active_user($row->id)) {
             $suspendedstring = get_string('userenrolmentsuspended', 'grades');
-            $fullname .= ' ' . html_writer::empty_tag('img', array('src' => $this->output->pix_url('i/enrolmentsuspended'),
-                'title' => $suspendedstring, 'alt' => $suspendedstring, 'class' => 'usersuspendedicon'));
+            $fullname .= ' ' . $this->output->pix_icon('i/enrolmentsuspended', $suspendedstring);
             $fullname = html_writer::tag('span', $fullname, array('class' => 'usersuspended'));
         }
         return $fullname;
@@ -920,8 +908,12 @@ class assign_grading_table extends table_sql implements renderable {
      * @return string
      */
     public function col_grademax(stdClass $row) {
-        $gradeitem = $this->assignment->get_grade_item();
-        return format_float($this->assignment->get_instance()->grade, $gradeitem->get_decimals());
+        if ($this->assignment->get_instance()->grade > 0) {
+            $gradeitem = $this->assignment->get_grade_item();
+            return format_float($this->assignment->get_instance()->grade, $gradeitem->get_decimals());
+        } else {
+            return '';
+        }
     }
 
     /**
@@ -1044,7 +1036,10 @@ class assign_grading_table extends table_sql implements renderable {
 
         $group = false;
         $submission = false;
-        $this->get_group_and_submission($row->id, $group, $submission, -1);
+
+        if ($instance->teamsubmission) {
+            $this->get_group_and_submission($row->id, $group, $submission, -1);
+        }
 
         if ($instance->teamsubmission && !$group && !$instance->preventsubmissionnotingroup) {
             $group = true;
@@ -1120,11 +1115,10 @@ class assign_grading_table extends table_sql implements renderable {
 
         if ($row->allowsubmissionsfromdate) {
             $userdate = userdate($row->allowsubmissionsfromdate);
-            $o = $this->output->container($userdate, 'allowsubmissionsfromdate');
+            $o = ($this->is_downloading()) ? $userdate : $this->output->container($userdate, 'allowsubmissionsfromdate');
         }
 
         return $o;
-
     }
 
     /**
@@ -1138,11 +1132,10 @@ class assign_grading_table extends table_sql implements renderable {
 
         if ($row->duedate) {
             $userdate = userdate($row->duedate);
-            $o = $this->output->container($userdate, 'duedate');
+            $o = ($this->is_downloading()) ? $userdate : $this->output->container($userdate, 'duedate');
         }
 
         return $o;
-
     }
 
     /**
@@ -1156,11 +1149,10 @@ class assign_grading_table extends table_sql implements renderable {
 
         if ($row->cutoffdate) {
             $userdate = userdate($row->cutoffdate);
-            $o = $this->output->container($userdate, 'cutoffdate');
+            $o = ($this->is_downloading()) ? $userdate : $this->output->container($userdate, 'cutoffdate');
         }
 
         return $o;
-
     }
 
     /**

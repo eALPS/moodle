@@ -76,8 +76,12 @@ if ($param->moveupcontext || $param->movedowncontext) {
     } else {
         $catid = $param->movedowncontext;
     }
+    $newtopcat = question_get_top_category($param->tocontext);
+    if (!$newtopcat) {
+        print_error('invalidcontext');
+    }
     $oldcat = $DB->get_record('question_categories', array('id' => $catid), '*', MUST_EXIST);
-    $qcobject->update_category($catid, '0,'.$param->tocontext, $oldcat->name, $oldcat->info);
+    $qcobject->update_category($catid, "{$newtopcat->id},{$param->tocontext}", $oldcat->name, $oldcat->info);
     // The previous line does a redirect().
 }
 
@@ -133,6 +137,10 @@ if ($param->edit) {
 $PAGE->set_title(get_string('editcategories', 'question'));
 $PAGE->set_heading($COURSE->fullname);
 echo $OUTPUT->header();
+
+// Print horizontal nav if needed.
+$renderer = $PAGE->get_renderer('core_question', 'bank');
+echo $renderer->extra_horizontal_navigation();
 
 // Display the UI.
 if (!empty($param->edit)) {

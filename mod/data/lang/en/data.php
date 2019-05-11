@@ -54,14 +54,15 @@ $string['availabletodatevalidation'] = 'The available to date cannot be before t
 $string['blank'] = 'Blank';
 $string['buttons'] = 'Actions';
 $string['bynameondate'] = 'by {$a->name} - {$a->date}';
-$string['calendarend'] = 'Database {$a} closes';
-$string['calendarstart'] = 'Database {$a} opens';
+$string['calendarend'] = '{$a} closes';
+$string['calendarstart'] = '{$a} opens';
 $string['cancel'] = 'Cancel';
 $string['cannotaccesspresentsother'] = 'You are not allowed to access presets from other users';
 $string['cannotadd'] = 'Can not add entries!';
 $string['cannotdeletepreset'] = 'Error deleting a preset!';
 $string['cannotoverwritepreset'] = 'Error overwriting preset';
 $string['cannotunziptopreset'] = 'Cannot unzip to the preset directory';
+$string['closebeforeopen'] = 'You have specified an end date before the start date.';
 $string['columns'] = 'columns';
 $string['comment'] = 'Comment';
 $string['commentdeleted'] = 'Comment deleted';
@@ -70,6 +71,9 @@ $string['comments'] = 'Comments';
 $string['commentsaved'] = 'Comment saved';
 $string['commentsn'] = '{$a} comment(s)';
 $string['commentsoff'] = 'Comments feature is not enabled';
+$string['completionentries'] = 'Require entries';
+$string['completionentriescount'] = 'Count of entries';
+$string['completionentriesdesc'] = 'Minimum number of entries required: {$a}';
 $string['configenablerssfeeds'] = 'This switch will enable the possibility of RSS feeds for all databases. You will still need to turn feeds on manually in the settings for each database.';
 $string['confirmdeletefield'] = 'You are about to delete this field, are you sure?';
 $string['confirmdeleterecord'] = 'Are you sure you want to delete this entry?';
@@ -162,8 +166,8 @@ $string['fieldheightlistview'] = 'Height in list view';
 $string['fieldheightsingleview'] = 'Height in single view';
 $string['fieldids'] = 'Field ids';
 $string['fieldmappings'] = 'Field mappings';
-$string['fieldmappings_help'] = 'This menu allows you to keep the data from the existing database. To preserve the data in a field, you must map it to a new field, where the data will appear. Any field can also be left blank, with no infomation copied into it. Any old field not mapped to a new one will be lost and all it\'s data removed.
-You can only map fields of the same type, so each dropdown will have different fields in it. Also, you must be careful not to try and map one old field to more than one new field.';
+$string['fieldmappings_help'] = 'This menu allows you to keep the data from the existing database. To preserve the data in a field, you must map it to a new field, where the data will appear. Any field can also be left blank, with no information copied into it. Any old field not mapped to a new one will be lost and all its data removed.
+You can only map fields of the same type, so each drop-down menu will have different fields in it. Also, you must be careful not to try and map one old field to more than one new field.';
 $string['fieldname'] = 'Field name';
 $string['fieldnotmatched'] = 'The following fields in your file are not known in this database: {$a}';
 $string['fieldoptions'] = 'Options (one per line)';
@@ -198,8 +202,13 @@ $string['expired'] = 'Sorry, this activity closed on {$a} and is no longer avail
 $string['importentries'] = 'Import entries';
 $string['importsuccess'] = 'The preset has been successfully applied.';
 $string['includeapproval'] = 'Include approval status';
+$string['includetags'] = 'Include tags';
 $string['includetime'] = 'Include time added/modified';
 $string['includeuserdetails'] = 'Include user details';
+$string['indicator:cognitivedepth'] = 'Database cognitive';
+$string['indicator:cognitivedepth_help'] = 'This indicator is based on the cognitive depth reached by the student in a Database activity.';
+$string['indicator:socialbreadth'] = 'Database social';
+$string['indicator:socialbreadth_help'] = 'This indicator is based on the social breadth reached by the student in a Database activity.';
 $string['insufficiententries'] = 'more entries needed to view this database';
 $string['intro'] = 'Description';
 $string['invalidaccess'] = 'This page was not accessed correctly';
@@ -234,7 +243,7 @@ $string['menuchoose'] = 'Choose...';
 $string['missingdata'] = 'Data id or object must be provided to field class';
 $string['missingfield'] = 'Programmer error: You must specify field and/or data when defining field class.';
 $string['modulename'] = 'Database';
-$string['modulename_help'] = 'The database activity module enables participants to create, maintain and search a collection of entries (i.e. records).  The structure of the entries is defined by the teacher as a number of fields. Field types include checkbox, radio buttons, dropdown menu, text area, URL, picture and uploaded file.
+$string['modulename_help'] = 'The database activity module enables participants to create, maintain and search a collection of entries (i.e. records).  The structure of the entries is defined by the teacher as a number of fields. Field types include checkbox, radio buttons, drop-down menu, text area, URL, picture and uploaded file.
 
 The visual layout of information when listing, viewing or editing database entries may be controlled by database templates. Database activities may be shared between courses as presets and a teacher may also import and export database entries.
 
@@ -245,7 +254,7 @@ A teacher can allow comments on entries. Entries can also be rated by teachers o
 Database activities have many uses, such as
 
 * A collaborative collection of web links, books, book reviews, journal references etc
-* For displaying student-created photos, posters, websites or poems for peer comment and review';
+* For displaying student-created photos, posters, websites or poems for peer comment and review.';
 $string['modulename_link'] = 'mod/data/view';
 $string['modulenameplural'] = 'Databases';
 $string['more'] = 'More';
@@ -256,7 +265,7 @@ $string['multimenu'] = 'Menu (Multi-select)';
 $string['multipletags'] = 'Multiple tags found! Template not saved';
 $string['newentry'] = 'New entry';
 $string['newfield'] = 'Create a new field';
-$string['newfield_help'] = 'A field allows the input of data. Each entry in a database activity can have multiple fields of multiple types such as a date field, which allows participants to select a day, month and year from a dropdown list, a picture field, which allows participants to upload an image file, or a checkbox field, which allows participants to select one or more options.
+$string['newfield_help'] = 'A field allows the input of data. Each entry in a database activity can have multiple fields of multiple types such as a date field, which allows participants to select a day, month and year from a drop-down menu, a picture field, which allows participants to upload an image file, or a checkbox field, which allows participants to select one or more options.
 
 Each field must have a unique field name. The field description is optional.';
 $string['noaccess'] = 'You do not have access to this page';
@@ -276,6 +285,7 @@ $string['numberrssarticles'] = 'Entries in the RSS feed';
 $string['numnotapproved'] = 'Pending';
 $string['numrecords'] = '{$a} entries';
 $string['ods'] = '<acronym title="OpenDocument Spreadsheet">ODS</acronym> (OpenOffice)';
+$string['openafterclose'] = 'You have specified an open date after the close date';
 $string['optionaldescription'] = 'Short description (optional)';
 $string['optionalfilename'] = 'Filename (optional)';
 $string['other'] = 'Other';
@@ -292,17 +302,40 @@ $string['pluginname'] = 'Database';
 $string['portfolionotfile'] = 'Export to a portfolio rather than a file (csv and leap2a only)';
 $string['presetinfo'] = 'Saving as a preset will publish this template. Other users may be able to use it in their databases.';
 $string['presets'] = 'Presets';
+$string['privacy:metadata:commentpurpose'] = 'Comments on database records';
+$string['privacy:metadata:data_content'] = 'Represents one answer to one field in database activity module';
+$string['privacy:metadata:data_content:fieldid'] = 'Field definition ID';
+$string['privacy:metadata:data_content:content'] = 'Content';
+$string['privacy:metadata:data_content:content1'] = 'Additional content 1';
+$string['privacy:metadata:data_content:content2'] = 'Additional content 2';
+$string['privacy:metadata:data_content:content3'] = 'Additional content 3';
+$string['privacy:metadata:data_content:content4'] = 'Additional content 4';
+$string['privacy:metadata:data_records'] = 'Represent records in database acitivity module';
+$string['privacy:metadata:data_records:userid'] = 'User who created the record';
+$string['privacy:metadata:data_records:groupid'] = 'Group';
+$string['privacy:metadata:data_records:timecreated'] = 'Time when record was created';
+$string['privacy:metadata:data_records:timemodified'] = 'Time when record was last modified';
+$string['privacy:metadata:data_records:approved'] = 'Approval status';
+$string['privacy:metadata:datafieldnpluginsummary'] = 'Fields for database activity module';
+$string['privacy:metadata:filepurpose'] = 'File attached to the database record';
+$string['privacy:metadata:tagpurpose'] = 'Tags on database records';
+$string['privacy:metadata:ratingpurpose'] = 'Ratings on database records';
 $string['radiobutton'] = 'Radio buttons';
 $string['recordapproved'] = 'Entry approved';
 $string['recorddeleted'] = 'Entry deleted';
 $string['recorddisapproved'] = 'Entry unapproved';
 $string['recordsnotsaved'] = 'No entry was saved. Please check the format of the uploaded file.';
 $string['recordssaved'] = 'entries saved';
+$string['removealldatatags'] = 'Remove all database tags';
 $string['requireapproval'] = 'Approval required';
 $string['requireapproval_help'] = 'If enabled, entries require approving by a teacher before they are viewable by everyone.';
 $string['required'] = 'Required';
-$string['requiredentries'] = 'Entries required for completion';
-$string['requiredentries_help'] = 'The number of entries a student is required to submit before the activity can be considered complete.';
+$string['requiredentries'] = 'Entries required for completion (old)';
+$string['requiredentries_help'] = "If set, a message is displayed stating the number of entries required for completion. Note that this setting is not connected to activity completion.
+
+For entries required for activity completion, the new Activity completion setting 'Require entries' should be used. To remove this setting completely, set to none, then save changes.
+Please use the Entries required fields in the Activity completion section instead.";
+$string['requiredentrieswarning'] = 'This setting has been replaced by an Activity completion setting "Require entries"';
 $string['requiredentriestoview'] = 'Entries required before viewing';
 $string['requiredentriestoview_help'] = 'The number of entries a student is required to submit before they can view entries from other students.
 
@@ -334,6 +367,9 @@ $string['subplugintype_datafield'] = 'Database field type';
 $string['subplugintype_datafield_plural'] = 'Database field types';
 $string['subplugintype_datapreset'] = 'Preset';
 $string['subplugintype_datapreset_plural'] = 'Presets';
+$string['tagarea_data_records'] = 'Data records';
+$string['tags'] = 'Tags';
+$string['tagsdeleted'] = 'Database tags have been deleted';
 $string['teachersandstudents'] = '{$a->teachers} and {$a->students}';
 $string['templates'] = 'Templates';
 $string['templatesaved'] = 'Template saved';
@@ -356,7 +392,7 @@ $string['uploadrecords_help'] = 'Entries may be uploaded via text file. The form
 
 The field enclosure is a character that surrounds each field in each record. It can normally be left unset.';
 $string['uploadrecords_link'] = 'mod/data/import';
-$string['url'] = 'Url';
+$string['url'] = 'URL';
 $string['usedate'] = 'Include in search.';
 $string['usestandard'] = 'Use a preset';
 $string['usestandard_help'] = 'To use a preset available to the whole site, select it from the list. (If you have added a preset to the list using the save as preset feature then you have the option of deleting it.)';

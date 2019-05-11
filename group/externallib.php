@@ -24,6 +24,8 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+defined('MOODLE_INTERNAL') || die();
+
 require_once("$CFG->libdir/externallib.php");
 
 /**
@@ -87,9 +89,6 @@ class core_group_external extends external_api {
             }
             if ($DB->get_record('groups', array('courseid'=>$group->courseid, 'name'=>$group->name))) {
                 throw new invalid_parameter_exception('Group with the same name already exists in the course');
-            }
-            if (!empty($group->idnumber) && $DB->count_records('groups', array('idnumber' => $group->idnumber))) {
-                throw new invalid_parameter_exception('Group with the same idnumber already exists');
             }
 
             // now security checks
@@ -463,7 +462,7 @@ class core_group_external extends external_api {
             $groupid = $member['groupid'];
             $userid = $member['userid'];
 
-            $group = groups_get_group($groupid, 'id, courseid', MUST_EXIST);
+            $group = groups_get_group($groupid, '*', MUST_EXIST);
             $user = $DB->get_record('user', array('id'=>$userid, 'deleted'=>0, 'mnethostid'=>$CFG->mnet_localhost_id), '*', MUST_EXIST);
 
             // now security checks
@@ -541,7 +540,7 @@ class core_group_external extends external_api {
             $groupid = $member['groupid'];
             $userid = $member['userid'];
 
-            $group = groups_get_group($groupid, 'id, courseid', MUST_EXIST);
+            $group = groups_get_group($groupid, '*', MUST_EXIST);
             $user = $DB->get_record('user', array('id'=>$userid, 'deleted'=>0, 'mnethostid'=>$CFG->mnet_localhost_id), '*', MUST_EXIST);
 
             // now security checks
@@ -624,9 +623,6 @@ class core_group_external extends external_api {
             }
             if ($DB->count_records('groupings', array('courseid'=>$grouping->courseid, 'name'=>$grouping->name))) {
                 throw new invalid_parameter_exception('Grouping with the same name already exists in the course');
-            }
-            if (!empty($grouping->idnumber) && $DB->count_records('groupings', array('idnumber' => $grouping->idnumber))) {
-                throw new invalid_parameter_exception('Grouping with the same idnumber already exists');
             }
 
             // Now security checks            .
@@ -728,11 +724,6 @@ class core_group_external extends external_api {
             if ($grouping->name != $currentgrouping->name and
                     $DB->count_records('groupings', array('courseid'=>$currentgrouping->courseid, 'name'=>$grouping->name))) {
                 throw new invalid_parameter_exception('A different grouping with the same name already exists in the course');
-            }
-            // Check if the new modified grouping idnumber already exists.
-            if (!empty($grouping->idnumber) && $grouping->idnumber != $currentgrouping->idnumber &&
-                    $DB->count_records('groupings', array('idnumber' => $grouping->idnumber))) {
-                throw new invalid_parameter_exception('A different grouping with the same idnumber already exists');
             }
 
             $grouping->courseid = $currentgrouping->courseid;
@@ -995,7 +986,7 @@ class core_group_external extends external_api {
 
         foreach ($params['groupingids'] as $groupingid) {
 
-            if (!$grouping = groups_get_grouping($groupingid, 'id, courseid', IGNORE_MISSING)) {
+            if (!$grouping = groups_get_grouping($groupingid)) {
                 // Silently ignore attempts to delete nonexisting groupings.
                 continue;
             }
@@ -1386,6 +1377,7 @@ class core_group_external extends external_api {
 
         $results = array(
             'groups' => $usergroups,
+            'canaccessallgroups' => has_capability('moodle/site:accessallgroups', $context, $user),
             'warnings' => $warnings
         );
         return $results;
@@ -1401,6 +1393,8 @@ class core_group_external extends external_api {
         return new external_single_structure(
             array(
                 'groups' => new external_multiple_structure(self::group_description()),
+                'canaccessallgroups' => new external_value(PARAM_BOOL,
+                    'Whether the user will be able to access all the activity groups.', VALUE_OPTIONAL),
                 'warnings' => new external_warnings(),
             )
         );

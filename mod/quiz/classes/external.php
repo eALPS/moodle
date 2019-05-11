@@ -110,7 +110,11 @@ class mod_quiz_external extends external_api {
 
                     $quizdetails['introfiles'] = external_util::get_area_files($context->id, 'mod_quiz', 'intro', false, false);
                     $viewablefields = array('timeopen', 'timeclose', 'grademethod', 'section', 'visible', 'groupmode',
-                                            'groupingid');
+                                            'groupingid', 'attempts', 'timelimit', 'grademethod', 'decimalpoints',
+                                            'questiondecimalpoints', 'sumgrades', 'grade', 'preferredbehaviour');
+                    // Some times this function returns just empty.
+                    $hasfeedback = quiz_has_feedback($quiz);
+                    $quizdetails['hasfeedback'] = (!empty($hasfeedback)) ? 1 : 0;
 
                     $timenow = time();
                     $quizobj = quiz::create($quiz->id, $USER->id);
@@ -119,20 +123,15 @@ class mod_quiz_external extends external_api {
 
                     // Fields the user could see if have access to the quiz.
                     if (!$accessmanager->prevent_access()) {
-                        // Some times this function returns just empty.
-                        $hasfeedback = quiz_has_feedback($quiz);
-                        $quizdetails['hasfeedback'] = (!empty($hasfeedback)) ? 1 : 0;
                         $quizdetails['hasquestions'] = (int) $quizobj->has_questions();
                         $quizdetails['autosaveperiod'] = get_config('quiz', 'autosaveperiod');
 
-                        $additionalfields = array('timelimit', 'attempts', 'attemptonlast', 'grademethod', 'decimalpoints',
-                                                    'questiondecimalpoints', 'reviewattempt', 'reviewcorrectness', 'reviewmarks',
+                        $additionalfields = array('attemptonlast', 'reviewattempt', 'reviewcorrectness', 'reviewmarks',
                                                     'reviewspecificfeedback', 'reviewgeneralfeedback', 'reviewrightanswer',
-                                                    'reviewoverallfeedback', 'questionsperpage', 'navmethod', 'sumgrades', 'grade',
+                                                    'reviewoverallfeedback', 'questionsperpage', 'navmethod',
                                                     'browsersecurity', 'delay1', 'delay2', 'showuserpicture', 'showblocks',
                                                     'completionattemptsexhausted', 'completionpass', 'overduehandling',
-                                                    'graceperiod', 'preferredbehaviour', 'canredoquestions',
-                                                    'allowofflineattempts');
+                                                    'graceperiod', 'canredoquestions', 'allowofflineattempts');
                         $viewablefields = array_merge($viewablefields, $additionalfields);
                     }
 
@@ -866,7 +865,7 @@ class mod_quiz_external extends external_api {
     /**
      * Describes a single question structure.
      *
-     * @return external_single_structure the question structure
+     * @return external_single_structure the question data. Some fields may not be returned depending on the quiz display settings.
      * @since  Moodle 3.1
      * @since Moodle 3.2 blockedbyprevious parameter added.
      */
@@ -884,13 +883,18 @@ class mod_quiz_external extends external_api {
                                                             VALUE_OPTIONAL),
                 'flagged' => new external_value(PARAM_BOOL, 'whether the question is flagged or not'),
                 'number' => new external_value(PARAM_INT, 'question ordering number in the quiz', VALUE_OPTIONAL),
-                'state' => new external_value(PARAM_ALPHA, 'the state where the question is in', VALUE_OPTIONAL),
+                'state' => new external_value(PARAM_ALPHA, 'the state where the question is in.
+                    It will not be returned if the user cannot see it due to the quiz display correctness settings.',
+                    VALUE_OPTIONAL),
                 'status' => new external_value(PARAM_RAW, 'current formatted state of the question', VALUE_OPTIONAL),
                 'blockedbyprevious' => new external_value(PARAM_BOOL, 'whether the question is blocked by the previous question',
-                        VALUE_OPTIONAL),
-                'mark' => new external_value(PARAM_RAW, 'the mark awarded', VALUE_OPTIONAL),
-                'maxmark' => new external_value(PARAM_FLOAT, 'the maximum mark possible for this question attempt', VALUE_OPTIONAL),
-            )
+                    VALUE_OPTIONAL),
+                'mark' => new external_value(PARAM_RAW, 'the mark awarded.
+                    It will be returned only if the user is allowed to see it.', VALUE_OPTIONAL),
+                'maxmark' => new external_value(PARAM_FLOAT, 'the maximum mark possible for this question attempt.
+                    It will be returned only if the user is allowed to see it.', VALUE_OPTIONAL),
+            ),
+            'The question data. Some fields may not be returned depending on the quiz display settings.'
         );
     }
 
@@ -925,7 +929,10 @@ class mod_quiz_external extends external_api {
 
             if ($attemptobj->is_real_question($slot)) {
                 $question['number'] = $attemptobj->get_question_number($slot);
-                $question['state'] = (string) $attemptobj->get_question_state($slot);
+                $showcorrectness = $displayoptions->correctness && $attemptobj->get_question_attempt($slot)->has_marks();
+                if ($showcorrectness) {
+                    $question['state'] = (string) $attemptobj->get_question_state($slot);
+                }
                 $question['status'] = $attemptobj->get_question_status($slot, $displayoptions->correctness);
                 $question['blockedbyprevious'] = $attemptobj->is_blocked_by_previous_question($slot);
             }
@@ -1233,8 +1240,11 @@ class mod_quiz_external extends external_api {
         );
         $params = self::validate_parameters(self::process_attempt_parameters(), $params);
 
-        // Do not check access manager rules.
-        list($attemptobj, $messages) = self::validate_attempt($params, false);
+        // Do not check access manager rules and evaluate fail if overdue.
+        $attemptobj = quiz_attempt::create($params['attemptid']);
+        $failifoverdue = !($attemptobj->get_quizobj()->get_quiz()->overduehandling == 'graceperiod');
+
+        list($attemptobj, $messages) = self::validate_attempt($params, false, $failifoverdue);
 
         // Create the $_POST object required by the question engine.
         $_POST = array();

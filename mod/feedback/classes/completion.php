@@ -42,46 +42,54 @@ class mod_feedback_completion extends mod_feedback_structure {
     protected $values = null;
     /** @var bool */
     protected $iscompleted = false;
+    /** @var mod_feedback_complete_form the form used for completing the feedback */
+    protected $form = null;
+    /** @var bool true when the feedback has been completed during the request */
+    protected $justcompleted = false;
+    /** @var int the next page the user should jump after processing the form */
+    protected $jumpto = null;
 
 
     /**
      * Constructor
      *
-     * @param stdClass $feedback feedback object, in case of the template
-     *     this is the current feedback the template is accessed from
+     * @param stdClass $feedback feedback object
      * @param cm_info $cm course module object corresponding to the $feedback
+     *     (at least one of $feedback or $cm is required)
      * @param int $courseid current course (for site feedbacks only)
      * @param bool $iscompleted has feedback been already completed? If yes either completedid or userid must be specified.
      * @param int $completedid id in the table feedback_completed, may be omitted if userid is specified
      *     but it is highly recommended because the same user may have multiple responses to the same feedback
      *     for different courses
-     * @param int $userid id of the user - if specified only non-anonymous replies will be returned. If not
-     *     specified only anonymous replies will be returned and the $completedid is mandatory.
+     * @param int $nonanonymouseuserid - Return only anonymous results or specified user's results.
+     *     If null only anonymous replies will be returned and the $completedid is mandatory.
+     *     If specified only non-anonymous replies of $nonanonymouseuserid will be returned.
+     * @param int $userid User id to use for all capability checks, etc. Set to 0 for current user (default).
      */
-    public function __construct($feedback, $cm, $courseid, $iscompleted = false, $completedid = null, $userid = null) {
+    public function __construct($feedback, $cm, $courseid, $iscompleted = false, $completedid = null,
+                                $nonanonymouseuserid = null, $userid = 0) {
         global $DB;
-        // Make sure courseid is always set for site feedback and never for course feedback.
-        if ($feedback->course == SITEID) {
-            $courseid = $courseid ?: SITEID;
-        } else {
-            $courseid = 0;
+
+        parent::__construct($feedback, $cm, $courseid, 0, $userid);
+        // Make sure courseid is always set for site feedback.
+        if ($this->feedback->course == SITEID && !$this->courseid) {
+            $this->courseid = SITEID;
         }
-        parent::__construct($feedback, $cm, $courseid, 0);
         if ($iscompleted) {
             // Retrieve information about the completion.
             $this->iscompleted = true;
-            $params = array('feedback' => $feedback->id);
-            if (!$userid && !$completedid) {
-                throw new coding_exception('Either $completedid or $userid must be specified for completed feedbacks');
+            $params = array('feedback' => $this->feedback->id);
+            if (!$nonanonymouseuserid && !$completedid) {
+                throw new coding_exception('Either $completedid or $nonanonymouseuserid must be specified for completed feedbacks');
             }
             if ($completedid) {
                 $params['id'] = $completedid;
             }
-            if ($userid) {
+            if ($nonanonymouseuserid) {
                 // We must respect the anonymousity of the reply that the user saw when they were completing the feedback,
                 // not the current state that may have been changed later by the teacher.
                 $params['anonymous_response'] = FEEDBACK_ANONYMOUS_NO;
-                $params['userid'] = $userid;
+                $params['userid'] = $nonanonymouseuserid;
             }
             $this->completed = $DB->get_record('feedback_completed', $params, '*', MUST_EXIST);
             $this->courseid = $this->completed->courseid;
@@ -97,19 +105,39 @@ class mod_feedback_completion extends mod_feedback_structure {
     }
 
     /**
+     * Check if the feedback was just completed.
+     *
+     * @return bool true if the feedback was just completed.
+     * @since  Moodle 3.3
+     */
+    public function just_completed() {
+        return $this->justcompleted;
+    }
+
+    /**
+     * Return the jumpto property.
+     *
+     * @return int the next page to jump.
+     * @since  Moodle 3.3
+     */
+    public function get_jumpto() {
+        return $this->jumpto;
+    }
+
+    /**
      * Returns the temporary completion record for the current user or guest session
      *
      * @return stdClass|false record from feedback_completedtmp or false if not found
      */
-    protected function get_current_completed_tmp() {
-        global $USER, $DB;
+    public function get_current_completed_tmp() {
+        global $DB, $USER;
         if ($this->completedtmp === null) {
             $params = array('feedback' => $this->get_feedback()->id);
             if ($courseid = $this->get_courseid()) {
                 $params['courseid'] = $courseid;
             }
-            if (isloggedin() && !isguestuser()) {
-                $params['userid'] = $USER->id;
+            if ((isloggedin() || $USER->id != $this->userid) && !isguestuser($this->userid)) {
+                $params['userid'] = $this->userid;
             } else {
                 $params['guestid'] = sesskey();
             }
@@ -123,7 +151,10 @@ class mod_feedback_completion extends mod_feedback_structure {
      *
      * @param stdClass $item
      * @return bool whether user can see item or not,
-     *     null if dependency is broken or dependent question is not answered.
+     *     true if there is no dependency or dependency is met,
+     *     false if dependent question is visible or broken
+     *        and further it is either not answered or the dependency is not met,
+     *     null if dependency is broken.
      */
     protected function can_see_item($item) {
         if (empty($item->dependitem)) {
@@ -141,6 +172,10 @@ class mod_feedback_completion extends mod_feedback_structure {
             $value = $this->get_values_tmp($ditem);
         }
         if ($value === null) {
+            // Cyclic dependencies are no problem here, since they will throw an dependency error above.
+            if ($this->can_see_item($ditem) === false) {
+                return false;
+            }
             return null;
         }
         return $itemobj->compare_value($ditem, $value, $item->dependvalue) ? true : false;
@@ -191,6 +226,23 @@ class mod_feedback_completion extends mod_feedback_structure {
     }
 
     /**
+     * Retrieves responses from an unfinished attempt.
+     *
+     * @return array the responses (from the feedback_valuetmp table)
+     * @since  Moodle 3.3
+     */
+    public function get_unfinished_responses() {
+        global $DB;
+        $responses = array();
+
+        $completedtmp = $this->get_current_completed_tmp();
+        if ($completedtmp) {
+            $responses = $DB->get_records('feedback_valuetmp', ['completed' => $completedtmp->id]);
+        }
+        return $responses;
+    }
+
+    /**
      * Returns all temporary values for this feedback or just a value for an item
      * @param stdClass $item
      * @return array
@@ -198,18 +250,32 @@ class mod_feedback_completion extends mod_feedback_structure {
     protected function get_values_tmp($item = null) {
         global $DB;
         if ($this->valuestmp === null) {
-            $completedtmp = $this->get_current_completed_tmp();
-            if ($completedtmp) {
-                $this->valuestmp = $DB->get_records_menu('feedback_valuetmp',
-                        ['completed' => $completedtmp->id], '', 'item, value');
-            } else {
-                $this->valuestmp = array();
+            $this->valuestmp = array();
+            $responses = $this->get_unfinished_responses();
+            foreach ($responses as $r) {
+                $this->valuestmp[$r->item] = $r->value;
             }
         }
         if ($item) {
             return array_key_exists($item->id, $this->valuestmp) ? $this->valuestmp[$item->id] : null;
         }
         return $this->valuestmp;
+    }
+
+    /**
+     * Retrieves responses from an finished attempt.
+     *
+     * @return array the responses (from the feedback_value table)
+     * @since  Moodle 3.3
+     */
+    public function get_finished_responses() {
+        global $DB;
+        $responses = array();
+
+        if ($this->completed) {
+            $responses = $DB->get_records('feedback_value', ['completed' => $this->completed->id]);
+        }
+        return $responses;
     }
 
     /**
@@ -220,11 +286,10 @@ class mod_feedback_completion extends mod_feedback_structure {
     protected function get_values($item = null) {
         global $DB;
         if ($this->values === null) {
-            if ($this->completed) {
-                $this->values = $DB->get_records_menu('feedback_value',
-                        ['completed' => $this->completed->id], '', 'item, value');
-            } else {
-                $this->values = array();
+            $this->values = array();
+            $responses = $this->get_finished_responses();
+            foreach ($responses as $r) {
+                $this->values[$r->item] = $r->value;
             }
         }
         if ($item) {
@@ -383,13 +448,13 @@ class mod_feedback_completion extends mod_feedback_structure {
      * @return stdClass record from feedback_completedtmp or false if not found
      */
     protected function create_current_completed_tmp() {
-        global $USER, $DB;
+        global $DB, $USER;
         $record = (object)['feedback' => $this->feedback->id];
         if ($this->get_courseid()) {
             $record->courseid = $this->get_courseid();
         }
-        if (isloggedin() && !isguestuser()) {
-            $record->userid = $USER->id;
+        if ((isloggedin() || $USER->id != $this->userid) && !isguestuser($this->userid)) {
+            $record->userid = $this->userid;
         } else {
             $record->guestid = sesskey();
         }
@@ -398,6 +463,21 @@ class mod_feedback_completion extends mod_feedback_structure {
         $id = $DB->insert_record('feedback_completedtmp', $record);
         $this->completedtmp = $DB->get_record('feedback_completedtmp', ['id' => $id]);
         $this->valuestmp = null;
+        return $this->completedtmp;
+    }
+
+    /**
+     * If user has already completed the feedback, create the temproray values from last completed attempt
+     *
+     * @return stdClass record from feedback_completedtmp or false if not found
+     */
+    public function create_completed_tmp_from_last_completed() {
+        if (!$this->get_current_completed_tmp()) {
+            $lastcompleted = $this->find_last_completed();
+            if ($lastcompleted) {
+                $this->completedtmp = feedback_set_tmp_values($lastcompleted);
+            }
+        }
         return $this->completedtmp;
     }
 
@@ -466,7 +546,7 @@ class mod_feedback_completion extends mod_feedback_structure {
      * It is also responsible for sending email notifications when applicable.
      */
     public function save_response() {
-        global $USER, $SESSION, $DB;
+        global $SESSION, $DB, $USER;
 
         $feedbackcompleted = $this->find_last_completed();
         $feedbackcompletedtmp = $this->get_current_completed_tmp();
@@ -483,7 +563,7 @@ class mod_feedback_completion extends mod_feedback_structure {
 
         // Send email.
         if ($this->feedback->anonymous == FEEDBACK_ANONYMOUS_NO) {
-            feedback_send_email($this->cm, $this->feedback, $this->cm->get_course(), $USER);
+            feedback_send_email($this->cm, $this->feedback, $this->cm->get_course(), $this->userid, $this->completed);
         } else {
             feedback_send_email_anonym($this->cm, $this->feedback, $this->cm->get_course());
         }
@@ -492,8 +572,9 @@ class mod_feedback_completion extends mod_feedback_structure {
 
         // Update completion state.
         $completion = new completion_info($this->cm->get_course());
-        if (isloggedin() && !isguestuser() && $completion->is_enabled($this->cm) && $this->feedback->completionsubmit) {
-            $completion->update_state($this->cm, COMPLETION_COMPLETE);
+        if ((isloggedin() || $USER->id != $this->userid) && $completion->is_enabled($this->cm) &&
+                $this->cm->completion == COMPLETION_TRACKING_AUTOMATIC && $this->feedback->completionsubmit) {
+            $completion->update_state($this->cm, COMPLETION_COMPLETE, $this->userid);
         }
     }
 
@@ -515,9 +596,9 @@ class mod_feedback_completion extends mod_feedback_structure {
      *
      * @return stdClass record from feedback_completed or false if not found
      */
-    protected function find_last_completed() {
-        global $USER, $DB;
-        if (isloggedin() || isguestuser()) {
+    public function find_last_completed() {
+        global $DB, $USER;
+        if ((!isloggedin() && $USER->id == $this->userid) || isguestuser($this->userid)) {
             // Not possible to retrieve completed feedback for guests.
             return false;
         }
@@ -525,7 +606,10 @@ class mod_feedback_completion extends mod_feedback_structure {
             // Not possible to retrieve completed anonymous feedback.
             return false;
         }
-        $params = array('feedback' => $this->feedback->id, 'userid' => $USER->id);
+        $params = array('feedback' => $this->feedback->id,
+            'userid' => $this->userid,
+            'anonymous_response' => FEEDBACK_ANONYMOUS_NO
+        );
         if ($this->get_courseid()) {
             $params['courseid'] = $this->get_courseid();
         }
@@ -534,7 +618,7 @@ class mod_feedback_completion extends mod_feedback_structure {
     }
 
     /**
-     * Checks if current user has capability to submit the feedback
+     * Checks if user has capability to submit the feedback
      *
      * There is an exception for fully anonymous feedbacks when guests can complete
      * feedback without the proper capability.
@@ -546,17 +630,17 @@ class mod_feedback_completion extends mod_feedback_structure {
      * @return bool
      */
     public function can_complete() {
-        global $CFG;
+        global $CFG, $USER;
 
         $context = context_module::instance($this->cm->id);
-        if (has_capability('mod/feedback:complete', $context)) {
+        if (has_capability('mod/feedback:complete', $context, $this->userid)) {
             return true;
         }
 
         if (!empty($CFG->feedback_allowfullanonymous)
                     AND $this->feedback->course == SITEID
                     AND $this->feedback->anonymous == FEEDBACK_ANONYMOUS_YES
-                    AND (!isloggedin() OR isguestuser())) {
+                    AND ((!isloggedin() && $USER->id == $this->userid) || isguestuser($this->userid))) {
             // Guests are allowed to complete fully anonymous feedback without having 'mod/feedback:complete' capability.
             return true;
         }
@@ -578,5 +662,97 @@ class mod_feedback_completion extends mod_feedback_structure {
             }
         }
         return true;
+    }
+
+    /**
+     * Trigger module viewed event.
+     *
+     * @since Moodle 3.3
+     */
+    public function trigger_module_viewed() {
+        $event = \mod_feedback\event\course_module_viewed::create_from_record($this->feedback, $this->cm, $this->cm->get_course());
+        $event->trigger();
+    }
+
+    /**
+     * Mark activity viewed for completion-tracking.
+     *
+     * @since Moodle 3.3
+     */
+    public function set_module_viewed() {
+        global $CFG;
+        require_once($CFG->libdir . '/completionlib.php');
+
+        $completion = new completion_info($this->cm->get_course());
+        $completion->set_module_viewed($this->cm, $this->userid);
+    }
+
+    /**
+     * Process a page jump via the mod_feedback_complete_form.
+     *
+     * This function initializes the form and process the submission.
+     *
+     * @param  int $gopage         the current page
+     * @param  int $gopreviouspage if the user chose to go to the previous page
+     * @return string the url to redirect the user (if any)
+     * @since  Moodle 3.3
+     */
+    public function process_page($gopage, $gopreviouspage = false) {
+        global $CFG, $PAGE, $SESSION;
+
+        $urltogo = null;
+
+        // Save the form for later during the request.
+        $this->create_completed_tmp_from_last_completed();
+        $this->form = new mod_feedback_complete_form(mod_feedback_complete_form::MODE_COMPLETE,
+            $this, 'feedback_complete_form', array('gopage' => $gopage));
+
+        if ($this->form->is_cancelled()) {
+            // Form was cancelled - return to the course page.
+            $urltogo = course_get_url($this->courseid ?: $this->feedback->course);
+        } else if ($this->form->is_submitted() &&
+                ($this->form->is_validated() || $gopreviouspage)) {
+            // Form was submitted (skip validation for "Previous page" button).
+            $data = $this->form->get_submitted_data();
+            if (!isset($SESSION->feedback->is_started) OR !$SESSION->feedback->is_started == true) {
+                print_error('error', '', $CFG->wwwroot.'/course/view.php?id='.$this->courseid);
+            }
+            $this->save_response_tmp($data);
+            if (!empty($data->savevalues) || !empty($data->gonextpage)) {
+                if (($nextpage = $this->get_next_page($gopage)) !== null) {
+                    if ($PAGE->has_set_url()) {
+                        $urltogo = new moodle_url($PAGE->url, array('gopage' => $nextpage));
+                    }
+                    $this->jumpto = $nextpage;
+                } else {
+                    $this->save_response();
+                    if (!$this->get_feedback()->page_after_submit) {
+                        \core\notification::success(get_string('entries_saved', 'feedback'));
+                    }
+                    $this->justcompleted = true;
+                }
+            } else if (!empty($gopreviouspage)) {
+                $prevpage = intval($this->get_previous_page($gopage));
+                if ($PAGE->has_set_url()) {
+                    $urltogo = new moodle_url($PAGE->url, array('gopage' => $prevpage));
+                }
+                $this->jumpto = $prevpage;
+            }
+        }
+        return $urltogo;
+    }
+
+    /**
+     * Render the form with the questions.
+     *
+     * @return string the form rendered
+     * @since Moodle 3.3
+     */
+    public function render_items() {
+        global $SESSION;
+
+        // Print the items.
+        $SESSION->feedback->is_started = true;
+        return $this->form->render();
     }
 }

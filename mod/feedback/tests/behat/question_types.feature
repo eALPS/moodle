@@ -23,7 +23,7 @@ Feature: Test creating different types of feedback questions for anonymous feedb
       | activity   | name                | course | idnumber    |
       | feedback   | Learning experience | C1     | feedback0   |
     When I log in as "teacher1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
     And I click on "Edit questions" "link" in the "[role=main]" "css_element"
     And I add a "Information" question to the feedback with:
@@ -49,7 +49,7 @@ Feature: Test creating different types of feedback questions for anonymous feedb
     And I add a "Multiple choice" question to the feedback with:
       | Question                       | this is a multiple choice 3        |
       | Label                          | multichoice3                       |
-      | Multiple choice type           | Multiple choice - single answer allowed (dropdownlist) |
+      | Multiple choice type           | Multiple choice - single answer allowed (drop-down menu) |
       | Multiple choice values         | option g\noption h\noption i                           |
     And I add a "Multiple choice (rated)" question to the feedback with:
       | Question               | this is a multiple choice rated |
@@ -67,9 +67,9 @@ Feature: Test creating different types of feedback questions for anonymous feedb
       | Maximum characters accepted | 200                    |
     And I log out
     And I log in as "student1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I set the following fields to these values:
       | this is a longer text answer | my long answer |
       | option b                     | 1              |
@@ -82,9 +82,9 @@ Feature: Test creating different types of feedback questions for anonymous feedb
     And I press "Submit your answers"
     And I log out
     And I log in as "student2"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I set the following fields to these values:
       | this is a longer text answer | lots of feedbacks |
       | option a                     | 1              |
@@ -97,14 +97,14 @@ Feature: Test creating different types of feedback questions for anonymous feedb
     And I press "Submit your answers"
     And I log out
     When I log in as "teacher1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
     And I navigate to "Analysis" in current page administration
     And I should see "Submitted answers: 2"
     And I should see "Questions: 8"
     And I log out
     And I log in as "teacher1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Learning experience"
     And I navigate to "Analysis" in current page administration
     And I should see "C1" in the "(info)" "table"

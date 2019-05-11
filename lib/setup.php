@@ -36,6 +36,7 @@
  *  - $CFG->dataroot - Path to moodle data files directory on server's filesystem.
  *  - $CFG->dirroot  - Path to moodle's library folder on server's filesystem.
  *  - $CFG->libdir   - Path to moodle's library folder on server's filesystem.
+ *  - $CFG->backuptempdir  - Path to moodle's backup temp file directory on server's filesystem.
  *  - $CFG->tempdir  - Path to moodle's temp file directory on server's filesystem.
  *  - $CFG->cachedir - Path to moodle's cache directory on server's filesystem (shared by cluster nodes).
  *  - $CFG->localcachedir - Path to moodle's local cache directory (not shared by cluster nodes).
@@ -190,6 +191,11 @@ $CFG->libdir = $CFG->dirroot .'/lib';
 // Allow overriding of tempdir but be backwards compatible
 if (!isset($CFG->tempdir)) {
     $CFG->tempdir = "$CFG->dataroot/temp";
+}
+
+// Allow overriding of backuptempdir but be backwards compatible
+if (!isset($CFG->backuptempdir)) {
+    $CFG->backuptempdir = "$CFG->tempdir/backup";
 }
 
 // Allow overriding of cachedir but be backwards compatible
@@ -528,8 +534,8 @@ global $FULLSCRIPT;
  */
 global $SCRIPT;
 
-// Set httpswwwroot default value (this variable will replace $CFG->wwwroot
-// inside some URLs used in HTTPSPAGEREQUIRED pages.
+// Set httpswwwroot to $CFG->wwwroot for backwards compatibility
+// The loginhttps option is deprecated, so httpswwwroot is no longer necessary. See MDL-42834.
 $CFG->httpswwwroot = $CFG->wwwroot;
 
 require_once($CFG->libdir .'/setuplib.php');        // Functions that MUST be loaded first
@@ -915,37 +921,10 @@ if (!empty($CFG->debugvalidators) and !empty($CFG->guestloginbutton)) {
 
 // Apache log integration. In apache conf file one can use ${MOODULEUSER}n in
 // LogFormat to get the current logged in username in moodle.
-if ($USER && function_exists('apache_note')
-    && !empty($CFG->apacheloguser) && isset($USER->username)) {
-    $apachelog_userid = $USER->id;
-    $apachelog_username = clean_filename($USER->username);
-    $apachelog_name = '';
-    if (isset($USER->firstname)) {
-        // We can assume both will be set
-        // - even if to empty.
-        $apachelog_name = clean_filename($USER->firstname . " " .
-                                         $USER->lastname);
-    }
-    if (\core\session\manager::is_loggedinas()) {
-        $realuser = \core\session\manager::get_realuser();
-        $apachelog_username = clean_filename($realuser->username." as ".$apachelog_username);
-        $apachelog_name = clean_filename($realuser->firstname." ".$realuser->lastname ." as ".$apachelog_name);
-        $apachelog_userid = clean_filename($realuser->id." as ".$apachelog_userid);
-    }
-    switch ($CFG->apacheloguser) {
-        case 3:
-            $logname = $apachelog_username;
-            break;
-        case 2:
-            $logname = $apachelog_name;
-            break;
-        case 1:
-        default:
-            $logname = $apachelog_userid;
-            break;
-    }
-    apache_note('MOODLEUSER', $logname);
-}
+// Alternatvely for other web servers a header X-MOODLEUSER can be set which
+// can be using in the logfile and stripped out if needed.
+set_access_log_user();
+
 
 // Ensure the urlrewriteclass is setup correctly (to avoid crippling site).
 if (isset($CFG->urlrewriteclass)) {

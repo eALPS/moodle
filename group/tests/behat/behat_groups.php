@@ -62,15 +62,18 @@ class behat_groups extends behat_base {
         $select->selectOption($fulloption);
 
         // This is needed by some drivers to ensure relevant event is triggred and button is enabled.
-        $script = "Syn.trigger('change', {}, {{ELEMENT}})";
-        $this->getSession()->getDriver()->triggerSynScript($select->getXpath(), $script);
-        $this->getSession()->wait(self::TIMEOUT * 1000, self::PAGE_READY_JS);
+        $driver = $this->getSession()->getDriver();
+        if ($driver instanceof \Moodle\BehatExtension\Driver\MoodleSelenium2Driver) {
+            $script = "Syn.trigger('change', {}, {{ELEMENT}})";
+            $driver->triggerSynScript($select->getXpath(), $script);
+        }
+        $this->getSession()->wait(self::get_timeout() * 1000, self::PAGE_READY_JS);
 
         // Here we don't need to wait for the AJAX response.
         $this->find_button(get_string('adduserstogroup', 'group'))->click();
 
         // Wait for add/remove members page to be loaded.
-        $this->getSession()->wait(self::TIMEOUT * 1000, self::PAGE_READY_JS);
+        $this->getSession()->wait(self::get_timeout() * 1000, self::PAGE_READY_JS);
 
         // Getting the option and selecting it.
         $select = $this->find_field('addselect');
@@ -83,7 +86,7 @@ class behat_groups extends behat_base {
         $this->find_button(get_string('add'))->click();
 
         // Wait for the page to load.
-        $this->getSession()->wait(self::TIMEOUT * 1000, self::PAGE_READY_JS);
+        $this->getSession()->wait(self::get_timeout() * 1000, self::PAGE_READY_JS);
 
         // Returning to the main groups page.
         $this->find_button(get_string('backtogroups', 'group'))->click();

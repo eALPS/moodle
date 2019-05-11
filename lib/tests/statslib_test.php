@@ -188,16 +188,16 @@ class core_statslib_testcase extends advanced_testcase {
         static $replacements = null;
 
         $raw   = $this->createXMLDataSet($file);
-        $clean = new PHPUnit_Extensions_Database_DataSet_ReplacementDataSet($raw);
+        $clean = new PHPUnit\DbUnit\DataSet\ReplacementDataSet($raw);
 
         foreach ($this->replacements as $placeholder => $value) {
             $clean->addFullReplacement($placeholder, $value);
         }
 
-        $logs = new PHPUnit_Extensions_Database_DataSet_DataSetFilter($clean);
+        $logs = new PHPUnit\DbUnit\DataSet\Filter($clean);
         $logs->addIncludeTables(array('log'));
 
-        $stats = new PHPUnit_Extensions_Database_DataSet_DataSetFilter($clean);
+        $stats = new PHPUnit\DbUnit\DataSet\Filter($clean);
         $stats->addIncludeTables(array('stats_daily', 'stats_user_daily'));
 
         return array($logs, $stats);
@@ -217,6 +217,34 @@ class core_statslib_testcase extends advanced_testcase {
         }
 
         return $logfiles;
+    }
+
+    /**
+     * Set of data for test_statlibs_get_base_weekly
+     *
+     * @return array Dates and timezones for which the first day of the week will be calculated
+     */
+    public function get_base_weekly_provider() {
+        return [
+            [
+                "startwday" => 0,
+                "timezone" => 'America/Chicago',
+                "timestart" => '18-03-2017 22:00',
+                "expected" => '12-03-2017 00:00:00'
+            ],
+            [
+                "startwday" => 0,
+                "timezone" => 'America/Chicago',
+                "date" => '25-03-2017 22:00',
+                "expected" => '19-03-2017 00:00:00'
+            ],
+            [
+                "startwday" => 1,
+                "timezone" => 'Atlantic/Canary',
+                "date" => '06-08-2018 22:00',
+                "expected" => '06-08-2018 00:00:00'
+            ],
+        ];
     }
 
     /**
@@ -337,15 +365,29 @@ class core_statslib_testcase extends advanced_testcase {
 
         $this->assertEquals($firstoldtime, stats_get_start_from('daily'));
 
+        $time = time() - 5;
         \core_tests\event\create_executed::create(array('context' => context_system::instance()))->trigger();
+        $DB->set_field('logstore_standard_log', 'timecreated', $time++, [
+                'eventname' => '\\core_tests\\event\\create_executed',
+            ]);
+
         \core_tests\event\read_executed::create(array('context' => context_system::instance()))->trigger();
+        $DB->set_field('logstore_standard_log', 'timecreated', $time++, [
+                'eventname' => '\\core_tests\\event\\read_executed',
+            ]);
+
         \core_tests\event\update_executed::create(array('context' => context_system::instance()))->trigger();
+        $DB->set_field('logstore_standard_log', 'timecreated', $time++, [
+                'eventname' => '\\core_tests\\event\\update_executed',
+            ]);
+
         \core_tests\event\delete_executed::create(array('context' => context_system::instance()))->trigger();
+        $DB->set_field('logstore_standard_log', 'timecreated', $time++, [
+                'eventname' => '\\core_tests\\event\\delete_executed',
+            ]);
 
-        // Fake the origin of events.
         $DB->set_field('logstore_standard_log', 'origin', 'web', array());
-
-        $logs = $DB->get_records('logstore_standard_log');
+        $logs = $DB->get_records('logstore_standard_log', null, 'timecreated ASC');
         $this->assertCount(4, $logs);
 
         $firstnew = reset($logs);
@@ -404,6 +446,27 @@ class core_statslib_testcase extends advanced_testcase {
         // The next day should be normal.
         $this->assertEquals(1446526800, stats_get_next_day_start(1446440400));
         $this->assertEquals(24, ((1446526800 - 1446440400) / 60 ) / 60);
+    }
+
+    /**
+     * Test the function that calculates the start of the week.
+     *
+     * @dataProvider get_base_weekly_provider
+     * @param int $startwday Day in which the week starts (Sunday = 0)
+     * @param string $timezone Default timezone
+     * @param string $timestart Date and time for which the first day of the week will be obtained
+     * @param string $expected Expected date of the first day of the week
+     */
+    public function test_statslib_get_base_weekly($startwday, $timezone, $timestart, $expected) {
+        $this->setTimezone($timezone);
+        $time = strtotime($timestart);
+        $expected = strtotime($expected);
+        set_config('calendar_startwday', $startwday);
+        set_config('statslastweekly', $time);
+
+        $weekstarttime = stats_get_base_weekly($time);
+
+        $this->assertEquals($expected, $weekstarttime);
     }
 
     /**

@@ -40,8 +40,8 @@ $time = optional_param('preset_time', 'weeknow', PARAM_ALPHA);
 $now = $calendartype->timestamp_to_date_array(time());
 
 // Let's see if we have sufficient and correct data
-$allowed_what = array('all', 'user', 'groups', 'courses');
-$allowed_time = array('weeknow', 'weeknext', 'monthnow', 'monthnext', 'recentupcoming', 'custom');
+$allowedwhat = ['all', 'user', 'groups', 'courses', 'categories'];
+$allowedtime = ['weeknow', 'weeknext', 'monthnow', 'monthnext', 'recentupcoming', 'custom'];
 
 if (!empty($generateurl)) {
     $authtoken = sha1($user->id . $user->password . $CFG->calendar_exportsalt);
@@ -56,11 +56,12 @@ if (!empty($generateurl)) {
     redirect($link->out());
     die;
 }
-
+$paramcategory = false;
 if(!empty($what) && !empty($time)) {
-    if(in_array($what, $allowed_what) && in_array($time, $allowed_time)) {
+    if(in_array($what, $allowedwhat) && in_array($time, $allowedtime)) {
         $courses = enrol_get_users_courses($user->id, true, 'id, visible, shortname');
-        // Array of courses that we will pass to calendar_get_events() which is initially set to the list of the user's courses.
+        // Array of courses that we will pass to calendar_get_legacy_events() which
+        // is initially set to the list of the user's courses.
         $paramcourses = $courses;
         if ($what == 'all' || $what == 'groups') {
             $groups = array();
@@ -77,6 +78,7 @@ if(!empty($what) && !empty($time)) {
             $courses[SITEID] = new stdClass;
             $courses[SITEID]->shortname = get_string('globalevents', 'calendar');
             $paramcourses[SITEID] = $courses[SITEID];
+            $paramcategory = true;
         } else if ($what == 'groups') {
             $users = false;
             $paramcourses = array();
@@ -84,6 +86,11 @@ if(!empty($what) && !empty($time)) {
             $users = $user->id;
             $groups = false;
             $paramcourses = array();
+        } else if ($what == 'categories') {
+            $users = $user->id;
+            $groups = false;
+            $paramcourses = array();
+            $paramcategory = true;
         } else {
             $users = false;
             $groups = false;
@@ -98,7 +105,7 @@ if(!empty($what) && !empty($time)) {
                 $startmonthday = find_day_in_month($now['mday'] - ($numberofdaysinweek - 1), $startweekday, $now['mon'], $now['year']);
                 $startmonth = $now['mon'];
                 $startyear = $now['year'];
-                if($startmonthday > calendar_days_in_month($startmonth, $startyear)) {
+                if ($startmonthday > calendar_days_in_month($startmonth, $startyear)) {
                     list($startmonth, $startyear) = calendar_add_month($startmonth, $startyear);
                     $startmonthday = find_day_in_month(1, $startweekday, $startmonth, $startyear);
                 }
@@ -109,7 +116,7 @@ if(!empty($what) && !empty($time)) {
                 $endmonthday = $startmonthday + $numberofdaysinweek;
                 $endmonth = $startmonth;
                 $endyear = $startyear;
-                if($endmonthday > calendar_days_in_month($endmonth, $endyear)) {
+                if ($endmonthday > calendar_days_in_month($endmonth, $endyear)) {
                     list($endmonth, $endyear) = calendar_add_month($endmonth, $endyear);
                     $endmonthday = find_day_in_month(1, $startweekday, $endmonth, $endyear);
                 }
@@ -122,7 +129,7 @@ if(!empty($what) && !empty($time)) {
                 $startmonthday = find_day_in_month($now['mday'] + 1, $startweekday, $now['mon'], $now['year']);
                 $startmonth = $now['mon'];
                 $startyear = $now['year'];
-                if($startmonthday > calendar_days_in_month($startmonth, $startyear)) {
+                if ($startmonthday > calendar_days_in_month($startmonth, $startyear)) {
                     list($startmonth, $startyear) = calendar_add_month($startmonth, $startyear);
                     $startmonthday = find_day_in_month(1, $startweekday, $startmonth, $startyear);
                 }
@@ -133,7 +140,7 @@ if(!empty($what) && !empty($time)) {
                 $endmonthday = $startmonthday + $numberofdaysinweek;
                 $endmonth = $startmonth;
                 $endyear = $startyear;
-                if($endmonthday > calendar_days_in_month($endmonth, $endyear)) {
+                if ($endmonthday > calendar_days_in_month($endmonth, $endyear)) {
                     list($endmonth, $endyear) = calendar_add_month($endmonth, $endyear);
                     $endmonthday = find_day_in_month(1, $startweekday, $endmonth, $endyear);
                 }
@@ -179,24 +186,37 @@ if(!empty($what) && !empty($time)) {
         die();
     }
 }
-$events = calendar_get_events($timestart, $timeend, $users, $groups, array_keys($paramcourses), false);
+
+$events = calendar_get_legacy_events($timestart, $timeend, $users, $groups, array_keys($paramcourses), false, true,
+        $paramcategory);
 
 $ical = new iCalendar;
 $ical->add_property('method', 'PUBLISH');
+$ical->add_property('prodid', '-//Moodle Pty Ltd//NONSGML Moodle Version ' . $CFG->version . '//EN');
 foreach($events as $event) {
-   if (!empty($event->modulename)) {
-        $cm = get_coursemodule_from_instance($event->modulename, $event->instance);
-        if (!\core_availability\info_module::is_user_visible($cm, $userid, false)) {
+    if (!empty($event->modulename)) {
+        $instances = get_fast_modinfo($event->courseid, $userid)->get_instances_of($event->modulename);
+        if (empty($instances[$event->instance]->uservisible)) {
             continue;
         }
     }
     $hostaddress = str_replace('http://', '', $CFG->wwwroot);
     $hostaddress = str_replace('https://', '', $hostaddress);
 
-    $ev = new iCalendar_event;
+    $me = new calendar_event($event); // To use moodle calendar event services.
+    $ev = new iCalendar_event; // To export in ical format.
     $ev->add_property('uid', $event->id.'@'.$hostaddress);
-    $ev->add_property('summary', $event->name);
-    $ev->add_property('description', clean_param($event->description, PARAM_NOTAGS));
+
+    // Set iCal event summary from event name.
+    $ev->add_property('summary', format_string($event->name, true, ['context' => $me->context]));
+
+    // Format the description text.
+    $description = format_text($me->description, $me->format, ['context' => $me->context]);
+    // Then convert it to plain text, since it's the only format allowed for the event description property.
+    // We use html_to_text in order to convert <br> and <p> tags to new line characters for descriptions in HTML format.
+    $description = html_to_text($description, 0);
+    $ev->add_property('description', $description);
+
     $ev->add_property('class', 'PUBLIC'); // PUBLIC / PRIVATE / CONFIDENTIAL
     $ev->add_property('last-modified', Bennu::timestamp_to_datetime($event->timemodified));
     $ev->add_property('dtstamp', Bennu::timestamp_to_datetime()); // now
@@ -204,10 +224,14 @@ foreach($events as $event) {
         //dtend is better than duration, because it works in Microsoft Outlook and works better in Korganizer
         $ev->add_property('dtstart', Bennu::timestamp_to_datetime($event->timestart)); // when event starts.
         $ev->add_property('dtend', Bennu::timestamp_to_datetime($event->timestart + $event->timeduration));
+    } else if ($event->timeduration == 0) {
+        // When no duration is present, the event is instantaneous event, ex - Due date of a module.
+        // Moodle doesn't support all day events yet. See MDL-56227.
+        $ev->add_property('dtstart', Bennu::timestamp_to_datetime($event->timestart));
+        $ev->add_property('dtend', Bennu::timestamp_to_datetime($event->timestart));
     } else {
-        // When no duration is present, ie an all day event, VALUE should be date instead of time and dtend = dtstart + 1 day.
-        $ev->add_property('dtstart', Bennu::timestamp_to_date($event->timestart), array('value' => 'DATE')); // All day event.
-        $ev->add_property('dtend', Bennu::timestamp_to_date($event->timestart + DAYSECS), array('value' => 'DATE')); // All day event.
+        // This can be used to represent all day events in future.
+        throw new coding_exception("Negative duration is not supported yet.");
     }
     if ($event->courseid != 0) {
         $coursecontext = context_course::instance($event->courseid);

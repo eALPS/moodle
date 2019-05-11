@@ -208,15 +208,14 @@ class external_api {
             // Do not allow access to write or delete webservices as a public user.
             if ($externalfunctioninfo->loginrequired) {
                 if (defined('NO_MOODLE_COOKIES') && NO_MOODLE_COOKIES && !PHPUNIT_TEST) {
-                    throw new moodle_exception('servicenotavailable', 'webservice');
+                    throw new moodle_exception('servicerequireslogin', 'webservice');
                 }
                 if (!isloggedin()) {
-                    throw new moodle_exception('servicenotavailable', 'webservice');
+                    throw new moodle_exception('servicerequireslogin', 'webservice');
                 } else {
                     require_sesskey();
                 }
             }
-
             // Validate params, this also sorts the params properly, we need the correct order in the next part.
             $callable = array($externalfunctioninfo->classname, 'validate_parameters');
             $params = call_user_func($callable,
@@ -381,8 +380,9 @@ class external_api {
                     return (bool)$response;
                 }
             }
+            $responsetype = gettype($response);
             $debuginfo = 'Invalid external api response: the value is "' . $response .
-                    '", the server was expecting "' . $description->type . '" type';
+                    '" of PHP type "' . $responsetype . '", the server was expecting "' . $description->type . '" type';
             try {
                 return validate_param($response, $description->type, $description->allownull, $debuginfo);
             } catch (invalid_parameter_exception $e) {
@@ -509,6 +509,37 @@ class external_api {
             throw new invalid_parameter_exception('Missing parameters, please provide either context level with instance id or contextid');
         }
     }
+
+    /**
+     * Returns a prepared structure to use a context parameters.
+     * @return external_single_structure
+     */
+    protected static function get_context_parameters() {
+        $id = new external_value(
+            PARAM_INT,
+            'Context ID. Either use this value, or level and instanceid.',
+            VALUE_DEFAULT,
+            0
+        );
+        $level = new external_value(
+            PARAM_ALPHA,
+            'Context level. To be used with instanceid.',
+            VALUE_DEFAULT,
+            ''
+        );
+        $instanceid = new external_value(
+            PARAM_INT,
+            'Context instance ID. To be used with level',
+            VALUE_DEFAULT,
+            0
+        );
+        return new external_single_structure(array(
+            'contextid' => $id,
+            'contextlevel' => $level,
+            'instanceid' => $instanceid,
+        ));
+    }
+
 }
 
 /**
@@ -866,21 +897,25 @@ function external_validate_format($format) {
  * @param string $str The string to be filtered. Should be plain text, expect
  * possibly for multilang tags.
  * @param boolean $striplinks To strip any link in the result text. Moodle 1.8 default changed from false to true! MDL-8713
- * @param int $contextid The id of the context for the string (affects filters).
+ * @param context|int $contextorid The id of the context for the string or the context (affects filters).
  * @param array $options options array/object or courseid
  * @return string text
  * @since Moodle 3.0
  */
-function external_format_string($str, $contextid, $striplinks = true, $options = array()) {
+function external_format_string($str, $contextorid, $striplinks = true, $options = array()) {
 
     // Get settings (singleton).
     $settings = external_settings::get_instance();
-    if (empty($contextid)) {
+    if (empty($contextorid)) {
         throw new coding_exception('contextid is required');
     }
 
     if (!$settings->get_raw()) {
-        $context = context::instance_by_id($contextid);
+        if (is_object($contextorid) && is_a($contextorid, 'context')) {
+            $context = $contextorid;
+        } else {
+            $context = context::instance_by_id($contextorid);
+        }
         $options['context'] = $context;
         $options['filter'] = isset($options['filter']) && !$options['filter'] ? false : $settings->get_filter();
         $str = format_string($str, $striplinks, $options);
@@ -914,7 +949,7 @@ function external_format_string($str, $contextid, $striplinks = true, $options =
  *
  * @param string $text The content that may contain ULRs in need of rewriting.
  * @param int $textformat The text format.
- * @param int $contextid This parameter and the next two identify the file area to use.
+ * @param context|int $contextorid This parameter and the next two identify the file area to use.
  * @param string $component
  * @param string $filearea helps identify the file area.
  * @param int $itemid helps identify the file area.
@@ -923,17 +958,28 @@ function external_format_string($str, $contextid, $striplinks = true, $options =
  * @since Moodle 2.3
  * @since Moodle 3.2 component, filearea and itemid are optional parameters
  */
-function external_format_text($text, $textformat, $contextid, $component = null, $filearea = null, $itemid = null,
+function external_format_text($text, $textformat, $contextorid, $component = null, $filearea = null, $itemid = null,
                                 $options = null) {
     global $CFG;
 
     // Get settings (singleton).
     $settings = external_settings::get_instance();
 
+    if (is_object($contextorid) && is_a($contextorid, 'context')) {
+        $context = $contextorid;
+        $contextid = $context->id;
+    } else {
+        $context = null;
+        $contextid = $contextorid;
+    }
+
     if ($component and $filearea and $settings->get_fileurl()) {
         require_once($CFG->libdir . "/filelib.php");
         $text = file_rewrite_pluginfile_urls($text, $settings->get_file(), $contextid, $component, $filearea, $itemid);
     }
+
+    // Note that $CFG->forceclean does not apply here if the client requests for the raw database content.
+    // This is consistent with web clients that are still able to load non-cleaned text into editors, too.
 
     if (!$settings->get_raw()) {
         $options = (array)$options;
@@ -949,7 +995,7 @@ function external_format_text($text, $textformat, $contextid, $component = null,
 
         $options['filter'] = isset($options['filter']) && !$options['filter'] ? false : $settings->get_filter();
         $options['para'] = isset($options['para']) ? $options['para'] : false;
-        $options['context'] = context::instance_by_id($contextid);
+        $options['context'] = !is_null($context) ? $context : context::instance_by_id($contextid);
         $options['allowid'] = isset($options['allowid']) ? $options['allowid'] : true;
 
         $text = format_text($text, $textformat, $options);
@@ -969,7 +1015,7 @@ function external_format_text($text, $textformat, $contextid, $component = null,
  * @throws moodle_exception
  */
 function external_generate_token_for_current_user($service) {
-    global $DB, $USER;
+    global $DB, $USER, $CFG;
 
     core_user::require_active_user($USER, true, true);
 
@@ -1053,8 +1099,8 @@ function external_generate_token_for_current_user($service) {
             $token->creatorid = $USER->id;
             $token->timecreated = time();
             $token->externalserviceid = $service->id;
-            // MDL-43119 Token valid for 3 months (12 weeks).
-            $token->validuntil = $token->timecreated + 12 * WEEKSECS;
+            // By default tokens are valid for 12 weeks.
+            $token->validuntil = $token->timecreated + $CFG->tokenduration;
             $token->iprestriction = null;
             $token->sid = null;
             $token->lastaccess = null;
@@ -1133,13 +1179,18 @@ class external_settings {
     /** @var string In which file should the urls be rewritten */
     private $file = 'webservice/pluginfile.php';
 
+    /** @var string The session lang */
+    private $lang = '';
+
     /**
      * Constructor - protected - can not be instanciated
      */
     protected function __construct() {
-        if (!defined('AJAX_SCRIPT') && !defined('CLI_SCRIPT') && !defined('WS_SERVER')) {
+        if ((AJAX_SCRIPT == false) && (CLI_SCRIPT == false) && (WS_SERVER == false)) {
             // For normal pages, the default should match the default for format_text.
             $this->filter = true;
+            // Use pluginfile.php for web requests.
+            $this->file = 'pluginfile.php';
         }
     }
 
@@ -1152,7 +1203,7 @@ class external_settings {
     /**
      * Return only one instance
      *
-     * @return object
+     * @return \external_settings
      */
     public static function get_instance() {
         if (self::$instance === null) {
@@ -1233,6 +1284,24 @@ class external_settings {
     public function get_file() {
         return $this->file;
     }
+
+    /**
+     * Set lang
+     *
+     * @param string $lang
+     */
+    public function set_lang($lang) {
+        $this->lang = $lang;
+    }
+
+    /**
+     * Get lang
+     *
+     * @return string
+     */
+    public function get_lang() {
+        return $this->lang;
+    }
 }
 
 /**
@@ -1310,6 +1379,10 @@ class external_util {
                 $file['mimetype'] = $areafile->get_mimetype();
                 $file['filesize'] = $areafile->get_filesize();
                 $file['timemodified'] = $areafile->get_timemodified();
+                $file['isexternalfile'] = $areafile->is_external_file();
+                if ($file['isexternalfile']) {
+                    $file['repositorytype'] = $areafile->get_repository_type();
+                }
                 $fileitemid = $useitemidinurl ? $areafile->get_itemid() : null;
                 $file['fileurl'] = moodle_url::make_webservice_pluginfile_url($contextid, $component, $filearea,
                                     $fileitemid, $areafile->get_filepath(), $areafile->get_filename())->out(false);
@@ -1346,11 +1419,72 @@ class external_files extends external_multiple_structure {
                     'fileurl' => new external_value(PARAM_URL, 'Downloadable file url.', VALUE_OPTIONAL),
                     'timemodified' => new external_value(PARAM_INT, 'Time modified.', VALUE_OPTIONAL),
                     'mimetype' => new external_value(PARAM_RAW, 'File mime type.', VALUE_OPTIONAL),
+                    'isexternalfile' => new external_value(PARAM_BOOL, 'Whether is an external file.', VALUE_OPTIONAL),
+                    'repositorytype' => new external_value(PARAM_PLUGIN, 'The repository type for external files.', VALUE_OPTIONAL),
                 ),
                 'File.'
             ),
             $desc,
             $required
         );
+    }
+
+    /**
+     * Return the properties ready to be used by an exporter.
+     *
+     * @return array properties
+     * @since  Moodle 3.3
+     */
+    public static function get_properties_for_exporter() {
+        return [
+            'filename' => array(
+                'type' => PARAM_FILE,
+                'description' => 'File name.',
+                'optional' => true,
+                'null' => NULL_NOT_ALLOWED,
+            ),
+            'filepath' => array(
+                'type' => PARAM_PATH,
+                'description' => 'File path.',
+                'optional' => true,
+                'null' => NULL_NOT_ALLOWED,
+            ),
+            'filesize' => array(
+                'type' => PARAM_INT,
+                'description' => 'File size.',
+                'optional' => true,
+                'null' => NULL_NOT_ALLOWED,
+            ),
+            'fileurl' => array(
+                'type' => PARAM_URL,
+                'description' => 'Downloadable file url.',
+                'optional' => true,
+                'null' => NULL_NOT_ALLOWED,
+            ),
+            'timemodified' => array(
+                'type' => PARAM_INT,
+                'description' => 'Time modified.',
+                'optional' => true,
+                'null' => NULL_NOT_ALLOWED,
+            ),
+            'mimetype' => array(
+                'type' => PARAM_RAW,
+                'description' => 'File mime type.',
+                'optional' => true,
+                'null' => NULL_NOT_ALLOWED,
+            ),
+            'isexternalfile' => array(
+                'type' => PARAM_BOOL,
+                'description' => 'Whether is an external file.',
+                'optional' => true,
+                'null' => NULL_NOT_ALLOWED,
+            ),
+            'repositorytype' => array(
+                'type' => PARAM_PLUGIN,
+                'description' => 'The repository type for the external files.',
+                'optional' => true,
+                'null' => NULL_ALLOWED,
+            ),
+        ];
     }
 }

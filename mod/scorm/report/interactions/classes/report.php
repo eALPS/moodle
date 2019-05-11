@@ -475,6 +475,7 @@ class report extends \mod_scorm\report {
                         $row[] = scorm_grade_user_attempt($scorm, $scouser->userid, $scouser->attempt);
                     }
                     // Print out all scores of attempt.
+                    $emptyrow = $download ? '' : '&nbsp;';
                     foreach ($scoes as $sco) {
                         if ($sco->launch != '') {
                             if ($trackdata = scorm_get_tracks($sco->id, $scouser->userid, $scouser->attempt)) {
@@ -495,8 +496,7 @@ class report extends \mod_scorm\report {
                                 if (!$download) {
                                     $url = new \moodle_url('/mod/scorm/report/userreporttracks.php', array('id' => $cm->id,
                                         'scoid' => $sco->id, 'user' => $scouser->userid, 'attempt' => $scouser->attempt));
-                                    $row[] = \html_writer::img($OUTPUT->pix_url($trackdata->status, 'scorm'), $strstatus,
-                                        array('title' => $strstatus)) . \html_writer::empty_tag('br') .
+                                    $row[] = $OUTPUT->pix_icon($trackdata->status, $strstatus, 'scorm') . '<br>' .
                                         \html_writer::link($url, $score, array('title' => get_string('details', 'scorm')));
                                 } else {
                                     $row[] = $score;
@@ -508,7 +508,7 @@ class report extends \mod_scorm\report {
                                         if (isset($trackdata->$element)) {
                                             $row[] = s($trackdata->$element);
                                         } else {
-                                            $row[] = '&nbsp;';
+                                            $row[] = $emptyrow;
                                         }
                                     }
                                     if ($displayoptions['resp']) {
@@ -516,7 +516,7 @@ class report extends \mod_scorm\report {
                                         if (isset($trackdata->$element)) {
                                             $row[] = s($trackdata->$element);
                                         } else {
-                                            $row[] = '&nbsp;';
+                                            $row[] = $emptyrow;
                                         }
                                     }
                                     if ($displayoptions['right']) {
@@ -534,7 +534,7 @@ class report extends \mod_scorm\report {
                                             }
                                             $row[] = $rightans;
                                         } else {
-                                            $row[] = '&nbsp;';
+                                            $row[] = $emptyrow;
                                         }
                                     }
                                     if ($displayoptions['result']) {
@@ -542,7 +542,7 @@ class report extends \mod_scorm\report {
                                         if (isset($trackdata->$element)) {
                                             $row[] = s($trackdata->$element);
                                         } else {
-                                            $row[] = '&nbsp;';
+                                            $row[] = $emptyrow;
                                         }
                                     }
                                 }
@@ -551,14 +551,13 @@ class report extends \mod_scorm\report {
                                 // If we don't have track data, we haven't attempted yet.
                                 $strstatus = get_string('notattempted', 'scorm');
                                 if (!$download) {
-                                    $row[] = \html_writer::img($OUTPUT->pix_url('notattempted', 'scorm'), $strstatus,
-                                                array('title' => $strstatus)).\html_writer::empty_tag('br').$strstatus;
+                                    $row[] = $OUTPUT->pix_icon('notattempted', $strstatus, 'scorm') . '<br>' . $strstatus;
                                 } else {
                                     $row[] = $strstatus;
                                 }
                                 // Complete the empty cells.
                                 for ($i = 0; $i < count($columns) - $nbmaincolumns; $i++) {
-                                    $row[] = '&nbsp;';
+                                    $row[] = $emptyrow;
                                 }
                             }
                         }

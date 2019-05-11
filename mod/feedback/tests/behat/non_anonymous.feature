@@ -40,7 +40,7 @@ Feature: Non anonymous feedback
 
   Scenario: Guests can see non anonymous feedback on front page but can not complete
     When I follow "Site feedback"
-    Then I should not see "Answer the questions..."
+    Then I should not see "Answer the questions"
     And I follow "Preview"
     And I should see "Do you like our site?"
     And I press "Continue"
@@ -52,7 +52,7 @@ Feature: Non anonymous feedback
     And I follow "Preview"
     And I should see "Do you like our site?"
     And I press "Continue"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I should see "Do you like our site?"
     And I set the following fields to these values:
       | Yes of course | 1 |
@@ -70,7 +70,7 @@ Feature: Non anonymous feedback
     And I log in as "user1"
     And I am on site homepage
     When I follow "Site feedback"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I should see "Do you like our site?"
     And I set the following fields to these values:
       | Yes of course | 1 |
@@ -79,7 +79,7 @@ Feature: Non anonymous feedback
     And I log in as "user2"
     And I am on site homepage
     When I follow "Site feedback"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I set the following fields to these values:
       | Not at all | 1 |
     And I press "Submit your answers"
@@ -109,7 +109,7 @@ Feature: Non anonymous feedback
   @javascript
   Scenario: Non anonymous feedback in a course
     When I log in as "teacher"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Course feedback"
     And I click on "Edit questions" "link" in the "[role=main]" "css_element"
     And I add a "Multiple choice" question to the feedback with:
@@ -120,18 +120,18 @@ Feature: Non anonymous feedback
       | Multiple choice values         | Yes of course\nNot at all\nI don't know |
     And I log out
     And I log in as "user1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Course feedback"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I should see "Do you like this course?"
     And I set the following fields to these values:
       | Yes of course | 1 |
     And I press "Submit your answers"
     And I log out
     And I log in as "user2"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Course feedback"
-    And I follow "Answer the questions..."
+    And I follow "Answer the questions"
     And I should see "Do you like this course?"
     And I set the following fields to these values:
       | Not at all | 1 |
@@ -146,12 +146,12 @@ Feature: Non anonymous feedback
     And I should see "1 (50.00 %)" in the "Not at all" "table_row"
     And I log out
     And I log in as "teacher"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Course feedback"
     And I follow "Preview"
     And I should see "Do you like this course?"
     And I press "Continue"
-    And I should not see "Answer the questions..."
+    And I should not see "Answer the questions"
     And I navigate to "Show responses" in current page administration
     And I should see "Non anonymous entries (2)"
     And I should not see "Anonymous"

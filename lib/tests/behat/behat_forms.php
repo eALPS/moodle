@@ -51,14 +51,7 @@ class behat_forms extends behat_base {
      * @param string $button
      */
     public function press_button($button) {
-
-        // Ensures the button is present.
-        $buttonnode = $this->find_button($button);
-        // Focus on button to ensure it is in viewport, before pressing it.
-        if ($this->running_javascript()) {
-            $buttonnode->focus();
-        }
-        $buttonnode->press();
+        $this->execute('behat_general::i_click_on', [$button, 'button']);
     }
 
     /**
@@ -78,7 +71,7 @@ class behat_forms extends behat_base {
     }
 
     /**
-     * Fills a form with field/value data. More info in http://docs.moodle.org/dev/Acceptance_testing#Providing_values_to_steps.
+     * Fills a form with field/value data.
      *
      * @Given /^I set the following fields to these values:$/
      * @throws ElementNotFoundException Thrown by behat_base::find
@@ -124,11 +117,16 @@ class behat_forms extends behat_base {
         // so, we will use the reduced timeout as it is a common task and we should save time.
         try {
 
-            // Expand fieldsets link.
-            $xpath = "//div[@class='collapsible-actions']" .
-                "/descendant::a[contains(concat(' ', @class, ' '), ' collapseexpand ')]" .
+            // Expand all fieldsets link - which will only be there if there is more than one collapsible section.
+            $expandallxpath = "//div[@class='collapsible-actions']" .
+                "//a[contains(concat(' ', @class, ' '), ' collapseexpand ')]" .
                 "[not(contains(concat(' ', @class, ' '), ' collapse-all '))]";
-            $collapseexpandlink = $this->find('xpath', $xpath, false, false, self::REDUCED_TIMEOUT);
+            // Else, look for the first expand fieldset link.
+            $expandonlysection = "//legend[@class='ftoggler']" .
+                    "//a[contains(concat(' ', @class, ' '), ' fheader ') and @aria-expanded = 'false']";
+
+            $collapseexpandlink = $this->find('xpath', $expandallxpath . '|' . $expandonlysection,
+                    false, false, behat_base::get_reduced_timeout());
             $collapseexpandlink->click();
 
         } catch (ElementNotFoundException $e) {
@@ -148,13 +146,20 @@ class behat_forms extends behat_base {
                 return;
             }
 
-            // Funny thing about this, with findAll() we specify a pattern and each element matching the pattern is added to the array
-            // with of xpaths with a [0], [1]... sufix, but when we click on an element it does not matches the specified xpath
-            // anymore (now is a "Show less..." link) so [1] becomes [0], that's why we always click on the first XPath match,
-            // will be always the next one.
-            $iterations = count($showmores);
-            for ($i = 0; $i < $iterations; $i++) {
-                $showmores[0]->click();
+            if ($this->getSession()->getDriver() instanceof \DMore\ChromeDriver\ChromeDriver) {
+                // Chrome Driver produces unique xpaths for each element.
+                foreach ($showmores as $showmore) {
+                    $showmore->click();
+                }
+            } else {
+                // Funny thing about this, with findAll() we specify a pattern and each element matching the pattern
+                // is added to the array with of xpaths with a [0], [1]... sufix, but when we click on an element it
+                // does not matches the specified xpath anymore (now is a "Show less..." link) so [1] becomes [0],
+                // that's why we always click on the first XPath match, will be always the next one.
+                $iterations = count($showmores);
+                for ($i = 0; $i < $iterations; $i++) {
+                    $showmores[0]->click();
+                }
             }
 
         } catch (ElementNotFoundException $e) {
@@ -241,13 +246,14 @@ class behat_forms extends behat_base {
      * @return void
      */
     public function i_set_the_field_with_xpath_to($fieldxpath, $value) {
-        $fieldNode = $this->find('xpath', $fieldxpath);
-        $field = behat_field_manager::get_form_field($fieldNode, $this->getSession());
+        $fieldnode = $this->find('xpath', $fieldxpath);
+        $this->ensure_node_is_visible($fieldnode);
+        $field = behat_field_manager::get_form_field($fieldnode, $this->getSession());
         $field->set_value($value);
     }
 
     /**
-     * Checks, the field matches the value. More info in http://docs.moodle.org/dev/Acceptance_testing#Providing_values_to_steps.
+     * Checks, the field matches the value.
      *
      * @Then /^the field "(?P<field_string>(?:[^"]|\\")*)" matches value "(?P<field_value_string>(?:[^"]|\\")*)"$/
      * @throws ElementNotFoundException Thrown by behat_base::find
@@ -271,7 +277,7 @@ class behat_forms extends behat_base {
     }
 
     /**
-     * Checks, the field does not match the value. More info in http://docs.moodle.org/dev/Acceptance_testing#Providing_values_to_steps.
+     * Checks, the field does not match the value.
      *
      * @Then /^the field "(?P<field_string>(?:[^"]|\\")*)" does not match value "(?P<field_value_string>(?:[^"]|\\")*)"$/
      * @throws ExpectationException
@@ -346,7 +352,7 @@ class behat_forms extends behat_base {
     }
 
     /**
-     * Checks, the provided field/value matches. More info in http://docs.moodle.org/dev/Acceptance_testing#Providing_values_to_steps.
+     * Checks, the provided field/value matches.
      *
      * @Then /^the following fields match these values:$/
      * @throws ExpectationException
@@ -366,7 +372,7 @@ class behat_forms extends behat_base {
     }
 
     /**
-     * Checks that the provided field/value pairs don't match. More info in http://docs.moodle.org/dev/Acceptance_testing#Providing_values_to_steps.
+     * Checks that the provided field/value pairs don't match.
      *
      * @Then /^the following fields do not match these values:$/
      * @throws ExpectationException
@@ -516,4 +522,28 @@ class behat_forms extends behat_base {
         }
     }
 
+    /**
+     * Select item from autocomplete list.
+     *
+     * @Given /^I click on "([^"]*)" item in the autocomplete list$/
+     *
+     * @param string $item
+     */
+    public function i_click_on_item_in_the_autocomplete_list($item) {
+        $xpathtarget = "//ul[@class='form-autocomplete-suggestions']//*[contains(concat('|', string(.), '|'),'|" . $item . "|')]";
+
+        $this->execute('behat_general::i_click_on', [$xpathtarget, 'xpath_element']);
+
+        $this->execute('behat_general::i_press_key_in_element', ['13', 'body', 'xpath_element']);
+    }
+
+    /**
+     * Open the auto-complete suggestions list (Assuming there is only one on the page.).
+     *
+     * @Given /^I open the autocomplete suggestions list$/
+     */
+    public function i_open_the_autocomplete_suggestions_list() {
+        $csstarget = ".form-autocomplete-downarrow";
+        $this->execute('behat_general::i_click_on', [$csstarget, 'css_element']);
+    }
 }

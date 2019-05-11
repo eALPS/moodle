@@ -54,6 +54,7 @@ $string['paths'] = 'Căi';
 $string['pathserrcreatedataroot'] = 'Data directory ({$a->dataroot}) nu poate fi creat de către installer.';
 $string['pathshead'] = 'Confirmare căi';
 $string['pathsrodataroot'] = 'Directorul dataroot nu poate fi scris.';
+$string['pathsroparentdataroot'] = 'Directorul parent ({$a->parent}) nu poate fi scris. Directorul data ({$a->dataroot}) nu poate fi creat de persoana care îl instalează.';
 $string['pathssubdataroot'] = '<p>Un director unde Moodle va stoca tot conținutul unui fișier încărcat de către utilizatori.</p>
 <p>Acest director trebuie să poată fi citit și scris de către utilizatrii serverului web (de obicei \'www-data\', \'nobody\', or \'apache\').</p>
 <p>Nu trebuie să fie direct accesibil de pe web.</p>
@@ -72,5 +73,11 @@ $string['welcomep20'] = 'Vedeți această pagină deoarece ați instalat și lan
 $string['welcomep30'] = 'Lansarea <strong>{$a->installername}</strong> include aplicațiile
     pentru a crea un mediu în care <strong>Moodle</strong> va funcționa, și anume:';
 $string['welcomep40'] = 'Pachetul include și <strong>Moodle {$a->moodlerelease} ({$a->moodleversion})</strong>.';
+$string['welcomep50'] = 'Utilizarea tuturor aplicațiilor din acest pachet este determinată de respectivele lor
+   licențe. Pachetul complet <strong>{$a->installername}</strong> este
+     <a href="http://www.opensource.org/docs/definition_plain.html">open source</a> și este distribuit sub licența <a href="http://www.gnu.org/copyleft/gpl.html">GPL</a>.';
+$string['welcomep60'] = 'Următoarele pagini vă oferă pași ușor de urmat pentru a
+   configura și seta <strong>Moodle</strong> în computerul       dumneavoastră. Puteți accepta setările implicite
+    sau, opțional, să le modificați pentru a corespunde nevoilor dumneavoastră.';
 $string['welcomep70'] = 'Click pe butonul "Next" de mai jos pentru a continua setarea <strong>Moodle</strong>.';
 $string['wwwroot'] = 'Adresă Web';

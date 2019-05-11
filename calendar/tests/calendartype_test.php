@@ -33,9 +33,6 @@ require_once($CFG->dirroot . '/calendar/tests/calendartype_test_example.php');
 require_once($CFG->libdir . '/form/dateselector.php');
 require_once($CFG->libdir . '/form/datetimeselector.php');
 
-// Used to test the calendar/lib.php functions.
-require_once($CFG->dirroot . '/calendar/lib.php');
-
 // Used to test the user datetime profile field.
 require_once($CFG->dirroot . '/user/profile/lib.php');
 require_once($CFG->dirroot . '/user/profile/definelib.php');
@@ -108,8 +105,6 @@ class core_calendar_type_testcase extends advanced_testcase {
      * different calendar types.
      */
     public function test_calendar_type_dateselector_elements() {
-        global $CFG;
-
         // We want to reset the test data after this run.
         $this->resetAfterTest();
 
@@ -226,9 +221,11 @@ class core_calendar_type_testcase extends advanced_testcase {
         $counter++;
 
         if ($element == 'dateselector') {
-            $el = $this->mform->addElement('date_selector', 'dateselector' . $counter, null, array('timezone' => 0.0, 'step' => 1));
+            $el = $this->mform->addElement('date_selector',
+                    'dateselector' . $counter, null, array('timezone' => 0.0));
         } else {
-            $el = $this->mform->addElement('date_time_selector', 'dateselector' . $counter, null, array('timezone' => 0.0, 'step' => 1, 'optional' => false));
+            $el = $this->mform->addElement('date_time_selector',
+                    'dateselector' . $counter, null, array('timezone' => 0.0, 'optional' => false));
         }
         $submitvalues = array('dateselector' . $counter => $date);
 

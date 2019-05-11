@@ -124,15 +124,18 @@ class edit_table extends XMLDBAction {
         $o.= '    <input type="hidden" name ="action" value="edit_table_save" />';
         $o.= '    <input type="hidden" name ="sesskey" value="' . sesskey() .'" />';
         $o.= '    <input type="hidden" name ="postaction" value="edit_table" />';
-        $o.= '    <table id="formelements" class="boxaligncenter">';
+        $o .= '    <table id="formelements">';
         // If the table is being used, we cannot rename it
         if ($structure->getTableUses($table->getName())) {
             $o.= '      <tr valign="top"><td>Name:</td><td><input type="hidden" name ="name" value="' . s($table->getName()) . '" />' . s($table->getName()) .'</td></tr>';
         } else {
             $o.= '      <tr valign="top"><td><label for="name" accesskey="p">Name:</label></td><td><input name="name" type="text" size="'.xmldb_table::NAME_MAX_LENGTH.'" maxlength="'.xmldb_table::NAME_MAX_LENGTH.'" id="name" value="' . s($table->getName()) . '" /></td></tr>';
         }
-        $o.= '      <tr valign="top"><td><label for="comment" accesskey="c">Comment:</label></td><td><textarea name="comment" rows="3" cols="80" id="comment">' . s($table->getComment()) . '</textarea></td></tr>';
-        $o.= '      <tr valign="top"><td>&nbsp;</td><td><input type="submit" value="' .$this->str['change'] . '" /></td></tr>';
+        $o .= '      <tr valign="top"><td><label for="comment" accesskey="c">Comment:</label></td><td>
+                     <textarea name="comment" rows="3" cols="80" id="comment" class="form-control">' .
+                     s($table->getComment()) . '</textarea></td></tr>';
+        $o .= '      <tr valign="top"><td>&nbsp;</td><td><input type="submit" value="' . $this->str['change'] .
+                     '" class="btn btn-secondary"/></td></tr>';
         $o.= '    </table>';
         $o.= '</div></form>';
         // Calculate the pending changes / save message
@@ -243,7 +246,7 @@ class edit_table extends XMLDBAction {
                 // The readable info
                 $r = '</td><td class="readableinfo cell">' . $field->readableInfo() . '</td>';
                 // Print table row
-                $o .= '<tr class="r' . $row . '"><td class="table cell">' . $f . $b . $r . '</tr>';
+                $o .= '<tr class="r' . $row . '"><td class="cell firstcol">' . $f . $b . $r . '</tr>';
                 $row = ($row + 1) % 2;
             }
             $o .= '</table>';
@@ -296,7 +299,7 @@ class edit_table extends XMLDBAction {
                 // The readable info
                 $r = '</td><td class="readableinfo cell">' . $key->readableInfo() . '</td>';
                 // Print table row
-            $o .= '<tr class="r' . $row . '"><td class="table cell">' . $k . $b . $r .'</tr>';
+                $o .= '<tr class="r' . $row . '"><td class="cell firstcol">' . $k . $b . $r .'</tr>';
                 $row = ($row + 1) % 2;
             }
             $o .= '</table>';
@@ -337,7 +340,7 @@ class edit_table extends XMLDBAction {
                 // The readable info
                 $r = '</td><td class="readableinfo cell">' . $index->readableInfo() . '</td>';
                 // Print table row
-            $o .= '<tr class="r' . $row . '"><td class="table cell">' . $i . $b . $r .'</tr>';
+                $o .= '<tr class="r' . $row . '"><td class="cell firstcol">' . $i . $b . $r .'</tr>';
                 $row = ($row + 1) % 2;
             }
             $o .= '</table>';
