@@ -61,8 +61,8 @@ class mod_feedback_mod_form extends moodleform_mod {
         $mform->addElement('header', 'feedbackhdr', get_string('questionandsubmission', 'feedback'));
 
         $options=array();
-        $options[1]  = get_string('anonymous', 'feedback');
         $options[2]  = get_string('non_anonymous', 'feedback');
+        $options[1]  = get_string('anonymous', 'feedback');
         $mform->addElement('select',
                            'anonymous',
                            get_string('anonymous_edit', 'feedback'),

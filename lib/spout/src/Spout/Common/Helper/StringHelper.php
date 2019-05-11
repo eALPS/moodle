@@ -34,7 +34,7 @@ class StringHelper
      */
     public function getStringLength($string)
     {
-        return $this->hasMbstringSupport ? mb_strlen($string) : strlen($string);
+        return $this->hasMbstringSupport ? mb_strlen($string, 'UTF-8') : strlen($string);
     }
 
     /**

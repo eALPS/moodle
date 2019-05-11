@@ -167,6 +167,7 @@ abstract class core_filetypes {
             'mpg' => array('type' => 'video/mpeg', 'icon' => 'mpeg', 'groups' => array('video', 'web_video'),
                     'string' => 'video'),
             'mpr' => array('type' => 'application/vnd.moodle.profiling', 'icon' => 'moodle'),
+            'msi'  => array ('type'=>'application/x-msi', 'icon'=>'unknown'),
 
             'nbk' => array('type' => 'application/x-smarttech-notebook', 'icon' => 'archive'),
             'notebook' => array('type' => 'application/x-smarttech-notebook', 'icon' => 'archive'),
