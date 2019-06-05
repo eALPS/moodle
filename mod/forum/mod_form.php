@@ -96,7 +96,8 @@ class mod_forum_mod_form extends moodleform_mod {
         if (isset($CFG->forum_subscription)) {
             $defaultforumsubscription = $CFG->forum_subscription;
         } else {
-            $defaultforumsubscription = FORUM_CHOOSESUBSCRIBE;
+            #$defaultforumsubscription = FORUM_CHOOSESUBSCRIBE;
+            $defaultforumsubscription = FORUM_DISALLOWSUBSCRIBE;
         }
         $mform->setDefault('forcesubscribe', $defaultforumsubscription);
 
