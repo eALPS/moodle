@@ -30,6 +30,5 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$string['parentlanguage'] = '';
-$string['thisdirection'] = 'ltr';
-$string['thislanguage'] = 'Slovenščina';
+$string['parentlanguage'] = 'hi';
+$string['thislanguage'] = 'वर्कप्लेस  के लिए  हिंदी';
