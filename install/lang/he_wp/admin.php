@@ -30,6 +30,6 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$string['clianswerno'] = 'ទេ';
-$string['environmentrequireinstall'] = 'ត្រូវតែបានដំឡើង និងអនុញ្ញាត';
-$string['environmentrequireversion'] = 'ត្រូវការកំណែ {$a->needed} ហើយអ្នកកំពុងរត់ {$a->current}';
+$string['clianswerno'] = 'ל';
+$string['cliansweryes'] = 'כ';
+$string['cliincorrectvalueretry'] = 'ערך לא תקין, נסו שוב בבקשה';
