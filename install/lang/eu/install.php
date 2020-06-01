@@ -45,7 +45,7 @@ $string['datarootpermission'] = 'Datu-direktorioen baimena';
 $string['dbprefix'] = 'Taulen aurrizkia';
 $string['dirroot'] = 'Moodle direktorioa';
 $string['environmenthead'] = 'Zure ingurunea egiaztatzen...';
-$string['environmentsub2'] = 'Moodleko bertsio bakoitzak PHPko gutxieneko bertsioa eta derrigorrez instalatu beharreko PHP hedapen batzuk ditu. Ingurunearen azterketa oso bat egiten da instalazioa eta eguneraketa bakoitza egin aurretik. Mesedez, jarri harremanetan zerbitzariaren kudeatzailearekin ez badakizu bertsio berria edo PHP hedapenak nola instalatu.';
+$string['environmentsub2'] = 'Moodleko bertsio bakoitzak PHPko gutxieneko bertsioa eta derrigorrez instalatu beharreko PHP hedapen batzuk ditu. Ingurunearen azterketa oso bat egiten da instalazioa eta eguneratze bakoitza egin aurretik. Mesedez, jarri harremanetan zerbitzariaren kudeatzailearekin ez badakizu bertsio berria edo PHP hedapenak nola instalatu.';
 $string['errorsinenvironment'] = 'Huts egin du ingurunearen egiaztatzeak!';
 $string['installation'] = 'Instalazioa';
 $string['langdownloaderror'] = 'Zoritxarrez "{$a}" hizkuntza ezin izan da jaitsi. Instalazio-prozesuak ingelesez jarraituko du.';
@@ -67,11 +67,11 @@ Horrek Moodle-k berak memoria-muga ezartzea ahalbidetzen du.</li>
 (orriak ikustean erroreak ere ikusiko dituzu). Kasu horretan, .htaccess fitxategia ezabatu beharko duzu.</p></li>
 </ol>';
 $string['paths'] = 'Bideak';
-$string['pathserrcreatedataroot'] = 'Instalatzaileak ezin du datu-karpeta ({$a->dataroot}) sortu.';
+$string['pathserrcreatedataroot'] = 'Instalatzaileak ezin du datu-direktorioa ({$a->dataroot}) sortu.';
 $string['pathshead'] = 'Egiaztatu bideak';
 $string['pathsrodataroot'] = 'Dataroot direktorioa ez da idazteko modukoa.';
-$string['pathsroparentdataroot'] = 'Goragoko karpeta ({$a->parent}) ez da idazteko modukoa. Instalatzaileak ezin du datu-karpeta ({$a->dataroot}) sortu.';
-$string['pathssubadmindir'] = 'Web ostalari gutxi batzuk /admin URL berezi gisa erabiltzen dute kontrol-panel edo antzekora sarbidea emateko. Zoritxarrez, honek Moodleren kudeatze-orrien lehenetsitako kokapenarekin gatazka sortzen du. Hau konpondu dezakezu zure instalazioko admin karpeta berrizendatuz, eta izen berria hemen sartuta. Adibidez <em>moodleadmin</em>. Honek Moodleko admin estekak konponduko du.';
+$string['pathsroparentdataroot'] = 'Goragoko direktorioa ({$a->parent}) ez da idazteko modukoa. Instalatzaileak ezin du datu-direktorioa ({$a->dataroot}) sortu.';
+$string['pathssubadmindir'] = 'Web ostalari gutxi batzuk /admin URL berezi gisa erabiltzen dute kontrol-panel edo antzekora sarbidea emateko. Zoritxarrez, honek Moodleren kudeatze-orrien lehenetsitako kokapenarekin gatazka sortzen du. Hau konpondu dezakezu zure instalazioko admin direktorioa berrizendatuz, eta izen berria hemen sartuta. Adibidez <em>moodleadmin</em>. Honek Moodleko admin estekak konponduko du.';
 $string['pathssubdataroot'] = '<p>Moodlek erabiltzaileek igotako fitxategien edukiak bilduko dituen direktorio bat.</p>
 <p>Direktorio honetan web-zerbitzariaren erabiltzaileak irakurtzeko eta idazteko baimena izan beharko ditu (normalean \'www-data\', \'nobody\', edo \'apache\').</p>
 <p>Ez litzateke web bidez eskuragarri egon beharko.</p>
