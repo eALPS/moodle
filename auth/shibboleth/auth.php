@@ -129,17 +129,27 @@ class auth_plugin_shibboleth extends auth_plugin_base {
             // }
             if ($key == 'username'){
                 $result[$key] = strtolower($this->get_first_string($_SERVER[$value]));
-            } else if ($key == 'firstname'){
-                if ($_SERVER['affiliation'] == 'student') {
-                    $result[$key] = $this->get_first_string($_SERVER['givenName;lang-ja']).' '.$this->get_first_string($_SERVER['sn;lang-ja']);
-                } else {
-                    $result[$key] = $this->get_first_string($_SERVER['sn;lang-ja']);
-                }
             } else if ($key == 'lastname'){
-                if ($_SERVER['affiliation'] == 'student') {
-                    $result[$key] = $this->get_first_string($_SERVER['id']);
+                if ($_SERVER['eduPersonAffiliation'] == 'student') {
+                    $result[$key] = strtoupper($this->get_first_string($_SERVER['uid']));
                 } else {
-                    $result[$key] = $this->get_first_string($_SERVER['givenName;lang-ja']);
+                    $userFullName = mb_convert_kana($this->get_first_string($_SERVER['displayName']), 's') ;
+                    $userFullNameArray = explode(' ',$userFullName);
+                    $result[$key] = $userFullNameArray[0];
+                }
+            } else if ($key == 'firstname'){
+                if ($_SERVER['eduPersonAffiliation'] == 'student') {
+                    $result[$key] = $this->get_first_string($_SERVER['jasn']).' '.$this->get_first_string($_SERVER['jaGivenName']);
+                } else {
+                    $userFullName = mb_convert_kana($this->get_first_string($_SERVER['displayName']), 's') ;
+                    $userFullNameArray = explode(' ',$userFullName);
+                    // 空白を含まない名前の場合には，名の部分を * にする
+                    if (count($userFullNameArray) == 1) {
+                        $result[$key] = '*';
+                    } else {
+                        array_shift($userFullNameArray);
+                        $result[$key] = join(" ", $userFullNameArray);
+                    }
                 }
             } else {
                 $result[$key] = $this->get_first_string($_SERVER[$value]);

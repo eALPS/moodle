@@ -568,6 +568,7 @@ class page_requirements_manager {
                     continue;
                 }
             }
+error_log(var_export($component, true), 0);
             $this->jqueryplugins[$plugin]->urls[] = $url;
         }
 
