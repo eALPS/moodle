@@ -2396,9 +2396,7 @@ function calendar_get_default_courses($courseid = null, $fields = '*', $canmanag
         $prefixedfields = array_map(function($value) {
             return 'c.' . trim(strtolower($value));
         }, $fieldlist);
-        if (!in_array('c.visible', $prefixedfields) && !in_array('c.*', $prefixedfields)) {
-            $prefixedfields[] = 'c.visible';
-        }
+
         $courses = get_courses('all', 'c.shortname', implode(',', $prefixedfields));
     } else {
         $courses = enrol_get_users_courses($userid, true, $fields);
@@ -3206,6 +3204,7 @@ function calendar_update_subscription($subscription) {
  * @return bool true if current user can edit the subscription else false
  */
 function calendar_can_edit_subscription($subscriptionorid) {
+    global $USER;
     if (is_array($subscriptionorid)) {
         $subscription = (object)$subscriptionorid;
     } else if (is_object($subscriptionorid)) {
@@ -3226,7 +3225,7 @@ function calendar_can_edit_subscription($subscriptionorid) {
     calendar_get_allowed_types($allowed, $courseid, null, $category);
     switch ($subscription->eventtype) {
         case 'user':
-            return $allowed->user;
+            return ($USER->id == $subscription->userid && $allowed->user);
         case 'course':
             if (isset($allowed->courses[$courseid])) {
                 return $allowed->courses[$courseid];
