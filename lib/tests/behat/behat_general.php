@@ -1000,7 +1000,7 @@ EOF;
             // Using the spin method as we want a reduced timeout but there is no need for a 0.1 seconds interval
             // because in the optimistic case we will timeout.
             // If all goes good it will throw an ElementNotFoundExceptionn that we will catch.
-            return $this->find($selectortype, $element, $exception, false, behat_base::get_reduced_timeout());
+            $this->find($selectortype, $element, $exception, false, behat_base::get_reduced_timeout());
         } catch (ElementNotFoundException $e) {
             // We expect the element to not be found.
             return;
@@ -1575,7 +1575,7 @@ EOF;
 
         if ($content !== $expectedcontent) {
             throw new ExpectationException('Image is not identical to the fixture. Received ' .
-            strlen($content) . ' bytes and expected ' . strlen($expectedcontent) . ' bytes');
+            strlen($content) . ' bytes and expected ' . strlen($expectedcontent) . ' bytes', $this->getSession());
         }
     }
 
@@ -1860,7 +1860,8 @@ EOF;
             list($modifier, $char) = preg_split('/-/', $key, 2);
             $modifier = strtolower($modifier);
             if (!in_array($modifier, $validmodifiers)) {
-                throw new ExpectationException(sprintf('Unknown key modifier: %s.', $modifier));
+                throw new ExpectationException(sprintf('Unknown key modifier: %s.', $modifier),
+                    $this->getSession());
             }
         }
         if (is_numeric($char)) {

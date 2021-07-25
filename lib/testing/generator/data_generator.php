@@ -103,6 +103,9 @@ EOD;
      * @return component_generator_base or rather an instance of the appropriate subclass.
      */
     public function get_plugin_generator($component) {
+        // Note: This global is included so that generator have access to it.
+        // CFG is widely used in require statements.
+        global $CFG;
         list($type, $plugin) = core_component::normalize_component($component);
         $cleancomponent = $type . '_' . $plugin;
         if ($cleancomponent != $component) {
@@ -509,7 +512,7 @@ EOD;
         require_once($CFG->dirroot . '/group/lib.php');
 
         $this->groupcount++;
-        $i = $this->groupcount;
+        $i = str_pad($this->groupcount, 4, '0', STR_PAD_LEFT);
 
         $record = (array)$record;
 
