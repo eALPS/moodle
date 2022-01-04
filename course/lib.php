@@ -1929,22 +1929,28 @@ function course_get_cm_edit_actions(cm_info $mod, $indent = -1, $sr = null) {
     if ($hasmanageactivities && !$mod->coursegroupmodeforce) {
         if (plugin_supports('mod', $mod->modname, FEATURE_GROUPS, false)) {
             if ($mod->effectivegroupmode == SEPARATEGROUPS) {
-                $nextgroupmode = VISIBLEGROUPS;
+                // $nextgroupmode = VISIBLEGROUPS;
+                $nextgroupmode = SEPARATEGROUPS;
                 $grouptitle = $str->groupsseparate;
                 $actionname = 'groupsseparate';
-                $nextactionname = 'groupsvisible';
+                // $nextactionname = 'groupsvisible';
+                $nextactionname = 'groupsseparate';
                 $groupimage = 'i/groups';
             } else if ($mod->effectivegroupmode == VISIBLEGROUPS) {
-                $nextgroupmode = NOGROUPS;
+                // $nextgroupmode = NOGROUPS;
+                $nextgroupmode = VISIBLEGROUPS;
                 $grouptitle = $str->groupsvisible;
                 $actionname = 'groupsvisible';
-                $nextactionname = 'groupsnone';
+                // $nextactionname = 'groupsnone';
+                $nextactionname = 'groupsvisible';
                 $groupimage = 'i/groupv';
             } else {
-                $nextgroupmode = SEPARATEGROUPS;
+                // $nextgroupmode = SEPARATEGROUPS;
+                $nextgroupmode = NOGROUPS;
                 $grouptitle = $str->groupsnone;
                 $actionname = 'groupsnone';
-                $nextactionname = 'groupsseparate';
+                // $nextactionname = 'groupsseparate';
+                $nextactionname = 'groupsnone';
                 $groupimage = 'i/groupn';
             }
 
