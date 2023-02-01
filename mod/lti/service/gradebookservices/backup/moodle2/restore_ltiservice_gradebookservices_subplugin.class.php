@@ -233,6 +233,12 @@ class restore_ltiservice_gradebookservices_subplugin extends restore_subplugin {
                         ));
                     }
                 }
+            } else {
+                // update ltiservice_gradebookservices:ltilinkid with grade_items:iteminstance
+                foreach ($gbs as $gbsone) {
+                    $gbsone->ltilinkid = $gi->iteminstance;
+                    $DB->update_record('ltiservice_gradebookservices', $gbsone);
+                }
             }
         }
     }
