@@ -55,7 +55,7 @@
                         >
                             {{#str}} favourites, core {{/str}}
                         </a>
-                        <a class="nav-item nav-link {{#fallback}}active{{/fallback}} {{^showAll}}d-none{{/showAll}}"
+                        <a class="nav-item nav-link {{^showAll}}d-none{{/showAll}}"
                            id="all-tab-{{uniqid}}"
                            data-toggle="tab"
                            data-region="default-tab-nav"
@@ -94,7 +94,7 @@
                         >
                             {{#str}} resources, core {{/str}}
                         </a>
-                        <a class="nav-item nav-link {{^recommended}}d-none{{/recommended}}"
+                        <a class="nav-item nav-link {{#fallback}}active{{/fallback}} {{^recommended}}d-none{{/recommended}}"
                            id="recommended-tab-{{uniqid}}"
                            data-region="recommended-tab-nav"
                            data-toggle="tab"
@@ -114,7 +114,7 @@
                                 {{>core_course/local/activitychooser/favourites}}
                             </div>
                         </div>
-                        <div class="tab-pane {{#fallback}}active{{/fallback}} {{^showAll}}d-none{{/showAll}}" id="all-{{uniqid}}" data-region="default" role="tabpanel" aria-labelledby="all-tab-{{uniqid}}">
+                        <div class="tab-pane {{^showAll}}d-none{{/showAll}}" id="all-{{uniqid}}" data-region="default" role="tabpanel" aria-labelledby="all-tab-{{uniqid}}">
                             <div class="optionscontainer d-flex flex-wrap p-1 mw-100 position-relative" role="menubar" data-region="chooser-options-container">
                                 {{#default}}
                                     {{>core_course/local/activitychooser/item}}
@@ -135,7 +135,7 @@
                                 {{/resources}}
                             </div>
                         </div>
-                        <div class="tab-pane" id="recommended-{{uniqid}}" data-region="recommended" role="tabpanel" aria-labelledby="recommended-tab-{{uniqid}}">
+                        <div class="tab-pane {{#fallback}}active{{/fallback}}" id="recommended-{{uniqid}}" data-region="recommended" role="tabpanel" aria-labelledby="recommended-tab-{{uniqid}}">
                             <div class="optionscontainer d-flex flex-wrap p-1 mw-100 position-relative" role="menubar" data-region="chooser-options-container">
                                 {{#recommended}}
                                     {{>core_course/local/activitychooser/item}}
