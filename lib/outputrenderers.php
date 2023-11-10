@@ -2660,7 +2660,7 @@ class core_renderer extends renderer_base {
 
         // Get the image html output first, auto generated based on initials if one isn't already set.
         if ($user->picture == 0 && empty($CFG->enablegravatar) && !defined('BEHAT_SITE_RUNNING')) {
-            $output = html_writer::tag('span', mb_substr($user->firstname, 0, 1) . mb_substr($user->lastname, 0, 1),
+            $output = html_writer::tag('span', mb_substr($user->lastname, 0, 1) . mb_substr($user->firstname, 0, 1),
                 ['class' => 'userinitials size-' . $size]);
         } else {
             $output = html_writer::empty_tag('img', $attributes);
