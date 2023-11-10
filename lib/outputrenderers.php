@@ -4207,20 +4207,12 @@ EOD;
             return '';
         }
 
-        $label = get_string('contactsitesupport', 'admin');
+        $label = 'e-Learningセンターに問い合わせ';
         $icon = $this->pix_icon('t/email', '');
         $content = $icon . $label;
+        $link = 'https://docs.google.com/forms/d/e/1FAIpQLSfBjIt3ApCmiYnZ7MRBZMuDprMRfU7m0ccj85DpsOXdmuFvaQ/viewform';
 
-        if (!empty($CFG->supportpage)) {
-            $attributes = ['href' => $CFG->supportpage, 'target' => 'blank'];
-            $content .= $this->pix_icon('i/externallink', '', 'moodle', ['class' => 'ml-1']);
-        } else {
-            $attributes = ['href' => $CFG->wwwroot . '/user/contactsitesupport.php'];
-        }
-
-        $attributes += $customattribs;
-
-        return html_writer::tag('a', $content, $attributes);
+        return html_writer::tag('a', $content, ['target' => '_blank', 'href' => $link]);
     }
 
     /**
@@ -4232,15 +4224,14 @@ EOD;
         global $CFG;
 
         if (during_initial_install() ||
-            (isset($CFG->showservicesandsupportcontent) && $CFG->showservicesandsupportcontent == false) ||
-            !is_siteadmin()) {
+            (isset($CFG->showservicesandsupportcontent) && $CFG->showservicesandsupportcontent == false)
+        ) {
             return '';
         }
 
-        $liferingicon = $this->pix_icon('t/life-ring', '', 'moodle', ['class' => 'fa fa-life-ring']);
-        $newwindowicon = $this->pix_icon('i/externallink', get_string('opensinnewwindow'), 'moodle', ['class' => 'ml-1']);
-        $link = 'https://moodle.com/help/?utm_source=CTA-banner&utm_medium=platform&utm_campaign=name~Moodle4+cat~lms+mp~no';
-        $content = $liferingicon . get_string('moodleservicesandsupport') . $newwindowicon;
+        $bookicon = $this->pix_icon('book', '', 'moodle', array('class' => 'iconhelp icon-pre', 'role' => 'presentation'));
+        $link = 'https://lms.ealps.shinshu-u.ac.jp/help/';
+        $content = $bookicon . 'eALPSヘルプ';
 
         return html_writer::tag('a', $content, ['target' => '_blank', 'href' => $link]);
     }
