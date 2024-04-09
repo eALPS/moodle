@@ -77,7 +77,7 @@ class user_editadvanced_form extends moodleform {
         foreach ($auths as $auth => $unused) {
             $authinst = get_auth_plugin($auth);
 
-            if (!$authinst->is_internal() && !$auth == "db") {
+            if (!$authinst->is_internal()) {
                 $cannotchangeusername[] = $auth;
             }
 
@@ -86,8 +86,6 @@ class user_editadvanced_form extends moodleform {
                 if ($userid < 1 and $authinst->is_internal()) {
                     // This is unlikely but we can not create account without password
                     // when plugin uses passwords, we need to set it initially at least.
-                } else if ($auth == "db") {
-                    // 
                 } else {
                     $cannotchangepass[] = $auth;
                 }
@@ -98,6 +96,7 @@ class user_editadvanced_form extends moodleform {
                 $authoptions[$disabled][$auth] = get_string('pluginname', "auth_{$auth}");
             }
         }
+
         $purpose = user_edit_map_field_purpose($userid, 'username');
         $mform->addElement('text', 'username', get_string('username'), 'size="20"' . $purpose);
         $mform->addHelpButton('username', 'username', 'auth');
