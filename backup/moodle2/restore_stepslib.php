@@ -4990,8 +4990,12 @@ class restore_create_categories_and_questions extends restore_structure_step {
         $questioncreated = $this->get_mappingid('question_category_created', $data->questioncategoryid) ? true : false;
         $recordexist = $DB->record_exists('question_bank_entries', ['id' => $data->id,
             'questioncategoryid' => $data->questioncategoryid]);
-        // Check we have category created.
-        if (!$questioncreated && $recordexist) {
+        $task_old_course_id = $this->task->get_old_courseid();
+        $task_course_id = $this->task->get_courseid();
+            // Check we have category created.
+        #if (!$questioncreated && $recordexist) {
+        # "Import as new version"
+        if (!$questioncreated && $recordexist &&  $this->task->is_samesite() && ($task_old_course_id == $task_course_id)) {
             return self::SKIP_ALL_CHILDREN;
         }
 
