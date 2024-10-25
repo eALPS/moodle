@@ -30,15 +30,12 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['clianswerno'] = 'n';
-$string['cliansweryes'] = 'd';
-$string['cliincorrectvalueerror'] = 'Eroare, valoare incorectă "{$a->value}" pentru "{$a->option}"';
-$string['cliincorrectvalueretry'] = 'Valoare incorectă, încercaţi din nou';
-$string['clitypevalue'] = 'introdu valoarea';
-$string['clitypevaluedefault'] = 'introdu valoarea, apasă Enter pentru a folosi valoarea implicită ({$a})';
-$string['cliunknowoption'] = 'Opţiuni necunoscute:
- {$a}
-Te rugăm folosește--opţiunea Ajutor.';
-$string['cliyesnoprompt'] = 'tastează d (pentru \'da\') sau \'n\' (pentru \'nu\')';
-$string['environmentrequireinstall'] = 'trebuie instalat şi activat';
-$string['environmentrequireversion'] = 'versiuna necesară este {$a->needed} în timp ce dumneavoastră rulaţi versiunea {$a->current}';
-$string['upgradekeyset'] = 'Actualizează cheie (lăsați necompletat pentru a nu fi setat)';
+$string['cliansweryes'] = 'y';
+$string['cliincorrectvalueerror'] = 'Памылка, хібнае значэньне "{$a->value}" для "{$a->option}"';
+$string['cliincorrectvalueretry'] = 'Хібнае значэньне, калі ласка, паўтарыце';
+$string['clitypevalue'] = 'значэньне тыпа';
+$string['clitypevaluedefault'] = 'значэньне тыпа, націсьніце Enter для выкарыстаньня стандартнага значэньня ({$a})';
+$string['cliunknowoption'] = 'Нераспазнаныя опцыі:
+  {$a}
+Калі ласка, выкарыстайце опцыю --help.';
+$string['cliyesnoprompt'] = 'надрукуйце y (yes) ці n (n=no)';
