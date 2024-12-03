@@ -14,6 +14,13 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+use core_external\external_api;
+use core_external\external_format_value;
+use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
+
 defined('MOODLE_INTERNAL') || die();
 
 /**
@@ -25,7 +32,6 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once("$CFG->libdir/externallib.php");
 require_once($CFG->dirroot . "/message/lib.php");
 
 /**
@@ -67,7 +73,7 @@ class message_popup_external extends external_api {
      * @param  bool     $newestfirst        true for ordering by newest first, false for oldest first
      * @param  int      $limit              the number of results to return
      * @param  int      $offset             offset the result set by a given amount
-     * @return external_description
+     * @return \core_external\external_description
      */
     public static function get_popup_notifications($useridto, $newestfirst, $limit, $offset) {
         global $USER, $PAGE;
@@ -117,6 +123,9 @@ class message_popup_external extends external_api {
                 $notificationoutput = new \message_popup\output\popup_notification($notification);
 
                 $notificationcontext = $notificationoutput->export_for_template($renderer);
+
+                // Keep this for BC.
+                $notificationcontext->deleted = false;
                 $notificationcontexts[] = $notificationcontext;
             }
         }
@@ -162,6 +171,8 @@ class message_popup_external extends external_api {
                             'component' => new external_value(PARAM_TEXT, 'The component that generated the notification',
                                 VALUE_OPTIONAL),
                             'eventtype' => new external_value(PARAM_TEXT, 'The type of notification', VALUE_OPTIONAL),
+                            'customdata' => new external_value(PARAM_RAW, 'Custom data to be passed to the message processor.
+                                The data here is serialised using json_encode().', VALUE_OPTIONAL),
                         ), 'message'
                     )
                 ),
@@ -191,7 +202,7 @@ class message_popup_external extends external_api {
      * @throws invalid_parameter_exception
      * @throws moodle_exception
      * @param  int      $useridto       the user id who received the message
-     * @return external_description
+     * @return \core_external\external_description
      */
     public static function get_unread_popup_notification_count($useridto) {
         global $USER;

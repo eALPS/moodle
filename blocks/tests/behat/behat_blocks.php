@@ -26,6 +26,7 @@
 // NOTE: no MOODLE_INTERNAL test here, this file may be required by behat before including /config.php.
 
 use Behat\Mink\Exception\ElementNotFoundException as ElementNotFoundException;
+use Behat\Gherkin\Node\TableNode as TableNode;
 
 require_once(__DIR__ . '/../../../lib/behat/behat_base.php');
 
@@ -46,16 +47,56 @@ class behat_blocks extends behat_base {
      * @param string $blockname
      */
     public function i_add_the_block($blockname) {
-        $this->execute('behat_forms::i_set_the_field_to',
-            array("bui_addblock", $this->escape($blockname))
-        );
+        $addblock = get_string('addblock');
+        $this->execute('behat_general::i_click_on_in_the', [$addblock, 'link_exact', '.add_block_button', 'css_element']);
 
-        // If we are running without javascript we need to submit the form.
         if (!$this->running_javascript()) {
-            $this->execute('behat_general::i_click_on_in_the',
-                array(get_string('go'), "button", "#add_block", "css_element")
-            );
+            $this->execute('behat_general::i_click_on_in_the', [$blockname, 'link_exact', '#region-main', 'css_element']);
+        } else {
+            $this->execute('behat_general::i_click_on_in_the', [$blockname, 'link_exact', $addblock, 'dialogue']);
         }
+    }
+
+    /**
+     * Adds the selected block to the specified region
+     *
+     * Editing mode must be previously enabled.
+     *
+     * @Given /^I add the "(?P<block_name_string>(?:[^"]|\\")*)" block to the "(?P<region_string>(?:[^"]|\\")*)" region$/
+     * @param string $blockname
+     * @param string $region
+     */
+    public function i_add_the_block_to_the_region(string $blockname, string $region) {
+        if (!$this->running_javascript()) {
+            throw new coding_exception('Adding block to specific region is not possible with Javascript disabled');
+        }
+        if ($region === "default") {
+            $region = "";
+        }
+        $csselement = 'a[data-key="addblock"][data-blockregion='.behat_context_helper::escape($region).']';
+        $addblock = get_string('addblock');
+        $this->execute('behat_general::i_click_on', [$csselement, 'css_element']);
+        $this->execute('behat_general::i_click_on_in_the', [$blockname, 'link_exact', $addblock, 'dialogue']);
+    }
+
+    /**
+     * Adds the selected block to the specified region and fills configuration form.
+     *
+     * Editing mode must be previously enabled.
+     *
+     * @Given /^I add the "(?P<block_name_string>(?:[^"]|\\")*)" block to the (?P<region_string>(?:[^"]|\\")*) region with:$/
+     * @param string $blockname
+     * @param string $region
+     * @param TableNode $data
+     */
+    public function i_add_the_block_to_the_region_with(string $blockname, string $region, TableNode $data) {
+        $blocklabel = get_string('textellipsis', 'moodle', $blockname);
+        $this->execute('behat_blocks::i_add_the_block_to_the_region', [$blocklabel, $region]);
+        $this->wait_for_pending_js();
+        $dialogname = get_string('addblock', 'core_block', $blockname);
+        $this->execute('behat_forms::i_set_the_following_fields_in_container_to_these_values',
+            [$dialogname, "dialogue", $data]);
+        $this->execute('behat_general::i_click_on_in_the', ["Save changes", 'button', $dialogname, 'dialogue']);
     }
 
     /**
@@ -70,21 +111,6 @@ class behat_blocks extends behat_base {
         } catch (ElementNotFoundException $e) {
             $this->execute('behat_blocks::i_add_the_block', [$blockname]);
         }
-    }
-
-    /**
-     * Docks a block. Editing mode should be previously enabled.
-     *
-     * @Given /^I dock "(?P<block_name_string>(?:[^"]|\\")*)" block$/
-     * @param string $blockname
-     */
-    public function i_dock_block($blockname) {
-
-        // Looking for both title and alt.
-        $xpath = "//input[@type='image'][@title='" . get_string('dockblock', 'block', $blockname) . "' or @alt='" . get_string('addtodock', 'block') . "']";
-        $this->execute('behat_general::i_click_on_in_the',
-            array($xpath, "xpath_element", $this->escape($blockname), "block")
-        );
     }
 
     /**
@@ -108,7 +134,7 @@ class behat_blocks extends behat_base {
         }
 
         $this->execute('behat_general::i_click_on_in_the',
-            array("a[role='menuitem']", "css_element", $this->escape($blockname), "block")
+                array("a[data-toggle='dropdown']", "css_element", $this->escape($blockname), "block")
         );
     }
 
@@ -137,7 +163,18 @@ class behat_blocks extends behat_base {
      * @param string $blockname
      */
     public function the_add_block_selector_should_contain_block($blockname) {
-        $this->execute('behat_forms::the_select_box_should_contain', [get_string('addblock'), $blockname]);
+        $addblock = get_string('addblock');
+        $this->execute('behat_general::i_click_on', [$addblock, 'link_exact']);
+
+
+        $cancelstr = get_string('cancel');
+        if (!$this->running_javascript()) {
+            $this->execute('behat_general::should_exist_in_the', [$blockname, 'link_exact', '#region-main', 'css_element']);
+            $this->execute('behat_general::i_click_on_in_the', [$cancelstr, 'link_exact', '#region-main', 'css_element']);
+        } else {
+            $this->execute('behat_general::should_exist_in_the', [$blockname, 'link_exact', $addblock, 'dialogue']);
+            $this->execute('behat_general::i_click_on_in_the', [$cancelstr, 'button', $addblock, 'dialogue']);
+        }
     }
 
     /**
@@ -147,6 +184,17 @@ class behat_blocks extends behat_base {
      * @param string $blockname
      */
     public function the_add_block_selector_should_not_contain_block($blockname) {
-        $this->execute('behat_forms::the_select_box_should_not_contain', [get_string('addblock'), $blockname]);
+        $addblock = get_string('addblock');
+        $this->execute('behat_general::i_click_on', [$addblock, 'link_exact']);
+
+
+        $cancelstr = get_string('cancel');
+        if (!$this->running_javascript()) {
+            $this->execute('behat_general::should_not_exist_in_the', [$blockname, 'link_exact', '#region-main', 'css_element']);
+            $this->execute('behat_general::i_click_on_in_the', [$cancelstr, 'link_exact', '#region-main', 'css_element']);
+        } else {
+            $this->execute('behat_general::should_not_exist_in_the', [$blockname, 'link_exact', $addblock, 'dialogue']);
+            $this->execute('behat_general::i_click_on_in_the', [$cancelstr, 'button', $addblock, 'dialogue']);
+        }
     }
 }

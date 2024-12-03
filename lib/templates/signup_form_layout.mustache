@@ -3,8 +3,12 @@
 
     Example context (json):
     {
+        "logourl": "https://moodle.org/logo/moodle-logo.svg",
+        "sitename": "Site name",
         "formhtml": "<p>(Form html would go here)</p>"
     }
 }}
-<h3>{{#str}}newaccount{{/str}}</h3>
-{{{formhtml}}}
+<div class="signupform">
+    <h1 class="login-heading">{{#str}} newaccount {{/str}}</h1>
+    {{{formhtml}}}
+</div>

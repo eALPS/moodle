@@ -30,6 +30,14 @@ defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot . '/calendar/lib.php');
 
+define('WORKSHOP_EVENT_TYPE_SUBMISSION_OPEN',   'opensubmission');
+define('WORKSHOP_EVENT_TYPE_SUBMISSION_CLOSE',  'closesubmission');
+define('WORKSHOP_EVENT_TYPE_ASSESSMENT_OPEN',   'openassessment');
+define('WORKSHOP_EVENT_TYPE_ASSESSMENT_CLOSE',  'closeassessment');
+define('WORKSHOP_SUBMISSION_TYPE_DISABLED', 0);
+define('WORKSHOP_SUBMISSION_TYPE_AVAILABLE', 1);
+define('WORKSHOP_SUBMISSION_TYPE_REQUIRED', 2);
+
 ////////////////////////////////////////////////////////////////////////////////
 // Moodle core API                                                            //
 ////////////////////////////////////////////////////////////////////////////////
@@ -39,7 +47,7 @@ require_once($CFG->dirroot . '/calendar/lib.php');
  *
  * @see plugin_supports() in lib/moodlelib.php
  * @param string $feature FEATURE_xx constant for requested feature
- * @return mixed true if the feature is supported, null if unknown
+ * @return mixed True if module supports feature, false if not, null if doesn't know or string for the module purpose.
  */
 function workshop_supports($feature) {
     switch($feature) {
@@ -52,6 +60,7 @@ function workshop_supports($feature) {
             return true;
         case FEATURE_SHOW_DESCRIPTION:  return true;
         case FEATURE_PLAGIARISM:        return true;
+        case FEATURE_MOD_PURPOSE:       return MOD_PURPOSE_ASSESSMENT;
         default:                        return null;
     }
 }
@@ -90,11 +99,15 @@ function workshop_add_instance(stdclass $workshop) {
     }
 
     if (isset($workshop->submissionfiletypes)) {
-        $workshop->submissionfiletypes = workshop::clean_file_extensions($workshop->submissionfiletypes);
+        $filetypesutil = new \core_form\filetypes_util();
+        $submissionfiletypes = $filetypesutil->normalize_file_types($workshop->submissionfiletypes);
+        $workshop->submissionfiletypes = implode(' ', $submissionfiletypes);
     }
 
     if (isset($workshop->overallfeedbackfiletypes)) {
-        $workshop->overallfeedbackfiletypes = workshop::clean_file_extensions($workshop->overallfeedbackfiletypes);
+        $filetypesutil = new \core_form\filetypes_util();
+        $overallfeedbackfiletypes = $filetypesutil->normalize_file_types($workshop->overallfeedbackfiletypes);
+        $workshop->overallfeedbackfiletypes = implode(' ', $overallfeedbackfiletypes);
     }
 
     // insert the new record so we get the id
@@ -133,6 +146,9 @@ function workshop_add_instance(stdclass $workshop) {
 
     // create calendar events
     workshop_calendar_update($workshop, $workshop->coursemodule);
+    if (!empty($workshop->completionexpected)) {
+        \core_completion\api::update_completion_date_event($cmid, 'workshop', $workshop->id, $workshop->completionexpected);
+    }
 
     return $workshop->id;
 }
@@ -166,11 +182,15 @@ function workshop_update_instance(stdclass $workshop) {
     }
 
     if (isset($workshop->submissionfiletypes)) {
-        $workshop->submissionfiletypes = workshop::clean_file_extensions($workshop->submissionfiletypes);
+        $filetypesutil = new \core_form\filetypes_util();
+        $submissionfiletypes = $filetypesutil->normalize_file_types($workshop->submissionfiletypes);
+        $workshop->submissionfiletypes = implode(' ', $submissionfiletypes);
     }
 
     if (isset($workshop->overallfeedbackfiletypes)) {
-        $workshop->overallfeedbackfiletypes = workshop::clean_file_extensions($workshop->overallfeedbackfiletypes);
+        $filetypesutil = new \core_form\filetypes_util();
+        $overallfeedbackfiletypes = $filetypesutil->normalize_file_types($workshop->overallfeedbackfiletypes);
+        $workshop->overallfeedbackfiletypes = implode(' ', $overallfeedbackfiletypes);
     }
 
     // todo - if the grading strategy is being changed, we may want to replace all aggregated peer grades with nulls
@@ -206,6 +226,8 @@ function workshop_update_instance(stdclass $workshop) {
 
     // update calendar events
     workshop_calendar_update($workshop, $workshop->coursemodule);
+    $completionexpected = (!empty($workshop->completionexpected)) ? $workshop->completionexpected : null;
+    \core_completion\api::update_completion_date_event($workshop->coursemodule, 'workshop', $workshop->id, $completionexpected);
 
     return true;
 }
@@ -269,12 +291,13 @@ function workshop_delete_instance($id) {
         $event->delete();
     }
 
-    // finally remove the workshop record itself
-    $DB->delete_records('workshop', array('id' => $workshop->id));
-
     // gradebook cleanup
     grade_update('mod/workshop', $workshop->course, 'mod', 'workshop', $workshop->id, 0, null, array('deleted' => true));
     grade_update('mod/workshop', $workshop->course, 'mod', 'workshop', $workshop->id, 1, null, array('deleted' => true));
+
+    // finally remove the workshop record itself
+    // We must delete the module record after we delete the grade item.
+    $DB->delete_records('workshop', array('id' => $workshop->id));
 
     return true;
 }
@@ -286,10 +309,28 @@ function workshop_delete_instance($id) {
  * only workshop events belonging to the course specified are checked.
  *
  * @param  integer $courseid The Course ID.
+ * @param int|stdClass $instance workshop module instance or ID.
+ * @param int|stdClass $cm Course module object or ID.
  * @return bool Returns true if the calendar events were successfully updated.
  */
-function workshop_refresh_events($courseid = 0) {
+function workshop_refresh_events($courseid = 0, $instance = null, $cm = null) {
     global $DB;
+
+    // If we have instance information then we can just update the one event instead of updating all events.
+    if (isset($instance)) {
+        if (!is_object($instance)) {
+            $instance = $DB->get_record('workshop', array('id' => $instance), '*', MUST_EXIST);
+        }
+        if (isset($cm)) {
+            if (!is_object($cm)) {
+                $cm = (object)array('id' => $cm);
+            }
+        } else {
+            $cm = get_coursemodule_from_instance('workshop', $instance->id);
+        }
+        workshop_calendar_update($instance, $cm->id);
+        return true;
+    }
 
     if ($courseid) {
         // Make sure that the course id is numeric.
@@ -369,13 +410,23 @@ function workshop_user_outline($course, $user, $mod, $workshop) {
 
     if (!empty($grades->items[0]->grades)) {
         $submissiongrade = reset($grades->items[0]->grades);
-        $info .= get_string('submissiongrade', 'workshop') . ': ' . $submissiongrade->str_long_grade . html_writer::empty_tag('br');
         $time = max($time, $submissiongrade->dategraded);
+        if (!$submissiongrade->hidden || has_capability('moodle/grade:viewhidden', context_course::instance($course->id))) {
+            $info .= get_string('submissiongrade', 'workshop') . ': ' . $submissiongrade->str_long_grade
+                . html_writer::empty_tag('br');
+        } else {
+            $info .= get_string('submissiongrade', 'workshop') . ': ' . get_string('hidden', 'grades')
+                . html_writer::empty_tag('br');
+        }
     }
     if (!empty($grades->items[1]->grades)) {
         $assessmentgrade = reset($grades->items[1]->grades);
-        $info .= get_string('gradinggrade', 'workshop') . ': ' . $assessmentgrade->str_long_grade;
         $time = max($time, $assessmentgrade->dategraded);
+        if (!$assessmentgrade->hidden || has_capability('moodle/grade:viewhidden', context_course::instance($course->id))) {
+            $info .= get_string('gradinggrade', 'workshop') . ': ' . $assessmentgrade->str_long_grade;
+        } else {
+            $info .= get_string('gradinggrade', 'workshop') . ': ' . get_string('hidden', 'grades');
+        }
     }
 
     if (!empty($info) and !empty($time)) {
@@ -408,12 +459,20 @@ function workshop_user_complete($course, $user, $mod, $workshop) {
 
     if (!empty($grades->items[0]->grades)) {
         $submissiongrade = reset($grades->items[0]->grades);
-        $info = get_string('submissiongrade', 'workshop') . ': ' . $submissiongrade->str_long_grade;
+        if (!$submissiongrade->hidden || has_capability('moodle/grade:viewhidden', context_course::instance($course->id))) {
+            $info = get_string('submissiongrade', 'workshop') . ': ' . $submissiongrade->str_long_grade;
+        } else {
+            $info = get_string('submissiongrade', 'workshop') . ': ' . get_string('hidden', 'grades');
+        }
         echo html_writer::tag('li', $info, array('class'=>'submissiongrade'));
     }
     if (!empty($grades->items[1]->grades)) {
         $assessmentgrade = reset($grades->items[1]->grades);
-        $info = get_string('gradinggrade', 'workshop') . ': ' . $assessmentgrade->str_long_grade;
+        if (!$assessmentgrade->hidden || has_capability('moodle/grade:viewhidden', context_course::instance($course->id))) {
+            $info = get_string('gradinggrade', 'workshop') . ': ' . $assessmentgrade->str_long_grade;
+        } else {
+            $info = get_string('gradinggrade', 'workshop') . ': ' . get_string('hidden', 'grades');
+        }
         echo html_writer::tag('li', $info, array('class'=>'gradinggrade'));
     }
 
@@ -465,8 +524,9 @@ function workshop_user_complete($course, $user, $mod, $workshop) {
 function workshop_print_recent_activity($course, $viewfullnames, $timestart) {
     global $CFG, $USER, $DB, $OUTPUT;
 
-    $authoramefields = get_all_user_name_fields(true, 'author', null, 'author');
-    $reviewerfields = get_all_user_name_fields(true, 'reviewer', null, 'reviewer');
+    $userfieldsapi = \core_user\fields::for_name();
+    $authoramefields = $userfieldsapi->get_sql('author', false, 'author', '', false)->selects;
+    $reviewerfields = $userfieldsapi->get_sql('reviewer', false, 'reviewer', '', false)->selects;
 
     $sql = "SELECT s.id AS submissionid, s.title AS submissiontitle, s.timemodified AS submissionmodified,
                    author.id AS authorid, $authoramefields, a.id AS assessmentid, a.timemodified AS assessmentmodified,
@@ -627,7 +687,7 @@ function workshop_print_recent_activity($course, $viewfullnames, $timestart) {
 
     if (!empty($submissions)) {
         $shown = true;
-        echo $OUTPUT->heading(get_string('recentsubmissions', 'workshop'), 3);
+        echo $OUTPUT->heading(get_string('recentsubmissions', 'workshop') . ':', 6);
         foreach ($submissions as $id => $submission) {
             $link = new moodle_url('/mod/workshop/submission.php', array('id'=>$id, 'cmid'=>$submission->cmid));
             if ($submission->authornamevisible) {
@@ -641,7 +701,7 @@ function workshop_print_recent_activity($course, $viewfullnames, $timestart) {
 
     if (!empty($assessments)) {
         $shown = true;
-        echo $OUTPUT->heading(get_string('recentassessments', 'workshop'), 3);
+        echo $OUTPUT->heading(get_string('recentassessments', 'workshop') . ':', 6);
         core_collator::asort_objects_by_property($assessments, 'timemodified');
         foreach ($assessments as $id => $assessment) {
             $link = new moodle_url('/mod/workshop/assessment.php', array('asid' => $id));
@@ -710,8 +770,9 @@ function workshop_get_recent_mod_activity(&$activities, &$index, $timestart, $co
     $params['submissionmodified'] = $timestart;
     $params['assessmentmodified'] = $timestart;
 
-    $authornamefields = get_all_user_name_fields(true, 'author', null, 'author');
-    $reviewerfields = get_all_user_name_fields(true, 'reviewer', null, 'reviewer');
+    $userfieldsapi = \core_user\fields::for_name();
+    $authornamefields = $userfieldsapi->get_sql('author', false, 'author', '', false)->selects;
+    $reviewerfields = $userfieldsapi->get_sql('reviewer', false, 'reviewer', '', false)->selects;
 
     $sql = "SELECT s.id AS submissionid, s.title AS submissiontitle, s.timemodified AS submissionmodified,
                    author.id AS authorid, $authornamefields, author.picture AS authorpicture, author.imagealt AS authorimagealt,
@@ -748,13 +809,13 @@ function workshop_get_recent_mod_activity(&$activities, &$index, $timestart, $co
         // remember all user names we can use later
         if (empty($users[$activity->authorid])) {
             $u = new stdclass();
-            $additionalfields = explode(',', user_picture::fields());
+            $additionalfields = explode(',', implode(',', \core_user\fields::get_picture_fields()));
             $u = username_load_fields_from_object($u, $activity, 'author', $additionalfields);
             $users[$activity->authorid] = $u;
         }
         if ($activity->reviewerid and empty($users[$activity->reviewerid])) {
             $u = new stdclass();
-            $additionalfields = explode(',', user_picture::fields());
+            $additionalfields = explode(',', implode(',', \core_user\fields::get_picture_fields()));
             $u = username_load_fields_from_object($u, $activity, 'reviewer', $additionalfields);
             $users[$activity->reviewerid] = $u;
         }
@@ -928,7 +989,7 @@ function workshop_print_recent_mod_activity($activity, $courseid, $detail, $modn
             echo html_writer::start_tag('h4', array('class'=>'workshop'));
             $url = new moodle_url('/mod/workshop/view.php', array('id'=>$activity->cmid));
             $name = s($activity->name);
-            echo html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('icon', $activity->type), 'class'=>'icon', 'alt'=>$name));
+            echo $OUTPUT->image_icon('monologo', $name, $activity->type);
             echo ' ' . $modnames[$activity->type];
             echo html_writer::link($url, $name, array('class'=>'name', 'style'=>'margin-left: 5px'));
             echo html_writer::end_tag('h4');
@@ -965,7 +1026,7 @@ function workshop_print_recent_mod_activity($activity, $courseid, $detail, $modn
             echo html_writer::start_tag('h4', array('class'=>'workshop'));
             $url = new moodle_url('/mod/workshop/view.php', array('id'=>$activity->cmid));
             $name = s($activity->name);
-            echo html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('icon', $activity->type), 'class'=>'icon', 'alt'=>$name));
+            echo $OUTPUT->image_icon('monologo', $name, $activity->type);
             echo ' ' . $modnames[$activity->type];
             echo html_writer::link($url, $name, array('class'=>'name', 'style'=>'margin-left: 5px'));
             echo html_writer::end_tag('h4');
@@ -999,87 +1060,11 @@ function workshop_print_recent_mod_activity($activity, $courseid, $detail, $modn
 }
 
 /**
- * Regular jobs to execute via cron
- *
- * @return boolean true on success, false otherwise
+ * @deprecated since Moodle 3.8
  */
-function workshop_cron() {
-    global $CFG, $DB;
-
-    $now = time();
-
-    mtrace(' processing workshop subplugins ...');
-    cron_execute_plugin_type('workshopallocation', 'workshop allocation methods');
-
-    // now when the scheduled allocator had a chance to do its job, check if there
-    // are some workshops to switch into the assessment phase
-    $workshops = $DB->get_records_select("workshop",
-        "phase = 20 AND phaseswitchassessment = 1 AND submissionend > 0 AND submissionend < ?", array($now));
-
-    if (!empty($workshops)) {
-        mtrace('Processing automatic assessment phase switch in '.count($workshops).' workshop(s) ... ', '');
-        require_once($CFG->dirroot.'/mod/workshop/locallib.php');
-        foreach ($workshops as $workshop) {
-            $cm = get_coursemodule_from_instance('workshop', $workshop->id, $workshop->course, false, MUST_EXIST);
-            $course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST);
-            $workshop = new workshop($workshop, $cm, $course);
-            $workshop->switch_phase(workshop::PHASE_ASSESSMENT);
-
-            $params = array(
-                'objectid' => $workshop->id,
-                'context' => $workshop->context,
-                'courseid' => $workshop->course->id,
-                'other' => array(
-                    'workshopphase' => $workshop->phase
-                )
-            );
-            $event = \mod_workshop\event\phase_switched::create($params);
-            $event->trigger();
-
-            // disable the automatic switching now so that it is not executed again by accident
-            // if the teacher changes the phase back to the submission one
-            $DB->set_field('workshop', 'phaseswitchassessment', 0, array('id' => $workshop->id));
-
-            // todo inform the teachers
-        }
-        mtrace('done');
-    }
-
-    return true;
-}
-
-/**
- * Is a given scale used by the instance of workshop?
- *
- * The function asks all installed grading strategy subplugins. The workshop
- * core itself does not use scales. Both grade for submission and grade for
- * assessments do not use scales.
- *
- * @param int $workshopid id of workshop instance
- * @param int $scaleid id of the scale to check
- * @return bool
- */
-function workshop_scale_used($workshopid, $scaleid) {
-    global $CFG; // other files included from here
-
-    $strategies = core_component::get_plugin_list('workshopform');
-    foreach ($strategies as $strategy => $strategypath) {
-        $strategylib = $strategypath . '/lib.php';
-        if (is_readable($strategylib)) {
-            require_once($strategylib);
-        } else {
-            throw new coding_exception('the grading forms subplugin must contain library ' . $strategylib);
-        }
-        $classname = 'workshop_' . $strategy . '_strategy';
-        if (method_exists($classname, 'scale_used')) {
-            if (call_user_func_array(array($classname, 'scale_used'), array($scaleid, $workshopid))) {
-                // no need to include any other files - scale is used
-                return true;
-            }
-        }
-    }
-
-    return false;
+function workshop_scale_used() {
+    throw new coding_exception('workshop_scale_used() can not be used anymore. Plugins can implement ' .
+        '<modname>_scale_used_anywhere, all implementations of <modname>_scale_used are now ignored');
 }
 
 /**
@@ -1113,15 +1098,6 @@ function workshop_scale_used_anywhere($scaleid) {
     }
 
     return false;
-}
-
-/**
- * Returns all other caps used in the module
- *
- * @return array
- */
-function workshop_get_extra_capabilities() {
-    return array('moodle/site:accessallgroups');
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1517,7 +1493,9 @@ function workshop_get_file_info($browser, $areas, $course, $cm, $context, $filea
 
         } else {
 
-            $sql = "SELECT s.id, u.lastname, u.firstname
+            $userfieldsapi = \core_user\fields::for_name();
+            $userfields = $userfieldsapi->get_sql('u', false, '', '', false)->selects;
+            $sql = "SELECT s.id, $userfields
                       FROM {workshop_submissions} s
                       JOIN {user} u ON (s.authorid = u.id)
                      WHERE s.example = 0 AND s.workshopid = ?";
@@ -1649,18 +1627,15 @@ function workshop_extend_navigation(navigation_node $navref, stdclass $course, s
  * @param settings_navigation $settingsnav {@link settings_navigation}
  * @param navigation_node $workshopnode {@link navigation_node}
  */
-function workshop_extend_settings_navigation(settings_navigation $settingsnav, navigation_node $workshopnode=null) {
-    global $PAGE;
-
-    //$workshopobject = $DB->get_record("workshop", array("id" => $PAGE->cm->instance));
-
-    if (has_capability('mod/workshop:editdimensions', $PAGE->cm->context)) {
-        $url = new moodle_url('/mod/workshop/editform.php', array('cmid' => $PAGE->cm->id));
-        $workshopnode->add(get_string('editassessmentform', 'workshop'), $url, settings_navigation::TYPE_SETTING);
+function workshop_extend_settings_navigation(settings_navigation $settingsnav, ?navigation_node $workshopnode=null) {
+    if (has_capability('mod/workshop:editdimensions', $settingsnav->get_page()->cm->context)) {
+        $url = new moodle_url('/mod/workshop/editform.php', array('cmid' => $settingsnav->get_page()->cm->id));
+        $workshopnode->add(get_string('assessmentform', 'workshop'), $url,
+        settings_navigation::TYPE_SETTING, null, 'workshopassessement');
     }
-    if (has_capability('mod/workshop:allocate', $PAGE->cm->context)) {
-        $url = new moodle_url('/mod/workshop/allocation.php', array('cmid' => $PAGE->cm->id));
-        $workshopnode->add(get_string('allocate', 'workshop'), $url, settings_navigation::TYPE_SETTING);
+    if (has_capability('mod/workshop:allocate', $settingsnav->get_page()->cm->context)) {
+        $url = new moodle_url('/mod/workshop/allocation.php', array('cmid' => $settingsnav->get_page()->cm->id));
+        $workshopnode->add(get_string('submissionsallocation', 'workshop'), $url, settings_navigation::TYPE_SETTING);
     }
 }
 
@@ -1694,11 +1669,11 @@ function workshop_calendar_update(stdClass $workshop, $cmid) {
     // the common properties for all events
     $base = new stdClass();
     $base->description  = format_module_intro('workshop', $workshop, $cmid, false);
+    $base->format       = FORMAT_HTML;
     $base->courseid     = $workshop->course;
     $base->groupid      = 0;
     $base->userid       = 0;
     $base->modulename   = 'workshop';
-    $base->eventtype    = 'pluginname';
     $base->instance     = $workshop->id;
     $base->visible      = instance_is_visible('workshop', $workshop);
     $base->timeduration = 0;
@@ -1706,7 +1681,10 @@ function workshop_calendar_update(stdClass $workshop, $cmid) {
     if ($workshop->submissionstart) {
         $event = clone($base);
         $event->name = get_string('submissionstartevent', 'mod_workshop', $workshop->name);
+        $event->eventtype = WORKSHOP_EVENT_TYPE_SUBMISSION_OPEN;
+        $event->type = empty($workshop->submissionend) ? CALENDAR_EVENT_TYPE_ACTION : CALENDAR_EVENT_TYPE_STANDARD;
         $event->timestart = $workshop->submissionstart;
+        $event->timesort  = $workshop->submissionstart;
         if ($reusedevent = array_shift($currentevents)) {
             $event->id = $reusedevent->id;
         } else {
@@ -1721,7 +1699,10 @@ function workshop_calendar_update(stdClass $workshop, $cmid) {
     if ($workshop->submissionend) {
         $event = clone($base);
         $event->name = get_string('submissionendevent', 'mod_workshop', $workshop->name);
+        $event->eventtype = WORKSHOP_EVENT_TYPE_SUBMISSION_CLOSE;
+        $event->type      = CALENDAR_EVENT_TYPE_ACTION;
         $event->timestart = $workshop->submissionend;
+        $event->timesort  = $workshop->submissionend;
         if ($reusedevent = array_shift($currentevents)) {
             $event->id = $reusedevent->id;
         } else {
@@ -1736,7 +1717,10 @@ function workshop_calendar_update(stdClass $workshop, $cmid) {
     if ($workshop->assessmentstart) {
         $event = clone($base);
         $event->name = get_string('assessmentstartevent', 'mod_workshop', $workshop->name);
+        $event->eventtype = WORKSHOP_EVENT_TYPE_ASSESSMENT_OPEN;
+        $event->type      = empty($workshop->assessmentend) ? CALENDAR_EVENT_TYPE_ACTION : CALENDAR_EVENT_TYPE_STANDARD;
         $event->timestart = $workshop->assessmentstart;
+        $event->timesort  = $workshop->assessmentstart;
         if ($reusedevent = array_shift($currentevents)) {
             $event->id = $reusedevent->id;
         } else {
@@ -1751,7 +1735,10 @@ function workshop_calendar_update(stdClass $workshop, $cmid) {
     if ($workshop->assessmentend) {
         $event = clone($base);
         $event->name = get_string('assessmentendevent', 'mod_workshop', $workshop->name);
+        $event->eventtype = WORKSHOP_EVENT_TYPE_ASSESSMENT_CLOSE;
+        $event->type      = CALENDAR_EVENT_TYPE_ACTION;
         $event->timestart = $workshop->assessmentend;
+        $event->timesort  = $workshop->assessmentend;
         if ($reusedevent = array_shift($currentevents)) {
             $event->id = $reusedevent->id;
         } else {
@@ -1770,6 +1757,221 @@ function workshop_calendar_update(stdClass $workshop, $cmid) {
     }
 }
 
+/**
+ * This function receives a calendar event and returns the action associated with it, or null if there is none.
+ *
+ * This is used by block_myoverview in order to display the event appropriately. If null is returned then the event
+ * is not displayed on the block.
+ *
+ * @param calendar_event $event
+ * @param \core_calendar\action_factory $factory
+ * @param int $userid User id to use for all capability checks, etc. Set to 0 for current user (default).
+ * @return \core_calendar\local\event\entities\action_interface|null
+ */
+function mod_workshop_core_calendar_provide_event_action(calendar_event $event,
+        \core_calendar\action_factory $factory, int $userid = 0) {
+    global $USER;
+
+    if (!$userid) {
+        $userid = $USER->id;
+    }
+
+    $cm = get_fast_modinfo($event->courseid, $userid)->instances['workshop'][$event->instance];
+
+    if (!$cm->uservisible) {
+        // The module is not visible to the user for any reason.
+        return null;
+    }
+
+    $completion = new \completion_info($cm->get_course());
+
+    $completiondata = $completion->get_data($cm, false, $userid);
+
+    if ($completiondata->completionstate != COMPLETION_INCOMPLETE) {
+        return null;
+    }
+
+    return $factory->create_instance(
+        get_string('viewworkshopsummary', 'workshop'),
+        new \moodle_url('/mod/workshop/view.php', array('id' => $cm->id)),
+        1,
+        true
+    );
+}
+
+/**
+ * This function calculates the minimum and maximum cutoff values for the timestart of
+ * the given event.
+ *
+ * It will return an array with two values, the first being the minimum cutoff value and
+ * the second being the maximum cutoff value. Either or both values can be null, which
+ * indicates there is no minimum or maximum, respectively.
+ *
+ * If a cutoff is required then the function must return an array containing the cutoff
+ * timestamp and error string to display to the user if the cutoff value is violated.
+ *
+ * A minimum and maximum cutoff return value will look like:
+ * [
+ *     [1505704373, 'The date must be after this date'],
+ *     [1506741172, 'The date must be before this date']
+ * ]
+ *
+ * @param calendar_event $event The calendar event to get the time range for
+ * @param stdClass $workshop The module instance to get the range from
+ * @return array Returns an array with min and max date.
+ */
+function mod_workshop_core_calendar_get_valid_event_timestart_range(\calendar_event $event, \stdClass $workshop): array {
+    $mindate = null;
+    $maxdate = null;
+
+    $phasesubmissionend = max($workshop->submissionstart, $workshop->submissionend);
+    $phaseassessmentstart = min($workshop->assessmentstart, $workshop->assessmentend);
+    if ($phaseassessmentstart == 0) {
+        $phaseassessmentstart = max($workshop->assessmentstart, $workshop->assessmentend);
+    }
+
+    switch ($event->eventtype) {
+        case WORKSHOP_EVENT_TYPE_SUBMISSION_OPEN:
+            if (!empty($workshop->submissionend)) {
+                $maxdate = [
+                    $workshop->submissionend - 1,   // The submissionstart and submissionend cannot be exactly the same.
+                    get_string('submissionendbeforestart', 'mod_workshop')
+                ];
+            } else if ($phaseassessmentstart) {
+                $maxdate = [
+                    $phaseassessmentstart,
+                    get_string('phasesoverlap', 'mod_workshop')
+                ];
+            }
+            break;
+        case WORKSHOP_EVENT_TYPE_SUBMISSION_CLOSE:
+            if (!empty($workshop->submissionstart)) {
+                $mindate = [
+                    $workshop->submissionstart + 1, // The submissionstart and submissionend cannot be exactly the same.
+                    get_string('submissionendbeforestart', 'mod_workshop')
+                ];
+            }
+            if ($phaseassessmentstart) {
+                $maxdate = [
+                    $phaseassessmentstart,
+                    get_string('phasesoverlap', 'mod_workshop')
+                ];
+            }
+            break;
+        case WORKSHOP_EVENT_TYPE_ASSESSMENT_OPEN:
+            if ($phasesubmissionend) {
+                $mindate = [
+                    $phasesubmissionend,
+                    get_string('phasesoverlap', 'mod_workshop')
+                ];
+            }
+            if (!empty($workshop->assessmentend)) {
+                $maxdate = [
+                    $workshop->assessmentend - 1,   // The assessmentstart and assessmentend cannot be exactly the same.
+                    get_string('assessmentendbeforestart', 'mod_workshop')
+                ];
+            }
+            break;
+        case WORKSHOP_EVENT_TYPE_ASSESSMENT_CLOSE:
+            if (!empty($workshop->assessmentstart)) {
+                $mindate = [
+                    $workshop->assessmentstart + 1, // The assessmentstart and assessmentend cannot be exactly the same.
+                    get_string('assessmentendbeforestart', 'mod_workshop')
+                ];
+            } else if ($phasesubmissionend) {
+                $mindate = [
+                    $phasesubmissionend,
+                    get_string('phasesoverlap', 'mod_workshop')
+                ];
+            }
+            break;
+    }
+
+    return [$mindate, $maxdate];
+}
+
+/**
+ * This function will update the workshop module according to the
+ * event that has been modified.
+ *
+ * @param \calendar_event $event
+ * @param stdClass $workshop The module instance to get the range from
+ */
+function mod_workshop_core_calendar_event_timestart_updated(\calendar_event $event, \stdClass $workshop): void {
+    global $DB;
+
+    $courseid = $event->courseid;
+    $modulename = $event->modulename;
+    $instanceid = $event->instance;
+
+    // Something weird going on. The event is for a different module so
+    // we should ignore it.
+    if ($modulename != 'workshop') {
+        return;
+    }
+
+    if ($workshop->id != $instanceid) {
+        return;
+    }
+
+    if (!in_array(
+            $event->eventtype,
+            [
+                WORKSHOP_EVENT_TYPE_SUBMISSION_OPEN,
+                WORKSHOP_EVENT_TYPE_SUBMISSION_CLOSE,
+                WORKSHOP_EVENT_TYPE_ASSESSMENT_OPEN,
+                WORKSHOP_EVENT_TYPE_ASSESSMENT_CLOSE
+            ]
+    )) {
+        return;
+    }
+
+    $coursemodule = get_fast_modinfo($courseid)->instances[$modulename][$instanceid];
+    $context = context_module::instance($coursemodule->id);
+
+    // The user does not have the capability to modify this activity.
+    if (!has_capability('moodle/course:manageactivities', $context)) {
+        return;
+    }
+
+    $modified = false;
+
+    switch ($event->eventtype) {
+        case WORKSHOP_EVENT_TYPE_SUBMISSION_OPEN:
+            if ($event->timestart != $workshop->submissionstart) {
+                $workshop->submissionstart = $event->timestart;
+                $modified = true;
+            }
+            break;
+        case WORKSHOP_EVENT_TYPE_SUBMISSION_CLOSE:
+            if ($event->timestart != $workshop->submissionend) {
+                $workshop->submissionend = $event->timestart;
+                $modified = true;
+            }
+            break;
+        case WORKSHOP_EVENT_TYPE_ASSESSMENT_OPEN:
+            if ($event->timestart != $workshop->assessmentstart) {
+                $workshop->assessmentstart = $event->timestart;
+                $modified = true;
+            }
+            break;
+        case WORKSHOP_EVENT_TYPE_ASSESSMENT_CLOSE:
+            if ($event->timestart != $workshop->assessmentend) {
+                $workshop->assessmentend = $event->timestart;
+                $modified = true;
+            }
+            break;
+    }
+
+    if ($modified) {
+        $workshop->timemodified = time();
+        // Persist the assign instance changes.
+        $DB->update_record('workshop', $workshop);
+        $event = \core\event\course_module_updated::create_from_cm($coursemodule, $context);
+        $event->trigger();
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Course reset API                                                           //
 ////////////////////////////////////////////////////////////////////////////////
@@ -1783,15 +1985,17 @@ function workshop_reset_course_form_definition($mform) {
 
     $mform->addElement('header', 'workshopheader', get_string('modulenameplural', 'mod_workshop'));
 
+    $mform->addElement('advcheckbox', 'reset_workshop_phase', get_string('resetphase', 'mod_workshop'));
+    $mform->addHelpButton('reset_workshop_phase', 'resetphase', 'mod_workshop');
+
+    $mform->addElement('static', 'workshopdelete', get_string('delete'));
+
     $mform->addElement('advcheckbox', 'reset_workshop_submissions', get_string('resetsubmissions', 'mod_workshop'));
     $mform->addHelpButton('reset_workshop_submissions', 'resetsubmissions', 'mod_workshop');
 
     $mform->addElement('advcheckbox', 'reset_workshop_assessments', get_string('resetassessments', 'mod_workshop'));
     $mform->addHelpButton('reset_workshop_assessments', 'resetassessments', 'mod_workshop');
-    $mform->disabledIf('reset_workshop_assessments', 'reset_workshop_submissions', 'checked');
-
-    $mform->addElement('advcheckbox', 'reset_workshop_phase', get_string('resetphase', 'mod_workshop'));
-    $mform->addHelpButton('reset_workshop_phase', 'resetphase', 'mod_workshop');
+    $mform->hideIf('reset_workshop_assessments', 'reset_workshop_submissions', 'checked');
 }
 
 /**
@@ -1819,24 +2023,36 @@ function workshop_reset_course_form_defaults(stdClass $course) {
 function workshop_reset_userdata(stdClass $data) {
     global $CFG, $DB;
 
+    // Any changes to the list of dates that needs to be rolled should be same during course restore and course reset.
+    // See MDL-9367.
+    shift_course_mod_dates(
+        'workshop',
+        ['submissionstart', 'submissionend', 'assessmentstart', 'assessmentend'],
+        $data->timeshift, $data->courseid,
+    );
+    $status[] = [
+        'component' => get_string('modulenameplural', 'workshop'),
+        'item' => get_string('date'),
+        'error' => false,
+    ];
+
     if (empty($data->reset_workshop_submissions)
             and empty($data->reset_workshop_assessments)
             and empty($data->reset_workshop_phase) ) {
         // Nothing to do here.
-        return array();
+        return $status;
     }
 
-    $workshoprecords = $DB->get_records('workshop', array('course' => $data->courseid));
+    $workshoprecords = $DB->get_records('workshop', ['course' => $data->courseid]);
 
     if (empty($workshoprecords)) {
-        // What a boring course - no workshops here!
-        return array();
+        // What a boring course - no workshops here.
+        return $status;
     }
 
     require_once($CFG->dirroot . '/mod/workshop/locallib.php');
 
-    $course = $DB->get_record('course', array('id' => $data->courseid), '*', MUST_EXIST);
-    $status = array();
+    $course = $DB->get_record('course', ['id' => $data->courseid], '*', MUST_EXIST);
 
     foreach ($workshoprecords as $workshoprecord) {
         $cm = get_coursemodule_from_instance('workshop', $workshoprecord->id, $course->id, false, MUST_EXIST);
@@ -1845,4 +2061,261 @@ function workshop_reset_userdata(stdClass $data) {
     }
 
     return $status;
+}
+
+/**
+ * Get icon mapping for font-awesome.
+ */
+function mod_workshop_get_fontawesome_icon_map() {
+    return [
+        'mod_workshop:userplan/task-done' => 'fa-clipboard-check text-success',
+        'mod_workshop:userplan/task-fail' => 'fa-xmark text-danger',
+        'mod_workshop:userplan/task-info' => 'fa-circle-info text-info',
+        'mod_workshop:userplan/task-todo' => 'fa-regular fa-clipboard',
+    ];
+}
+
+/**
+ * Check if the module has any update that affects the current user since a given time.
+ *
+ * @param  cm_info $cm course module data
+ * @param  int $from the time to check updates from
+ * @param  array $filter  if we need to check only specific updates
+ * @return stdClass an object with the different type of areas indicating if they were updated or not
+ * @since Moodle 3.4
+ */
+function workshop_check_updates_since(cm_info $cm, $from, $filter = array()) {
+    global $DB, $USER;
+
+    $updates = course_check_module_updates_since($cm, $from, array('instructauthors', 'instructreviewers', 'conclusion'), $filter);
+
+    // Check if there are new submissions, assessments or assessments grades in the workshop.
+    $updates->submissions = (object) array('updated' => false);
+    $updates->assessments = (object) array('updated' => false);
+    $updates->assessmentgrades = (object) array('updated' => false);
+
+    $select = 'workshopid = ? AND authorid = ? AND (timecreated > ? OR timegraded > ? OR timemodified > ?)';
+    $params = array($cm->instance, $USER->id, $from, $from, $from);
+    $submissions = $DB->get_records_select('workshop_submissions', $select, $params, '', 'id');
+    if (!empty($submissions)) {
+        $updates->submissions->updated = true;
+        $updates->submissions->itemids = array_keys($submissions);
+    }
+
+    // Get assessments updates (both submissions reviewed by me or reviews by others).
+    $select = "SELECT a.id
+                 FROM {workshop_assessments} a
+                 JOIN {workshop_submissions} s ON a.submissionid = s.id
+                 WHERE s.workshopid = ? AND (a.timecreated > ? OR a.timemodified > ?) AND (s.authorid = ? OR a.reviewerid = ?)";
+    $params = array($cm->instance, $from, $from, $USER->id, $USER->id);
+    $assessments = $DB->get_records_sql($select, $params);
+    if (!empty($assessments)) {
+        $updates->assessments->updated = true;
+        $updates->assessments->itemids = array_keys($assessments);
+    }
+    // Finally assessment aggregated grades.
+    $select = 'workshopid = ? AND userid = ? AND timegraded > ?';
+    $params = array($cm->instance, $USER->id, $from);
+    $assessmentgrades = $DB->get_records_select('workshop_aggregations', $select, $params, '', 'id');
+    if (!empty($assessmentgrades)) {
+        $updates->assessmentgrades->updated = true;
+        $updates->assessmentgrades->itemids = array_keys($assessmentgrades);
+    }
+
+    // Now, teachers should see other students updates.
+    $canviewallsubmissions = has_capability('mod/workshop:viewallsubmissions', $cm->context);
+    $canviewallassessments = has_capability('mod/workshop:viewallassessments', $cm->context);
+    if ($canviewallsubmissions || $canviewallassessments) {
+
+        $insql = '';
+        $inparams = array();
+        // To filter by users in my groups when separated groups are forced.
+        if (groups_get_activity_groupmode($cm) == SEPARATEGROUPS) {
+            $groupusers = array_keys(groups_get_activity_shared_group_members($cm));
+            if (empty($groupusers)) {
+                return $updates;
+            }
+            list($insql, $inparams) = $DB->get_in_or_equal($groupusers);
+        }
+
+        if ($canviewallsubmissions) {
+            $updates->usersubmissions = (object) array('updated' => false);
+            $select = 'workshopid = ? AND (timecreated > ? OR timegraded > ? OR timemodified > ?)';
+            $params = array($cm->instance, $from, $from, $from);
+            if (!empty($insql)) {
+                $select .= " AND authorid $insql";
+                $params = array_merge($params, $inparams);
+            }
+            $usersubmissions = $DB->get_records_select('workshop_submissions', $select, $params, '', 'id');
+            if (!empty($usersubmissions)) {
+                $updates->usersubmissions->updated = true;
+                $updates->usersubmissions->itemids = array_keys($usersubmissions);
+            }
+        }
+
+        if ($canviewallassessments) {
+            $updates->userassessments = (object) array('updated' => false);
+            $select = "SELECT a.id
+                         FROM {workshop_assessments} a
+                         JOIN {workshop_submissions} s ON a.submissionid = s.id
+                        WHERE s.workshopid = ? AND (a.timecreated > ? OR a.timemodified > ?)";
+            $params = array($cm->instance, $from, $from);
+            if (!empty($insql)) {
+                $select .= " AND s.reviewerid $insql";
+                $params = array_merge($params, $inparams);
+            }
+            $userassessments = $DB->get_records_sql($select, $params);
+            if (!empty($userassessments)) {
+                $updates->userassessments->updated = true;
+                $updates->userassessments->itemids = array_keys($userassessments);
+            }
+
+            $updates->userassessmentgrades = (object) array('updated' => false);
+            $select = 'workshopid = ? AND timegraded > ?';
+            $params = array($cm->instance, $USER->id);
+            if (!empty($insql)) {
+                $select .= " AND userid $insql";
+                $params = array_merge($params, $inparams);
+            }
+            $userassessmentgrades = $DB->get_records_select('workshop_aggregations', $select, $params, '', 'id');
+            if (!empty($userassessmentgrades)) {
+                $updates->userassessmentgrades->updated = true;
+                $updates->userassessmentgrades->itemids = array_keys($userassessmentgrades);
+            }
+        }
+    }
+    return $updates;
+}
+
+/**
+ * Given an array with a file path, it returns the itemid and the filepath for the defined filearea.
+ *
+ * @param  string $filearea The filearea.
+ * @param  array  $args The path (the part after the filearea and before the filename).
+ * @return array|null The itemid and the filepath inside the $args path, for the defined filearea.
+ */
+function mod_workshop_get_path_from_pluginfile(string $filearea, array $args): ?array {
+    if ($filearea !== 'instructauthors' && $filearea !== 'instructreviewers' && $filearea !== 'conclusion') {
+        return null;
+    }
+
+    // Workshop only has empty itemid for some of the fileareas.
+    array_shift($args);
+
+    // Get the filepath.
+    if (empty($args)) {
+        $filepath = '/';
+    } else {
+        $filepath = '/' . implode('/', $args) . '/';
+    }
+
+    return [
+        'itemid' => 0,
+        'filepath' => $filepath,
+    ];
+}
+
+/**
+ * Add a get_coursemodule_info function in case any feedback type wants to add 'extra' information
+ * for the course (see resource).
+ *
+ * Given a course_module object, this function returns any "extra" information that may be needed
+ * when printing this activity in a course listing.  See get_array_of_activities() in course/lib.php.
+ *
+ * @param stdClass $coursemodule The coursemodule object (record).
+ * @return cached_cm_info|false An object on information that the courses will know about (most noticeably, an icon).
+ */
+function workshop_get_coursemodule_info($coursemodule) {
+    global $DB;
+
+    $dbparams = ['id' => $coursemodule->instance];
+    $fields = 'id, name, intro, introformat, submissionstart, submissionend, assessmentstart, assessmentend';
+    if (!$workshop = $DB->get_record('workshop', $dbparams, $fields)) {
+        return false;
+    }
+
+    $result = new cached_cm_info();
+    $result->name = $workshop->name;
+
+    if ($coursemodule->showdescription) {
+        // Convert intro to html. Do not filter cached version, filters run at display time.
+        $result->content = format_module_intro('workshop', $workshop, $coursemodule->id, false);
+    }
+
+    // Populate some other values that can be used in calendar or on dashboard.
+    if ($workshop->submissionstart) {
+        $result->customdata['submissionstart'] = $workshop->submissionstart;
+    }
+    if ($workshop->submissionend) {
+        $result->customdata['submissionend'] = $workshop->submissionend;
+    }
+    if ($workshop->assessmentstart) {
+        $result->customdata['assessmentstart'] = $workshop->assessmentstart;
+    }
+    if ($workshop->assessmentend) {
+        $result->customdata['assessmentend'] = $workshop->assessmentend;
+    }
+
+    return $result;
+}
+
+/**
+ * Get the current user preferences that are available
+ *
+ * @return array[]
+ */
+function mod_workshop_user_preferences(): array {
+    $preferencedefinition = [
+        'type' => PARAM_BOOL,
+        'null' => NULL_NOT_ALLOWED,
+        'default' => false,
+        'permissioncallback' => [core_user::class, 'is_current_user'],
+    ];
+
+    return [
+        'workshop-viewlet-allexamples-collapsed' => $preferencedefinition,
+        'workshop-viewlet-allsubmissions-collapsed' => $preferencedefinition,
+        'workshop-viewlet-assessmentform-collapsed' => $preferencedefinition,
+        'workshop-viewlet-assignedassessments-collapsed' => $preferencedefinition,
+        'workshop-viewlet-cleargrades-collapsed' => $preferencedefinition,
+        'workshop-viewlet-conclusion-collapsed' => $preferencedefinition,
+        'workshop-viewlet-examples-collapsed' => $preferencedefinition,
+        'workshop-viewlet-examplesfail-collapsed' => $preferencedefinition,
+        'workshop-viewlet-gradereport-collapsed' => $preferencedefinition,
+        'workshop-viewlet-instructauthors-collapsed' => $preferencedefinition,
+        'workshop-viewlet-instructreviewers-collapsed' => $preferencedefinition,
+        'workshop-viewlet-intro-collapsed' => $preferencedefinition,
+        'workshop-viewlet-ownsubmission-collapsed' => $preferencedefinition,
+        'workshop-viewlet-publicsubmissions-collapsed' => $preferencedefinition,
+        'workshop-viewlet-yourgrades-collapsed' => $preferencedefinition,
+    ];
+}
+
+/**
+ * Callback to fetch the activity event type lang string.
+ *
+ * @param string $eventtype The event type.
+ * @return lang_string The event type lang string.
+ */
+function mod_workshop_core_calendar_get_event_action_string($eventtype): string {
+    $modulename = get_string('modulename', 'workshop');
+
+    switch ($eventtype) {
+        case WORKSHOP_EVENT_TYPE_SUBMISSION_OPEN:
+            $identifier = 'submissionstartevent';
+            break;
+        case WORKSHOP_EVENT_TYPE_SUBMISSION_CLOSE:
+            $identifier = 'submissionendevent';
+            break;
+        case WORKSHOP_EVENT_TYPE_ASSESSMENT_OPEN:
+            $identifier = 'assessmentstartevent';
+            break;
+        case WORKSHOP_EVENT_TYPE_ASSESSMENT_CLOSE;
+            $identifier = 'assessmentendevent';
+            break;
+        default:
+            return get_string('requiresaction', 'calendar', $modulename);
+    }
+
+    return get_string($identifier, 'workshop', $modulename);
 }

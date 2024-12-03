@@ -72,12 +72,22 @@ class mod_feedback_responses_table extends table_sql {
      * (no more than TABLEJOINLIMIT tables with values can be joined). */
     protected $hasmorecolumns = 0;
 
+    /** @var bool whether we are building this table for a external function */
+    protected $buildforexternal = false;
+
+    /** @var array the data structure containing the table data for the external function */
+    protected $dataforexternal = [];
+
+    /** @var bool true if elements per page > 0, otherwise false. */
+    protected $pageable;
+
     /**
      * Constructor
      *
      * @param mod_feedback_structure $feedbackstructure
+     * @param int $group retrieve only users from this group (optional)
      */
-    public function __construct(mod_feedback_structure $feedbackstructure) {
+    public function __construct(mod_feedback_structure $feedbackstructure, $group = 0) {
         $this->feedbackstructure = $feedbackstructure;
 
         parent::__construct('feedback-showentry-list-' . $feedbackstructure->get_cm()->instance);
@@ -97,19 +107,26 @@ class mod_feedback_responses_table extends table_sql {
         $this->is_downloading(optional_param($this->downloadparamname, 0, PARAM_ALPHA),
                 $name, get_string('responses', 'feedback'));
         $this->useridfield = 'userid';
-        $this->init();
+        $this->init($group);
     }
 
     /**
      * Initialises table
+     * @param int $group retrieve only users from this group (optional)
      */
-    protected function init() {
+    protected function init($group = 0) {
 
-        $tablecolumns = array('userpic', 'fullname');
-        $tableheaders = array(get_string('userpic'), get_string('fullnameuser'));
+        $tablecolumns = array('userpic', 'fullname', 'groups');
+        $tableheaders = array(
+            get_string('userpic'),
+            get_string('fullnameuser'),
+            get_string('groups')
+        );
 
-        $extrafields = get_extra_user_fields($this->get_context());
-        $ufields = user_picture::fields('u', $extrafields, $this->useridfield);
+        // TODO Does not support custom user profile fields (MDL-70456).
+        $userfieldsapi = \core_user\fields::for_identity($this->get_context(), false)->with_userpic();
+        $ufields = $userfieldsapi->get_sql('u', false, '', $this->useridfield, false)->selects;
+        $extrafields = $userfieldsapi->get_required_fields([\core_user\fields::PURPOSE_IDENTITY]);
         $fields = 'c.id, c.timemodified as completed_timemodified, c.courseid, '.$ufields;
         $from = '{feedback_completed} c '
                 . 'JOIN {user} u ON u.id = c.userid AND u.deleted = :notdeleted';
@@ -129,7 +146,7 @@ class mod_feedback_responses_table extends table_sql {
             foreach ($extrafields as $field) {
                 $fields .= ", u.{$field}";
                 $tablecolumns[] = $field;
-                $tableheaders[] = get_user_field_name($field);
+                $tableheaders[] = \core_user\fields::get_display_name($field);
             }
         }
 
@@ -145,6 +162,7 @@ class mod_feedback_responses_table extends table_sql {
         $this->define_headers($tableheaders);
 
         $this->sortable(true, 'lastname', SORT_ASC);
+        $this->no_sorting('groups');
         $this->collapsible(true);
         $this->set_attribute('id', 'showentrytable');
 
@@ -154,7 +172,7 @@ class mod_feedback_responses_table extends table_sql {
         $params['notdeleted'] = 0;
         $params['courseid'] = $this->feedbackstructure->get_courseid();
 
-        $group = groups_get_activity_group($this->feedbackstructure->get_cm(), true);
+        $group = (empty($group)) ? groups_get_activity_group($this->feedbackstructure->get_cm(), true) : $group;
         if ($group) {
             $where .= ' AND c.userid IN (SELECT g.userid FROM {groups_members} g WHERE g.groupid = :group)';
             $params['group'] = $group;
@@ -168,7 +186,7 @@ class mod_feedback_responses_table extends table_sql {
      * Current context
      * @return context_module
      */
-    protected function get_context() {
+    public function get_context(): context {
         return context_module::instance($this->feedbackstructure->get_cm()->id);
     }
 
@@ -181,9 +199,13 @@ class mod_feedback_responses_table extends table_sql {
         if (preg_match('/^val(\d+)$/', $column, $matches)) {
             $items = $this->feedbackstructure->get_items();
             $itemobj = feedback_get_item_class($items[$matches[1]]->typ);
-            return trim($itemobj->get_printval($items[$matches[1]], (object) ['value' => $row->$column] ));
+            $printval = $itemobj->get_printval($items[$matches[1]], (object) ['value' => $row->$column]);
+            if ($this->is_downloading()) {
+                $printval = s($printval);
+            }
+            return trim($printval);
         }
-        return $row->$column;
+        return parent::other_cols($column, $row);
     }
 
     /**
@@ -251,15 +273,32 @@ class mod_feedback_responses_table extends table_sql {
     }
 
     /**
+     * Prepares column groups for display
+     * @param array $row
+     * @return string
+     */
+    public function col_groups($row) {
+        $groups = '';
+        if ($usergrps = groups_get_all_groups($this->feedbackstructure->get_cm()->course, $row->userid, 0, 'name')) {
+            foreach ($usergrps as $group) {
+                $groups .= format_string($group->name). ' ';
+            }
+        }
+        return trim($groups);
+    }
+
+    /**
      * Adds common values to the table that do not change the number or order of entries and
      * are only needed when outputting or downloading data.
      */
     protected function add_all_values_to_output() {
+        global $DB;
+
         $tablecolumns = array_keys($this->columns);
         $tableheaders = $this->headers;
 
         $items = $this->feedbackstructure->get_items(true);
-        if (!$this->is_downloading()) {
+        if (!$this->is_downloading() && !$this->buildforexternal) {
             // In preview mode do not show all columns or the page becomes unreadable.
             // The information message will be displayed to the teacher that the rest of the data can be viewed when downloading.
             $items = array_slice($items, 0, self::PREVIEWCOLUMNSLIMIT, true);
@@ -268,12 +307,13 @@ class mod_feedback_responses_table extends table_sql {
         $columnscount = 0;
         $this->hasmorecolumns = max(0, count($items) - self::TABLEJOINLIMIT);
 
+        $headernamepostfix = !$this->is_downloading();
         // Add feedback response values.
         foreach ($items as $nr => $item) {
             if ($columnscount++ < self::TABLEJOINLIMIT) {
                 // Mysql has a limit on the number of tables in the join, so we only add limited number of columns here,
                 // the rest will be added in {@link self::build_table()} and {@link self::build_table_chunk()} functions.
-                $this->sql->fields .= ", v{$nr}.value AS val{$nr}";
+                $this->sql->fields .= ", " . $DB->sql_cast_to_char("v{$nr}.value") . " AS val{$nr}";
                 $this->sql->from .= " LEFT OUTER JOIN {feedback_value} v{$nr} " .
                     "ON v{$nr}.completed = c.id AND v{$nr}.item = :itemid{$nr}";
                 $this->sql->params["itemid{$nr}"] = $item->id;
@@ -281,7 +321,15 @@ class mod_feedback_responses_table extends table_sql {
 
             $tablecolumns[] = "val{$nr}";
             $itemobj = feedback_get_item_class($item->typ);
-            $tableheaders[] = $itemobj->get_display_name($item);
+            $columnheader = $itemobj->get_display_name($item, $headernamepostfix);
+            if (!$this->is_downloading()) {
+                $columnheader = shorten_text($columnheader);
+            }
+            if (strval($item->label) !== '') {
+                $columnheader = get_string('nameandlabelformat', 'mod_feedback',
+                    (object)['label' => format_string($item->label), 'name' => $columnheader]);
+            }
+            $tableheaders[] = $columnheader;
         }
 
         // Add 'Delete entry' column.
@@ -384,7 +432,7 @@ class mod_feedback_responses_table extends table_sql {
         groups_print_activity_menu($this->feedbackstructure->get_cm(), $this->baseurl->out());
         $grandtotal = $this->get_total_responses_count();
         if (!$grandtotal) {
-            echo $OUTPUT->box(get_string('nothingtodisplay'), 'generalbox nothingtodisplay');
+            echo $OUTPUT->notification(get_string('nothingtodisplay'), 'info', false);
             return;
         }
 
@@ -488,12 +536,14 @@ class mod_feedback_responses_table extends table_sql {
                     $chunk = [];
                 }
             } else {
-                $this->add_data_keyed($this->format_row($row), $this->get_row_class($row));
+                if ($this->buildforexternal) {
+                    $this->add_data_for_external($row);
+                } else {
+                    $this->add_data_keyed($this->format_row($row), $this->get_row_class($row));
+                }
             }
         }
         $this->build_table_chunk($chunk, $columnsgroups);
-
-        $this->rawdata->close();
     }
 
     /**
@@ -515,7 +565,7 @@ class mod_feedback_responses_table extends table_sql {
             $from = '{feedback_completed} c';
             $params = [];
             foreach ($columnsgroup as $nr => $item) {
-                $fields .= ", v{$nr}.value AS val{$nr}";
+                $fields .= ", " . $DB->sql_cast_to_char("v{$nr}.value") . " AS val{$nr}";
                 $from .= " LEFT OUTER JOIN {feedback_value} v{$nr} " .
                     "ON v{$nr}.completed = c.id AND v{$nr}.item = :itemid{$nr}";
                 $params["itemid{$nr}"] = $item->id;
@@ -531,7 +581,11 @@ class mod_feedback_responses_table extends table_sql {
         }
 
         foreach ($rows as $row) {
-            $this->add_data_keyed($this->format_row($row), $this->get_row_class($row));
+            if ($this->buildforexternal) {
+                $this->add_data_for_external($row);
+            } else {
+                $this->add_data_keyed($this->format_row($row), $this->get_row_class($row));
+            }
         }
     }
 
@@ -547,5 +601,75 @@ class mod_feedback_responses_table extends table_sql {
         } else {
             return '';
         }
+    }
+
+    /**
+     * Return user responses data ready for the external function.
+     *
+     * @param stdClass $row the table row containing the responses
+     * @return array returns the responses ready to be used by an external function
+     * @since Moodle 3.3
+     */
+    protected function get_responses_for_external($row) {
+        $responses = [];
+        foreach ($row as $el => $val) {
+            // Get id from column name.
+            if (preg_match('/^val(\d+)$/', $el, $matches)) {
+                $id = $matches[1];
+
+                $responses[] = [
+                    'id' => $id,
+                    'name' => $this->headers[$this->columns[$el]],
+                    'printval' => $this->other_cols($el, $row),
+                    'rawval' => $val,
+                ];
+            }
+        }
+        return $responses;
+    }
+
+    /**
+     * Add data for the external structure that will be returned.
+     *
+     * @param stdClass $row a database query record row
+     * @since Moodle 3.3
+     */
+    protected function add_data_for_external($row) {
+        $this->dataforexternal[] = [
+            'id' => $row->id,
+            'courseid' => $row->courseid,
+            'userid' => $row->userid,
+            'fullname' => fullname($row),
+            'timemodified' => $row->completed_timemodified,
+            'responses' => $this->get_responses_for_external($row),
+        ];
+    }
+
+    /**
+     * Exports the table as an external structure handling pagination.
+     *
+     * @param int $page page number (for pagination)
+     * @param int $perpage elements per page
+     * @since Moodle 3.3
+     * @return array returns the table ready to be used by an external function
+     */
+    public function export_external_structure($page = 0, $perpage = 0) {
+
+        $this->buildforexternal = true;
+        $this->add_all_values_to_output();
+        // Set-up.
+        $this->setup();
+        // Override values, if needed.
+        if ($perpage > 0) {
+            $this->pageable = true;
+            $this->currpage = $page;
+            $this->pagesize = $perpage;
+        } else {
+            $this->pagesize = $this->get_total_responses_count();
+        }
+        $this->query_db($this->pagesize, false);
+        $this->build_table();
+        $this->close_recordset();
+        return $this->dataforexternal;
     }
 }

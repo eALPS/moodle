@@ -84,7 +84,7 @@ class lesson_page_type_branchtable extends lesson_page {
 
         if (!$firstpage) {
             if (!$apageid = $DB->get_field("lesson_pages", "id", array("lessonid" => $lesson->id, "prevpageid" => 0))) {
-                print_error('cannotfindfirstpage', 'lesson');
+                throw new \moodle_exception('cannotfindfirstpage', 'lesson');
             }
             while (true) {
                 if ($apageid) {
@@ -113,8 +113,10 @@ class lesson_page_type_branchtable extends lesson_page {
         if ($this->lesson->slideshow) {
             $output .= $renderer->slideshow_start($this->lesson);
         }
-        // We are using level 3 header because the page title is a sub-heading of lesson title (MDL-30911).
-        $output .= $renderer->heading(format_string($this->properties->title), 3);
+
+        // The heading level depends on whether the theme's activity header displays a heading (usually the activity name).
+        $headinglevel = $PAGE->activityheader->get_heading_level();
+        $output .= $renderer->heading(format_string($this->properties->title), $headinglevel);
         $output .= $renderer->box($this->get_contents(), 'contents');
 
         $buttons = array();
@@ -160,6 +162,8 @@ class lesson_page_type_branchtable extends lesson_page {
     public function check_answer() {
         global $USER, $DB, $PAGE, $CFG;
 
+        $result = parent::check_answer();
+
         require_sesskey();
         $newpageid = optional_param('jumpto', null, PARAM_INT);
         // going to insert into lesson_branch
@@ -173,6 +177,17 @@ class lesson_page_type_branchtable extends lesson_page {
         } else {
             $retries = 0;
         }
+
+        // First record this page in lesson_branch. This record may be needed by lesson_unseen_branch_jump.
+        $branch = new stdClass;
+        $branch->lessonid = $this->lesson->id;
+        $branch->userid = $USER->id;
+        $branch->pageid = $this->properties->id;
+        $branch->retry = $retries;
+        $branch->flag = $branchflag;
+        $branch->timeseen = time();
+        $branch->nextpageid = 0;    // Next page id will be set later.
+        $branch->id = $DB->insert_record("lesson_branch", $branch);
 
         //  this is called when jumping to random from a branch table
         $context = context_module::instance($PAGE->cm->id);
@@ -199,18 +214,14 @@ class lesson_page_type_branchtable extends lesson_page {
             $newpageid = lesson_unseen_branch_jump($this->lesson, $USER->id);
         }
 
-        // Record this page in lesson_branch.
-        $branch = new stdClass;
-        $branch->lessonid = $this->lesson->id;
-        $branch->userid = $USER->id;
-        $branch->pageid = $this->properties->id;
-        $branch->retry = $retries;
-        $branch->flag = $branchflag;
-        $branch->timeseen = time();
+        // Update record to set nextpageid.
         $branch->nextpageid = $newpageid;
-        $DB->insert_record("lesson_branch", $branch);
+        $DB->update_record("lesson_branch", $branch);
 
-        redirect(new moodle_url('/mod/lesson/view.php', array('id' => $PAGE->cm->id, 'pageid' => $newpageid)));
+        // This will force to redirect to the newpageid.
+        $result->inmediatejump = true;
+        $result->newpageid = $newpageid;
+        return $result;
     }
 
     public function display_answers(html_table $table) {
@@ -225,12 +236,12 @@ class lesson_page_type_branchtable extends lesson_page {
                 continue;
             }
             $cells = array();
-            $cells[] = "<span class=\"label\">".get_string("branch", "lesson")." $i<span>: ";
+            $cells[] = '<label>' . get_string('branch', 'lesson') . ' ' . $i . '</label>: ';
             $cells[] = format_text($answer->answer, $answer->answerformat, $options);
             $table->data[] = new html_table_row($cells);
 
             $cells = array();
-            $cells[] = "<span class=\"label\">".get_string("jump", "lesson")." $i<span>: ";
+            $cells[] = '<label>' . get_string('jump', 'lesson') . ' ' . $i . '</label>: ';
             $cells[] = $this->get_jump_name($answer->jumpto);
             $table->data[] = new html_table_row($cells);
 
@@ -306,7 +317,7 @@ class lesson_add_page_form_branchtable extends lesson_add_page_form_base {
     protected $standard = false;
 
     public function custom_definition() {
-        global $PAGE;
+        global $PAGE, $CFG;
 
         $mform = $this->_form;
         $lesson = $this->_customdata['lesson'];
@@ -315,7 +326,11 @@ class lesson_add_page_form_branchtable extends lesson_add_page_form_base {
 
         $jumptooptions = lesson_page_type_branchtable::get_jumptooptions($firstpage, $lesson);
 
-        $mform->setDefault('qtypeheading', get_string('addabranchtable', 'lesson'));
+        if ($this->_customdata['edit']) {
+            $mform->setDefault('qtypeheading', get_string('editbranchtable', 'lesson'));
+        } else {
+            $mform->setDefault('qtypeheading', get_string('addabranchtable', 'lesson'));
+        }
 
         $mform->addElement('hidden', 'firstpage');
         $mform->setType('firstpage', PARAM_BOOL);
@@ -324,9 +339,14 @@ class lesson_add_page_form_branchtable extends lesson_add_page_form_base {
         $mform->addElement('hidden', 'qtype');
         $mform->setType('qtype', PARAM_INT);
 
-        $mform->addElement('text', 'title', get_string("pagetitle", "lesson"), array('size'=>70));
-        $mform->setType('title', PARAM_TEXT);
-        $mform->addRule('title', null, 'required', null, 'server');
+        $mform->addElement('text', 'title', get_string("pagetitle", "lesson"), ['size' => 70, 'maxlength' => 255]);
+        $mform->addRule('title', null, 'required', null, 'client');
+        $mform->addRule('title', get_string('maximumchars', '', 255), 'maxlength', 255, 'client');
+        if (!empty($CFG->formatstringstriptags)) {
+            $mform->setType('title', PARAM_TEXT);
+        } else {
+            $mform->setType('title', PARAM_CLEANHTML);
+        }
 
         $this->editoroptions = array('noclean'=>true, 'maxfiles'=>EDITOR_UNLIMITED_FILES, 'maxbytes'=>$PAGE->course->maxbytes);
         $mform->addElement('editor', 'contents_editor', get_string("pagecontents", "lesson"), null, $this->editoroptions);

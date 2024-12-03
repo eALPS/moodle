@@ -55,6 +55,7 @@ if (empty($CFG->enablecalendarexport)) {
 }
 
 $courseid = optional_param('course', SITEID, PARAM_INT);
+$categoryid  = optional_param('category', null, PARAM_INT);
 $action = optional_param('action', '', PARAM_ALPHA);
 $day = optional_param('cal_d', 0, PARAM_INT);
 $mon = optional_param('cal_m', 0, PARAM_INT);
@@ -76,44 +77,61 @@ if (!empty($day) && !empty($mon) && !empty($year)) {
     $time = time();
 }
 
+$url = new moodle_url('/calendar/export.php', array('time' => $time));
+$managesubscriptionsurl = new moodle_url('/calendar/managesubscriptions.php');
+
 if ($courseid != SITEID && !empty($courseid)) {
-    $course = $DB->get_record('course', array('id' => $courseid));
+    // Course ID must be valid and existing.
+    $course = $DB->get_record('course', array('id' => $courseid), '*', MUST_EXIST);
     $courses = array($course->id => $course);
-    $issite = false;
+    $url->param('course', $course->id);
+    $managesubscriptionsurl->param('course', $course->id);
+
+    navigation_node::override_active_url(new moodle_url('/course/view.php', ['id' => $course->id]));
+    $PAGE->navbar->add(
+        get_string('calendar', 'calendar'),
+        new moodle_url('/calendar/view.php', ['view' => 'month', 'course' => $course->id])
+    );
 } else {
     $course = get_site();
     $courses = calendar_get_default_courses();
-    $issite = true;
-}
-require_course_login($course);
 
-$url = new moodle_url('/calendar/export.php', array('time' => $time));
+    if (!empty($categoryid)) {
+        $managesubscriptionsurl->param('category', $categoryid);
+
+        navigation_node::override_active_url(new moodle_url('/course/index.php', ['categoryid' => $categoryid]));
+        $PAGE->set_category_by_id($categoryid);
+        $PAGE->navbar->add(
+            get_string('calendar', 'calendar'),
+            new moodle_url('/calendar/view.php', ['view' => 'month', 'category' => $categoryid])
+        );
+    } else {
+        $PAGE->navbar->add(get_string('calendar', 'calendar'), new moodle_url('/calendar/view.php', ['view' => 'month']));
+    }
+}
+require_login($course, false);
 
 if ($action !== '') {
     $url->param('action', $action);
 }
 
-if ($course !== NULL) {
-    $url->param('course', $course->id);
-}
 $PAGE->set_url($url);
 
 $calendar = new calendar_information(0, 0, 0, $time);
-$calendar->prepare_for_view($course, $courses);
+$calendar->set_sources($course, $courses);
 
 $pagetitle = get_string('export', 'calendar');
 
-// Print title and header
-if ($issite) {
-    $PAGE->navbar->add($course->shortname, new moodle_url('/course/view.php', array('id'=>$course->id)));
-}
-$link = new moodle_url(CALENDAR_URL.'view.php', array('view'=>'upcoming', 'course'=>$calendar->courseid));
-$PAGE->navbar->add(get_string('calendar', 'calendar'), calendar_get_link_href($link, 0, 0, 0, $time));
-$PAGE->navbar->add($pagetitle);
+$PAGE->navbar->add(get_string('managesubscriptions', 'calendar'), $managesubscriptionsurl);
+$PAGE->navbar->add(get_string('exportcalendar', 'calendar'), $url);
 
+// Print title and header.
+$headingstr = get_string('calendar', 'core_calendar');
+$headingstr = ($courseid != SITEID && !empty($courseid)) ? "{$headingstr}: {$COURSE->shortname}" : $headingstr;
 $PAGE->set_title($course->shortname.': '.get_string('calendar', 'calendar').': '.$pagetitle);
-$PAGE->set_heading($course->fullname);
+$PAGE->set_heading($headingstr);
 $PAGE->set_pagelayout('standard');
+$PAGE->set_secondary_navigation(false);
 
 $renderer = $PAGE->get_renderer('core_calendar');
 $calendar->add_sidecalendar_blocks($renderer);
@@ -137,20 +155,22 @@ $formdata = array(
     // If today it's weekend but tomorrow it isn't, do NOT give the "this week" option.
     'allowthisweek' => !(($weekend & (1 << $now['wday'])) && !($weekend & (1 << (($now['wday'] + 1) % $numberofdaysinweek))))
 );
-$exportform = new core_calendar_export_form(null, $formdata);
+
+// Disable submit protection so that the submit buttons continue working after being pressed.
+$exportform = new core_calendar_export_form($FULLME, $formdata, 'POST', '', ['data-double-submit-protection' => 'off']);
 $calendarurl = '';
 if ($data = $exportform->get_data()) {
-    $password = $DB->get_record('user', array('id' => $USER->id), 'password');
     $params = array();
     $params['userid']      = $USER->id;
-    $params['authtoken']   = sha1($USER->id . (isset($password->password) ? $password->password : '') . $CFG->calendar_exportsalt);
+    $params['authtoken']   = calendar_get_export_token($USER);
     $params['preset_what'] = $data->events['exportevents'];
     $params['preset_time'] = $data->period['timeperiod'];
 
     $link = new moodle_url('/calendar/export_execute.php', $params);
     if (!empty($data->generateurl)) {
-        $urlclasses = array('class' => 'generalbox calendarurl');
-        $calendarurl = html_writer::tag( 'div', get_string('calendarurl', 'calendar', $link->out()), $urlclasses);
+        $exporturlcontext = ['calendarexporturl' => $link->out(false)];
+        $exporturl = $OUTPUT->render_from_template('core_calendar/export_calendar_url', $exporturlcontext);
+        $calendarurl = html_writer::div($exporturl, 'generalbox calendarurl mt-3');
     }
 
     if (!empty($data->export)) {
@@ -169,4 +189,5 @@ if ($action != 'advanced') {
 echo $calendarurl;
 
 echo $renderer->complete_layout();
+
 echo $OUTPUT->footer();

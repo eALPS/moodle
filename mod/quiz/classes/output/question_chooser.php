@@ -23,7 +23,6 @@
  */
 
 namespace mod_quiz\output;
-defined('MOODLE_INTERNAL') || die();
 
 /**
  * The question_chooser renderable class.
@@ -32,5 +31,5 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright  2016 Frédéric Massart - FMCorz.net
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class question_chooser extends \core_question\output\qbank_chooser {
+class question_chooser extends \qbank_editquestion\qbank_chooser {
 }

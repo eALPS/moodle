@@ -35,17 +35,7 @@ class observer {
      * @param \mod_assign\event\submission_created $event
      */
     public static function submission_created(\mod_assign\event\submission_created $event) {
-        global $DB;
-
-        $submissionid = $event->other['submissionid'];
-        $submissionattempt = $event->other['submissionattempt'];
-        $fields = array( 'submissionid' => $submissionid, 'submissionattempt' => $submissionattempt);
-        $record = (object) $fields;
-
-        $exists = $DB->get_records('assignfeedback_editpdf_queue', $fields);
-        if (!$exists) {
-            $DB->insert_record('assignfeedback_editpdf_queue', $record);
-        }
+        self::queue_conversion($event);
     }
 
     /**
@@ -53,16 +43,28 @@ class observer {
      * @param \mod_assign\event\submission_updated $event
      */
     public static function submission_updated(\mod_assign\event\submission_updated $event) {
-        global $DB;
+        self::queue_conversion($event);
+    }
 
-        $submissionid = $event->other['submissionid'];
-        $submissionattempt = $event->other['submissionattempt'];
-        $fields = array( 'submissionid' => $submissionid, 'submissionattempt' => $submissionattempt);
-        $record = (object) $fields;
+    /**
+     * Queue the submission for processing.
+     * @param \mod_assign\event\base $event The submission created/updated event.
+     */
+    protected static function queue_conversion($event) {
+        $assign = $event->get_assign();
+        $plugin = $assign->get_feedback_plugin_by_type('editpdf');
 
-        $exists = $DB->get_records('assignfeedback_editpdf_queue', $fields);
-        if (!$exists) {
-            $DB->insert_record('assignfeedback_editpdf_queue', $record);
+        if (!$plugin->is_visible() || !$plugin->is_enabled()) {
+            // The plugin is not enabled on this assignment instance, so nothing should be queued.
+            return;
         }
+
+        $data = [
+            'submissionid' => $event->other['submissionid'],
+            'submissionattempt' => $event->other['submissionattempt'],
+        ];
+        $task = new \assignfeedback_editpdf\task\convert_submission;
+        $task->set_custom_data($data);
+        \core\task\manager::queue_adhoc_task($task, true);
     }
 }

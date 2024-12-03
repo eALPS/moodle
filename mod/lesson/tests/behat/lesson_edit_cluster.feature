@@ -16,82 +16,49 @@ Feature: In a lesson activity, teacher can edit a cluster page
       | user | course | role |
       | teacher1 | C1 | editingteacher |
       | student1 | C1 | student |
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Lesson" to section "1" and I fill the form with:
-      | Name | Lesson with cluster |
-      | Description | Test lesson description |
-    And I follow "Lesson with cluster"
-    And I follow "Add a content page"
-    And I set the following fields to these values:
-      | Page title | First page name |
-      | Page contents | First page contents |
-      | id_answer_editor_0 | Next page |
-      | id_jumpto_0 | Next page |
-    And I press "Save page"
-    And I follow "Expanded"
-    And I click on "Add a cluster" "link" in the "//div[contains(concat(' ', normalize-space(@class), ' '), ' addlinks ')][2]" "xpath_element"
-    And I click on "Add a question page here" "link" in the "//div[contains(concat(' ', normalize-space(@class), ' '), ' addlinks ')][3]" "xpath_element"
-    And I set the field "Select a question type" to "Multichoice"
-    And I press "Add a question page"
-    And I set the following fields to these values:
-      | Page title | question 1 |
-      | Page contents | Question from cluster |
-      | id_answer_editor_0 | Correct answer |
-      | id_response_editor_0 | Good |
-      | id_jumpto_0 | Cluster |
-      | id_score_0 | 1 |
-      | id_answer_editor_1 | Incorrect answer |
-      | id_response_editor_1 | Bad |
-      | id_jumpto_1 | This page |
-      | id_score_1 | 0 |
-    And I press "Save page"
-    And I click on "Add a question page here" "link" in the "//div[contains(concat(' ', normalize-space(@class), ' '), ' addlinks ')][4]" "xpath_element"
-    And I set the field "Select a question type" to "Multichoice"
-    And I press "Add a question page"
-    And I set the following fields to these values:
-      | Page title | question 2 |
-      | Page contents | Question from cluster |
-      | id_answer_editor_0 | Correct answer |
-      | id_response_editor_0 | Good |
-      | id_jumpto_0 | Cluster |
-      | id_score_0 | 1 |
-      | id_answer_editor_1 | Incorrect answer |
-      | id_response_editor_1 | Bad |
-      | id_jumpto_1 | This page |
-      | id_score_1 | 0 |
-    And I press "Save page"
-    And I click on "Add an end of cluster" "link" in the "//div[contains(concat(' ', normalize-space(@class), ' '), ' addlinks ')][5]" "xpath_element"
-    And I click on "Add a content page" "link" in the "//div[contains(concat(' ', normalize-space(@class), ' '), ' addlinks ')][6]" "xpath_element"
-    And I set the following fields to these values:
-      | Page title | Second page name |
-      | Page contents | Content page after cluster |
-      | id_answer_editor_0 | Next page |
-      | id_jumpto_0 | Next page |
-    And I press "Save page"
+    And the following "activities" exist:
+      | activity | name                | course | idnumber |
+      | lesson   | Lesson with cluster | C1     | lesson1  |
+    And the following "mod_lesson > pages" exist:
+      | lesson              | qtype        | title            | content                    |
+      | Lesson with cluster | content      | First page name  | First page contents        |
+      | Lesson with cluster | cluster      | Cluster          | Cluster                    |
+      | Lesson with cluster | multichoice  | Question 1       | Question from cluster      |
+      | Lesson with cluster | multichoice  | Question 2       | Question from cluster      |
+      | Lesson with cluster | endofcluster | End of cluster   | End of cluster             |
+      | Lesson with cluster | content      | Second page name | Content page after cluster |
+    And the following "mod_lesson > answers" exist:
+      | page             | answer           | response | jumpto                           | score |
+      | First page name  | Next page        |          | Next page                        | 0     |
+      | Cluster          |                  |          | Unseen question within a cluster | 0     |
+      | Question 1       | Correct answer   | Good     | Cluster                          | 1     |
+      | Question 1       | Incorrect answer | Bad      | This page                        | 0     |
+      | Question 2       | Correct answer   | Good     | Cluster                          | 1     |
+      | Question 2       | Incorrect answer | Bad      | This page                        | 0     |
+      | End of cluster   |                  |          | Next page                        | 0     |
+      | Second page name | Next page        |          | Next page                        | 0     |
 
   Scenario: Edit lesson cluster page
-    Given I click on "//th[normalize-space(.)='Cluster']/descendant::a[2]" "xpath_element"
+    Given I am on the "Lesson with cluster" "lesson activity" page logged in as teacher1
+    And I press "Edit lesson"
+    And I select edit type "Expanded"
+    And I click on "//th[normalize-space(.)='Cluster']/descendant::a[3]" "xpath_element"
     When I set the following fields to these values:
       | Page title | Modified name |
       | Page contents | Modified contents |
     And I press "Save page"
     Then I should see "Modified name"
-    And I click on "//th[normalize-space(.)='Modified name']/descendant::a[2]" "xpath_element"
+    And I click on "//th[normalize-space(.)='Modified name']/descendant::a[3]" "xpath_element"
     And I should see "Unseen question within a cluster"
     And I press "Cancel"
-    And I click on "//th[normalize-space(.)='End of cluster']/descendant::a[2]" "xpath_element"
+    And I click on "//th[normalize-space(.)='End of cluster']/descendant::a[3]" "xpath_element"
     And I set the following fields to these values:
       | Page title | Modified end |
       | Page contents | Modified end contents |
       | id_jumpto_0 | Second page name |
     And I press "Save page"
     And I should see "Modified end"
-    And I log out
-    And I log in as "student1"
-    And I follow "Course 1"
-    And I follow "Lesson with cluster"
+    And I am on the "Lesson with cluster" "lesson activity" page logged in as student1
     And I should see "First page contents"
     And I press "Next page"
     And I should see "Question from cluster"

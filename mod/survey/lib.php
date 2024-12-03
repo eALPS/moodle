@@ -54,7 +54,10 @@ define("SURVEY_COLLES_PREFERRED",        "2");
 define("SURVEY_COLLES_PREFERRED_ACTUAL", "3");
 define("SURVEY_ATTLS",                   "4");
 define("SURVEY_CIQ",                     "5");
+// Question length to wrap.
+define("SURVEY_QLENGTH_WRAP",            "80");
 
+require_once(__DIR__ . '/deprecatedlib.php');
 
 // STANDARD FUNCTIONS ////////////////////////////////////////////////////////
 /**
@@ -78,7 +81,12 @@ function survey_add_instance($survey) {
     $survey->timecreated  = time();
     $survey->timemodified = $survey->timecreated;
 
-    return $DB->insert_record("survey", $survey);
+    $id = $DB->insert_record("survey", $survey);
+
+    $completiontimeexpected = !empty($survey->completionexpected) ? $survey->completionexpected : null;
+    \core_completion\api::update_completion_date_event($survey->coursemodule, 'survey', $id, $completiontimeexpected);
+
+    return $id;
 
 }
 
@@ -102,6 +110,9 @@ function survey_update_instance($survey) {
     $survey->questions    = $template->questions;
     $survey->timemodified = time();
 
+    $completiontimeexpected = !empty($survey->completionexpected) ? $survey->completionexpected : null;
+    \core_completion\api::update_completion_date_event($survey->coursemodule, 'survey', $survey->id, $completiontimeexpected);
+
     return $DB->update_record("survey", $survey);
 }
 
@@ -120,6 +131,9 @@ function survey_delete_instance($id) {
     if (! $survey = $DB->get_record("survey", array("id"=>$id))) {
         return false;
     }
+
+    $cm = get_coursemodule_from_instance('survey', $id);
+    \core_completion\api::update_completion_date_event($cm->id, 'survey', $id, null);
 
     $result = true;
 
@@ -232,7 +246,8 @@ function survey_print_recent_activity($course, $viewfullnames, $timestart) {
 
     $slist = implode(',', $ids); // there should not be hundreds of glossaries in one course, right?
 
-    $allusernames = user_picture::fields('u');
+    $userfieldsapi = \core_user\fields::for_userpic();
+    $allusernames = $userfieldsapi->get_sql('u', false, '', '', false)->selects;
     $rs = $DB->get_recordset_sql("SELECT sa.userid, sa.survey, MAX(sa.time) AS time,
                                          $allusernames
                                     FROM {survey_answers} sa
@@ -259,7 +274,7 @@ function survey_print_recent_activity($course, $viewfullnames, $timestart) {
         return false;
     }
 
-    echo $OUTPUT->heading(get_string('newsurveyresponses', 'survey').':', 3);
+    echo $OUTPUT->heading(get_string('newsurveyresponses', 'survey') . ':', 6);
     foreach ($surveys as $survey) {
         $url = $CFG->wwwroot.'/mod/survey/view.php?id='.$survey->cmid;
         print_recent_activity_note($survey->time, $survey, $survey->name, $url, false, $viewfullnames);
@@ -304,7 +319,8 @@ function survey_get_responses($surveyid, $groupid, $groupingid) {
         $groupsjoin = "";
     }
 
-    $userfields = user_picture::fields('u');
+    $userfieldsapi = \core_user\fields::for_userpic();
+    $userfields = $userfieldsapi->get_sql('u', false, '', '', false)->selects;
     return $DB->get_records_sql("SELECT $userfields, MAX(a.time) as time
                                    FROM {survey_answers} a
                                    JOIN {user} u ON a.userid = u.id
@@ -364,7 +380,8 @@ function survey_get_user_answers($surveyid, $questionid, $groupid, $sort="sa.ans
         $groupsql  = '';
     }
 
-    $userfields = user_picture::fields('u');
+    $userfieldsapi = \core_user\fields::for_userpic();
+    $userfields = $userfieldsapi->get_sql('u', false, '', '', false)->selects;
     return $DB->get_records_sql("SELECT sa.*, $userfields
                                    FROM {survey_answers} sa,  {user} u $groupfrom
                                   WHERE sa.survey = :surveyid
@@ -378,7 +395,7 @@ function survey_get_user_answers($surveyid, $questionid, $groupid, $sort="sa.ans
  * @param int $surveyid
  * @param int $questionid
  * @param int $userid
- * @return array
+ * @return stdClass|false
  */
 function survey_get_user_answer($surveyid, $questionid, $userid) {
     global $DB;
@@ -526,14 +543,15 @@ function survey_print_multi($question) {
         $P = "";
     }
 
+    echo "<colgroup colspan=\"7\"></colgroup>";
     echo "<tr class=\"smalltext\"><th scope=\"row\">$strresponses</th>";
     echo "<th scope=\"col\" class=\"hresponse\">". get_string('notyetanswered', 'survey'). "</th>";
-    while (list ($key, $val) = each ($options)) {
+    foreach ($options as $key => $val) {
         echo "<th scope=\"col\" class=\"hresponse\">$val</th>\n";
     }
     echo "</tr>\n";
 
-    echo "<tr><th scope=\"col\" colspan=\"7\">$question->intro</th></tr>\n";
+    echo "<tr><th scope=\"colgroup\" colspan=\"7\">$question->intro</th></tr>\n";
 
     $subquestions = survey_get_subquestions($question);
 
@@ -704,13 +722,14 @@ function survey_get_post_actions() {
  * Implementation of the function for printing the form elements that control
  * whether the course reset functionality affects the survey.
  *
- * @param object $mform form passed by reference
+ * @param MoodleQuickForm $mform form passed by reference
  */
 function survey_reset_course_form_definition(&$mform) {
     $mform->addElement('header', 'surveyheader', get_string('modulenameplural', 'survey'));
-    $mform->addElement('checkbox', 'reset_survey_answers', get_string('deleteallanswers','survey'));
-    $mform->addElement('checkbox', 'reset_survey_analysis', get_string('deleteanalysis','survey'));
-    $mform->disabledIf('reset_survey_analysis', 'reset_survey_answers', 'checked');
+    $mform->addElement('static', 'surveydelete', get_string('delete'));
+    $mform->addElement('checkbox', 'reset_survey_answers', get_string('deleteallanswers', 'survey'));
+    $mform->addElement('checkbox', 'reset_survey_analysis', get_string('deleteanalysis', 'survey'));
+    $mform->hideIf('reset_survey_analysis', 'reset_survey_answers', 'checked');
 }
 
 /**
@@ -751,17 +770,11 @@ function survey_reset_userdata($data) {
         $status[] = array('component'=>$componentstr, 'item'=>get_string('deleteallanswers', 'survey'), 'error'=>false);
     }
 
-    // no date shifting
-    return $status;
-}
+    // No date shifting.
+    // Any changes to the list of dates that needs to be rolled should be same during course restore and course reset.
+    // See MDL-9367.
 
-/**
- * Returns all other caps used in module
- *
- * @return array
- */
-function survey_get_extra_capabilities() {
-    return array('moodle/site:accessallgroups');
+    return $status;
 }
 
 /**
@@ -772,7 +785,7 @@ function survey_get_extra_capabilities() {
  * @uses FEATURE_GRADE_HAS_GRADE
  * @uses FEATURE_GRADE_OUTCOMES
  * @param string $feature FEATURE_xx constant for requested feature
- * @return mixed True if module supports feature, false if not, null if doesn't know
+ * @return mixed True if module supports feature, false if not, null if doesn't know or string for the module purpose.
  */
 function survey_supports($feature) {
     switch($feature) {
@@ -785,6 +798,7 @@ function survey_supports($feature) {
         case FEATURE_GRADE_OUTCOMES:          return false;
         case FEATURE_BACKUP_MOODLE2:          return true;
         case FEATURE_SHOW_DESCRIPTION:        return true;
+        case FEATURE_MOD_PURPOSE:             return MOD_PURPOSE_COMMUNICATION;
 
         default: return null;
     }
@@ -796,31 +810,30 @@ function survey_supports($feature) {
  * It is safe to rely on PAGE here as we will only ever be within the module
  * context when this is called
  *
- * @param navigation_node $settings
+ * @param settings_navigation $settings
  * @param navigation_node $surveynode
  */
-function survey_extend_settings_navigation($settings, $surveynode) {
-    global $PAGE;
+function survey_extend_settings_navigation(settings_navigation $settings, navigation_node $surveynode) {
+    global $DB;
 
-    if (has_capability('mod/survey:readresponses', $PAGE->cm->context)) {
-        $responsesnode = $surveynode->add(get_string("responsereports", "survey"));
+    $cm = get_coursemodule_from_id('survey', $settings->get_page()->cm->id);
+    $context = context_module::instance($cm->id);
 
-        $url = new moodle_url('/mod/survey/report.php', array('id' => $PAGE->cm->id, 'action'=>'summary'));
-        $responsesnode->add(get_string("summary", "survey"), $url);
+    // Check to see if groups are being used in this survey, confirm user can access.
+    $groupmode = groups_get_activity_groupmode($cm);
+    $currentgroup = groups_get_activity_group($cm, true);
 
-        $url = new moodle_url('/mod/survey/report.php', array('id' => $PAGE->cm->id, 'action'=>'scales'));
-        $responsesnode->add(get_string("scales", "survey"), $url);
+    if (has_capability('mod/survey:readresponses', $context) &&
+            !($currentgroup === 0 && $groupmode == SEPARATEGROUPS && !has_capability('moodle/site:accessallgroups', $context))) {
 
-        $url = new moodle_url('/mod/survey/report.php', array('id' => $PAGE->cm->id, 'action'=>'questions'));
-        $responsesnode->add(get_string("question", "survey"), $url);
-
-        $url = new moodle_url('/mod/survey/report.php', array('id' => $PAGE->cm->id, 'action'=>'students'));
-        $responsesnode->add(get_string('participants'), $url);
-
-        if (has_capability('mod/survey:download', $PAGE->cm->context)) {
-            $url = new moodle_url('/mod/survey/report.php', array('id' => $PAGE->cm->id, 'action'=>'download'));
-            $surveynode->add(get_string('downloadresults', 'survey'), $url);
+        $survey = $DB->get_record("survey", ["id" => $cm->instance]);
+        $url = new moodle_url('/mod/survey/report.php', ['id' => $cm->id]);
+        if ($survey && ($survey->template != SURVEY_CIQ)) {
+            $url->param('action', 'summary');
+        } else {
+            $url->param('action', 'questions');
         }
+        $surveynode->add(get_string("responsereports", "survey"), $url);
     }
 }
 
@@ -1021,32 +1034,6 @@ function survey_save_answers($survey, $answersrawdata, $course, $context) {
 }
 
 /**
- * Obtains the automatic completion state for this survey based on the condition
- * in feedback settings.
- *
- * @param object $course Course
- * @param object $cm Course-module
- * @param int $userid User ID
- * @param bool $type Type of comparison (or/and; can be used as return value if no conditions)
- * @return bool True if completed, false if not, $type if conditions not set.
- */
-function survey_get_completion_state($course, $cm, $userid, $type) {
-    global $DB;
-
-    // Get survey details.
-    $survey = $DB->get_record('survey', array('id' => $cm->instance), '*', MUST_EXIST);
-
-    // If completion option is enabled, evaluate it and return true/false.
-    if ($survey->completionsubmit) {
-        $params = array('userid' => $userid, 'survey' => $survey->id);
-        return $DB->record_exists('survey_answers', $params);
-    } else {
-        // Completion option is not enabled so just return $type.
-        return $type;
-    }
-}
-
-/**
  * Check if the module has any update that affects the current user since a given time.
  *
  * @param  cm_info $cm course module data
@@ -1072,5 +1059,135 @@ function survey_check_updates_since(cm_info $cm, $from, $filter = array()) {
         $updates->answers->updated = true;
         $updates->answers->itemids = array_keys($answers);
     }
+
+    // Now, teachers should see other students updates.
+    if (has_capability('mod/survey:readresponses', $cm->context)) {
+        $select = 'survey = ? AND time > ?';
+        $params = array($cm->instance, $from);
+
+        if (groups_get_activity_groupmode($cm) == SEPARATEGROUPS) {
+            $groupusers = array_keys(groups_get_activity_shared_group_members($cm));
+            if (empty($groupusers)) {
+                return $updates;
+            }
+            list($insql, $inparams) = $DB->get_in_or_equal($groupusers);
+            $select .= ' AND userid ' . $insql;
+            $params = array_merge($params, $inparams);
+        }
+
+        $updates->useranswers = (object) array('updated' => false);
+        $answers = $DB->get_records_select('survey_answers', $select, $params, '', 'id');
+        if (!empty($answers)) {
+            $updates->useranswers->updated = true;
+            $updates->useranswers->itemids = array_keys($answers);
+        }
+    }
     return $updates;
+}
+
+/**
+ * This function receives a calendar event and returns the action associated with it, or null if there is none.
+ *
+ * This is used by block_myoverview in order to display the event appropriately. If null is returned then the event
+ * is not displayed on the block.
+ *
+ * @param calendar_event $event
+ * @param \core_calendar\action_factory $factory
+ * @param int $userid User id to use for all capability checks, etc. Set to 0 for current user (default).
+ * @return \core_calendar\local\event\entities\action_interface|null
+ */
+function mod_survey_core_calendar_provide_event_action(calendar_event $event,
+                                                      \core_calendar\action_factory $factory,
+                                                      int $userid = 0) {
+    global $USER;
+
+    if (empty($userid)) {
+        $userid = $USER->id;
+    }
+
+    $cm = get_fast_modinfo($event->courseid, $userid)->instances['survey'][$event->instance];
+    $context = context_module::instance($cm->id);
+
+    if (!has_capability('mod/survey:participate', $context, $userid)) {
+        return null;
+    }
+
+    $completion = new \completion_info($cm->get_course());
+
+    $completiondata = $completion->get_data($cm, false, $userid);
+
+    if ($completiondata->completionstate != COMPLETION_INCOMPLETE) {
+        return null;
+    }
+
+    return $factory->create_instance(
+        get_string('view'),
+        new \moodle_url('/mod/survey/view.php', ['id' => $cm->id]),
+        1,
+        true
+    );
+}
+
+/**
+ * Add a get_coursemodule_info function in case any survey type wants to add 'extra' information
+ * for the course (see resource).
+ *
+ * Given a course_module object, this function returns any "extra" information that may be needed
+ * when printing this activity in a course listing.  See get_array_of_activities() in course/lib.php.
+ *
+ * @param stdClass $coursemodule The coursemodule object (record).
+ * @return cached_cm_info An object on information that the courses
+ *                        will know about (most noticeably, an icon).
+ */
+function survey_get_coursemodule_info($coursemodule) {
+    global $DB;
+
+    $dbparams = ['id' => $coursemodule->instance];
+    $fields = 'id, name, intro, introformat, completionsubmit';
+    if (!$survey = $DB->get_record('survey', $dbparams, $fields)) {
+        return false;
+    }
+
+    $result = new cached_cm_info();
+    $result->name = $survey->name;
+
+    if ($coursemodule->showdescription) {
+        // Convert intro to html. Do not filter cached version, filters run at display time.
+        $result->content = format_module_intro('survey', $survey, $coursemodule->id, false);
+    }
+
+    // Populate the custom completion rules as key => value pairs, but only if the completion mode is 'automatic'.
+    if ($coursemodule->completion == COMPLETION_TRACKING_AUTOMATIC) {
+        $result->customdata['customcompletionrules']['completionsubmit'] = $survey->completionsubmit;
+    }
+
+    return $result;
+}
+
+/**
+ * Callback which returns human-readable strings describing the active completion custom rules for the module instance.
+ *
+ * @param cm_info|stdClass $cm object with fields ->completion and ->customdata['customcompletionrules']
+ * @return array $descriptions the array of descriptions for the custom rules.
+ */
+function mod_survey_get_completion_active_rule_descriptions($cm) {
+    // Values will be present in cm_info, and we assume these are up to date.
+    if (empty($cm->customdata['customcompletionrules'])
+        || $cm->completion != COMPLETION_TRACKING_AUTOMATIC) {
+        return [];
+    }
+
+    $descriptions = [];
+    foreach ($cm->customdata['customcompletionrules'] as $key => $val) {
+        switch ($key) {
+            case 'completionsubmit':
+                if (!empty($val)) {
+                    $descriptions[] = get_string('completionsubmit', 'survey');
+                }
+                break;
+            default:
+                break;
+        }
+    }
+    return $descriptions;
 }

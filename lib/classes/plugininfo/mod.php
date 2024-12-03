@@ -23,14 +23,19 @@
  */
 namespace core\plugininfo;
 
-use moodle_url, part_of_admin_tree, admin_settingpage;
-
-defined('MOODLE_INTERNAL') || die();
+use admin_settingpage;
+use moodle_url;
+use part_of_admin_tree;
 
 /**
  * Class for activity modules
  */
 class mod extends base {
+
+    public static function plugintype_supports_disabling(): bool {
+        return true;
+    }
+
     /**
      * Finds all enabled plugins, the result may include missing plugins.
      * @return array|null of enabled plugins $pluginname=>$pluginname, null means unknown
@@ -38,6 +43,69 @@ class mod extends base {
     public static function get_enabled_plugins() {
         global $DB;
         return $DB->get_records_menu('modules', array('visible'=>1), 'name ASC', 'name, name AS val');
+    }
+
+    public static function enable_plugin(string $pluginname, int $enabled): bool {
+        global $DB;
+
+        if (!$module = $DB->get_record('modules', ['name' => $pluginname])) {
+            throw new \moodle_exception('moduledoesnotexist', 'error');
+        }
+
+        $haschanged = false;
+
+        // Only set visibility if it's different from the current value.
+        if ($module->visible != $enabled) {
+            if ($enabled && component_callback_exists("mod_{$pluginname}", 'pre_enable_plugin_actions')) {
+                // This callback may be used to perform actions that must be completed prior to enabling a plugin.
+                // Example of this may include:
+                // - making a configuration change
+                // - adding an alert
+                // - checking a pre-requisite
+                //
+                // If the return value is falsy, then the change will be prevented.
+                if (!component_callback("mod_{$pluginname}", 'pre_enable_plugin_actions')) {
+                    return false;
+                }
+            }
+            // Set module visibility.
+            $DB->set_field('modules', 'visible', $enabled, ['id' => $module->id]);
+            $haschanged = true;
+
+            if ($enabled) {
+                // Revert the previous saved visible state for the course module.
+                $DB->set_field('course_modules', 'visible', '1', ['visibleold' => 1, 'module' => $module->id]);
+
+                // Increment course.cacherev for courses where we just made something visible.
+                // This will force cache rebuilding on the next request.
+                increment_revision_number('course', 'cacherev',
+                    "id IN (SELECT DISTINCT course
+                                       FROM {course_modules}
+                                      WHERE visible = 1 AND module = ?)",
+                    [$module->id]
+                );
+            } else {
+                // Remember the visibility status in visibleold and hide.
+                $sql = "UPDATE {course_modules}
+                           SET visibleold = visible, visible = 0
+                         WHERE module = ?";
+                $DB->execute($sql, [$module->id]);
+                // Increment course.cacherev for courses where we just made something invisible.
+                // This will force cache rebuilding on the next request.
+                increment_revision_number('course', 'cacherev',
+                    'id IN (SELECT DISTINCT course
+                                       FROM {course_modules}
+                                      WHERE visibleold = 1 AND module = ?)',
+                    [$module->id]
+                );
+            }
+
+            // Include this information into config changes table.
+            add_to_config_log('mod_visibility', $module->visible, $enabled, $pluginname);
+            \core_plugin_manager::reset_caches();
+        }
+
+        return $haschanged;
     }
 
     /**
@@ -71,6 +139,7 @@ class mod extends base {
 
     public function load_settings(part_of_admin_tree $adminroot, $parentnodename, $hassiteconfig) {
         global $CFG, $USER, $DB, $OUTPUT, $PAGE; // In case settings.php wants to refer to them.
+        /** @var \admin_root $ADMIN */
         $ADMIN = $adminroot; // May be used in settings.php.
         $plugininfo = $this; // Also can be used inside settings.php.
         $module = $this;     // Also can be used inside settings.php.

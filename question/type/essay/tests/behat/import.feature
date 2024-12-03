@@ -6,20 +6,18 @@ Feature: Test importing Essay questions
 
   Background:
     Given the following "users" exist:
-      | username | firstname | lastname | email                |
-      | teacher1 | T1        | Teacher1 | teacher1@example.com |
+      | username |
+      | teacher  |
     And the following "courses" exist:
       | fullname | shortname | category |
       | Course 1 | C1        | 0        |
     And the following "course enrolments" exist:
-      | user     | course | role           |
-      | teacher1 | C1     | editingteacher |
-    And I log in as "teacher1"
-    And I follow "Course 1"
+      | user    | course | role           |
+      | teacher | C1     | editingteacher |
 
   @javascript @_file_upload
   Scenario: import Essay question.
-    When I navigate to "Import" node in "Course administration > Question bank"
+    When I am on the "Course 1" "core_question > course question import" page logged in as teacher
     And I set the field "id_format_xml" to "1"
     And I upload "question/type/essay/tests/fixtures/testquestion.moodle.xml" file to "Import" filemanager
     And I press "id_submitbutton"
@@ -28,3 +26,5 @@ Feature: Test importing Essay questions
     And I should see "Write an essay with 500 words."
     And I press "Continue"
     And I should see "essay-001"
+    And I choose "Edit question" action for "essay-001" in the question bank
+    And the field "id_maxwordlimit" matches value "20"

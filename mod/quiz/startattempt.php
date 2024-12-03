@@ -26,6 +26,9 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use mod_quiz\quiz_attempt;
+use mod_quiz\quiz_settings;
+
 require_once(__DIR__ . '/../../config.php');
 require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 
@@ -34,16 +37,12 @@ $id = required_param('cmid', PARAM_INT); // Course module id
 $forcenew = optional_param('forcenew', false, PARAM_BOOL); // Used to force a new preview
 $page = optional_param('page', -1, PARAM_INT); // Page to jump to in the attempt.
 
-if (!$cm = get_coursemodule_from_id('quiz', $id)) {
-    print_error('invalidcoursemodule');
-}
-if (!$course = $DB->get_record('course', array('id' => $cm->course))) {
-    print_error("coursemisconf");
-}
+$quizobj = quiz_settings::create_for_cmid($id, $USER->id);
 
-$quizobj = quiz::create($cm->instance, $USER->id);
 // This script should only ever be posted to, so set page URL to the view page.
 $PAGE->set_url($quizobj->view_url());
+// During quiz attempts, the browser back/forwards buttons should force a reload.
+$PAGE->set_cacheable(false);
 
 // Check login and sesskey.
 require_login($quizobj->get_course(), false, $quizobj->get_cm());
@@ -55,7 +54,7 @@ if (!$quizobj->has_questions()) {
     if ($quizobj->has_capability('mod/quiz:manage')) {
         redirect($quizobj->edit_url());
     } else {
-        print_error('cannotstartnoquestions', 'quiz', $quizobj->view_url());
+        throw new \moodle_exception('cannotstartnoquestions', 'quiz', $quizobj->view_url());
     }
 }
 
@@ -70,7 +69,7 @@ list($currentattemptid, $attemptnumber, $lastattempt, $messages, $page) =
 // Check access.
 if (!$quizobj->is_preview_user() && $messages) {
     $output = $PAGE->get_renderer('mod_quiz');
-    print_error('attempterror', 'quiz', $quizobj->view_url(),
+    throw new \moodle_exception('attempterror', 'quiz', $quizobj->view_url(),
             $output->access_messages($messages));
 }
 

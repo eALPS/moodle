@@ -108,14 +108,14 @@ if ($action === 'delete' && $eventid > 0) {
 }
 
 $calendar = new calendar_information(0, 0, 0, $time);
-$calendar->prepare_for_view($course, $courses);
+$calendar->set_sources($course, $courses);
 
 $formoptions = new stdClass;
 if ($eventid !== 0) {
     $title = get_string('editevent', 'calendar');
     $event = calendar_event::load($eventid);
-    if (!calendar_edit_event_allowed($event)) {
-        print_error('nopermissions');
+    if (!calendar_edit_event_allowed($event, true)) {
+        throw new \moodle_exception('nopermissions');
     }
     $event->action = $action;
     $event->course = $courseid;
@@ -123,8 +123,15 @@ if ($eventid !== 0) {
     $event->count_repeats();
 
     if (!calendar_add_event_allowed($event)) {
-        print_error('nopermissions');
+        throw new \moodle_exception('nopermissions');
     }
+
+    // Check to see if this event is part of a subscription or import.
+    // If so display a warning on edit.
+    if (isset($event->subscriptionid) && ($event->subscriptionid != null)) {
+        \core\notification::add(get_string('eventsubscriptioneditwarning', 'calendar'), \core\output\notification::NOTIFY_INFO);
+    }
+
 } else {
     $title = get_string('newevent', 'calendar');
     calendar_get_allowed_types($formoptions->eventtypes, $course);
@@ -144,7 +151,7 @@ if ($eventid !== 0) {
     $event->timestart = $time;
     $event = new calendar_event($event);
     if (!calendar_add_event_allowed($event)) {
-        print_error('nopermissions');
+        throw new \moodle_exception('nopermissions');
     }
 }
 
@@ -186,7 +193,7 @@ $PAGE->navbar->add($strcalendar, $viewcalendarurl);
 $PAGE->navbar->add($title);
 $PAGE->set_title($course->shortname.': '.$strcalendar.': '.$title);
 $PAGE->set_heading($course->fullname);
-
+$PAGE->set_secondary_navigation(false);
 $renderer = $PAGE->get_renderer('core_calendar');
 $calendar->add_sidecalendar_blocks($renderer);
 

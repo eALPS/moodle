@@ -149,27 +149,31 @@ class gradeimport_csv_load_data {
     /**
      * Inserts a record into the grade_import_values table. This also adds common record information.
      *
-     * @param object $record The grade record being inserted into the database.
+     * @param stdClass $record The grade record being inserted into the database.
      * @param int $studentid The student ID.
-     * @return bool|int true or insert id on success. Null if the grade value is too high.
+     * @param grade_item $gradeitem Grade item.
+     * @return mixed true or insert id on success. Null if the grade value is too high or too low or grade item not exist.
      */
-    protected function insert_grade_record($record, $studentid) {
+    protected function insert_grade_record(stdClass $record, int $studentid, grade_item $gradeitem): mixed {
         global $DB, $USER, $CFG;
         $record->importcode = $this->importcode;
         $record->userid     = $studentid;
         $record->importer   = $USER->id;
-        // By default the maximum grade is 100.
-        $gradepointmaximum = 100;
-        // If the grade limit has been increased then use the gradepointmax setting.
-        if ($CFG->unlimitedgrades) {
-            $gradepointmaximum = $CFG->gradepointmax;
-        }
         // If the record final grade is set then check that the grade value isn't too high.
         // Final grade will not be set if we are inserting feedback.
-        if (!isset($record->finalgrade) || $record->finalgrade <= $gradepointmaximum) {
+        $gradepointmaximum = $gradeitem->grademax;
+        $gradepointminimum = $gradeitem->grademin;
+
+        $finalgradeinrange =
+            isset($record->finalgrade) && $record->finalgrade <= $gradepointmaximum && $record->finalgrade >= $gradepointminimum;
+        if (!isset($record->finalgrade) || $finalgradeinrange || $CFG->unlimitedgrades) {
             return $DB->insert_record('grade_import_values', $record);
         } else {
-            $this->cleanup_import(get_string('gradevaluetoobig', 'grades', $gradepointmaximum));
+            if ($record->finalgrade > $gradepointmaximum) {
+                $this->cleanup_import(get_string('gradevaluetoobig', 'grades', format_float($gradepointmaximum)));
+            } else {
+                $this->cleanup_import(get_string('gradevaluetoosmall', 'grades', format_float($gradepointminimum)));
+            }
             return null;
         }
     }
@@ -221,20 +225,42 @@ class gradeimport_csv_load_data {
     protected function check_user_exists($value, $userfields) {
         global $DB;
 
-        $usercheckproblem = false;
         $user = null;
+        $errorkey = false;
         // The user may use the incorrect field to match the user. This could result in an exception.
         try {
-            $user = $DB->get_record('user', array($userfields['field'] => $value));
-        } catch (Exception $e) {
-            $usercheckproblem = true;
+            $field = $userfields['field'];
+            // Fields that can be queried in a case-insensitive manner.
+            $caseinsensitivefields = [
+                'email',
+                'username',
+            ];
+            // Build query predicate.
+            if (in_array($field, $caseinsensitivefields)) {
+                // Case-insensitive.
+                $select = $DB->sql_equal($field, ':' . $field, false);
+            } else {
+                // Exact-value.
+                $select = "{$field} = :{$field}";
+            }
+
+            // Validate if the user id value is numerical.
+            if ($field === 'id' && !is_numeric($value)) {
+                $errorkey = 'usermappingerror';
+            }
+            // Make sure the record exists and that there's only one matching record found.
+            $user = $DB->get_record_select('user', $select, array($userfields['field'] => $value), '*', MUST_EXIST);
+        } catch (dml_missing_record_exception $missingex) {
+            $errorkey = 'usermappingerror';
+        } catch (dml_multiple_records_exception $multiex) {
+            $errorkey = 'usermappingerrormultipleusersfound';
         }
         // Field may be fine, but no records were returned.
-        if (!$user || $usercheckproblem) {
+        if ($errorkey) {
             $usermappingerrorobj = new stdClass();
             $usermappingerrorobj->field = $userfields['label'];
             $usermappingerrorobj->value = $value;
-            $this->cleanup_import(get_string('usermappingerror', 'grades', $usermappingerrorobj));
+            $this->cleanup_import(get_string($errorkey, 'grades', $usermappingerrorobj));
             unset($usermappingerrorobj);
             return null;
         }
@@ -381,10 +407,7 @@ class gradeimport_csv_load_data {
             case 'useridnumber':
             case 'useremail':
             case 'username':
-                // Skip invalid row with blank user field.
-                if (!empty($value)) {
-                    $this->studentid = $this->check_user_exists($value, $userfields[$mappingidentifier]);
-                }
+                $this->studentid = $this->check_user_exists($value, $userfields[$mappingidentifier]);
             break;
             case 'new':
                 $this->import_new_grade_item($header, $key, $value);
@@ -453,15 +476,15 @@ class gradeimport_csv_load_data {
         // Check for mapto collisions.
         $maperrors = array();
         foreach ($map as $i => $j) {
-            if ($j == 0) {
-                // You can have multiple ignores.
+            if (($j == 0) || ($j == 'new')) {
+                // You can have multiple ignores or multiple new grade items.
                 continue;
             } else {
                 if (!isset($maperrors[$j])) {
                     $maperrors[$j] = true;
                 } else {
                     // Collision.
-                    print_error('cannotmapfield', '', '', $j);
+                    throw new \moodle_exception('cannotmapfield', '', '', $j);
                 }
             }
         }
@@ -556,7 +579,12 @@ class gradeimport_csv_load_data {
                             }
                         }
                     }
-                    $insertid = self::insert_grade_record($newgrade, $this->studentid);
+                    if (isset($newgrade->itemid)) {
+                        $gradeitem = new grade_item(['id' => $newgrade->itemid]);
+                    } else if (isset($newgrade->newgradeitem)) {
+                        $gradeitem = new grade_item(['id' => $newgrade->newgradeitem]);
+                    }
+                    $insertid = isset($gradeitem) ? self::insert_grade_record($newgrade, $this->studentid, $gradeitem) : null;
                     // Check to see if the insert was successful.
                     if (empty($insertid)) {
                         return null;
@@ -578,7 +606,7 @@ class gradeimport_csv_load_data {
                     } else {
                         // The grade item for this is not updated.
                         $newfeedback->importonlyfeedback = true;
-                        $insertid = self::insert_grade_record($newfeedback, $this->studentid);
+                        $insertid = self::insert_grade_record($newfeedback, $this->studentid, new grade_item(['id' => $newfeedback->itemid]));
                         // Check to see if the insert was successful.
                         if (empty($insertid)) {
                             return null;

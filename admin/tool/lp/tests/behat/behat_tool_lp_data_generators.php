@@ -94,7 +94,7 @@ class behat_tool_lp_data_generators extends behat_base {
     );
 
     /**
-     * Creates the specified element. More info about available elements in http://docs.moodle.org/dev/Acceptance_testing#Fixtures.
+     * Creates the specified element. More info about available elements in https://moodledev.io/general/development/tools/behat.
      *
      * @Given /^the following lp "(?P<element_string>(?:[^"]|\\")*)" exist:$/
      *
@@ -175,11 +175,11 @@ class behat_tool_lp_data_generators extends behat_base {
         if (isset($data['framework'])) {
             $framework = competency_framework::get_record(array('idnumber' => $data['framework']));
             if ($framework) {
-                $data['competencyframeworkid'] = $framework->get_id();
+                $data['competencyframeworkid'] = $framework->get('id');
             } else {
                 $framework = competency_framework::get_record(array('id' => $data['framework']));
                 if ($framework) {
-                    $data['competencyframeworkid'] = $framework->get_id();
+                    $data['competencyframeworkid'] = $framework->get('id');
                 } else {
                     throw new Exception('Could not resolve framework with idnumber or id : "' . $data['category'] . '"');
                 }

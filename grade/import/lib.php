@@ -73,7 +73,8 @@ function grade_import_commit($courseid, $importcode, $importfeedback=true, $verb
 
                 // insert each individual grade to this new grade item
                 foreach ($grades as $grade) {
-                    if (!$gradeitem->update_final_grade($grade->userid, $grade->finalgrade, 'import', $grade->feedback, FORMAT_MOODLE)) {
+                    if (!$gradeitem->update_final_grade($grade->userid, $grade->finalgrade, 'import',
+                        $grade->feedback, FORMAT_MOODLE, null, null, true)) {
                         $failed = true;
                         break 2;
                     }
@@ -112,14 +113,15 @@ function grade_import_commit($courseid, $importcode, $importfeedback=true, $verb
 
                 // make the grades array for update_grade
                 foreach ($grades as $grade) {
-                    if (!$importfeedback) {
+                    if (!$importfeedback || $grade->feedback === null) {
                         $grade->feedback = false; // ignore it
                     }
                     if ($grade->importonlyfeedback) {
                         // False means do not change. See grade_itme::update_final_grade().
                         $grade->finalgrade = false;
                     }
-                    if (!$gradeitem->update_final_grade($grade->userid, $grade->finalgrade, 'import', $grade->feedback)) {
+                    if (!$gradeitem->update_final_grade($grade->userid, $grade->finalgrade, 'import',
+                            $grade->feedback, FORMAT_MOODLE, null, null, true)) {
                         $errordata = new stdClass();
                         $errordata->itemname = $gradeitem->itemname;
                         $errordata->userid = $grade->userid;
@@ -171,7 +173,7 @@ function grade_import_commit($courseid, $importcode, $importfeedback=true, $verb
  * are still stored in the database, but will not be visible in the gradebook unless
  * this user subsequently enrols on the course in a graded roles.
  *
- * The returned objects have fields user firstname, lastname and useridnumber, and gradeidnumber.
+ * The returned objects have fields useridnumber and gradeidnumber, plus enough user name fields to pass to {@see fullname}
  *
  * @param integer $importcode import batch identifier
  * @param integer $courseid the course we are importing to.
@@ -188,12 +190,14 @@ function get_unenrolled_users_in_import($importcode, $courseid) {
     // Users with a gradeable role.
     list($gradebookrolessql, $gradebookrolesparams) = $DB->get_in_or_equal(explode(',', $CFG->gradebookroles), SQL_PARAMS_NAMED, 'grbr');
 
+    $usernamefields = core_user\fields::for_name()->get_sql('u', false, '', '', false);
+
     // Enrolled users.
     $context = context_course::instance($courseid);
     list($enrolledsql, $enrolledparams) = get_enrolled_sql($context);
     list($sort, $sortparams) = users_order_by_sql('u');
 
-    $sql = "SELECT giv.id, u.firstname, u.lastname, u.idnumber AS useridnumber,
+    $sql = "SELECT giv.id, {$usernamefields->selects}, u.idnumber AS useridnumber,
                    COALESCE(gi.idnumber, gin.itemname) AS gradeidnumber
               FROM {grade_import_values} giv
               JOIN {user} u

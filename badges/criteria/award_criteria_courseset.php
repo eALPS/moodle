@@ -78,23 +78,10 @@ class award_criteria_courseset extends award_criteria {
         require_once($CFG->dirroot . '/course/lib.php');
         $buttonarray = array();
 
-        // Get courses with enabled completion.
-        $courses = $DB->get_records('course', array('enablecompletion' => COMPLETION_ENABLED));
-        if (!empty($courses)) {
-            require_once($CFG->libdir . '/coursecatlib.php');
-            $list = coursecat::make_categories_list();
-
-            $select = array();
-            $selected = array();
-            foreach ($courses as $c) {
-                $select[$c->id] = $list[$c->category] . ' / ' . format_string($c->fullname, true, array('context' => context_course::instance($c->id)));
-            }
-
-            if ($this->id !== 0) {
-                $selected = array_keys($this->params);
-            }
-            $settings = array('multiple' => 'multiple', 'size' => 20, 'style' => 'width:300px');
-            $mform->addElement('select', 'courses', get_string('addcourse', 'badges'), $select, $settings);
+        $hasselectablecourses = core_course_category::search_courses(['onlywithcompletion' => true], ['limit' => 1]);
+        if ($hasselectablecourses) {
+            $settings = array('multiple' => 'multiple', 'onlywithcompletion' => 1);
+            $mform->addElement('course', 'courses', get_string('addcourse', 'badges'), $settings);
             $mform->addRule('courses', get_string('requiredcourse', 'badges'), 'required');
             $mform->addHelpButton('courses', 'addcourse', 'badges');
 
@@ -105,6 +92,7 @@ class award_criteria_courseset extends award_criteria {
             $mform->addElement('hidden', 'addcourse', 'addcourse');
             $mform->setType('addcourse', PARAM_TEXT);
             if ($this->id !== 0) {
+                $selected = array_keys($this->params);
                 $mform->setDefault('courses', $selected);
             }
             $mform->setType('agg', PARAM_INT);
@@ -209,6 +197,7 @@ class award_criteria_courseset extends award_criteria {
      * @return bool Whether criteria is complete
      */
     public function review($userid, $filtered = false) {
+        $overall = false;
         foreach ($this->params as $param) {
             $course =  new stdClass();
             $course->id = $param['course'];

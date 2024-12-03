@@ -15,15 +15,20 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Unit tests for datetimeselector form element
+ * Unit tests for MoodleQuickForm_date_time_selector
  *
- * This file contains unit test related to datetimeselector form element
+ * Contains test cases for testing MoodleQuickForm_date_time_selector
  *
  * @package    core_form
- * @category   phpunit
+ * @category   test
  * @copyright  2012 Rajesh Taneja
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+
+namespace core_form;
+
+use moodleform;
+use MoodleQuickForm_date_time_selector;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -37,12 +42,12 @@ require_once($CFG->libdir.'/formslib.php');
  * Contains test cases for testing MoodleQuickForm_date_time_selector
  *
  * @package    core_form
- * @category   phpunit
+ * @category   test
  * @copyright  2012 Rajesh Taneja
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_form_datetimeselector_testcase extends advanced_testcase {
-    /** @var MoodleQuickForm Keeps reference of dummy form object */
+class datetimeselector_test extends \advanced_testcase {
+    /** @var \MoodleQuickForm Keeps reference of dummy form object */
     private $mform;
     /** @var array test fixtures */
     private $testvals;
@@ -50,7 +55,7 @@ class core_form_datetimeselector_testcase extends advanced_testcase {
     /**
      * Initalize test wide variable, it is called in start of the testcase
      */
-    protected function setUp() {
+    protected function setUp(): void {
         global $CFG;
         parent::setUp();
 
@@ -131,7 +136,7 @@ class core_form_datetimeselector_testcase extends advanced_testcase {
     /**
      * Testcase to check exportvalue
      */
-    public function test_exportvalue() {
+    public function test_exportvalue(): void {
         global $USER;
         $testvals = $this->testvals;
 
@@ -153,7 +158,7 @@ class core_form_datetimeselector_testcase extends advanced_testcase {
     /**
      * Testcase to check onQuickformEvent
      */
-    public function test_onquickformevent() {
+    public function test_onquickformevent(): void {
         global $USER;
         $testvals = $this->testvals;
         // Get dummy form for data.
@@ -193,7 +198,7 @@ class temp_form_datetime extends moodleform {
     }
     /**
      * Returns form reference.
-     * @return MoodleQuickForm
+     * @return \MoodleQuickForm
      */
     public function getform() {
         $mform = $this->_form;

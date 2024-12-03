@@ -35,7 +35,9 @@ require_once($CFG->dirroot . '/backup/moodle2/restore_final_task.class.php');
 require_once($CFG->dirroot . '/backup/moodle2/restore_block_task.class.php');
 require_once($CFG->dirroot . '/backup/moodle2/restore_default_block_task.class.php');
 require_once($CFG->dirroot . '/backup/moodle2/restore_plugin.class.php');
+require_once($CFG->dirroot . '/backup/moodle2/restore_qbank_plugin.class.php');
 require_once($CFG->dirroot . '/backup/moodle2/restore_qtype_plugin.class.php');
+require_once($CFG->dirroot . '/backup/moodle2/restore_qtype_extrafields_plugin.class.php');
 require_once($CFG->dirroot . '/backup/moodle2/restore_format_plugin.class.php');
 require_once($CFG->dirroot . '/backup/moodle2/restore_local_plugin.class.php');
 require_once($CFG->dirroot . '/backup/moodle2/restore_theme_plugin.class.php');
@@ -45,7 +47,9 @@ require_once($CFG->dirroot . '/backup/moodle2/restore_plagiarism_plugin.class.ph
 require_once($CFG->dirroot . '/backup/moodle2/restore_gradingform_plugin.class.php');
 require_once($CFG->dirroot . '/backup/moodle2/restore_enrol_plugin.class.php');
 require_once($CFG->dirroot . '/backup/moodle2/backup_plugin.class.php');
+require_once($CFG->dirroot . '/backup/moodle2/backup_qbank_plugin.class.php');
 require_once($CFG->dirroot . '/backup/moodle2/backup_qtype_plugin.class.php');
+require_once($CFG->dirroot . '/backup/moodle2/backup_qtype_extrafields_plugin.class.php');
 require_once($CFG->dirroot . '/backup/moodle2/backup_format_plugin.class.php');
 require_once($CFG->dirroot . '/backup/moodle2/backup_local_plugin.class.php');
 require_once($CFG->dirroot . '/backup/moodle2/backup_theme_plugin.class.php');
@@ -89,7 +93,7 @@ abstract class restore_plan_builder {
     /**
      * Dispatches, based on type to specialised builders
      */
-    static public function build_plan($controller) {
+    public static function build_plan($controller) {
 
         $plan = $controller->get_plan();
 
@@ -127,7 +131,7 @@ abstract class restore_plan_builder {
     /**
      * Restore one 1-activity backup
      */
-    static protected function build_activity_plan($controller, $activityid) {
+    protected static function build_activity_plan($controller, $activityid) {
 
         $plan = $controller->get_plan();
         $info = $controller->get_info();
@@ -139,6 +143,9 @@ abstract class restore_plan_builder {
         if ($task = restore_factory::get_restore_activity_task($infoactivity)) { // can be missing
             $plan->add_task($task);
             $controller->get_progress()->progress();
+
+            // Some activities may have delegated section integrations.
+            self::build_delegated_section_plan($controller, $infoactivity->moduleid);
 
             // For the given activity path, add as many block tasks as necessary
             // TODO: Add blocks, we need to introspect xml here
@@ -158,9 +165,33 @@ abstract class restore_plan_builder {
     }
 
     /**
+     * Build a course module delegated section backup plan.
+     * @param restore_controller $controller
+     * @param int $cmid the parent course module id.
+     */
+    protected static function build_delegated_section_plan($controller, $cmid) {
+        $info = $controller->get_info();
+
+        // Find if some section depends on that course module.
+        $delegatedsectionid = null;
+        foreach ($info->sections as $sectionid => $section) {
+            // Delegated sections are not course responsability.
+            if (isset($section->parentcmid) && $section->parentcmid == $cmid) {
+                $delegatedsectionid = $sectionid;
+                break;
+            }
+        }
+
+        if (!$delegatedsectionid) {
+            return;
+        }
+        self::build_section_plan($controller, $delegatedsectionid);
+    }
+
+    /**
      * Restore one 1-section backup
      */
-    static protected function build_section_plan($controller, $sectionid) {
+    protected static function build_section_plan($controller, $sectionid) {
 
         $plan = $controller->get_plan();
         $info = $controller->get_info();
@@ -186,7 +217,7 @@ abstract class restore_plan_builder {
     /**
      * Restore one 1-course backup
      */
-    static protected function build_course_plan($controller, $courseid) {
+    protected static function build_course_plan($controller, $courseid) {
 
         $plan = $controller->get_plan();
         $info = $controller->get_info();
@@ -211,6 +242,10 @@ abstract class restore_plan_builder {
 
         // For the given course, add as many section tasks as necessary
         foreach ($info->sections as $sectionid => $section) {
+            // Delegated sections are not course responsability.
+            if (isset($section->parentcmid) && !empty($section->parentcmid)) {
+                continue;
+            }
             self::build_section_plan($controller, $sectionid);
         }
     }

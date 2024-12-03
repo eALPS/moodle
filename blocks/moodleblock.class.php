@@ -71,13 +71,13 @@ class block_base {
 
     /**
      * An object to contain the information to be displayed in the block.
-     * @var stdObject $content
+     * @var stdClass|null $content
      */
     var $content       = NULL;
 
     /**
      * The initialized instance of this block object.
-     * @var block $instance
+     * @var stdClass $instance
      */
     var $instance      = NULL;
 
@@ -88,14 +88,14 @@ class block_base {
     public $page       = NULL;
 
     /**
-     * This blocks's context.
-     * @var stdClass
+     * This block's context.
+     * @var context
      */
     public $context    = NULL;
 
     /**
      * An object containing the instance configuration information for the current instance of this block.
-     * @var stdObject $config
+     * @var stdClass $config
      */
     var $config        = NULL;
 
@@ -132,12 +132,8 @@ class block_base {
     function name() {
         // Returns the block name, as present in the class name,
         // the database, the block directory, etc etc.
-        static $myname;
-        if ($myname === NULL) {
-            $myname = strtolower(get_class($this));
-            $myname = substr($myname, strpos($myname, '_') + 1);
-        }
-        return $myname;
+        $myname = strtolower(get_class($this));
+        return substr($myname, strpos($myname, '_') + 1);
     }
 
     /**
@@ -145,7 +141,7 @@ class block_base {
      * This should be implemented by the derived class to return
      * the content object.
      *
-     * @return stdObject
+     * @return stdClass
      */
     function get_content() {
         // This should be implemented by the derived class.
@@ -171,7 +167,7 @@ class block_base {
      * Intentionally doesn't check if content_type is set.
      * This is already done in {@link _self_test()}
      *
-     * @return string $this->content_type
+     * @return int $this->content_type
      */
     function get_content_type() {
         // Intentionally doesn't check if a content_type is set. This is already done in _self_test()
@@ -182,7 +178,7 @@ class block_base {
      * Returns true or false, depending on whether this block has any content to display
      * and whether the user has permission to view the block
      *
-     * @return boolean
+     * @return bool
      */
     function is_empty() {
         if ( !has_capability('moodle/block:view', $this->context) ) {
@@ -198,7 +194,7 @@ class block_base {
      * then calls the block's {@link get_content()} function
      * to set its value back.
      *
-     * @return stdObject
+     * @return stdClass
      */
     function refresh_content() {
         // Nothing special here, depends on content()
@@ -215,11 +211,16 @@ class block_base {
      * {@link html_attributes()}, {@link formatted_contents()} or {@link get_content()},
      * {@link hide_header()}, {@link (get_edit_controls)}, etc.
      *
-     * @return block_contents a representation of the block, for rendering.
+     * @return block_contents|null a representation of the block, for rendering.
      * @since Moodle 2.0.
      */
     public function get_content_for_output($output) {
         global $CFG;
+
+        // We can exit early if the current user doesn't have the capability to view the block.
+        if (!has_capability('moodle/block:view', $this->context)) {
+            return null;
+        }
 
         $bc = new block_contents($this->html_attributes());
         $bc->attributes['data-block'] = $this->name();
@@ -232,7 +233,7 @@ class block_base {
                 $bc->footer = $this->content->footer;
             }
         } else {
-            $bc->add_class('invisible');
+            $bc->add_class('invisibleblock');
         }
 
         if (!$this->hide_header()) {
@@ -244,7 +245,7 @@ class block_base {
             $this->arialabel = $bc->arialabel;
         }
 
-        if ($this->page->user_is_editing()) {
+        if ($this->page->user_is_editing() && $this->instance_can_be_edited()) {
             $bc->controls = $this->page->blocks->edit_controls($this);
         } else {
             // we must not use is_empty on hidden blocks
@@ -270,6 +271,54 @@ class block_base {
         $bc->annotation = ''; // TODO MDL-19398 need to work out what to say here.
 
         return $bc;
+    }
+
+
+    /**
+     * Return an object containing all the block content to be returned by external functions.
+     *
+     * If your block is returning formatted content or provide files for download, you should override this method to use the
+     * \core_external\util::format_text, \core_external\util::format_string functions for formatting or external_util::get_area_files for files.
+     *
+     * @param  core_renderer $output the rendered used for output
+     * @return stdClass      object containing the block title, central content, footer and linked files (if any).
+     * @since  Moodle 3.6
+     */
+    public function get_content_for_external($output) {
+        $bc = new stdClass;
+        $bc->title = null;
+        $bc->content = null;
+        $bc->contentformat = FORMAT_HTML;
+        $bc->footer = null;
+        $bc->files = [];
+
+        if ($this->instance->visible) {
+            $bc->content = $this->formatted_contents($output);
+            if (!empty($this->content->footer)) {
+                $bc->footer = $this->content->footer;
+            }
+        }
+
+        if (!$this->hide_header()) {
+            $bc->title = $this->title;
+        }
+
+        return $bc;
+    }
+
+    /**
+     * Return the plugin config settings for external functions.
+     *
+     * In some cases the configs will need formatting or be returned only if the current user has some capabilities enabled.
+     *
+     * @return stdClass the configs for both the block instance and plugin (as object with name -> value)
+     * @since Moodle 3.8
+     */
+    public function get_config_for_external() {
+        return (object) [
+            'instance' => new stdClass(),
+            'plugin' => new stdClass(),
+        ];
     }
 
     /**
@@ -396,13 +445,13 @@ class block_base {
     function html_attributes() {
         $attributes = array(
             'id' => 'inst' . $this->instance->id,
-            'class' => 'block_' . $this->name(). '  block',
+            'class' => 'block_' . $this->name() . ' block',
             'role' => $this->get_aria_role()
         );
         if ($this->hide_header()) {
             $attributes['class'] .= ' no-header';
         }
-        if ($this->instance_can_be_docked() && get_user_preferences('docked_block_instance_'.$this->instance->id, 0)) {
+        if ($this->instance_can_be_docked() && get_user_preferences('docked_block_instance_' . $this->instance->id, 0)) {
             $attributes['class'] .= ' dock_on_load';
         }
         return $attributes;
@@ -413,11 +462,11 @@ class block_base {
      * table and the current page. (See {@link block_manager::load_blocks()}.)
      *
      * @param stdClass $instance data from block_insances, block_positions, etc.
-     * @param moodle_page $the page this block is on.
+     * @param moodle_page $page the page this block is on.
      */
     function _load_instance($instance, $page) {
         if (!empty($instance->configdata)) {
-            $this->config = unserialize(base64_decode($instance->configdata));
+            $this->config = unserialize_object(base64_decode($instance->configdata));
         }
         $this->instance = $instance;
         $this->context = context_block::instance($instance->id);
@@ -429,11 +478,10 @@ class block_base {
      * Allows the block to load any JS it requires into the page.
      *
      * By default this function simply permits the user to dock the block if it is dockable.
+     *
+     * Left null as of MDL-64506.
      */
     function get_required_javascript() {
-        if ($this->instance_can_be_docked() && !$this->hide_header()) {
-            user_preference_allow_ajax_update('docked_block_instance_'.$this->instance->id, PARAM_INT);
-        }
     }
 
     /**
@@ -474,8 +522,8 @@ class block_base {
      */
     function instance_config_save($data, $nolongerused = false) {
         global $DB;
-        $DB->set_field('block_instances', 'configdata', base64_encode(serialize($data)),
-                array('id' => $this->instance->id));
+        $DB->update_record('block_instances', ['id' => $this->instance->id,
+                'configdata' => base64_encode(serialize($data)), 'timemodified' => time()]);
     }
 
     /**
@@ -545,16 +593,25 @@ class block_base {
      * @return boolean
      */
     function user_can_addto($page) {
-        global $USER;
+        global $CFG;
+        require_once($CFG->dirroot . '/user/lib.php');
+
+        // List of formats this block supports.
+        $formats = $this->applicable_formats();
+
+        // Check if user is trying to add blocks to their profile page.
+        $userpagetypes = user_page_type_list($page->pagetype, null, null);
+        if (array_key_exists($page->pagetype, $userpagetypes)) {
+            $capability = 'block/' . $this->name() . ':addinstance';
+            return $this->has_add_block_capability($page, $capability)
+                && has_capability('moodle/user:manageownblocks', $page->context);
+        }
 
         // The blocks in My Moodle are a special case and use a different capability.
-        if (!empty($USER->id)
-            && $page->context->contextlevel == CONTEXT_USER // Page belongs to a user
-            && $page->context->instanceid == $USER->id // Page belongs to this user
-            && $page->pagetype == 'my-index') { // Ensure we are on the My Moodle page
+        $mypagetypes = my_page_type_list($page->pagetype); // Get list of possible my page types.
 
+        if (array_key_exists($page->pagetype, $mypagetypes)) { // Ensure we are on a page with a my page type.
             // If the block cannot be displayed on /my it is ok if the myaddinstance capability is not defined.
-            $formats = $this->applicable_formats();
             // Is 'my' explicitly forbidden?
             // If 'all' has not been allowed, has 'my' been explicitly allowed?
             if ((isset($formats['my']) && $formats['my'] == false)
@@ -567,6 +624,12 @@ class block_base {
                 return $this->has_add_block_capability($page, $capability)
                        && has_capability('moodle/my:manageblocks', $page->context);
             }
+        }
+        // Check if this is a block only used on /my.
+        unset($formats['my']);
+        if (empty($formats)) {
+            // Block can only be added to /my - return false.
+            return false;
         }
 
         $capability = 'block/' . $this->name() . ':addinstance';
@@ -610,10 +673,11 @@ class block_base {
      * Can be overridden by the block to prevent the block from being dockable.
      *
      * @return bool
+     *
+     * Return false as per MDL-64506
      */
     public function instance_can_be_docked() {
-        global $CFG;
-        return (!empty($CFG->allowblockstodock) && $this->page->theme->enable_dock);
+        return false;
     }
 
     /**
@@ -632,6 +696,15 @@ class block_base {
      * @return bool
      */
     public function instance_can_be_collapsed() {
+        return true;
+    }
+
+    /**
+     * If overridden and set to false by the block it will not be editable.
+     *
+     * @return bool
+     */
+    public function instance_can_be_edited() {
         return true;
     }
 
@@ -680,6 +753,18 @@ EOD;
      */
     public function get_aria_role() {
         return 'complementary';
+    }
+
+    /**
+     * This method can be overriden to add some extra checks to decide whether the block can be added or not to a page.
+     * It doesn't need to do the standard capability checks as they will be performed by has_add_block_capability().
+     * This method is user agnostic. If you want to check if a user can add a block or not, you should use user_can_addto().
+     *
+     * @param moodle_page $page The page where this block will be added.
+     * @return bool Whether the block can be added or not to the given page.
+     */
+    public function can_block_be_added(moodle_page $page): bool {
+        return true;
     }
 }
 
@@ -770,9 +855,6 @@ class block_tree extends block_list {
         $this->get_required_javascript();
         $this->get_content();
         $content = $output->tree_block_contents($this->content->items,array('class'=>'block_tree list'));
-        if (isset($this->id) && !is_numeric($this->id)) {
-            $content = $output->box($content, 'block_tree_box', $this->id);
-        }
         return $content;
     }
 }

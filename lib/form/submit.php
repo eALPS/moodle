@@ -44,14 +44,43 @@ class MoodleQuickForm_submit extends HTML_QuickForm_submit implements templatabl
     }
 
     /**
+     * @var bool $primary Is this button a primary button?
+     */
+    protected $primary;
+
+    /**
+     * Any class apart from 'btn' would be overridden with this content.
+     *
+     * By default, submit buttons will utilize the btn-primary OR btn-secondary classes. However there are cases where we
+     * require a submit button with different stylings (e.g. btn-link). In these cases, $customclassoverride will override
+     * the defaults mentioned previously and utilize the provided class(es).
+     *
+     * @var string $customclassoverride Custom class override for the input element
+     */
+    protected $customclassoverride;
+
+    /**
      * constructor
      *
      * @param string $elementName (optional) name of the field
      * @param string $value (optional) field label
      * @param string $attributes (optional) Either a typical HTML attribute string or an associative array
+     * @param bool|null $primary Is this button a primary button?
+     * @param array $options Options to further customise the submit button. Currently accepted options are:
+     *                  customclassoverride String The CSS class to use for the button instead of the standard
+     *                                             btn-primary and btn-secondary classes.
      */
-    public function __construct($elementName=null, $value=null, $attributes=null) {
+    public function __construct($elementName=null, $value=null, $attributes=null, $primary = null, $options = []) {
         parent::__construct($elementName, $value, $attributes);
+
+        // Fallback to legacy behaviour if no value specified.
+        if (is_null($primary)) {
+            $this->primary = $this->getName() != 'cancel';
+        } else {
+            $this->primary = $primary;
+        }
+
+        $this->customclassoverride = $options['customclassoverride'] ?? false;
     }
 
     /**
@@ -59,9 +88,9 @@ class MoodleQuickForm_submit extends HTML_QuickForm_submit implements templatabl
      *
      * @deprecated since Moodle 3.1
      */
-    public function MoodleQuickForm_submit($elementName=null, $value=null, $attributes=null) {
+    public function MoodleQuickForm_submit($elementName=null, $value=null, $attributes=null, $primary = null) {
         debugging('Use of class name as constructor is deprecated', DEBUG_DEVELOPER);
-        self::__construct($elementName, $value, $attributes);
+        self::__construct($elementName, $value, $attributes, $primary);
     }
 
     /**
@@ -83,7 +112,7 @@ class MoodleQuickForm_submit extends HTML_QuickForm_submit implements templatabl
                     $onClick = $this->getAttribute('onclick');
                     $skip = 'skipClientValidation = true;';
                     $onClick = ($onClick !== null)?$skip.' '.$onClick:$skip;
-                    $this->updateAttributes(array('onclick'=>$onClick));
+                    $this->updateAttributes(array('data-skip-validation' => 1, 'data-no-submit' => 1, 'onclick' => $onClick));
                 }
                 return true;
                 break;
@@ -115,8 +144,12 @@ class MoodleQuickForm_submit extends HTML_QuickForm_submit implements templatabl
 
     public function export_for_template(renderer_base $output) {
         $context = $this->export_for_template_base($output);
-        if ($this->getName() == 'cancel') {
+        if (!$this->primary) {
             $context['secondary'] = true;
+        }
+
+        if ($this->customclassoverride) {
+            $context['customclassoverride'] = $this->customclassoverride;
         }
         return $context;
     }

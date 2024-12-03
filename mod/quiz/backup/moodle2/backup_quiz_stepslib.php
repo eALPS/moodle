@@ -15,19 +15,10 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Define all the backup steps that will be used by the backup_quiz_activity_task.
+ *
  * @package    mod_quiz
  * @subpackage backup-moodle2
- * @copyright  2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-
-defined('MOODLE_INTERNAL') || die();
-
-
-/**
- * Define all the backup steps that will be used by the backup_quiz_activity_task
- *
  * @copyright  2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -39,53 +30,59 @@ class backup_quiz_activity_structure_step extends backup_questions_activity_stru
         $userinfo = $this->get_setting_value('userinfo');
 
         // Define each element separated.
-        $quiz = new backup_nested_element('quiz', array('id'), array(
+        $quiz = new backup_nested_element('quiz', ['id'], [
             'name', 'intro', 'introformat', 'timeopen', 'timeclose', 'timelimit',
             'overduehandling', 'graceperiod', 'preferredbehaviour', 'canredoquestions', 'attempts_number',
             'attemptonlast', 'grademethod', 'decimalpoints', 'questiondecimalpoints',
-            'reviewattempt', 'reviewcorrectness', 'reviewmarks',
+            'reviewattempt', 'reviewcorrectness', 'reviewmaxmarks', 'reviewmarks',
             'reviewspecificfeedback', 'reviewgeneralfeedback',
             'reviewrightanswer', 'reviewoverallfeedback',
             'questionsperpage', 'navmethod', 'shuffleanswers',
             'sumgrades', 'grade', 'timecreated',
             'timemodified', 'password', 'subnet', 'browsersecurity',
-            'delay1', 'delay2', 'showuserpicture', 'showblocks', 'completionattemptsexhausted', 'completionpass',
-            'allowofflineattempts'));
+            'delay1', 'delay2', 'showuserpicture', 'showblocks', 'completionattemptsexhausted',
+            'completionminattempts', 'allowofflineattempts']);
 
         // Define elements for access rule subplugin settings.
         $this->add_subplugin_structure('quizaccess', $quiz, true);
 
+        $quizgradeitems = new backup_nested_element('quiz_grade_items');
+
+        $quizgradeitem = new backup_nested_element('quiz_grade_item', ['id'], ['sortorder', 'name']);
+
         $qinstances = new backup_nested_element('question_instances');
 
-        $qinstance = new backup_nested_element('question_instance', array('id'), array(
-            'slot', 'page', 'requireprevious', 'questionid', 'maxmark'));
+        $qinstance = new backup_nested_element('question_instance', ['id'],
+                ['quizid', 'slot', 'page', 'displaynumber', 'requireprevious', 'maxmark', 'quizgradeitemid']);
+
+        $this->add_question_references($qinstance, 'mod_quiz', 'slot');
+
+        $this->add_question_set_references($qinstance, 'mod_quiz', 'slot');
 
         $sections = new backup_nested_element('sections');
 
-        $section = new backup_nested_element('section', array('id'), array(
-            'firstslot', 'heading', 'shufflequestions'));
+        $section = new backup_nested_element('section', ['id'], ['firstslot', 'heading', 'shufflequestions']);
 
         $feedbacks = new backup_nested_element('feedbacks');
 
-        $feedback = new backup_nested_element('feedback', array('id'), array(
-            'feedbacktext', 'feedbacktextformat', 'mingrade', 'maxgrade'));
+        $feedback = new backup_nested_element('feedback', ['id'], ['feedbacktext', 'feedbacktextformat', 'mingrade', 'maxgrade']);
 
         $overrides = new backup_nested_element('overrides');
 
-        $override = new backup_nested_element('override', array('id'), array(
+        $override = new backup_nested_element('override', ['id'], [
             'userid', 'groupid', 'timeopen', 'timeclose',
-            'timelimit', 'attempts', 'password'));
+            'timelimit', 'attempts', 'password']);
 
         $grades = new backup_nested_element('grades');
 
-        $grade = new backup_nested_element('grade', array('id'), array(
-            'userid', 'gradeval', 'timemodified'));
+        $grade = new backup_nested_element('grade', ['id'], ['userid', 'gradeval', 'timemodified']);
 
         $attempts = new backup_nested_element('attempts');
 
-        $attempt = new backup_nested_element('attempt', array('id'), array(
+        $attempt = new backup_nested_element('attempt', ['id'], [
             'userid', 'attemptnum', 'uniqueid', 'layout', 'currentpage', 'preview',
-            'state', 'timestart', 'timefinish', 'timemodified', 'timemodifiedoffline', 'timecheckstate', 'sumgrades'));
+            'state', 'timestart', 'timefinish', 'timemodified', 'timemodifiedoffline',
+            'timecheckstate', 'sumgrades', 'gradednotificationsenttime']);
 
         // This module is using questions, so produce the related question states and sessions
         // attaching them to the $attempt element based in 'uniqueid' matching.
@@ -95,6 +92,9 @@ class backup_quiz_activity_structure_step extends backup_questions_activity_stru
         $this->add_subplugin_structure('quizaccess', $attempt, true);
 
         // Build the tree.
+        $quiz->add_child($quizgradeitems);
+        $quizgradeitems->add_child($quizgradeitem);
+
         $quiz->add_child($qinstances);
         $qinstances->add_child($qinstance);
 
@@ -114,33 +114,38 @@ class backup_quiz_activity_structure_step extends backup_questions_activity_stru
         $attempts->add_child($attempt);
 
         // Define sources.
-        $quiz->set_source_table('quiz', array('id' => backup::VAR_ACTIVITYID));
+        $quiz->set_source_table('quiz', ['id' => backup::VAR_ACTIVITYID]);
 
-        $qinstance->set_source_table('quiz_slots',
-                array('quizid' => backup::VAR_PARENTID));
+        $quizgradeitem->set_source_table('quiz_grade_items', ['quizid' => backup::VAR_PARENTID]);
 
-        $section->set_source_table('quiz_sections',
-                array('quizid' => backup::VAR_PARENTID));
+        $qinstance->set_source_table('quiz_slots', ['quizid' => backup::VAR_PARENTID]);
 
-        $feedback->set_source_table('quiz_feedback',
-                array('quizid' => backup::VAR_PARENTID));
+        $section->set_source_table('quiz_sections', ['quizid' => backup::VAR_PARENTID]);
+
+        $feedback->set_source_table('quiz_feedback', ['quizid' => backup::VAR_PARENTID]);
 
         // Quiz overrides to backup are different depending of user info.
-        $overrideparams = array('quiz' => backup::VAR_PARENTID);
+        $overrideparams = ['quiz' => backup::VAR_PARENTID];
         if (!$userinfo) { //  Without userinfo, skip user overrides.
             $overrideparams['userid'] = backup_helper::is_sqlparam(null);
 
         }
+
+        // Skip group overrides if not including groups.
+        $groupinfo = $this->get_setting_value('groups');
+        if (!$groupinfo) {
+            $overrideparams['groupid'] = backup_helper::is_sqlparam(null);
+        }
+
         $override->set_source_table('quiz_overrides', $overrideparams);
 
         // All the rest of elements only happen if we are including user info.
         if ($userinfo) {
-            $grade->set_source_table('quiz_grades', array('quiz' => backup::VAR_PARENTID));
+            $grade->set_source_table('quiz_grades', ['quiz' => backup::VAR_PARENTID]);
             $attempt->set_source_sql('
                     SELECT *
                     FROM {quiz_attempts}
-                    WHERE quiz = :quiz AND preview = 0',
-                    array('quiz' => backup::VAR_PARENTID));
+                    WHERE quiz = :quiz AND preview = 0', ['quiz' => backup::VAR_PARENTID]);
         }
 
         // Define source alias.
@@ -149,7 +154,6 @@ class backup_quiz_activity_structure_step extends backup_questions_activity_stru
         $attempt->set_source_alias('attempt', 'attemptnum');
 
         // Define id annotations.
-        $qinstance->annotate_ids('question', 'questionid');
         $override->annotate_ids('user', 'userid');
         $override->annotate_ids('group', 'groupid');
         $grade->annotate_ids('user', 'userid');

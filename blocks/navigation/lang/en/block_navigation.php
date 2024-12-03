@@ -27,7 +27,7 @@
 $string['everything'] = 'Everything';
 $string['courses'] = 'Categories and courses';
 $string['coursestructures'] = 'Categories, courses, and course structures';
-$string['courseactivities'] = 'Categories, courses, and course Activities';
+$string['courseactivities'] = 'Categories, courses, and course activities';
 $string['enabledockdesc'] = 'Allow the user to dock this block';
 $string['expansionlimit'] = 'Generate navigation for the following';
 $string['linkcategoriesdesc'] = 'Display categories as links';
@@ -39,3 +39,4 @@ $string['trimmoderight'] = 'Trim characters from the right';
 $string['trimmodeleft'] = 'Trim characters from the left';
 $string['trimmodecenter'] = 'Trim characters from the center';
 $string['trimlength'] = 'How many characters to trim to';
+$string['privacy:metadata'] = 'The Navigation block only shows data stored in other locations.';

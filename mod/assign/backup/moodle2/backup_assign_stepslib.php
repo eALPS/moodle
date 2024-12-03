@@ -55,12 +55,13 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
 
     /**
      * Define the structure for the assign activity
-     * @return void
+     * @return backup_nested_element
      */
     protected function define_structure() {
 
         // To know if we are including userinfo.
         $userinfo = $this->get_setting_value('userinfo');
+        $groupinfo = $this->get_setting_value('groups');
 
         // Define each element separated.
         $assign = new backup_nested_element('assign', array('id'),
@@ -74,6 +75,7 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
                                                   'sendstudentnotifications',
                                                   'duedate',
                                                   'cutoffdate',
+                                                  'gradingduedate',
                                                   'allowsubmissionsfromdate',
                                                   'grade',
                                                   'timemodified',
@@ -83,12 +85,18 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
                                                   'requireallteammemberssubmit',
                                                   'teamsubmissiongroupingid',
                                                   'blindmarking',
+                                                  'hidegrader',
                                                   'revealidentities',
                                                   'attemptreopenmethod',
                                                   'maxattempts',
                                                   'markingworkflow',
                                                   'markingallocation',
-                                                  'preventsubmissionnotingroup'));
+                                                  'markinganonymous',
+                                                  'preventsubmissionnotingroup',
+                                                  'activity',
+                                                  'activityformat',
+                                                  'timelimit',
+                                                  'submissionattachments'));
 
         $userflags = new backup_nested_element('userflags');
 
@@ -107,6 +115,7 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
                                                 array('userid',
                                                       'timecreated',
                                                       'timemodified',
+                                                      'timestarted',
                                                       'status',
                                                       'groupid',
                                                       'attemptnumber',
@@ -132,7 +141,7 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
 
         $overrides = new backup_nested_element('overrides');
         $override = new backup_nested_element('override', array('id'), array(
-            'groupid', 'userid', 'sortorder', 'allowsubmissionsfromdate', 'duedate', 'cutoffdate'));
+            'groupid', 'userid', 'sortorder', 'allowsubmissionsfromdate', 'duedate', 'cutoffdate', 'timelimit'));
 
         // Build the tree.
         $assign->add_child($userflags);
@@ -158,8 +167,12 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
             $userflag->set_source_table('assign_user_flags',
                                      array('assignment' => backup::VAR_PARENTID));
 
-            $submission->set_source_table('assign_submission',
-                                     array('assignment' => backup::VAR_PARENTID));
+            $submissionparams = array('assignment' => backup::VAR_PARENTID);
+            if (!$groupinfo) {
+                // Without group info, skip group submissions.
+                $submissionparams['groupid'] = backup_helper::is_sqlparam(0);
+            }
+            $submission->set_source_table('assign_submission', $submissionparams);
 
             $grade->set_source_table('assign_grades',
                                      array('assignment' => backup::VAR_PARENTID));
@@ -171,6 +184,10 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
             $overrideparams['userid'] = backup_helper::is_sqlparam(null); // Without userinfo, skip user overrides.
         }
 
+        if (!$groupinfo) {
+            // Without group info, skip group overrides.
+            $overrideparams['groupid'] = backup_helper::is_sqlparam(0);
+        }
         $override->set_source_table('assign_overrides', $overrideparams);
 
         // Define id annotations.
@@ -188,6 +205,8 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
         // These file areas don't have an itemid.
         $assign->annotate_files('mod_assign', 'intro', null);
         $assign->annotate_files('mod_assign', 'introattachment', null);
+        $assign->annotate_files('mod_assign', 'activityattachment', null);
+
         $this->annotate_plugin_config_files($assign, 'assignsubmission');
         $this->annotate_plugin_config_files($assign, 'assignfeedback');
 

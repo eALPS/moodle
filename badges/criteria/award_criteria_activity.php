@@ -47,8 +47,13 @@ class award_criteria_activity extends award_criteria {
         parent::__construct($record);
 
         $this->course = $DB->get_record_sql('SELECT c.id, c.enablecompletion, c.cacherev, c.startdate
-                        FROM {badge} b INNER JOIN {course} c ON b.courseid = c.id
+                        FROM {badge} b LEFT JOIN {course} c ON b.courseid = c.id
                         WHERE b.id = :badgeid ', array('badgeid' => $this->badgeid), MUST_EXIST);
+
+        // If the course doesn't exist but we're sure the badge does (thanks to the LEFT JOIN), then use the site as the course.
+        if (empty($this->course->id)) {
+            $this->course = get_course(SITEID);
+        }
         $this->courseid = $this->course->id;
     }
 
@@ -183,8 +188,6 @@ class award_criteria_activity extends award_criteria {
      * @return bool Whether criteria is complete
      */
     public function review($userid, $filtered = false) {
-        $completionstates = array(COMPLETION_COMPLETE, COMPLETION_COMPLETE_PASS);
-
         if ($this->course->startdate > time()) {
             return false;
         }
@@ -202,6 +205,15 @@ class award_criteria_activity extends award_criteria {
             if (isset($param['bydate'])) {
                 $date = $data->timemodified;
                 $check_date = ($date <= $param['bydate']);
+            }
+
+            // Successfull completion states depend on the completion settings.
+            if (isset($data->passgrade)) {
+                // Passing grade is required. Don't issue a badge when state is COMPLETION_COMPLETE_FAIL.
+                $completionstates = [COMPLETION_COMPLETE, COMPLETION_COMPLETE_PASS];
+            } else {
+                // Any grade is required. Issue a badge even when state is COMPLETION_COMPLETE_FAIL.
+                $completionstates = [COMPLETION_COMPLETE, COMPLETION_COMPLETE_PASS, COMPLETION_COMPLETE_FAIL];
             }
 
             if ($this->method == BADGE_CRITERIA_AGGREGATION_ALL) {
@@ -231,6 +243,7 @@ class award_criteria_activity extends award_criteria {
      * @return array list($join, $where, $params)
      */
     public function get_completed_criteria_sql() {
+        global $DB;
         $join = '';
         $where = '';
         $params = array();
@@ -243,22 +256,50 @@ class award_criteria_activity extends award_criteria {
             if (!empty($moduledata)) {
                 $extraon = implode(' OR ', $moduledata);
                 $join = " JOIN {course_modules_completion} cmc ON cmc.userid = u.id AND
-                          ( cmc.completionstate = :completionpass OR cmc.completionstate = :completioncomplete ) AND ({$extraon})";
+                          ( cmc.completionstate = :completionfail OR
+                          cmc.completionstate = :completionpass OR
+                          cmc.completionstate = :completioncomplete ) AND ({$extraon})";
                 $params["completionpass"] = COMPLETION_COMPLETE_PASS;
+                $params["completionfail"] = COMPLETION_COMPLETE_FAIL;
                 $params["completioncomplete"] = COMPLETION_COMPLETE;
             }
             return array($join, $where, $params);
         } else {
-            foreach ($this->params as $param) {
-                $join .= " LEFT JOIN {course_modules_completion} cmc{$param['module']} ON
-                          cmc{$param['module']}.userid = u.id AND
-                          cmc{$param['module']}.coursemoduleid = :completedmodule{$param['module']} AND
-                          ( cmc{$param['module']}.completionstate = :completionpass{$param['module']} OR
-                            cmc{$param['module']}.completionstate = :completioncomplete{$param['module']} )";
-                $where .= " AND cmc{$param['module']}.coursemoduleid IS NOT NULL ";
-                $params["completedmodule{$param['module']}"] = $param['module'];
-                $params["completionpass{$param['module']}"] = COMPLETION_COMPLETE_PASS;
-                $params["completioncomplete{$param['module']}"] = COMPLETION_COMPLETE;
+            // Get all cmids of modules related to the criteria.
+            $cmids = array_map(fn ($x) => $x['module'], $this->params);
+            list($cmcmodulessql, $paramscmc) = $DB->get_in_or_equal($cmids, SQL_PARAMS_NAMED);
+
+            // Create a sql query to get all users who have worked on these course modules.
+            $sql = "SELECT DISTINCT userid FROM {course_modules_completion} cmc "
+            . "WHERE coursemoduleid " . $cmcmodulessql . " AND "
+            . "( cmc.completionstate IN ( :completionpass, :completionfail, :completioncomplete ) )";
+            $paramscmcs = [
+                'completionpass' => COMPLETION_COMPLETE_PASS,
+                'completionfail' => COMPLETION_COMPLETE_FAIL,
+                'completioncomplete' => COMPLETION_COMPLETE
+            ];
+            $paramscmc = array_merge($paramscmc, $paramscmcs);
+            $userids = $DB->get_records_sql($sql, $paramscmc);
+
+            // Now check each user if the user has a completion of each module.
+            $useridsbadgeable = array_keys(array_filter(
+                $userids,
+                function ($user) use ($cmcmodulessql, $paramscmc, $cmids) {
+                    global $DB;
+                    $params = array_merge($paramscmc, ['userid' => $user->userid]);
+                    $select = "coursemoduleid " . $cmcmodulessql . " AND userid = :userid";
+                    $cmidsuser = $DB->get_fieldset_select('course_modules_completion', 'coursemoduleid', $select, $params);
+                    return empty(array_diff($cmidsuser, $cmids));
+                }
+            ));
+
+            // Finally create a where statement (if neccessary) with all userids who are allowed to get the badge.
+            // This list also includes all users who have previously received the badge. These are filtered out in the badge.php.
+            $join = "";
+            $where = "";
+            if (!empty($useridsbadgeable)) {
+                list($wherepart, $params) = $DB->get_in_or_equal($useridsbadgeable, SQL_PARAMS_NAMED);
+                $where = " AND u.id " . $wherepart;
             }
             return array($join, $where, $params);
         }

@@ -14,19 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Online users tests
- *
- * @package    block_online_users
- * @category   test
- * @copyright  2015 University of Nottingham <www.nottingham.ac.uk>
- * @author     Barry Oosthuizen <barry.oosthuizen@nottingham.ac.uk>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-use block_online_users\fetcher;
-
-defined('MOODLE_INTERNAL') || die();
+namespace block_online_users;
 
 /**
  * Online users testcase
@@ -37,7 +25,7 @@ defined('MOODLE_INTERNAL') || die();
  * @author     Barry Oosthuizen <barry.oosthuizen@nottingham.ac.uk>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class block_online_users_testcase extends advanced_testcase {
+class online_users_test extends \advanced_testcase {
 
     protected $data;
 
@@ -47,7 +35,8 @@ class block_online_users_testcase extends advanced_testcase {
      * Prepare the site with some courses, groups, users and
      * simulate various recent accesses.
      */
-    protected function setUp() {
+    protected function setUp(): void {
+        parent::setUp();
 
         // Generate (simulated) recently logged-in users.
         $generator = $this->getDataGenerator()->get_plugin_generator('block_online_users');
@@ -64,13 +53,13 @@ class block_online_users_testcase extends advanced_testcase {
      * @param int $now Current Unix timestamp
      * @param int $timetoshowusers The time window (in seconds) to check for the latest logged in users
      */
-    public function test_fetcher_course1_group_members() {
+    public function test_fetcher_course1_group_members(): void {
         global $CFG;
 
         $groupid = $this->data['group1']->id;
         $now = time();
         $timetoshowusers = $CFG->block_online_users_timetosee * 60;
-        $context = context_course::instance($this->data['course1']->id);
+        $context = \context_course::instance($this->data['course1']->id);
         $courseid = $this->data['course1']->id;
         $onlineusers = new fetcher($groupid, $now, $timetoshowusers, $context, false, $courseid);
 
@@ -103,14 +92,14 @@ class block_online_users_testcase extends advanced_testcase {
      * @param int $now Current Unix timestamp
      * @param int $timetoshowusers The time window (in seconds) to check for the latest logged in users
      */
-    public function test_fetcher_courses() {
+    public function test_fetcher_courses(): void {
 
         global $CFG;
 
         $currentgroup = null;
         $now = time();
         $timetoshowusers = $CFG->block_online_users_timetosee * 60;
-        $context = context_course::instance($this->data['course1']->id);
+        $context = \context_course::instance($this->data['course1']->id);
         $courseid = $this->data['course1']->id;
         $onlineusers = new fetcher($currentgroup, $now, $timetoshowusers, $context, false, $courseid);
 
@@ -134,18 +123,186 @@ class block_online_users_testcase extends advanced_testcase {
      * @param int $now Current Unix timestamp
      * @param int $timetoshowusers The time window (in seconds) to check for the latest logged in users
      */
-    public function test_fetcher_sitelevel() {
+    public function test_fetcher_sitelevel(): void {
         global $CFG;
 
         $currentgroup = null;
         $now = time();
         $timetoshowusers = $CFG->block_online_users_timetosee * 60;
-        $context = context_system::instance();
+        $context = \context_system::instance();
         $onlineusers = new fetcher($currentgroup, $now, $timetoshowusers, $context, true);
 
         $usercount = $onlineusers->count_users();
         $users = $onlineusers->get_users();
         $this->assertEquals($usercount, count($users), 'There was a problem counting the number of online users at site level');
         $this->assertEquals(12, $usercount, 'There was a problem counting the number of online users at site level');
+    }
+
+    /**
+     * Check user visibility setting for course group members.
+     */
+    public function test_user_visibility_course1_group1_members(): void {
+        global $CFG;
+
+        // Enable users to set their visibility to others in the online users block.
+        $CFG->block_online_users_onlinestatushiding = true;
+        $groupid = $this->data['group1']->id;
+        $now = time();
+        $timetoshowusers = $CFG->block_online_users_timetosee * 60;
+        $context = \context_course::instance($this->data['course1']->id);
+        $courseid = $this->data['course1']->id;
+        $user1 = $this->data['user1'];
+        $user2 = $this->data['user2'];
+        // Set user2 as logged user.
+        $this->setUser($user2);
+        $onlineusers = new fetcher($groupid, $now, $timetoshowusers, $context, false, $courseid);
+        $users = $onlineusers->get_users();
+        $usercount = $onlineusers->count_users();
+        // User1 should be displayed in the online users block.
+        $this->assertEquals(3, $usercount);
+        $this->assertTrue(array_key_exists($user1->id, $users));
+        // Set user1 as logged user.
+        $this->setUser($user1);
+        // Set visibility to 'hide' for user1.
+        set_user_preference('block_online_users_uservisibility', 0);
+        // Test if the fetcher gets all the users including user1.
+        $onlineusers = new fetcher($groupid, $now, $timetoshowusers, $context, false, $courseid);
+        $users = $onlineusers->get_users();
+        $usercount = $onlineusers->count_users();
+        // User1 should be displayed in the online users block.
+        $this->assertEquals(3, $usercount);
+        $this->assertTrue(array_key_exists($user1->id, $users));
+        // Set user2 as logged user.
+        $this->setUser($user2);
+        // Test if the fetcher gets all the users excluding user1.
+        $onlineusers = new fetcher($groupid, $now, $timetoshowusers, $context, false, $courseid);
+        $users = $onlineusers->get_users();
+        $usercount = $onlineusers->count_users();
+        // User1 should not be displayed in the online users block.
+        $this->assertEquals(2, $usercount);
+        $this->assertFalse(array_key_exists($user1->id, $users));
+
+        // Disable users to set their visibility to others in the online users block.
+        // All users should be displayed now and the visibility status of a users should be ignored,
+        // as the capability of setting the visibility to other user has been disabled.
+        $CFG->block_online_users_onlinestatushiding = false;
+        // Test if the fetcher gets all the users including user1.
+        $onlineusers = new fetcher($groupid, $now, $timetoshowusers, $context, false, $courseid);
+        $users = $onlineusers->get_users();
+        $usercount = $onlineusers->count_users();
+        // User1 should be displayed in the online users block.
+        $this->assertEquals(3, $usercount);
+        $this->assertTrue(array_key_exists($user1->id, $users));
+    }
+
+    /**
+     * Check user visibility setting at course level.
+     */
+    public function test_user_visibility_courses(): void {
+        global $CFG;
+
+        $currentgroup = null;
+        $now = time();
+        $timetoshowusers = $CFG->block_online_users_timetosee * 60;
+        $context = \context_course::instance($this->data['course1']->id);
+        $courseid = $this->data['course1']->id;
+        $user1 = $this->data['user1'];
+        $user2 = $this->data['user2'];
+        // Set user2 as logged user.
+        $this->setUser($user2);
+        // Test if the fetcher gets all the users including user1.
+        $onlineusers = new fetcher($currentgroup, $now, $timetoshowusers, $context, false, $courseid);
+        $users = $onlineusers->get_users();
+        $usercount = $onlineusers->count_users();
+        // User1 should be displayed in the online users block.
+        $this->assertEquals(9, $usercount);
+        $this->assertTrue(array_key_exists($user1->id, $users));
+        // Set user1 as logged user.
+        $this->setUser($user1);
+        // Set visibility to 'hide' for user1.
+        set_user_preference('block_online_users_uservisibility', 0);
+        // Test if the fetcher gets all the users including user1.
+        $onlineusers = new fetcher($currentgroup, $now, $timetoshowusers, $context, false, $courseid);
+        $users = $onlineusers->get_users();
+        $usercount = $onlineusers->count_users();
+        // User1 should be displayed in the online users block.
+        $this->assertEquals(9, $usercount);
+        $this->assertTrue(array_key_exists($user1->id, $users));
+        // Set user2 as logged user.
+        $this->setUser($user2);
+        // Test if the fetcher gets all the users excluding user1.
+        $onlineusers = new fetcher($currentgroup, $now, $timetoshowusers, $context, false, $courseid);
+        $users = $onlineusers->get_users();
+        $usercount = $onlineusers->count_users();
+        // User1 should not be displayed in the online users block.
+        $this->assertEquals(8, $usercount);
+        $this->assertFalse(array_key_exists($user1->id, $users));
+
+        // Disable users to set their visibility to others in the online users block.
+        // All users should be displayed now and the visibility status of a users should be ignored,
+        // as the capability of setting the visibility to other user has been disabled.
+        $CFG->block_online_users_onlinestatushiding = false;
+        // Test if the fetcher gets all the users including user1.
+        $onlineusers = new fetcher($currentgroup, $now, $timetoshowusers, $context, false, $courseid);
+        $users = $onlineusers->get_users();
+        $usercount = $onlineusers->count_users();
+        // User1 should be displayed in the online users block.
+        $this->assertEquals(9, $usercount);
+        $this->assertTrue(array_key_exists($user1->id, $users));
+    }
+
+    /**
+     * Check user visibility setting at site level.
+     */
+    public function test_user_visibility_sitelevel(): void {
+        global $CFG;
+
+        $currentgroup = null;
+        $now = time();
+        $timetoshowusers = $CFG->block_online_users_timetosee * 60;
+        $context = \context_system::instance();
+        $user1 = $this->data['user1'];
+        $user2 = $this->data['user2'];
+        // Set user2 as logged user.
+        $this->setUser($user2);
+        // Test if the fetcher gets all the users including user1.
+        $onlineusers = new fetcher($currentgroup, $now, $timetoshowusers, $context, true);
+        $users = $onlineusers->get_users();
+        $usercount = $onlineusers->count_users();
+        // User1 should be displayed in the online users block.
+        $this->assertEquals(12, $usercount);
+        $this->assertTrue(array_key_exists($user1->id, $users));
+        // Set user1 as logged user.
+        $this->setUser($user1);
+        // Set visibility to 'hide' for user1.
+        set_user_preference('block_online_users_uservisibility', 0);
+        // Test if the fetcher gets all the users including user1.
+        $onlineusers = new fetcher($currentgroup, $now, $timetoshowusers, $context, true);
+        $users = $onlineusers->get_users();
+        $usercount = $onlineusers->count_users();
+        // User1 should be displayed in the online users block.
+        $this->assertEquals(12, $usercount);
+        $this->assertTrue(array_key_exists($user1->id, $users));
+        // Set user2 as logged user.
+        $this->setUser($user2);
+        // Test if the fetcher gets all the users excluding user1.
+        $onlineusers = new fetcher($currentgroup, $now, $timetoshowusers, $context, true);
+        $users = $onlineusers->get_users();
+        $usercount = $onlineusers->count_users();
+        // User1 should not be displayed in the online users block.
+        $this->assertEquals(11, $usercount);
+        $this->assertFalse(array_key_exists($user1->id, $users));
+
+        // Disable users to set their visibility to others in the online users block.
+        // All users should be displayed now and the visibility status of a users should be ignored,
+        // as the capability of setting the visibility to other user has been disabled.
+        $CFG->block_online_users_onlinestatushiding = false;
+        // Test if the fetcher gets all the users including user1.
+        $onlineusers = new fetcher($currentgroup, $now, $timetoshowusers, $context, true);
+        $users = $onlineusers->get_users();
+        $usercount = $onlineusers->count_users();
+        // User1 should be displayed in the online users block.
+        $this->assertEquals(12, $usercount);
+        $this->assertTrue(array_key_exists($user1->id, $users));
     }
 }

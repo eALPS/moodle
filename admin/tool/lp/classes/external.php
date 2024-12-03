@@ -24,38 +24,11 @@
 namespace tool_lp;
 defined('MOODLE_INTERNAL') || die();
 
-require_once("$CFG->libdir/externallib.php");
 require_once("$CFG->libdir/grade/grade_scale.php");
 
-use context;
-use context_system;
 use context_course;
-use context_helper;
+use context_system;
 use context_user;
-use coding_exception;
-use external_api;
-use external_function_parameters;
-use external_value;
-use external_format_value;
-use external_single_structure;
-use external_multiple_structure;
-use invalid_parameter_exception;
-use required_capability_exception;
-
-use core_cohort\external\cohort_summary_exporter;
-use tool_lp\external\competency_path_exporter;
-use tool_lp\external\competency_summary_exporter;
-use tool_lp\external\course_competency_statistics_exporter;
-use core_course\external\course_module_summary_exporter;
-use core_course\external\course_summary_exporter;
-use tool_lp\external\template_statistics_exporter;
-use tool_lp\external\user_competency_summary_exporter;
-use tool_lp\external\user_competency_summary_in_course_exporter;
-use tool_lp\external\user_competency_summary_in_plan_exporter;
-use tool_lp\external\user_evidence_summary_exporter;
-use tool_lp\output\user_competency_summary_in_plan;
-use tool_lp\output\user_competency_summary_in_course;
-
 use core_competency\api;
 use core_competency\external\competency_exporter;
 use core_competency\external\competency_framework_exporter;
@@ -66,7 +39,25 @@ use core_competency\external\template_exporter;
 use core_competency\external\user_competency_course_exporter;
 use core_competency\external\user_competency_exporter;
 use core_competency\external\user_competency_plan_exporter;
+use core_course\external\course_module_summary_exporter;
+use core_course\external\course_summary_exporter;
+use core_external\external_api;
+use core_external\external_description;
+use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
 use core_user\external\user_summary_exporter;
+use tool_lp\external\competency_path_exporter;
+use tool_lp\external\competency_summary_exporter;
+use tool_lp\external\course_competency_statistics_exporter;
+use tool_lp\external\template_statistics_exporter;
+use tool_lp\external\user_competency_summary_exporter;
+use tool_lp\external\user_competency_summary_in_course_exporter;
+use tool_lp\external\user_competency_summary_in_plan_exporter;
+use tool_lp\external\user_evidence_summary_exporter;
+use tool_lp\output\user_competency_summary_in_course;
+use tool_lp\output\user_competency_summary_in_plan;
 
 /**
  * This is the external API for this tool.
@@ -109,7 +100,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_competency_frameworks_manage_page() parameters.
      *
-     * @return \external_function_parameters
+     * @return external_function_parameters
      */
     public static function data_for_competency_frameworks_manage_page_parameters() {
         $params = array('pagecontext' => self::get_context_parameters());
@@ -119,7 +110,7 @@ class external extends external_api {
     /**
      * Loads the data required to render the competency_frameworks_manage_page template.
      *
-     * @param context $pagecontext The page context
+     * @param \context $pagecontext The page context
      * @return \stdClass
      */
     public static function data_for_competency_frameworks_manage_page($pagecontext) {
@@ -145,7 +136,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_competency_frameworks_manage_page() result value.
      *
-     * @return \external_description
+     * @return external_description
      */
     public static function data_for_competency_frameworks_manage_page_returns() {
         return new external_single_structure(array (
@@ -164,7 +155,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_competencies_manage_page() parameters.
      *
-     * @return \external_function_parameters
+     * @return external_function_parameters
      */
     public static function data_for_competencies_manage_page_parameters() {
         $competencyframeworkid = new external_value(
@@ -205,7 +196,7 @@ class external extends external_api {
         self::validate_context($framework->get_context());
         $output = $PAGE->get_renderer('tool_lp');
 
-        $renderable = new output\manage_competencies_page($framework, $params['search'], $framework->get_context());
+        $renderable = new output\manage_competencies_page($framework, $params['search'], $framework->get_context(), null);
 
         $data = $renderable->export_for_template($output);
 
@@ -215,7 +206,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_competencies_manage_page() result value.
      *
-     * @return \external_description
+     * @return external_description
      */
     public static function data_for_competencies_manage_page_returns() {
         return new external_single_structure(array (
@@ -232,7 +223,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_competency_summary() parameters.
      *
-     * @return \external_function_parameters
+     * @return external_function_parameters
      */
     public static function data_for_competency_summary_parameters() {
         $competencyid = new external_value(
@@ -278,7 +269,7 @@ class external extends external_api {
         ));
 
         $competency = api::read_competency($params['competencyid']);
-        $framework = api::read_framework($competency->get_competencyframeworkid());
+        $framework = api::read_framework($competency->get('competencyframeworkid'));
         self::validate_context($framework->get_context());
         $renderable = new output\competency_summary($competency, $framework, $params['includerelated'], $params['includecourses']);
         $renderer = $PAGE->get_renderer('tool_lp');
@@ -291,7 +282,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_competency_summary_() result value.
      *
-     * @return \external_description
+     * @return external_description
      */
     public static function data_for_competency_summary_returns() {
         return competency_summary_exporter::get_read_structure();
@@ -300,7 +291,7 @@ class external extends external_api {
     /**
      * Returns description of list_courses_using_competency() parameters.
      *
-     * @return \external_function_parameters
+     * @return external_function_parameters
      */
     public static function list_courses_using_competency_parameters() {
         $competencyid = new external_value(
@@ -345,7 +336,7 @@ class external extends external_api {
     /**
      * Returns description of list_courses_using_competency() result value.
      *
-     * @return \external_description
+     * @return external_description
      */
     public static function list_courses_using_competency_returns() {
         return new external_multiple_structure(course_summary_exporter::get_read_structure());
@@ -355,7 +346,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_course_competenies_page() parameters.
      *
-     * @return \external_function_parameters
+     * @return external_function_parameters
      */
     public static function data_for_course_competencies_page_parameters() {
         $courseid = new external_value(
@@ -363,7 +354,13 @@ class external extends external_api {
             'The course id',
             VALUE_REQUIRED
         );
-        $params = array('courseid' => $courseid);
+        $moduleid = new external_value(
+            PARAM_INT,
+            'The module id',
+            VALUE_DEFAULT,
+            0
+        );
+        $params = array('courseid' => $courseid, 'moduleid' => $moduleid);
         return new external_function_parameters($params);
     }
 
@@ -371,16 +368,18 @@ class external extends external_api {
      * Loads the data required to render the course_competencies_page template.
      *
      * @param int $courseid The course id to check.
+     * @param int $moduleid The module id to check (0 for no filter).
      * @return boolean
      */
-    public static function data_for_course_competencies_page($courseid) {
+    public static function data_for_course_competencies_page($courseid, $moduleid) {
         global $PAGE;
         $params = self::validate_parameters(self::data_for_course_competencies_page_parameters(), array(
             'courseid' => $courseid,
+            'moduleid' => $moduleid,
         ));
         self::validate_context(context_course::instance($params['courseid']));
 
-        $renderable = new output\course_competencies_page($params['courseid']);
+        $renderable = new output\course_competencies_page($params['courseid'], $params['moduleid']);
         $renderer = $PAGE->get_renderer('tool_lp');
 
         $data = $renderable->export_for_template($renderer);
@@ -391,7 +390,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_course_competencies_page() result value.
      *
-     * @return \external_description
+     * @return external_description
      */
     public static function data_for_course_competencies_page_returns() {
         $ucc = user_competency_course_exporter::get_read_structure();
@@ -420,8 +419,12 @@ class external extends external_api {
                     ))
                 ),
                 'comppath' => competency_path_exporter::get_read_structure(),
+                'plans' => new external_multiple_structure(
+                    plan_exporter::get_read_structure()
+                ),
             ))),
             'manageurl' => new external_value(PARAM_LOCALURL, 'Url to the manage competencies page.'),
+            'pluginbaseurl' => new external_value(PARAM_LOCALURL, 'Url to the course competencies page.'),
         ));
 
     }
@@ -429,7 +432,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_templates_manage_page() parameters.
      *
-     * @return \external_function_parameters
+     * @return external_function_parameters
      */
     public static function data_for_templates_manage_page_parameters() {
         $params = array('pagecontext' => self::get_context_parameters());
@@ -462,7 +465,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_templates_manage_page() result value.
      *
-     * @return \external_description
+     * @return external_description
      */
     public static function data_for_templates_manage_page_returns() {
         return new external_single_structure(array (
@@ -482,7 +485,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_template_competenies_page() parameters.
      *
-     * @return \external_function_parameters
+     * @return external_function_parameters
      */
     public static function data_for_template_competencies_page_parameters() {
         $templateid = new external_value(
@@ -523,7 +526,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_template_competencies_page() result value.
      *
-     * @return \external_description
+     * @return external_description
      */
     public static function data_for_template_competencies_page_returns() {
         return new external_single_structure(array (
@@ -544,7 +547,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_plan_competenies_page() parameters.
      *
-     * @return \external_function_parameters
+     * @return external_function_parameters
      */
     public static function data_for_plan_page_parameters() {
         $planid = new external_value(
@@ -581,7 +584,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_plan_page() result value.
      *
-     * @return \external_description
+     * @return external_description
      */
     public static function data_for_plan_page_returns() {
         $uc = user_competency_exporter::get_read_structure();
@@ -612,7 +615,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_plans_page() parameters.
      *
-     * @return \external_function_parameters
+     * @return external_function_parameters
      */
     public static function data_for_plans_page_parameters() {
         $userid = new external_value(
@@ -649,7 +652,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_plans_page() result value.
      *
-     * @return \external_description
+     * @return external_description
      */
     public static function data_for_plans_page_returns() {
         return new external_single_structure(array (
@@ -669,7 +672,7 @@ class external extends external_api {
     /**
      * Returns description of external function parameters.
      *
-     * @return \external_function_parameters
+     * @return external_function_parameters
      */
     public static function data_for_user_evidence_list_page_parameters() {
         return new external_function_parameters(array(
@@ -699,7 +702,7 @@ class external extends external_api {
     /**
      * Returns description of external function result value.
      *
-     * @return \external_description
+     * @return external_description
      */
     public static function data_for_user_evidence_list_page_returns() {
         return new external_single_structure(array (
@@ -716,7 +719,7 @@ class external extends external_api {
     /**
      * Returns description of external function parameters.
      *
-     * @return \external_function_parameters
+     * @return external_function_parameters
      */
     public static function data_for_user_evidence_page_parameters() {
         return new external_function_parameters(array(
@@ -746,7 +749,7 @@ class external extends external_api {
     /**
      * Returns description of external function result value.
      *
-     * @return \external_description
+     * @return external_description
      */
     public static function data_for_user_evidence_page_returns() {
         return new external_single_structure(array(
@@ -793,7 +796,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_related_competencies_section_returns() result value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      */
     public static function data_for_related_competencies_section_returns() {
         return new external_single_structure(array(
@@ -866,13 +869,12 @@ class external extends external_api {
         list($filtercapsql, $filtercapparams) = api::filter_users_with_capability_on_user_context_sql($cap,
             $USER->id, SQL_PARAMS_NAMED);
 
-        $extrasearchfields = array();
-        if (!empty($CFG->showuseridentity) && has_capability('moodle/site:viewuseridentity', $context)) {
-            $extrasearchfields = explode(',', $CFG->showuseridentity);
-        }
-        $fields = \user_picture::fields('u', $extrasearchfields);
+        // TODO Does not support custom user profile fields (MDL-70456).
+        $userfieldsapi = \core_user\fields::for_identity($context, false)->with_userpic();
+        $fields = $userfieldsapi->get_sql('u', false, '', '', false)->selects;
+        $extrasearchfields = $userfieldsapi->get_required_fields([\core_user\fields::PURPOSE_IDENTITY]);
 
-        list($wheresql, $whereparams) = users_search_sql($query, 'u', true, $extrasearchfields);
+        list($wheresql, $whereparams) = users_search_sql($query, 'u', USER_SEARCH_CONTAINS, $extrasearchfields);
         list($sortsql, $sortparams) = users_order_by_sql('u', $query, $context);
 
         $countsql = "SELECT COUNT('x') FROM {user} u WHERE $wheresql AND u.id $filtercapsql";
@@ -909,7 +911,7 @@ class external extends external_api {
     /**
      * Returns description of external function result value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      */
     public static function search_users_returns() {
         global $CFG;
@@ -921,122 +923,9 @@ class external extends external_api {
     }
 
     /**
-     * Returns the description of external function parameters.
-     *
-     * @return external_function_parameters
-     */
-    public static function search_cohorts_parameters() {
-        $query = new external_value(
-            PARAM_RAW,
-            'Query string'
-        );
-        $includes = new external_value(
-            PARAM_ALPHA,
-            'What other contexts to fetch the frameworks from. (all, parents, self)',
-            VALUE_DEFAULT,
-            'parents'
-        );
-        $limitfrom = new external_value(
-            PARAM_INT,
-            'limitfrom we are fetching the records from',
-            VALUE_DEFAULT,
-            0
-        );
-        $limitnum = new external_value(
-            PARAM_INT,
-            'Number of records to fetch',
-            VALUE_DEFAULT,
-            25
-        );
-        return new external_function_parameters(array(
-            'query' => $query,
-            'context' => self::get_context_parameters(),
-            'includes' => $includes,
-            'limitfrom' => $limitfrom,
-            'limitnum' => $limitnum
-        ));
-    }
-
-    /**
-     * Search cohorts.
-     * TODO: MDL-52243 Move this function to cohorts/externallib.php
-     *
-     * @param string $query
-     * @param array $context
-     * @param string $includes
-     * @param int $limitfrom
-     * @param int $limitnum
-     * @return array
-     */
-    public static function search_cohorts($query, $context, $includes = 'parents', $limitfrom = 0, $limitnum = 25) {
-        global $DB, $CFG, $PAGE;
-        require_once($CFG->dirroot . '/cohort/lib.php');
-
-        $params = self::validate_parameters(self::search_cohorts_parameters(), array(
-            'query' => $query,
-            'context' => $context,
-            'includes' => $includes,
-            'limitfrom' => $limitfrom,
-            'limitnum' => $limitnum,
-        ));
-        $query = $params['query'];
-        $includes = $params['includes'];
-        $context = self::get_context_from_params($params['context']);
-        $limitfrom = $params['limitfrom'];
-        $limitnum = $params['limitnum'];
-
-        self::validate_context($context);
-        $output = $PAGE->get_renderer('tool_lp');
-
-        $manager = has_capability('moodle/cohort:manage', $context);
-        if (!$manager) {
-            require_capability('moodle/cohort:view', $context);
-        }
-
-        // TODO Make this more efficient.
-        if ($includes == 'self') {
-            $results = cohort_get_cohorts($context->id, $limitfrom, $limitnum, $query);
-            $results = $results['cohorts'];
-        } else if ($includes == 'parents') {
-            $results = cohort_get_cohorts($context->id, $limitfrom, $limitnum, $query);
-            $results = $results['cohorts'];
-            if (!$context instanceof context_system) {
-                $results = array_merge($results, cohort_get_available_cohorts($context, COHORT_ALL, $limitfrom, $limitnum, $query));
-            }
-        } else if ($includes == 'all') {
-            $results = cohort_get_all_cohorts($limitfrom, $limitnum, $query);
-            $results = $results['cohorts'];
-        } else {
-            throw new coding_exception('Invalid parameter value for \'includes\'.');
-        }
-
-        $cohorts = array();
-        foreach ($results as $key => $cohort) {
-            $cohortcontext = context::instance_by_id($cohort->contextid);
-            $exporter = new cohort_summary_exporter($cohort, array('context' => $cohortcontext));
-            $newcohort = $exporter->export($output);
-
-            $cohorts[$key] = $newcohort;
-        }
-
-        return array('cohorts' => $cohorts);
-    }
-
-    /**
-     * Returns description of external function result value.
-     *
-     * @return external_description
-     */
-    public static function search_cohorts_returns() {
-        return new external_single_structure(array(
-            'cohorts' => new external_multiple_structure(cohort_summary_exporter::get_read_structure())
-        ));
-    }
-
-    /**
      * Returns description of external function.
      *
-     * @return \external_function_parameters
+     * @return external_function_parameters
      */
     public static function data_for_user_competency_summary_parameters() {
         $userid = new external_value(
@@ -1081,7 +970,7 @@ class external extends external_api {
     /**
      * Returns description of external function.
      *
-     * @return \external_description
+     * @return external_description
      */
     public static function data_for_user_competency_summary_returns() {
         return user_competency_summary_exporter::get_read_structure();
@@ -1090,7 +979,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_user_competency_summary_in_plan() parameters.
      *
-     * @return \external_function_parameters
+     * @return external_function_parameters
      */
     public static function data_for_user_competency_summary_in_plan_parameters() {
         $competencyid = new external_value(
@@ -1137,7 +1026,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_user_competency_summary_in_plan() result value.
      *
-     * @return \external_description
+     * @return external_description
      */
     public static function data_for_user_competency_summary_in_plan_returns() {
         return user_competency_summary_in_plan_exporter::get_read_structure();
@@ -1146,7 +1035,7 @@ class external extends external_api {
     /**
      * Returns description of data_for_user_competency_summary_in_course() parameters.
      *
-     * @return \external_function_parameters
+     * @return external_function_parameters
      */
     public static function data_for_user_competency_summary_in_course_parameters() {
         $userid = new external_value(
@@ -1199,10 +1088,9 @@ class external extends external_api {
     /**
      * Returns description of data_for_user_competency_summary_in_course() result value.
      *
-     * @return \external_description
+     * @return external_description
      */
     public static function data_for_user_competency_summary_in_course_returns() {
         return user_competency_summary_in_course_exporter::get_read_structure();
     }
-
 }

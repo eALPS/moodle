@@ -22,30 +22,25 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Run all Atto equation upgrade steps between the current DB version and the current version on disk.
  * @param int $oldversion The old version of atto equation in the DB.
  * @return bool
  */
 function xmldb_atto_equation_upgrade($oldversion) {
-    require_once(__DIR__ . '/upgradelib.php');
-
-    if ($oldversion < 2015083100) {
-        atto_equation_update_librarygroup4_setting();
-
-        // Atto equation savepoint reached.
-        upgrade_plugin_savepoint(true, 2015083100, 'atto', 'equation');
-    }
-
-    // Moodle v3.0.0 release upgrade line.
+    // Automatically generated Moodle v4.1.0 release upgrade line.
     // Put any upgrade step following this.
 
-    // Moodle v3.1.0 release upgrade line.
+    // Automatically generated Moodle v4.2.0 release upgrade line.
     // Put any upgrade step following this.
 
-    // Automatically generated Moodle v3.2.0 release upgrade line.
+    // Automatically generated Moodle v4.3.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Automatically generated Moodle v4.4.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Automatically generated Moodle v4.5.0 release upgrade line.
     // Put any upgrade step following this.
 
     return true;

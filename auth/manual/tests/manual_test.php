@@ -14,14 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Manual authentication tests.
- *
- * @package    auth_manual
- * @category   test
- * @copyright  2014 Gilles-Philippe Leblanc <gilles-philippe.leblanc@umontreal.ca>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace auth_manual;
+
+use auth_plugin_manual;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -36,32 +31,28 @@ require_once($CFG->dirroot.'/auth/manual/auth.php');
  * @copyright  2014 Gilles-Philippe Leblanc <gilles-philippe.leblanc@umontreal.ca>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class auth_manual_testcase extends advanced_testcase {
+class manual_test extends \advanced_testcase {
 
     /** @var auth_plugin_manual Keeps the authentication plugin. */
     protected $authplugin;
 
-    /** @var stdClass Keeps authentication plugin config */
-    protected $config;
-
     /**
      * Setup test data.
      */
-    protected function setUp() {
+    protected function setUp(): void {
+        parent::setUp();
         $this->resetAfterTest(true);
         $this->authplugin = new auth_plugin_manual();
-        $this->config = new stdClass();
-        $this->config->expiration = '1';
-        $this->config->expiration_warning = '2';
-        $this->config->expirationtime = '30';
-        $this->authplugin->process_config($this->config);
+        set_config('expiration', '1', 'auth_manual');
+        set_config('expiration_warning', '2', 'auth_manual');
+        set_config('expirationtime', '30', 'auth_manual');
         $this->authplugin->config = get_config(auth_plugin_manual::COMPONENT_NAME);
     }
 
     /**
      * Test user_update_password method.
      */
-    public function test_user_update_password() {
+    public function test_user_update_password(): void {
         $user = $this->getDataGenerator()->create_user();
         $expectedtime = time();
         $passwordisupdated = $this->authplugin->user_update_password($user, 'MyNewPassword*');
@@ -76,7 +67,7 @@ class auth_manual_testcase extends advanced_testcase {
     /**
      * Test test_password_expire method.
      */
-    public function test_password_expire() {
+    public function test_password_expire(): void {
         $userrecord = array();
         $expirationtime = 31 * DAYSECS;
         $userrecord['timecreated'] = time() - $expirationtime;
@@ -95,14 +86,4 @@ class auth_manual_testcase extends advanced_testcase {
         $this->assertEquals(30, $this->authplugin->password_expire($user1->username));
     }
 
-    /**
-     * Test test_process_config method.
-     */
-    public function test_process_config() {
-        $this->assertTrue($this->authplugin->process_config($this->config));
-        $config = get_config(auth_plugin_manual::COMPONENT_NAME);
-        $this->assertEquals($this->config->expiration, $config->expiration);
-        $this->assertEquals($this->config->expiration_warning, $config->expiration_warning);
-        $this->assertEquals($this->config->expirationtime, $config->expirationtime);
-    }
 }

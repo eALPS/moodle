@@ -14,6 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace tool_usertours;
+
+use context_system;
+use stdClass;
+
 /**
  * Step class.
  *
@@ -21,19 +26,7 @@
  * @copyright  2016 Andrew Nicols <andrew@nicols.co.uk>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-namespace tool_usertours;
-
-defined('MOODLE_INTERNAL') || die();
-
-/**
- * Step class.
- *
- * @copyright  2016 Andrew Nicols <andrew@nicols.co.uk>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
 class step {
-
     /**
      * @var     int     $id         The id of the step.
      */
@@ -58,6 +51,11 @@ class step {
      * @var     string  $content    The content of this step.
      */
     protected $content;
+
+    /**
+     * @var     int  $contentformat    The content format: FORMAT_MOODLE/FORMAT_HTML/FORMAT_PLAIN/FORMAT_MARKDOWN.
+     */
+    protected $contentformat;
 
     /**
      * @var     int     $targettype The type of target.
@@ -85,6 +83,16 @@ class step {
     protected $dirty = false;
 
     /**
+     * @var bool $isimporting Whether the step is being imported or not.
+     */
+    protected $isimporting;
+
+    /**
+     * @var stdClass[] $files The list of attached files for this step.
+     */
+    protected $files = [];
+
+    /**
      * Fetch the step instance.
      *
      * @param   int             $id         The id of the step to be retrieved.
@@ -98,12 +106,14 @@ class step {
     /**
      * Load the step instance.
      *
-     * @param   stdClass        $record     The step record to be loaded.
-     * @param   boolean         $clean      Clean the values.
-     * @return  step
+     * @param stdClass $record The step record to be loaded.
+     * @param bool $clean Clean the values.
+     * @param bool $isimporting Whether the step is being imported or not.
+     * @return step
      */
-    public static function load_from_record($record, $clean = false) {
+    public static function load_from_record($record, $clean = false, bool $isimporting = false) {
         $step = new self();
+        $step->set_importing($isimporting);
         return $step->reload_from_record($record, $clean);
     }
 
@@ -117,7 +127,7 @@ class step {
         global $DB;
 
         return $this->reload_from_record(
-            $DB->get_record('tool_usertours_steps', array('id' => $id))
+            $DB->get_record('tool_usertours_steps', ['id' => $id])
         );
     }
 
@@ -133,9 +143,9 @@ class step {
     /**
      * Reload the current step from the supplied record.
      *
-     * @param   stdClass        $record     The step record to be loaded.
-     * @param   boolean         $clean      Clean the values.
-     * @return  step
+     * @param stdClass $record The step record to be loaded.
+     * @param bool $clean Clean the values.
+     * @return step
      */
     protected function reload_from_record($record, $clean = false) {
         $this->id           = $record->id;
@@ -147,13 +157,29 @@ class step {
             $this->title    = $record->title;
             $this->content  = $record->content;
         }
+        $this->contentformat = isset($record->contentformat) ? $record->contentformat : FORMAT_MOODLE;
         $this->targettype   = $record->targettype;
         $this->targetvalue  = $record->targetvalue;
         $this->sortorder    = $record->sortorder;
         $this->config       = json_decode($record->configdata);
         $this->dirty        = false;
 
+        if ($this->isimporting && isset($record->files)) {
+            // We are importing/exporting the step.
+            $this->files = $record->files;
+        }
+
         return $this;
+    }
+
+    /**
+     * Set the import state for the step.
+     *
+     * @param bool $isimporting True if the step is imported, otherwise false.
+     * @return void
+     */
+    protected function set_importing(bool $isimporting = false): void {
+        $this->isimporting = $isimporting;
     }
 
     /**
@@ -223,6 +249,15 @@ class step {
     }
 
     /**
+     * Get the content format of the step.
+     *
+     * @return  int
+     */
+    public function get_contentformat(): int {
+        return $this->contentformat;
+    }
+
+    /**
      * Get the body content of the step.
      *
      * @return  string
@@ -235,10 +270,12 @@ class step {
      * Set the content value for this step.
      *
      * @param   string      $value      The new content to use.
+     * @param   int         $format     The new format to use: FORMAT_MOODLE/FORMAT_HTML/FORMAT_PLAIN/FORMAT_MARKDOWN.
      * @return  $this
      */
-    public function set_content($value) {
+    public function set_content($value, $format = FORMAT_HTML) {
         $this->content = clean_text($value);
+        $this->contentformat = $format;
         $this->dirty = true;
 
         return $this;
@@ -341,7 +378,7 @@ class step {
     /**
      * Get the link to move this step up in the sortorder.
      *
-     * @return  moodle_url
+     * @return  \moodle_url
      */
     public function get_moveup_link() {
         return helper::get_move_step_link($this->get_id(), helper::MOVE_UP);
@@ -350,7 +387,7 @@ class step {
     /**
      * Get the link to move this step down in the sortorder.
      *
-     * @return  moodle_url
+     * @return  \moodle_url
      */
     public function get_movedown_link() {
         return helper::get_move_step_link($this->get_id(), helper::MOVE_DOWN);
@@ -367,7 +404,7 @@ class step {
      */
     public function get_config($key = null, $default = null) {
         if ($this->config === null) {
-            $this->config = (object) array();
+            $this->config = (object) [];
         }
 
         if ($key === null) {
@@ -401,7 +438,7 @@ class step {
      */
     public function set_config($key, $value) {
         if ($this->config === null) {
-            $this->config = (object) array();
+            $this->config = (object) [];
         }
 
         if ($value === null) {
@@ -417,7 +454,7 @@ class step {
     /**
      * Get the edit link for this step.
      *
-     * @return  moodle_url
+     * @return  \moodle_url
      */
     public function get_edit_link() {
         return helper::get_edit_step_link($this->tourid, $this->id);
@@ -426,28 +463,84 @@ class step {
     /**
      * Get the delete link for this step.
      *
-     * @return  moodle_url
+     * @return  \moodle_url
      */
     public function get_delete_link() {
         return helper::get_delete_step_link($this->id);
     }
 
     /**
+     * Embed attached file to the json file for step.
+     *
+     * @return array List of files.
+     */
+    protected function embed_files(): array {
+        $systemcontext = context_system::instance();
+        $fs = get_file_storage();
+        $areafiles = $fs->get_area_files($systemcontext->id, 'tool_usertours', 'stepcontent', $this->id);
+        $files = [];
+        foreach ($areafiles as $file) {
+            if ($file->is_directory()) {
+                continue;
+            }
+            $files[] = [
+                'name' => $file->get_filename(),
+                'path' => $file->get_filepath(),
+                'content' => base64_encode($file->get_content()),
+                'encode' => 'base64',
+            ];
+        }
+
+        return $files;
+    }
+
+    /**
+     * Get the embed files information and create store_file for this step.
+     *
+     * @return void
+     */
+    protected function extract_files() {
+        $fs = get_file_storage();
+        $systemcontext = context_system::instance();
+        foreach ($this->files as $file) {
+            $filename = $file->name;
+            $filepath = $file->path;
+            $filecontent = $file->content;
+            $filerecord = [
+                'contextid' => $systemcontext->id,
+                'component' => 'tool_usertours',
+                'filearea' => 'stepcontent',
+                'itemid' => $this->get_id(),
+                'filepath' => $filepath,
+                'filename' => $filename,
+            ];
+            $fs->create_file_from_string($filerecord, base64_decode($filecontent));
+        }
+    }
+
+    /**
      * Prepare this step for saving to the database.
      *
+     * @param bool $isexporting Whether the step is being exported or not.
      * @return  object
      */
-    public function to_record() {
-        return (object) array(
+    public function to_record(bool $isexporting = false) {
+        $record = [
             'id'            => $this->id,
             'tourid'        => $this->tourid,
             'title'         => $this->title,
             'content'       => $this->content,
+            'contentformat' => $this->contentformat,
             'targettype'    => $this->targettype,
             'targetvalue'   => $this->targetvalue,
             'sortorder'     => $this->sortorder,
             'configdata'    => json_encode($this->config),
-        );
+        ];
+        if ($isexporting) {
+            // We are exporting the step, adding files node to the json record.
+            $record['files'] = $this->embed_files();
+        }
+        return (object) $record;
     }
 
     /**
@@ -469,7 +562,8 @@ class step {
      * @return  $this
      */
     public function persist($force = false) {
-        global $DB;
+        global $CFG, $DB;
+        require_once("{$CFG->libdir}/filelib.php");
 
         if (!$this->dirty && !$force) {
             return $this;
@@ -483,10 +577,31 @@ class step {
             $record = $this->to_record();
             unset($record->id);
             $this->id = $DB->insert_record('tool_usertours_steps', $record);
+            $this->get_tour()->reset_step_sortorder();
         }
 
-        $this->get_tour()->reset_step_sortorder();
+        $systemcontext = context_system::instance();
+        if ($draftid = file_get_submitted_draft_itemid('content')) {
+            // Take any files added to the stepcontent draft file area and
+            // convert them into the proper event description file area. Also
+            // parse the content text and replace the URLs to the draft files
+            // with the @@PLUGIN_FILE@@ placeholder to be persisted in the DB.
+            $this->content = file_save_draft_area_files(
+                $draftid,
+                $systemcontext->id,
+                'tool_usertours',
+                'stepcontent',
+                $this->id,
+                ['subdirs' => true],
+                $this->content
+            );
+            $DB->set_field('tool_usertours_steps', 'content', $this->content, ['id' => $this->id]);
+        }
 
+        if ($this->isimporting) {
+            // We are importing the step, we need to create store_file from the json record.
+            $this->extract_files();
+        }
         $this->reload();
 
         // Notify of a change to the step configuration.
@@ -511,7 +626,7 @@ class step {
             return;
         }
 
-        $DB->delete_records('tool_usertours_steps', array('id' => $this->id));
+        $DB->delete_records('tool_usertours_steps', ['id' => $this->id]);
         $this->get_tour()->reset_step_sortorder();
 
         // Notify of a change to the step configuration.
@@ -550,7 +665,7 @@ class step {
     /**
      * Add the step configuration to the form.
      *
-     * @param   MoodleQuickForm $mform      The form to add configuration to.
+     * @param   \MoodleQuickForm $mform     The form to add configuration to.
      * @return  $this
      */
     public function add_config_to_form(\MoodleQuickForm $mform) {
@@ -570,7 +685,7 @@ class step {
     /**
      * Add the specified step field configuration to the form.
      *
-     * @param   MoodleQuickForm $mform      The form to add configuration to.
+     * @param   \MoodleQuickForm $mform     The form to add configuration to.
      * @param   string          $key        The key to add.
      * @return  $this
      */
@@ -605,6 +720,9 @@ class step {
      * @return  object
      */
     public function prepare_data_for_form() {
+        global $CFG;
+        require_once("{$CFG->libdir}/filelib.php");
+
         $data = $this->to_record();
         foreach (self::get_config_keys() as $key) {
             $data->$key = $this->get_config($key, configuration::get_step_default_value($key));
@@ -613,6 +731,23 @@ class step {
         if ($this->get_targettype() !== null) {
             $this->get_target()->prepare_data_for_form($data);
         }
+
+        // Prepare content for editing in a form 'editor' field type.
+        $draftitemid = file_get_submitted_draft_itemid('tool_usertours');
+        $systemcontext = context_system::instance();
+        $data->content = [
+            'format' => $data->contentformat,
+            'itemid' => $draftitemid,
+            'text' => file_prepare_draft_area(
+                $draftitemid,
+                $systemcontext->id,
+                'tool_usertours',
+                'stepcontent',
+                $this->id,
+                ['subdirs' => true],
+                $data->content
+            ),
+        ];
 
         return $data;
     }
@@ -624,9 +759,9 @@ class step {
      * @param   stdClass        $data       The submitted data.
      * @return  $this
      */
-    public function handle_form_submission(local\forms\editstep &$mform, \stdClass $data) {
+    public function handle_form_submission(local\forms\editstep &$mform, stdClass $data) {
         $this->set_title($data->title);
-        $this->set_content($data->content);
+        $this->set_content($data->content['text'], $data->content['format']);
         $this->set_targettype($data->targettype);
 
         $this->set_targetvalue($this->get_target()->get_value_from_form($data));
@@ -655,22 +790,44 @@ class step {
      * Attempt to fetch any matching langstring if the string is in the
      * format identifier,component.
      *
+     * @deprecated since Moodle 4.0 MDL-72783. Please use helper::get_string_from_input() instead.
      * @param   string  $string
      * @return  string
      */
     public static function get_string_from_input($string) {
-        $string = trim($string);
+        debugging('Use of ' . __FUNCTION__ .
+            '() have been deprecated, please update your code to use helper::get_string_from_input()', DEBUG_DEVELOPER);
+        return helper::get_string_from_input($string);
+    }
 
-        if (preg_match('|^([a-zA-Z][a-zA-Z0-9\.:/_-]*),([a-zA-Z][a-zA-Z0-9\.:/_-]*)$|', $string, $matches)) {
-            if ($matches[2] === 'moodle') {
-                $matches[2] = 'core';
-            }
-
-            if (get_string_manager()->string_exists($matches[1], $matches[2])) {
-                $string = get_string($matches[1], $matches[2]);
-            }
+    /**
+     * Attempt to replace PIXICON placeholder with the correct images for tour step content.
+     *
+     * @param string $content Tour content
+     * @return string Processed tour content
+     */
+    public static function get_step_image_from_input(string $content): string {
+        if (strpos($content, '@@PIXICON') === false) {
+            return $content;
         }
 
-        return $string;
+        $content = preg_replace_callback(
+            '%@@PIXICON::(?P<identifier>([^::]*))::(?P<component>([^@@]*))@@%',
+            function (array $matches) {
+                global $OUTPUT;
+                $component = $matches['component'];
+                if ($component == 'moodle') {
+                    $component = 'core';
+                }
+                return \html_writer::img(
+                    $OUTPUT->image_url($matches['identifier'], $component)->out(false),
+                    '',
+                    ['class' => 'img-fluid']
+                );
+            },
+            $content
+        );
+
+        return $content;
     }
 }

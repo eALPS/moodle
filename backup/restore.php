@@ -1,12 +1,46 @@
 <?php
-    //This script is used to configure and execute the restore proccess.
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * This script is used to configure and execute the restore proccess.
+ *
+ * @package    core
+ * @subpackage backup
+ * @copyright  Moodle
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+define('NO_OUTPUT_BUFFERING', true);
 
 require_once('../config.php');
 require_once($CFG->dirroot . '/backup/util/includes/restore_includes.php');
 
+// Restore of large courses requires extra memory. Use the amount configured
+// in admin settings.
+raise_memory_limit(MEMORY_EXTRA);
+
 $contextid   = required_param('contextid', PARAM_INT);
 $stage       = optional_param('stage', restore_ui::STAGE_CONFIRM, PARAM_INT);
 $cancel      = optional_param('cancel', '', PARAM_ALPHA);
+
+// Determine if we are performing realtime for asynchronous backups.
+$backupmode = backup::MODE_GENERAL;
+if (async_helper::is_async_enabled()) {
+    $backupmode = backup::MODE_ASYNC;
+}
 
 list($context, $course, $cm) = get_context_info_array($contextid);
 
@@ -14,16 +48,21 @@ navigation_node::override_active_url(new moodle_url('/backup/restorefile.php', a
 $PAGE->set_url(new moodle_url('/backup/restore.php', array('contextid'=>$contextid)));
 $PAGE->set_context($context);
 $PAGE->set_pagelayout('admin');
+$PAGE->set_secondary_active_tab('coursereuse');
 
 require_login($course, null, $cm);
 require_capability('moodle/restore:restorecourse', $context);
 
+$PAGE->secondarynav->set_overflow_selected_node('restore');
+
 if (is_null($course)) {
     $coursefullname = $SITE->fullname;
     $courseshortname = $SITE->shortname;
+    $courseurl = new moodle_url('/');
 } else {
     $coursefullname = $course->fullname;
     $courseshortname = $course->shortname;
+    $courseurl = course_get_url($course->id);
 }
 
 // Show page header.
@@ -46,10 +85,6 @@ $slowprogress->start_progress('', 10);
 // This progress section counts for loading the restore controller.
 $slowprogress->start_progress('', 1, 1);
 
-// Restore of large courses requires extra memory. Use the amount configured
-// in admin settings.
-raise_memory_limit(MEMORY_EXTRA);
-
 if ($stage & restore_ui::STAGE_CONFIRM + restore_ui::STAGE_DESTINATION) {
     $restore = restore_ui::engage_independent_stage($stage, $contextid);
 } else {
@@ -59,7 +94,7 @@ if ($stage & restore_ui::STAGE_CONFIRM + restore_ui::STAGE_DESTINATION) {
         $restore = restore_ui::engage_independent_stage($stage/2, $contextid);
         if ($restore->process()) {
             $rc = new restore_controller($restore->get_filepath(), $restore->get_course_id(), backup::INTERACTIVE_YES,
-                                backup::MODE_GENERAL, $USER->id, $restore->get_target());
+                    $backupmode, $USER->id, $restore->get_target(), null, backup::RELEASESESSION_YES);
         }
     }
     if ($rc) {
@@ -96,7 +131,7 @@ if (!$restore->is_independent()) {
     // Use a temporary (disappearing) progress bar to show the precheck progress if any.
     $precheckprogress = new \core\progress\display_if_slow(get_string('preparingdata', 'backup'));
     $restore->get_controller()->set_progress($precheckprogress);
-    if ($restore->get_stage() == restore_ui::STAGE_PROCESS && !$restore->requires_substage()) {
+    if ($restore->get_stage() == restore_ui::STAGE_PROCESS && !$restore->requires_substage() && $backupmode != backup::MODE_ASYNC) {
         try {
             // Div used to hide the 'progress' step once the page gets onto 'finished'.
             echo html_writer::start_div('', array('id' => 'executionprogress'));
@@ -126,7 +161,33 @@ if (!$restore->is_independent()) {
 }
 
 echo $renderer->progress_bar($restore->get_progress_bar());
-echo $restore->display($renderer);
+
+if ($restore->get_stage() != restore_ui::STAGE_PROCESS) {
+    echo $restore->display($renderer);
+} else if ($restore->get_stage() == restore_ui::STAGE_PROCESS && $restore->requires_substage()) {
+    echo $restore->display($renderer);
+} else if ($restore->get_stage() == restore_ui::STAGE_PROCESS
+        && !$restore->requires_substage()
+        && $backupmode == backup::MODE_ASYNC) {
+    // Asynchronous restore.
+    // Create adhoc task for restore.
+    $restoreid = $restore->get_restoreid();
+    $asynctask = new \core\task\asynchronous_restore_task();
+    $asynctask->set_userid($USER->id);
+    $asynctask->set_custom_data(array('backupid' => $restoreid));
+    \core\task\manager::queue_adhoc_task($asynctask);
+
+    // Add ajax progress bar and initiate ajax via a template.
+    $restoreurl = new moodle_url('/backup/restorefile.php', array('contextid' => $contextid));
+    $progresssetup = array(
+            'backupid' => $restoreid,
+            'contextid' => $contextid,
+            'courseurl' => $courseurl->out(),
+            'restoreurl' => $restoreurl->out()
+    );
+    echo $renderer->render_from_template('core/async_backup_status', $progresssetup);
+}
+
 $restore->destroy();
 unset($restore);
 

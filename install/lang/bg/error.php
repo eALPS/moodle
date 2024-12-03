@@ -1,6 +1,5 @@
 <?php
-
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Automatically generated strings for Moodle installer
@@ -30,6 +29,17 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['cannotcreatedboninstall'] = '<p>Не може да се създаде базата данни.</p>
+<p>Посочената база данни не съществува и даденият потребител няма разрешение да създаде базата данни.</p>
+<p>Администраторът на сайта трябва да провери конфигурацията на базата данни.</p>';
+$string['cannotcreatelangdir'] = 'Не може да се създаде езикова директория';
 $string['cannotcreatetempdir'] = 'Не може да създаде временна директория';
+$string['cannotdownloadcomponents'] = 'Не могат да се изтеглят компоненти';
+$string['cannotdownloadzipfile'] = 'Не може да се изтегли ZIP файл';
 $string['cannotfindcomponent'] = 'Не можа да намери компонент';
-$string['remotedownloaderror'] = 'Изтеглянето на компонента към вашия сървър пропадна, проверете настройките на proxy, препоръчително е PHP разширението cURL.<br /><br />Вие трябва ръчно да изтеглите файла <a href="{$a->url}">{$a->url}</a>, да го копирате в директория {$a->dest} на вашия сървър и да го разархивирате там.';
+$string['cannotunzipfile'] = 'Файлът не може да се разархивира';
+$string['componentisuptodate'] = 'Компонентът е актуален';
+$string['remotedownloaderror'] = '<p>Изтеглянето на компонента към вашия сървър пропадна, проверете настройките на proxy; препоръчително е PHP разширението cURL.</p><p>Вие трябва ръчно да изтеглите файла <a href="{$a->url}">{$a->url}</a>, да го копирате в директория "{$a->dest}" на вашия сървър и да го разархивирате там.</p>';
+$string['wrongdestpath'] = 'Грешен път към целта';
+$string['wrongsourcebase'] = 'Грешен изходен адрес';
+$string['wrongzipfilename'] = 'Грешно име на ZIP файл-а';

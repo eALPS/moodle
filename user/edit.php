@@ -29,9 +29,6 @@ require_once($CFG->dirroot.'/user/editlib.php');
 require_once($CFG->dirroot.'/user/profile/lib.php');
 require_once($CFG->dirroot.'/user/lib.php');
 
-// HTTPS is required in this page when $CFG->loginhttps enabled.
-$PAGE->https_required();
-
 $userid = optional_param('id', $USER->id, PARAM_INT);    // User id.
 $course = optional_param('course', SITEID, PARAM_INT);   // Course id (defaults to Site).
 $returnto = optional_param('returnto', null, PARAM_ALPHA);  // Code determining where to return to after save.
@@ -40,14 +37,14 @@ $cancelemailchange = optional_param('cancelemailchange', 0, PARAM_INT);   // Cou
 $PAGE->set_url('/user/edit.php', array('course' => $course, 'id' => $userid));
 
 if (!$course = $DB->get_record('course', array('id' => $course))) {
-    print_error('invalidcourseid');
+    throw new \moodle_exception('invalidcourseid');
 }
 
 if ($course->id != SITEID) {
     require_login($course);
 } else if (!isloggedin()) {
     if (empty($SESSION->wantsurl)) {
-        $SESSION->wantsurl = $CFG->httpswwwroot.'/user/edit.php';
+        $SESSION->wantsurl = $CFG->wwwroot.'/user/edit.php';
     }
     redirect(get_login_url());
 } else {
@@ -56,17 +53,17 @@ if ($course->id != SITEID) {
 
 // Guest can not edit.
 if (isguestuser()) {
-    print_error('guestnoeditprofile');
+    throw new \moodle_exception('guestnoeditprofile');
 }
 
 // The user profile we are editing.
 if (!$user = $DB->get_record('user', array('id' => $userid))) {
-    print_error('invaliduserid');
+    throw new \moodle_exception('invaliduserid');
 }
 
 // Guest can not be edited.
 if (isguestuser($user)) {
-    print_error('guestnoeditprofile');
+    throw new \moodle_exception('guestnoeditprofile');
 }
 
 // User interests separated by commas.
@@ -78,7 +75,7 @@ $user->interests = core_tag_tag::get_item_tags_array('core', 'user', $user->id);
 if (is_mnet_remote_user($user)) {
     if (user_not_fully_set_up($user, true)) {
         $hostwwwroot = $DB->get_field('mnet_host', 'wwwroot', array('id' => $user->mnethostid));
-        print_error('usernotfullysetup', 'mnet', '', $hostwwwroot);
+        throw new \moodle_exception('usernotfullysetup', 'mnet', '', $hostwwwroot);
     }
     redirect($CFG->wwwroot . "/user/view.php?course={$course->id}");
 }
@@ -87,7 +84,7 @@ if (is_mnet_remote_user($user)) {
 $userauth = get_auth_plugin($user->auth);
 
 if (!$userauth->can_edit_profile()) {
-    print_error('noprofileedit', 'auth');
+    throw new \moodle_exception('noprofileedit', 'auth');
 }
 
 if ($editurl = $userauth->edit_profile_url()) {
@@ -107,7 +104,7 @@ $personalcontext = context_user::instance($user->id);
 if ($user->id == $USER->id) {
     // Editing own profile - require_login() MUST NOT be used here, it would result in infinite loop!
     if (!has_capability('moodle/user:editownprofile', $systemcontext)) {
-        print_error('cannotedityourprofile');
+        throw new \moodle_exception('cannotedityourprofile');
     }
 
 } else {
@@ -115,11 +112,11 @@ if ($user->id == $USER->id) {
     require_capability('moodle/user:editprofile', $personalcontext);
     // No editing of guest user account.
     if (isguestuser($user->id)) {
-        print_error('guestnoeditprofileother');
+        throw new \moodle_exception('guestnoeditprofileother');
     }
     // No editing of primary admin!
     if (is_siteadmin($user) and !is_siteadmin($USER)) {  // Only admins may edit other admins.
-        print_error('useradmineditadmin');
+        throw new \moodle_exception('useradmineditadmin');
     }
 }
 
@@ -131,6 +128,7 @@ if ($user->deleted) {
 }
 
 $PAGE->set_pagelayout('admin');
+$PAGE->add_body_class('limitedwidth');
 $PAGE->set_context($personalcontext);
 if ($USER->id != $user->id) {
     $PAGE->navigation->extend_for_user($user);
@@ -168,7 +166,7 @@ $filemanagercontext = $editoroptions['context'];
 $filemanageroptions = array('maxbytes'       => $CFG->maxbytes,
                              'subdirs'        => 0,
                              'maxfiles'       => 1,
-                             'accepted_types' => 'web_image');
+                             'accepted_types' => 'optimised_image');
 file_prepare_draft_area($draftitemid, $filemanagercontext->id, 'user', 'newicon', 0, $filemanageroptions);
 $user->imagefile = $draftitemid;
 // Create form.
@@ -179,18 +177,20 @@ $userform = new user_edit_form(new moodle_url($PAGE->url, array('returnto' => $r
 
 $emailchanged = false;
 
-if ($usernew = $userform->get_data()) {
-
-    // Deciding where to send the user back in most cases.
-    if ($returnto === 'profile') {
-        if ($course->id != SITEID) {
-            $returnurl = new moodle_url('/user/view.php', array('id' => $user->id, 'course' => $course->id));
-        } else {
-            $returnurl = new moodle_url('/user/profile.php', array('id' => $user->id));
-        }
+// Deciding where to send the user back in most cases.
+if ($returnto === 'profile') {
+    if ($course->id != SITEID) {
+        $returnurl = new moodle_url('/user/view.php', array('id' => $user->id, 'course' => $course->id));
     } else {
-        $returnurl = new moodle_url('/user/preferences.php', array('userid' => $user->id));
+        $returnurl = new moodle_url('/user/profile.php', array('id' => $user->id));
     }
+} else {
+    $returnurl = new moodle_url('/user/preferences.php', array('userid' => $user->id));
+}
+
+if ($userform->is_cancelled()) {
+    redirect($returnurl);
+} else if ($usernew = $userform->get_data()) {
 
     $emailchangedhtml = '';
 
@@ -199,14 +199,16 @@ if ($usernew = $userform->get_data()) {
         // Other users require a confirmation email.
         if (isset($usernew->email) and $user->email != $usernew->email && !has_capability('moodle/user:update', $systemcontext)) {
             $a = new stdClass();
-            $a->newemail = $usernew->preference_newemail = $usernew->email;
-            $usernew->preference_newemailkey = random_string(20);
-            $usernew->preference_newemailattemptsleft = 3;
+            $emailchangedkey = random_string(20);
+            set_user_preference('newemail', $usernew->email, $user->id);
+            set_user_preference('newemailkey', $emailchangedkey, $user->id);
+            set_user_preference('newemailattemptsleft', 3, $user->id);
+
+            $a->newemail = $emailchanged = $usernew->email;
             $a->oldemail = $usernew->email = $user->email;
 
             $emailchangedhtml = $OUTPUT->box(get_string('auth_changingemailaddress', 'auth', $a), 'generalbox', 'notice');
             $emailchangedhtml .= $OUTPUT->continue_button($returnurl);
-            $emailchanged = true;
         }
     }
 
@@ -222,7 +224,7 @@ if ($usernew = $userform->get_data()) {
     // Pass a true old $user here.
     if (!$authplugin->user_update($user, $usernew)) {
         // Auth update failed.
-        print_error('cannotupdateprofile');
+        throw new \moodle_exception('cannotupdateprofile');
     }
 
     // Update user with new profile data.
@@ -254,17 +256,20 @@ if ($usernew = $userform->get_data()) {
     \core\event\user_updated::create_from_userid($user->id)->trigger();
 
     // If email was changed and confirmation is required, send confirmation email now to the new address.
-    if ($emailchanged && $CFG->emailchangeconfirmation) {
+    if ($emailchanged !== false && $CFG->emailchangeconfirmation) {
         $tempuser = $DB->get_record('user', array('id' => $user->id), '*', MUST_EXIST);
-        $tempuser->email = $usernew->preference_newemail;
-
-        $supportuser = core_user::get_support_user();
+        $tempuser->email = $emailchanged;
 
         $a = new stdClass();
-        $a->url = $CFG->wwwroot . '/user/emailupdate.php?key=' . $usernew->preference_newemailkey . '&id=' . $user->id;
+        $a->url = $CFG->wwwroot . '/user/emailupdate.php?key=' . $emailchangedkey . '&id=' . $user->id;
         $a->site = format_string($SITE->fullname, true, array('context' => context_course::instance(SITEID)));
-        $a->fullname = fullname($tempuser, true);
-        $a->supportemail = $supportuser->email;
+
+        $placeholders = \core_user::get_name_placeholders($user);
+        foreach ($placeholders as $field => $value) {
+            $a->{$field} = $value;
+        }
+
+        $a->supportemail = $OUTPUT->supportemail();
 
         $emailupdatemessage = get_string('emailupdatemessage', 'auth', $a);
         $emailupdatetitle = get_string('emailupdatetitle', 'auth', $a);
@@ -298,12 +303,9 @@ if ($usernew = $userform->get_data()) {
     }
 
     if (!$emailchanged || !$CFG->emailchangeconfirmation) {
-        redirect($returnurl);
+        redirect($returnurl, get_string('changessaved'), null, \core\output\notification::NOTIFY_SUCCESS);
     }
 }
-
-// Make sure we really are on the https page when https login required.
-$PAGE->verify_https_required();
 
 
 // Display page header.
@@ -326,4 +328,3 @@ if ($emailchanged) {
 
 // And proper footer.
 echo $OUTPUT->footer();
-

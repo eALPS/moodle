@@ -17,7 +17,7 @@
 /**
  * Check that, as in the coding guidelines, every to-do comment links to a tracker issue.
  *
- * As required by http://docs.moodle.org/dev/Coding_style.
+ * As required by https://moodledev.io/general/development/policies/codingstyle.
  *
  * @package    core
  * @copyright  2009 Tim Hunt
@@ -82,9 +82,9 @@ if (empty($found)) {
                 }
 
                 $line = str_replace($issueid, '<a href="' . $issueurl . '" title="' . s($issuesummary) .
-                        '">' . $issuename . '</a>', htmlspecialchars($line));
+                        '">' . $issuename . '</a>', htmlspecialchars($line, ENT_COMPAT));
             } else {
-                $line = htmlspecialchars($line);
+                $line = htmlspecialchars($line, ENT_COMPAT);
                 $error = 'No associated tracker issue.';
             }
 

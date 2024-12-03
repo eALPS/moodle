@@ -38,11 +38,6 @@ function report_participation_get_log_table_name() {
     // Get preferred reader.
     if (!empty($readers)) {
         foreach ($readers as $readerpluginname => $reader) {
-            // If legacy reader is preferred reader.
-            if ($readerpluginname == 'logstore_legacy') {
-                break;
-            }
-
             // If sql_internal_table_reader is preferred reader.
             if ($reader instanceof \core\log\sql_internal_table_reader) {
                 $logtable = $reader->get_internal_log_table_name();
@@ -98,8 +93,8 @@ function report_participation_get_time_options($minlog) {
 function report_participation_get_action_sql($action, $modname) {
     global $CFG, $DB;
 
-    $crudsql = '';
-    $crudparams = array();
+    $actionsql = '';
+    $actionparams = array();
 
     $viewnames = array();
     $postnames = array();
@@ -189,12 +184,14 @@ function report_participation_print_filter_form($course, $timefrom, $minlog, $ac
 
     $actionoptions = report_participation_get_action_options();
 
-    // TODO: we need a new list of roles that are visible here.
     $context = context_course::instance($course->id);
     $roles = get_roles_used_in_context($context);
+    $rolesviewable = get_viewable_roles($context);
+
     $guestrole = get_guest_role();
-    $roles[$guestrole->id] = $guestrole;
-    $roleoptions = role_fix_names($roles, $context, ROLENAME_ALIAS, true);
+    $roleoptions = array_intersect_key($rolesviewable, $roles) + [
+        $guestrole->id => role_get_name($guestrole, $context),
+    ];
 
     $modinfo = get_fast_modinfo($course);
 
@@ -220,7 +217,7 @@ function report_participation_print_filter_form($course, $timefrom, $minlog, $ac
         $instanceoptions[] = array(get_string('modulenameplural', $module->name)=>$instances);
     }
 
-    echo '<form class="participationselectform form-inline" action="index.php" method="get"><div>'."\n".
+    echo '<form class="participationselectform d-flex flex-wrap align-items-center" action="index.php" method="get"><div>'."\n".
         '<input type="hidden" name="id" value="'.$course->id.'" />'."\n";
     echo '<label for="menuinstanceid">'.get_string('activitymodule').'</label>'."\n";
     echo html_writer::select($instanceoptions, 'instanceid', $instanceid);
@@ -229,6 +226,6 @@ function report_participation_print_filter_form($course, $timefrom, $minlog, $ac
     echo '<label for="menuroleid">'.get_string('showonly').'</label>'."\n";
     echo html_writer::select($roleoptions,'roleid',$roleid,false);
     echo '<label for="menuaction">'.get_string('showactions').'</label>'."\n";
-    echo html_writer::select($actionoptions, 'action', $action, false, ['class' => 'm-r-1']);
+    echo html_writer::select($actionoptions, 'action', $action, false, ['class' => 'me-1']);
     echo '<input type="submit" value="'.get_string('go').'" class="btn btn-primary"/>'."\n</div></form>\n";
 }

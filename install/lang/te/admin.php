@@ -1,6 +1,5 @@
 <?php
-
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Automatically generated strings for Moodle installer
@@ -42,3 +41,4 @@ $string['cliunknowoption'] = 'Unrecognised ఎంపికలు:
 $string['cliyesnoprompt'] = 'y (అంటే ఔనని) గానీ, n (అంటే వద్దని) గానీ నొక్కండి';
 $string['environmentrequireinstall'] = 'స్థాపించి, చేతనం చెయ్యడం తప్పనిసరి';
 $string['environmentrequireversion'] = '{$a->needed} వెర్షను తప్పనిసరి. మీరేమో {$a->current} వెర్షను వాడుతున్నారు';
+$string['upgradekeyset'] = 'అప్గ్రేడ్ కీ (ఇది సెట్ చేయకుండా ఖాళీగా వదలండి)';

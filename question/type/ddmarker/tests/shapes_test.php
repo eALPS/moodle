@@ -14,50 +14,46 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for the drag-and-drop words shape code.
- *
- * @package   qtype_ddmarker
- * @copyright 2012 The Open University
- * @author    Jamie Pratt <me@jamiep.org>
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace qtype_ddmarker;
 
+use qtype_ddmarker_shape_circle;
+use qtype_ddmarker_shape_polygon;
+use qtype_ddmarker_shape_rectangle;
 
 defined('MOODLE_INTERNAL') || die();
 global $CFG;
 
 require_once($CFG->dirroot . '/question/type/ddmarker/shapes.php');
 
-
 /**
- * Unit tests for shape code
+ * Unit tests for the drag-and-drop words shape code.
  *
+ * @package   qtype_ddmarker
  * @copyright 2012 The Open University
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class qtype_ddmarker_shapes_test extends basic_testcase {
+class shapes_test extends \basic_testcase {
 
-    public function test_polygon_valdiation_test_ok() {
+    public function test_polygon_valdiation_test_ok(): void {
         $shape = new qtype_ddmarker_shape_polygon('10, 10; 20, 10; 20, 20; 10, 20');
         $this->assertFalse($shape->get_coords_interpreter_error()); // No errors.
     }
 
-    public function test_polygon_valdiation_test_only_two_points() {
+    public function test_polygon_valdiation_test_only_two_points(): void {
         $shape = new qtype_ddmarker_shape_polygon('10, 10; 20, 10');
         $this->assertEquals(get_string('formerror_polygonmusthaveatleastthreepoints', 'qtype_ddmarker',
                         array('shape' => 'polygon', 'coordsstring' => get_string('shape_polygon_coords', 'qtype_ddmarker'))),
                 $shape->get_coords_interpreter_error());
     }
 
-    public function test_polygon_valdiation_test_invalid_point() {
+    public function test_polygon_valdiation_test_invalid_point(): void {
         $shape = new qtype_ddmarker_shape_polygon('10, 10; 20, ; 20, 20; 10, 20');
         $this->assertEquals(get_string('formerror_onlyusewholepositivenumbers', 'qtype_ddmarker',
                         array('shape' => 'polygon', 'coordsstring' => get_string('shape_polygon_coords', 'qtype_ddmarker'))),
                 $shape->get_coords_interpreter_error());
     }
 
-    public function test_polygon_valdiation_test_repeated_point() {
+    public function test_polygon_valdiation_test_repeated_point(): void {
         $shape = new qtype_ddmarker_shape_polygon('70,220;90,200;95,150;120,150;140,200;150,230;'.
                 '150,230;150,240;120,240;110,240;90,240');
         $this->assertEquals(get_string('formerror_repeatedpoint', 'qtype_ddmarker',
@@ -65,7 +61,7 @@ class qtype_ddmarker_shapes_test extends basic_testcase {
                 $shape->get_coords_interpreter_error());
     }
 
-    public function test_polygon_hit_test() {
+    public function test_polygon_hit_test(): void {
         $shape = new qtype_ddmarker_shape_polygon('10, 10; 20, 10; 20, 20; 10, 20');
         $this->assertTrue($shape->is_point_in_shape(array(15, 15)));
         $this->assertFalse($shape->is_point_in_shape(array(5, 5)));
@@ -116,12 +112,12 @@ class qtype_ddmarker_shapes_test extends basic_testcase {
         $this->assertTrue($shape->is_point_in_shape(array(25, 10)));
     }
 
-    public function test_circle_valdiation_test() {
+    public function test_circle_valdiation_test(): void {
         $shape = new qtype_ddmarker_shape_circle('10, 10; 10');
         $this->assertFalse($shape->get_coords_interpreter_error()); // No errors.
     }
 
-    public function test_circle_hit_test() {
+    public function test_circle_hit_test(): void {
         $shape = new qtype_ddmarker_shape_circle('10, 10; 10');
         $this->assertTrue($shape->is_point_in_shape(array(19, 10)));
         $this->assertTrue($shape->is_point_in_shape(array(20, 10)));
@@ -143,12 +139,12 @@ class qtype_ddmarker_shapes_test extends basic_testcase {
         $this->assertTrue($shape->is_point_in_shape(array(16, 18)));
     }
 
-    public function test_rectangle_valdiation_test() {
+    public function test_rectangle_valdiation_test(): void {
         $shape = new qtype_ddmarker_shape_rectangle('1000, 4000; 500, 400');
         $this->assertFalse($shape->get_coords_interpreter_error()); // No errors.
     }
 
-    public function test_rectangle_hit_test() {
+    public function test_rectangle_hit_test(): void {
         $shape = new qtype_ddmarker_shape_rectangle('1000, 4000; 500, 400');
         $this->assertFalse($shape->is_point_in_shape(array(999, 4200)));
         $this->assertTrue($shape->is_point_in_shape(array(1000, 4200)));

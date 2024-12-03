@@ -196,7 +196,7 @@ class external_service_functions_form extends moodleform {
         //we add the descriptions to the functions
         foreach ($functions as $functionid => $functionname) {
             //retrieve full function information (including the description)
-            $function = external_api::external_function_info($functionname);
+            $function = \core_external\external_api::external_function_info($functionname);
             if (empty($function->deprecated)) {
                 $functions[$functionid] = $function->name . ':' . $function->description;
             } else {
@@ -218,123 +218,6 @@ class external_service_functions_form extends moodleform {
         $this->add_action_buttons(true, get_string('addfunctions', 'webservice'));
 
         $this->set_data($data);
-    }
-
-}
-
-class web_service_token_form extends moodleform {
-
-    function definition() {
-        global $USER, $DB, $CFG;
-
-        $mform = $this->_form;
-        $data = $this->_customdata;
-
-        $mform->addElement('header', 'token', get_string('token', 'webservice'));
-
-        if (empty($data->nouserselection)) {
-
-            //check if the number of user is reasonable to be displayed in a select box
-            $usertotal = $DB->count_records('user',
-                    array('deleted' => 0, 'suspended' => 0, 'confirmed' => 1));
-
-            if ($usertotal < 500) {
-                list($sort, $params) = users_order_by_sql('u');
-                // User searchable selector - return users who are confirmed, not deleted, not suspended and not a guest.
-                $sql = 'SELECT u.id, ' . get_all_user_name_fields(true, 'u') . '
-                        FROM {user} u
-                        WHERE u.deleted = 0
-                        AND u.confirmed = 1
-                        AND u.suspended = 0
-                        AND u.id != :siteguestid
-                        ORDER BY ' . $sort;
-                $params['siteguestid'] = $CFG->siteguest;
-                $users = $DB->get_records_sql($sql, $params);
-                $options = array();
-                foreach ($users as $userid => $user) {
-                    $options[$userid] = fullname($user);
-                }
-                $mform->addElement('searchableselector', 'user', get_string('user'), $options);
-                $mform->setType('user', PARAM_INT);
-            } else {
-                //simple text box for username or user id (if two username exists, a form error is displayed)
-                $mform->addElement('text', 'user', get_string('usernameorid', 'webservice'));
-                $mform->setType('user', PARAM_RAW_TRIMMED);
-            }
-            $mform->addRule('user', get_string('required'), 'required', null, 'client');
-        }
-
-        //service selector
-        $services = $DB->get_records('external_services');
-        $options = array();
-        $systemcontext = context_system::instance();
-        foreach ($services as $serviceid => $service) {
-            //check that the user has the required capability
-            //(only for generation by the profile page)
-            if (empty($data->nouserselection)
-                    || empty($service->requiredcapability)
-                    || has_capability($service->requiredcapability, $systemcontext, $USER->id)) {
-                $options[$serviceid] = $service->name;
-            }
-        }
-        $mform->addElement('select', 'service', get_string('service', 'webservice'), $options);
-        $mform->addRule('service', get_string('required'), 'required', null, 'client');
-        $mform->setType('service', PARAM_INT);
-
-        $mform->addElement('text', 'iprestriction', get_string('iprestriction', 'webservice'));
-        $mform->setType('iprestriction', PARAM_RAW_TRIMMED);
-
-        $mform->addElement('date_selector', 'validuntil',
-                get_string('validuntil', 'webservice'), array('optional' => true));
-        $mform->setType('validuntil', PARAM_INT);
-
-        $mform->addElement('hidden', 'action');
-        $mform->setType('action', PARAM_ALPHANUMEXT);
-
-        $this->add_action_buttons(true);
-
-        $this->set_data($data);
-    }
-
-    function get_data() {
-        global $DB;
-        $data = parent::get_data();
-
-        if (!empty($data) && !is_numeric($data->user)) {
-            //retrieve username
-            $user = $DB->get_record('user', array('username' => $data->user), 'id');
-            $data->user = $user->id;
-        }
-        return $data;
-    }
-
-    function validation($data, $files) {
-        global $DB;
-
-        $errors = parent::validation($data, $files);
-
-        if (is_numeric($data['user'])) {
-            $searchtype = 'id';
-        } else {
-            $searchtype = 'username';
-            //check the username is valid
-            if (clean_param($data['user'], PARAM_USERNAME) != $data['user']) {
-                $errors['user'] = get_string('invalidusername');
-            }
-        }
-
-        if (!isset($errors['user'])) {
-            $users = $DB->get_records('user', array($searchtype => $data['user']), '', 'id');
-
-            //check that the user exists in the database
-            if (count($users) == 0) {
-                $errors['user'] = get_string('usernameoridnousererror', 'webservice');
-            } else if (count($users) > 1) { //can only be a username search as id are unique
-                $errors['user'] = get_string('usernameoridoccurenceerror', 'webservice');
-            }
-        }
-
-        return $errors;
     }
 
 }

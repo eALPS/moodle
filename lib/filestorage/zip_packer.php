@@ -55,7 +55,7 @@ class zip_packer extends file_packer {
      */
     public function archive_to_storage(array $files, $contextid,
             $component, $filearea, $itemid, $filepath, $filename,
-            $userid = NULL, $ignoreinvalidfiles=true, file_progress $progress = null) {
+            $userid = NULL, $ignoreinvalidfiles=true, ?file_progress $progress = null) {
         global $CFG;
 
         $fs = get_file_storage();
@@ -96,7 +96,7 @@ class zip_packer extends file_packer {
      * @return bool true if file created, false if not
      */
     public function archive_to_pathname(array $files, $archivefile,
-            $ignoreinvalidfiles=true, file_progress $progress = null) {
+            $ignoreinvalidfiles=true, ?file_progress $progress = null) {
         $ziparch = new zip_archive();
         if (!$ziparch->open($archivefile, file_archive::OVERWRITE)) {
             return false;
@@ -173,7 +173,7 @@ class zip_packer extends file_packer {
      * @param file_progress $progress Progress indicator callback or null if not required
      * @return bool success
      */
-    private function archive_stored($ziparch, $archivepath, $file, file_progress $progress = null) {
+    private function archive_stored($ziparch, $archivepath, $file, ?file_progress $progress = null) {
         $result = $file->archive_file($ziparch, $archivepath);
         if (!$result) {
             return false;
@@ -216,7 +216,7 @@ class zip_packer extends file_packer {
      * @return bool success
      */
     private function archive_pathname($ziparch, $archivepath, $file,
-            file_progress $progress = null) {
+            ?file_progress $progress = null) {
         // Record progress each time this function is called.
         if ($progress) {
             $progress->progress();
@@ -263,7 +263,7 @@ class zip_packer extends file_packer {
      * @return bool|array list of processed files; false if error
      */
     public function extract_to_pathname($archivefile, $pathname,
-            array $onlyfiles = null, file_progress $progress = null, $returnbool = false) {
+            ?array $onlyfiles = null, ?file_progress $progress = null, $returnbool = false) {
         global $CFG;
 
         if (!is_string($archivefile)) {
@@ -297,11 +297,17 @@ class zip_packer extends file_packer {
 
             $size = $info->size;
             $name = $info->pathname;
+            $origname = $name;
+
+            // File names cannot end with dots on Windows and trailing dots are replaced with underscore.
+            if ($CFG->ostype === 'WINDOWS') {
+                $name = preg_replace('~([^/]+)\.(/|$)~', '\1_\2', $name);
+            }
 
             if ($name === '' or array_key_exists($name, $processed)) {
                 // Probably filename collisions caused by filename cleaning/conversion.
                 continue;
-            } else if (is_array($onlyfiles) && !in_array($name, $onlyfiles)) {
+            } else if (is_array($onlyfiles) && !in_array($origname, $onlyfiles)) {
                 // Skipping files which are not in the list.
                 continue;
             }
@@ -341,33 +347,58 @@ class zip_packer extends file_packer {
             }
 
             $newfile = "$newdir/$filename";
-            if (!$fp = fopen($newfile, 'wb')) {
-                $processed[$name] = 'Can not write target file'; // TODO: localise
-                $success = false;
-                continue;
-            }
-            if (!$fz = $ziparch->get_stream($info->index)) {
-                $processed[$name] = 'Can not read file from zip archive'; // TODO: localise
-                $success = false;
+
+            if (strpos($newfile, './') > 1 || $name !== $origname) {
+                // The path to the entry contains a directory ending with dot. We cannot use extract_to() due to
+                // upstream PHP bugs #69477, #74619 and #77214. Extract the file from its stream which is slower but
+                // should work even in this case.
+                if (!$fp = fopen($newfile, 'wb')) {
+                    $processed[$name] = 'Can not write target file'; // TODO: localise.
+                    $success = false;
+                    continue;
+                }
+
+                if (!$fz = $ziparch->get_stream($info->index)) {
+                    $processed[$name] = 'Can not read file from zip archive'; // TODO: localise.
+                    $success = false;
+                    fclose($fp);
+                    continue;
+                }
+
+                while (!feof($fz)) {
+                    $content = fread($fz, 262143);
+                    fwrite($fp, $content);
+                }
+
+                fclose($fz);
                 fclose($fp);
+
+            } else {
+                if (!$fz = $ziparch->extract_to($pathname, $info->index)) {
+                    $processed[$name] = 'Can not read file from zip archive'; // TODO: localise.
+                    $success = false;
+                    continue;
+                }
+            }
+
+            // Check that the file was correctly created in the destination.
+            if (!file_exists($newfile)) {
+                $processed[$name] = 'Unknown error during zip extraction (file not created).'; // TODO: localise.
+                $success = false;
                 continue;
             }
 
-            while (!feof($fz)) {
-                $content = fread($fz, 262143);
-                fwrite($fp, $content);
-            }
-            fclose($fz);
-            fclose($fp);
+            // Check that the size of extracted file matches the expectation.
             if (filesize($newfile) !== $size) {
-                $processed[$name] = 'Unknown error during zip extraction'; // TODO: localise
+                $processed[$name] = 'Unknown error during zip extraction (file size mismatch).'; // TODO: localise.
                 $success = false;
-                // something went wrong :-(
                 @unlink($newfile);
                 continue;
             }
+
             $processed[$name] = true;
         }
+
         $ziparch->close();
 
         if ($returnbool) {
@@ -393,7 +424,7 @@ class zip_packer extends file_packer {
      */
     public function extract_to_storage($archivefile, $contextid,
             $component, $filearea, $itemid, $pathbase, $userid = NULL,
-            file_progress $progress = null) {
+            ?file_progress $progress = null) {
         global $CFG;
 
         if (!is_string($archivefile)) {
@@ -456,8 +487,16 @@ class zip_packer extends file_packer {
                     continue;
                 }
                 $content = '';
+                $realfilesize = 0;
                 while (!feof($fz)) {
                     $content .= fread($fz, 262143);
+                    $realfilesize = strlen($content); // Current file size.
+
+                    // More was read than was expected, which indicates a malformed/malicious archive.
+                    // Break and let the error handling below take care of the file clean up.
+                    if ($realfilesize > $size) {
+                        break;
+                    }
                 }
                 fclose($fz);
                 if (strlen($content) !== $size) {
@@ -502,9 +541,17 @@ class zip_packer extends file_packer {
                     $processed[$name] = 'Can not read file from zip archive'; // TODO: localise
                     continue;
                 }
+                $realfilesize = 0;
                 while (!feof($fz)) {
                     $content = fread($fz, 262143);
-                    fwrite($fp, $content);
+                    $numofbytes = fwrite($fp, $content);
+                    $realfilesize += $numofbytes; // Current file size.
+
+                    // More was read than was expected, which indicates a malformed/malicious archive.
+                    // Break and let the error handling below take care of the file clean up.
+                    if ($realfilesize > $size) {
+                        break;
+                    }
                 }
                 fclose($fz);
                 fclose($fp);

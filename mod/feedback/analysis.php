@@ -25,8 +25,6 @@
 require_once("../../config.php");
 require_once("lib.php");
 
-$current_tab = 'analysis';
-
 $id = required_param('id', PARAM_INT);  // Course module id.
 
 $url = new moodle_url('/mod/feedback/analysis.php', array('id'=>$id));
@@ -41,23 +39,32 @@ $feedbackstructure = new mod_feedback_structure($feedback, $cm);
 $context = context_module::instance($cm->id);
 
 if (!$feedbackstructure->can_view_analysis()) {
-    print_error('error');
+    throw new \moodle_exception('error');
 }
 
 /// Print the page header
 
 $PAGE->set_heading($course->fullname);
 $PAGE->set_title($feedback->name);
+$PAGE->activityheader->set_attrs([
+    'hidecompletion' => true,
+    'description' => ''
+]);
+$PAGE->add_body_class('limitedwidth');
 echo $OUTPUT->header();
-echo $OUTPUT->heading(format_string($feedback->name));
-
-/// print the tabs
-require('tabs.php');
-
+echo $OUTPUT->heading(get_string('analysis', 'mod_feedback'), 3);
 
 //get the groupid
 $mygroupid = groups_get_activity_group($cm, true);
 groups_print_activity_menu($cm, $url);
+
+// Button "Export to excel".
+if (has_capability('mod/feedback:viewreports', $context) && $feedbackstructure->get_items()) {
+    echo $OUTPUT->container_start('form-buttons');
+    $aurl = new moodle_url('/mod/feedback/analysis_to_excel.php', ['sesskey' => sesskey(), 'id' => $id]);
+    echo $OUTPUT->single_button($aurl, get_string('export_to_excel', 'feedback'));
+    echo $OUTPUT->container_end();
+}
 
 // Show the summary.
 $summary = new mod_feedback\output\summary($feedbackstructure, $mygroupid);
@@ -90,4 +97,3 @@ if ($check_anonymously) {
 echo '</div>';
 
 echo $OUTPUT->footer();
-

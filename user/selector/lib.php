@@ -58,9 +58,9 @@ abstract class user_selector_base {
     protected $preserveselected = false;
     /** @var boolean If only one user matches the search, should we select them automatically. */
     protected $autoselectunique = false;
-    /** @var boolean When searching, do we only match the starts of fields (better performance)
-     * or do we match occurrences anywhere? */
-    protected $searchanywhere = false;
+    /** @var int When searching, do we only match the starts of fields (better performance)
+     * or do we match occurrences anywhere or do we match exact the fields. */
+    protected $searchtype = USER_SEARCH_STARTS_WITH;
     /** @var mixed This is used by get selected users */
     protected $validatinguserids = null;
 
@@ -85,6 +85,17 @@ abstract class user_selector_base {
     /** @var boolean Whether to override fullname() */
     public $viewfullnames = false;
 
+    /** @var boolean Whether to include custom user profile fields */
+    protected $includecustomfields = false;
+    /** @var string User fields selects for custom fields. */
+    protected $userfieldsselects = '';
+    /** @var string User fields join for custom fields. */
+    protected $userfieldsjoin = '';
+    /** @var array User fields params for custom fields. */
+    protected $userfieldsparams = [];
+    /** @var array User fields mappings for custom fields. */
+    protected $userfieldsmappings = [];
+
     /**
      * Constructor. Each subclass must have a constructor with this signature.
      *
@@ -105,14 +116,36 @@ abstract class user_selector_base {
             $this->accesscontext = context_system::instance();
         }
 
+        $this->viewfullnames = has_capability('moodle/site:viewfullnames', $this->accesscontext);
+
+        // Check if some legacy code tries to override $CFG->showuseridentity.
         if (isset($options['extrafields'])) {
-            $this->extrafields = $options['extrafields'];
-        } else if (!empty($CFG->showuseridentity) &&
-                has_capability('moodle/site:viewuseridentity', $this->accesscontext)) {
-            $this->extrafields = explode(',', $CFG->showuseridentity);
-        } else {
-            $this->extrafields = array();
+            debugging('The user_selector classes do not support custom list of extra identity fields any more. '.
+                'Instead, the user identity fields defined by the site administrator will be used to respect '.
+                'the configured privacy setting.', DEBUG_DEVELOPER);
+            unset($options['extrafields']);
         }
+
+        if (isset($options['includecustomfields'])) {
+            $this->includecustomfields = $options['includecustomfields'];
+        } else {
+            $this->includecustomfields = false;
+        }
+
+        // Populate the list of additional user identifiers to display.
+        if ($this->includecustomfields) {
+            $userfieldsapi = \core_user\fields::for_identity($this->accesscontext)->with_name();
+            $this->extrafields = $userfieldsapi->get_required_fields([\core_user\fields::PURPOSE_IDENTITY]);
+            [
+                'selects' => $this->userfieldsselects,
+                'joins' => $this->userfieldsjoin,
+                'params' => $this->userfieldsparams,
+                'mappings' => $this->userfieldsmappings
+            ] = (array) $userfieldsapi->get_sql('u', true, '', '', false);
+        } else {
+            $this->extrafields = \core_user\fields::get_identity_fields($this->accesscontext, false);
+        }
+
         if (isset($options['exclude']) && is_array($options['exclude'])) {
             $this->exclude = $options['exclude'];
         }
@@ -123,8 +156,7 @@ abstract class user_selector_base {
         // Read the user prefs / optional_params that we use.
         $this->preserveselected = $this->initialise_option('userselector_preserveselected', $this->preserveselected);
         $this->autoselectunique = $this->initialise_option('userselector_autoselectunique', $this->autoselectunique);
-        $this->searchanywhere = $this->initialise_option('userselector_searchanywhere', $this->searchanywhere);
-
+        $this->searchtype = (int) $this->initialise_option('userselector_searchtype', $this->searchtype, PARAM_INT);
         if (!empty($CFG->maxusersperpage)) {
             $this->maxusersperpage = $CFG->maxusersperpage;
         }
@@ -229,14 +261,14 @@ abstract class user_selector_base {
             $multiselect = 'multiple="multiple" ';
         }
         $output = '<div class="userselector" id="' . $this->name . '_wrapper">' . "\n" .
-                '<select name="' . $name . '" id="' . $this->name . '" ' .
+                '<select name="' . $name . '" id="' . $this->name . '" aria-live="polite" ' .
                 $multiselect . 'size="' . $this->rows . '" class="form-control no-overflow">' . "\n";
 
         // Populate the select.
         $output .= $this->output_options($groupedusers, $search);
 
         // Output the search controls.
-        $output .= "</select>\n<div class=\"form-inline\">\n";
+        $output .= "</select>\n<div class=\"d-flex flex-wrap align-items-center\">\n";
         $output .= '<input type="text" name="' . $this->name . '_searchtext" id="' .
                 $this->name . '_searchtext" size="15" value="' . s($search) . '" class="form-control"/>';
         $output .= '<input type="submit" name="' . $this->name . '_searchbutton" id="' .
@@ -245,7 +277,6 @@ abstract class user_selector_base {
                 $this->name . '_clearbutton" value="' . get_string('clear') . '" class="btn btn-secondary"/>';
 
         // And the search options.
-        $optionsoutput = false;
         if (!user_selector_base::$searchoptionsoutput) {
             $output .= print_collapsible_region_start('', 'userselector_options',
                 get_string('searchoptions'), 'userselector_optionscollapsed', true, true);
@@ -253,8 +284,7 @@ abstract class user_selector_base {
                 get_string('userselectorpreserveselected'));
             $output .= $this->option_checkbox('autoselectunique', $this->autoselectunique,
                 get_string('userselectorautoselectunique'));
-            $output .= $this->option_checkbox('searchanywhere', $this->searchanywhere,
-                get_string('userselectorsearchanywhere'));
+            $output .= $this->output_searchtype_radios();
             $output .= print_collapsible_region_end(true);
 
             $PAGE->requires->js_init_call('M.core_user.init_user_selector_options_tracker', array(), false, self::$jsmodule);
@@ -324,7 +354,9 @@ abstract class user_selector_base {
      * @param array $fields a list of field names that exist in the user table.
      */
     public function set_extra_fields($fields) {
-        $this->extrafields = $fields;
+        debugging('The user_selector classes do not support custom list of extra identity fields any more. '.
+            'Instead, the user identity fields defined by the site administrator will be used to respect '.
+            'the configured privacy setting.', DEBUG_DEVELOPER);
     }
 
     /**
@@ -354,7 +386,7 @@ abstract class user_selector_base {
      *      that is true, then that option will be displayed greyed out, and
      *      will not be returned by get_selected_users.
      */
-    public abstract function find_users($search);
+    abstract public function find_users($search);
 
     /**
      *
@@ -367,7 +399,6 @@ abstract class user_selector_base {
             'class' => get_class($this),
             'name' => $this->name,
             'exclude' => $this->exclude,
-            'extrafields' => $this->extrafields,
             'multiselect' => $this->multiselect,
             'accesscontext' => $this->accesscontext,
         );
@@ -429,12 +460,18 @@ abstract class user_selector_base {
      * @param string $u the table alias for the user table in the query being
      *      built. May be ''.
      * @return string fragment of SQL to go in the select list of the query.
+     * @throws coding_exception if used when includecustomfields is true
      */
-    protected function required_fields_sql($u) {
+    protected function required_fields_sql(string $u) {
+        if ($this->includecustomfields) {
+            throw new coding_exception('required_fields_sql() is not needed when includecustomfields is true, '.
+                    'use $userfieldsselects instead.');
+        }
+
         // Raw list of fields.
         $fields = array('id');
         // Add additional name fields.
-        $fields = array_merge($fields, get_all_user_name_fields(), $this->extrafields);
+        $fields = array_merge($fields, \core_user\fields::get_name_fields(), $this->extrafields);
 
         // Prepend the table alias.
         if ($u) {
@@ -455,8 +492,11 @@ abstract class user_selector_base {
      *      where clause the query, and an array containing any required parameters.
      *      this uses ? style placeholders.
      */
-    protected function search_sql($search, $u) {
-        return users_search_sql($search, $u, $this->searchanywhere, $this->extrafields,
+    protected function search_sql(string $search, string $u): array {
+        $extrafields = $this->includecustomfields
+            ? array_values($this->userfieldsmappings)
+            : $this->extrafields;
+        return users_search_sql($search, $u, $this->searchtype, $extrafields,
                 $this->exclude, $this->validatinguserids);
     }
 
@@ -542,7 +582,7 @@ abstract class user_selector_base {
      */
     protected function output_optgroup($groupname, $users, $select) {
         if (!empty($users)) {
-            $output = '  <optgroup label="' . htmlspecialchars($groupname) . ' (' . count($users) . ')">' . "\n";
+            $output = '  <optgroup label="' . htmlspecialchars($groupname, ENT_COMPAT) . ' (' . count($users) . ')">' . "\n";
             foreach ($users as $user) {
                 $attributes = '';
                 if (!empty($user->disabled)) {
@@ -560,7 +600,7 @@ abstract class user_selector_base {
                 }
             }
         } else {
-            $output = '  <optgroup label="' . htmlspecialchars($groupname) . '">' . "\n";
+            $output = '  <optgroup label="' . htmlspecialchars($groupname, ENT_COMPAT) . '">' . "\n";
             $output .= '    <option disabled="disabled">&nbsp;</option>' . "\n";
         }
         $output .= "  </optgroup>\n";
@@ -578,7 +618,7 @@ abstract class user_selector_base {
         if ($this->extrafields) {
             $displayfields = array();
             foreach ($this->extrafields as $field) {
-                $displayfields[] = $user->{$field};
+                $displayfields[] = s($user->{$field});
             }
             $out .= ' (' . implode(', ', $displayfields) . ')';
         }
@@ -600,10 +640,11 @@ abstract class user_selector_base {
      *
      * @param string $name
      * @param mixed $default
+     * @param string $paramtype allow the option to custom param type. default is bool
      * @return mixed|null|string
      */
-    private function initialise_option($name, $default) {
-        $param = optional_param($name, null, PARAM_BOOL);
+    private function initialise_option($name, $default, $paramtype = PARAM_BOOL) {
+        $param = optional_param($name, null, $paramtype);
         if (is_null($param)) {
             return get_user_preferences($name, $default);
         } else {
@@ -629,14 +670,55 @@ abstract class user_selector_base {
         $name = 'userselector_' . $name;
         // For the benefit of brain-dead IE, the id must be different from the name of the hidden form field above.
         // It seems that document.getElementById('frog') in IE will return and element with name="frog".
-        $output = '<div class="form-check"><input type="hidden" name="' . $name . '" value="0" />' .
+        $output = '<div class="form-check justify-content-start ms-1"><input type="hidden" name="' . $name . '" value="0" />' .
                     '<label class="form-check-label" for="' . $name . 'id">' .
                         '<input class="form-check-input" type="checkbox" id="' . $name . 'id" name="' . $name .
                             '" value="1"' . $checked . ' /> ' . $label .
                     "</label>
                    </div>\n";
-        user_preference_allow_ajax_update($name, PARAM_BOOL);
         return $output;
+    }
+
+    /**
+     * Get all the data for each input in the user selector search type.
+     *
+     * @param string $name
+     * @param bool $checked
+     * @param string $label
+     * @param int $value
+     * @param string $class
+     * @return array a list of attributes for input.
+     */
+    private function get_radio_searchtype_data(string $name, bool $checked, string $label, int $value, string $class): array {
+        $name = 'userselector_' . $name;
+        $id = $name . 'id';
+        $attrs = [
+            'value' => $value,
+            'id' => $id,
+            'name' => $name,
+            'class' => $class,
+            'label' => $label,
+        ];
+        if ($checked) {
+            $attrs['checked'] = true;
+        }
+        return $attrs;
+    }
+
+    /**
+     * Output the search type radio buttons.
+     *
+     * @return string
+     */
+    private function output_searchtype_radios(): string {
+        global $OUTPUT;
+        $fields[] = $this->get_radio_searchtype_data('searchexactmatchesonly', $this->searchtype === USER_SEARCH_EXACT_MATCH,
+            get_string('userselectorsearchexactmatchonly'), USER_SEARCH_EXACT_MATCH, 'me-1');
+        $fields[] = $this->get_radio_searchtype_data('searchfromstart', $this->searchtype === USER_SEARCH_STARTS_WITH,
+            get_string('userselectorsearchfromstart'), USER_SEARCH_STARTS_WITH, 'me-1');
+        $fields[] = $this->get_radio_searchtype_data('searchanywhere', $this->searchtype === USER_SEARCH_CONTAINS,
+            get_string('userselectorsearchanywhere'), USER_SEARCH_CONTAINS, 'me-1');
+        return $OUTPUT->render_from_template('core_user/form_user_selector_searchtype', (object) ['fields' => $fields]);
     }
 
     /**
@@ -646,7 +728,7 @@ abstract class user_selector_base {
      * @return string any HTML needed here.
      */
     protected function initialise_javascript($search) {
-        global $USER, $PAGE, $OUTPUT;
+        global $USER, $PAGE;
         $output = '';
 
         // Put the options into the session, to allow search.php to respond to the ajax requests.
@@ -657,7 +739,7 @@ abstract class user_selector_base {
         // Initialise the selector.
         $PAGE->requires->js_init_call(
             'M.core_user.init_user_selector',
-            array($this->name, $hash, $this->extrafields, $search),
+            array($this->name, $hash, $this->extrafields, $search, $this->searchtype),
             false,
             self::$jsmodule
         );
@@ -686,6 +768,7 @@ abstract class groups_user_selector_base extends user_selector_base {
     public function __construct($name, $options) {
         global $CFG;
         $options['accesscontext'] = context_course::instance($options['courseid']);
+        $options['includecustomfields'] = true;
         parent::__construct($name, $options);
         $this->groupid = $options['groupid'];
         $this->courseid = $options['courseid'];
@@ -718,11 +801,11 @@ abstract class groups_user_selector_base extends user_selector_base {
         foreach ($roles as $role) {
             if ($search) {
                 $a = new stdClass;
-                $a->role = $role->name;
+                $a->role = html_entity_decode($role->name, ENT_QUOTES, 'UTF-8');
                 $a->search = $search;
                 $groupname = get_string('matchingsearchandrole', '', $a);
             } else {
-                $groupname = $role->name;
+                $groupname = html_entity_decode($role->name, ENT_QUOTES, 'UTF-8');
             }
             $groupedusers[$groupname] = $role->users;
             foreach ($groupedusers[$groupname] as &$user) {
@@ -756,11 +839,11 @@ class group_members_selector extends groups_user_selector_base {
     public function find_users($search) {
         list($wherecondition, $params) = $this->search_sql($search, 'u');
 
-        list($sort, $sortparams) = users_order_by_sql('u', $search, $this->accesscontext);
+        list($sort, $sortparams) = users_order_by_sql('u', $search, $this->accesscontext, $this->userfieldsmappings);
 
         $roles = groups_get_members_by_role($this->groupid, $this->courseid,
-                $this->required_fields_sql('u') . ', gm.component',
-                $sort, $wherecondition, array_merge($params, $sortparams));
+                $this->userfieldsselects . ', gm.component',
+                $sort, $wherecondition, array_merge($params, $sortparams, $this->userfieldsparams), $this->userfieldsjoin);
 
         return $this->convert_array_format($roles, $search);
     }
@@ -788,7 +871,8 @@ class group_non_members_selector extends groups_user_selector_base {
      * @return string
      */
     public function output_user($user) {
-        return parent::output_user($user) . ' (' . $user->numgroups . ')';
+        return get_string('usergroupselectorcount', 'core_user',
+            (object) ['groupcount' => $user->numgroups, 'fullname' => parent::output_user($user)]);
     }
 
     /**
@@ -887,26 +971,33 @@ class group_non_members_selector extends groups_user_selector_base {
         list($searchcondition, $searchparams) = $this->search_sql($search, 'u');
 
         // Build the SQL.
-        list($enrolsql, $enrolparams) = get_enrolled_sql($context);
+        $enrolledjoin = get_enrolled_join($context, 'u.id');
+
+        $wheres = [];
+        $wheres[] = $enrolledjoin->wheres;
+        $wheres[] = 'u.deleted = 0';
+        $wheres[] = 'gm.id IS NULL';
+        $wheres = implode(' AND ', $wheres);
+        $wheres .= ' AND ' . $searchcondition;
+
         $fields = "SELECT r.id AS roleid, u.id AS userid,
-                          " . $this->required_fields_sql('u') . ",
+                          " . $this->userfieldsselects . ",
                           (SELECT count(igm.groupid)
                              FROM {groups_members} igm
                              JOIN {groups} ig ON igm.groupid = ig.id
                             WHERE igm.userid = u.id AND ig.courseid = :courseid) AS numgroups";
         $sql = "   FROM {user} u
-                   JOIN ($enrolsql) e ON e.id = u.id
+                   $enrolledjoin->joins
               LEFT JOIN {role_assignments} ra ON (ra.userid = u.id AND ra.contextid $relatedctxsql AND ra.roleid $roleids)
               LEFT JOIN {role} r ON r.id = ra.roleid
               LEFT JOIN {groups_members} gm ON (gm.userid = u.id AND gm.groupid = :groupid)
-                  WHERE u.deleted = 0
-                        AND gm.id IS NULL
-                        AND $searchcondition";
+              $this->userfieldsjoin
+                  WHERE $wheres";
 
-        list($sort, $sortparams) = users_order_by_sql('u', $search, $this->accesscontext);
+        list($sort, $sortparams) = users_order_by_sql('u', $search, $this->accesscontext, $this->userfieldsmappings);
         $orderby = ' ORDER BY ' . $sort;
 
-        $params = array_merge($searchparams, $roleparams, $enrolparams, $relatedctxparams);
+        $params = array_merge($searchparams, $roleparams, $relatedctxparams, $enrolledjoin->params, $this->userfieldsparams);
         $params['courseid'] = $this->courseid;
         $params['groupid']  = $this->groupid;
 

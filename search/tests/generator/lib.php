@@ -37,7 +37,7 @@ class core_search_generator extends component_generator_base {
     /**
      * Creates the mock search area temp table.
      */
-    public function setup() {
+    public function setUp(): void {
         global $DB;
 
         $dbman = $DB->get_manager();
@@ -56,7 +56,7 @@ class core_search_generator extends component_generator_base {
     /**
      * Destroys the mock search area temp table.
      */
-    public function teardown() {
+    public function tearDown(): void {
         global $DB;
 
         $dbman = $DB->get_manager();
@@ -118,7 +118,7 @@ class core_search_generator extends component_generator_base {
         }
 
         if (!isset($options->contextid)) {
-            $info->contextid = \context_system::instance()->id;
+            $info->contextid = \context_course::instance(SITEID)->id;
         } else {
             $info->contextid = $options->contextid;
         }

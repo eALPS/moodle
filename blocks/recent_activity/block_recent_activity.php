@@ -143,7 +143,7 @@ class block_recent_activity extends block_base {
                 FROM {block_recent_activity}
                 WHERE timecreated > ? AND courseid = ?
                 GROUP BY cmid
-                ORDER BY MAX(timecreated) ASC";
+                ORDER BY MAX(timecreated) DESC";
         $params = array($timestart, $course->id);
         $logs = $DB->get_records_sql($sql, $params);
         if (isset($logs[0])) {
@@ -226,16 +226,6 @@ class block_recent_activity extends block_base {
      */
     function applicable_formats() {
         return array('all' => true, 'my' => false, 'tag' => false);
-    }
-
-    /**
-     * Remove old entries from table block_recent_activity
-     */
-    public function cron() {
-        global $DB;
-        // Those entries will never be displayed as RECENT anyway.
-        $DB->delete_records_select('block_recent_activity', 'timecreated < ?',
-                array(time() - COURSE_MAX_RECENT_PERIOD));
     }
 
     /**

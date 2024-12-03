@@ -14,15 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for the quizaccess_delaybetweenattempts plugin.
- *
- * @package    quizaccess
- * @subpackage delaybetweenattempts
- * @category   phpunit
- * @copyright  2008 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace quizaccess_delaybetweenattempts;
+
+use mod_quiz\quiz_settings;
+use quizaccess_delaybetweenattempts;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -33,21 +28,23 @@ require_once($CFG->dirroot . '/mod/quiz/accessrule/delaybetweenattempts/rule.php
 /**
  * Unit tests for the quizaccess_delaybetweenattempts plugin.
  *
+ * @package    quizaccess_delaybetweenattempts
+ * @category   test
  * @copyright  2008 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class quizaccess_delaybetweenattempts_testcase extends basic_testcase {
-    public function test_just_first_delay() {
-        $quiz = new stdClass();
+class rule_test extends \basic_testcase {
+    public function test_just_first_delay(): void {
+        $quiz = new \stdClass();
         $quiz->attempts = 3;
         $quiz->timelimit = 0;
         $quiz->delay1 = 1000;
         $quiz->delay2 = 0;
         $quiz->timeclose = 0;
-        $cm = new stdClass();
+        $cm = new \stdClass();
         $cm->id = 0;
-        $quizobj = new quiz($quiz, $cm, null);
-        $attempt = new stdClass();
+        $quizobj = new quiz_settings($quiz, $cm, null);
+        $attempt = new \stdClass();
         $attempt->timefinish = 10000;
 
         $rule = new quizaccess_delaybetweenattempts($quizobj, 10000);
@@ -71,17 +68,17 @@ class quizaccess_delaybetweenattempts_testcase extends basic_testcase {
         $this->assertFalse($rule->prevent_new_attempt(2, $attempt));
     }
 
-    public function test_just_second_delay() {
-        $quiz = new stdClass();
+    public function test_just_second_delay(): void {
+        $quiz = new \stdClass();
         $quiz->attempts = 5;
         $quiz->timelimit = 0;
         $quiz->delay1 = 0;
         $quiz->delay2 = 1000;
         $quiz->timeclose = 0;
-        $cm = new stdClass();
+        $cm = new \stdClass();
         $cm->id = 0;
-        $quizobj = new quiz($quiz, $cm, null);
-        $attempt = new stdClass();
+        $quizobj = new quiz_settings($quiz, $cm, null);
+        $attempt = new \stdClass();
         $attempt->timefinish = 10000;
 
         $rule = new quizaccess_delaybetweenattempts($quizobj, 10000);
@@ -110,17 +107,17 @@ class quizaccess_delaybetweenattempts_testcase extends basic_testcase {
             get_string('youmustwait', 'quizaccess_delaybetweenattempts', userdate(10001)));
     }
 
-    public function test_just_both_delays() {
-        $quiz = new stdClass();
+    public function test_just_both_delays(): void {
+        $quiz = new \stdClass();
         $quiz->attempts = 5;
         $quiz->timelimit = 0;
         $quiz->delay1 = 2000;
         $quiz->delay2 = 1000;
         $quiz->timeclose = 0;
-        $cm = new stdClass();
+        $cm = new \stdClass();
         $cm->id = 0;
-        $quizobj = new quiz($quiz, $cm, null);
-        $attempt = new stdClass();
+        $quizobj = new quiz_settings($quiz, $cm, null);
+        $attempt = new \stdClass();
         $attempt->timefinish = 10000;
 
         $rule = new quizaccess_delaybetweenattempts($quizobj, 10000);
@@ -161,17 +158,17 @@ class quizaccess_delaybetweenattempts_testcase extends basic_testcase {
             get_string('youmustwait', 'quizaccess_delaybetweenattempts', userdate(10001)));
     }
 
-    public function test_with_close_date() {
-        $quiz = new stdClass();
+    public function test_with_close_date(): void {
+        $quiz = new \stdClass();
         $quiz->attempts = 5;
         $quiz->timelimit = 0;
         $quiz->delay1 = 2000;
         $quiz->delay2 = 1000;
         $quiz->timeclose = 15000;
-        $cm = new stdClass();
+        $cm = new \stdClass();
         $cm->id = 0;
-        $quizobj = new quiz($quiz, $cm, null);
-        $attempt = new stdClass();
+        $quizobj = new quiz_settings($quiz, $cm, null);
+        $attempt = new \stdClass();
         $attempt->timefinish = 13000;
 
         $rule = new quizaccess_delaybetweenattempts($quizobj, 10000);
@@ -217,17 +214,17 @@ class quizaccess_delaybetweenattempts_testcase extends basic_testcase {
         $this->assertFalse($rule->prevent_new_attempt(2, $attempt));
     }
 
-    public function test_time_limit_and_overdue() {
-        $quiz = new stdClass();
+    public function test_time_limit_and_overdue(): void {
+        $quiz = new \stdClass();
         $quiz->attempts = 5;
         $quiz->timelimit = 100;
         $quiz->delay1 = 2000;
         $quiz->delay2 = 1000;
         $quiz->timeclose = 0;
-        $cm = new stdClass();
+        $cm = new \stdClass();
         $cm->id = 0;
-        $quizobj = new quiz($quiz, $cm, null);
-        $attempt = new stdClass();
+        $quizobj = new quiz_settings($quiz, $cm, null);
+        $attempt = new \stdClass();
         $attempt->timestart = 9900;
         $attempt->timefinish = 10100;
 

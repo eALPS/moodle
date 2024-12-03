@@ -14,23 +14,26 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace qtype_numerical;
 
-/**
- * Unit tests for the numerical question definition class.
- *
- * @package moodlecore
- * @subpackage questiontypes
- * @copyright 2008 The Open University
- * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+use qtype_numerical_answer;
+
+defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/question/engine/tests/helpers.php');
 require_once($CFG->dirroot . '/question/type/numerical/question.php');
 
-
-class qtype_numerical_answer_test extends advanced_testcase {
-    public function test_within_tolerance_nominal() {
+/**
+ * Unit tests for the numerical question definition class.
+ *
+ * @package   qtype_numerical
+ * @category  test
+ * @copyright 2008 The Open University
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class answer_test extends \advanced_testcase {
+    public function test_within_tolerance_nominal(): void {
         $answer = new qtype_numerical_answer(13, 7.0, 1.0, '', FORMAT_MOODLE, 1.0);
 
         $this->assertFalse($answer->within_tolerance(5.99));
@@ -40,7 +43,7 @@ class qtype_numerical_answer_test extends advanced_testcase {
         $this->assertFalse($answer->within_tolerance(8.01));
     }
 
-    public function test_within_tolerance_nominal_zero() {
+    public function test_within_tolerance_nominal_zero(): void {
         // Either an answer or tolerance of 0 requires special care. We still
         // don't want to end up comparing two floats for absolute equality.
 
@@ -75,14 +78,14 @@ class qtype_numerical_answer_test extends advanced_testcase {
         $this->assertFalse($answer->within_tolerance(1.0002e-20));
     }
 
-    public function test_within_tolerance_blank() {
+    public function test_within_tolerance_blank(): void {
         $answer = new qtype_numerical_answer(13, 1234, 1.0, '', FORMAT_MOODLE, '');
         $this->assertTrue($answer->within_tolerance(1234));
         $this->assertFalse($answer->within_tolerance(1234.000001));
         $this->assertFalse($answer->within_tolerance(0));
     }
 
-    public function test_within_tolerance_relative() {
+    public function test_within_tolerance_relative(): void {
         $answer = new qtype_numerical_answer(13, 7.0, 1.0, '', FORMAT_MOODLE, 0.1);
         $answer->tolerancetype = 1;
 
@@ -93,7 +96,7 @@ class qtype_numerical_answer_test extends advanced_testcase {
         $this->assertFalse($answer->within_tolerance(7.71));
     }
 
-    public function test_within_tolerance_geometric() {
+    public function test_within_tolerance_geometric(): void {
         $answer = new qtype_numerical_answer(13, 7.0, 1.0, '', FORMAT_MOODLE, 1.0);
         $answer->tolerancetype = 3;
 
@@ -102,5 +105,15 @@ class qtype_numerical_answer_test extends advanced_testcase {
         $this->assertTrue($answer->within_tolerance(7));
         $this->assertTrue($answer->within_tolerance(14));
         $this->assertFalse($answer->within_tolerance(14.01));
+
+        // Geometric tolerance, negative answer.
+        $answer = new qtype_numerical_answer(13, -7.0, 1.0, '', FORMAT_MOODLE, 1.0);
+        $answer->tolerancetype = 3;
+
+        $this->assertFalse($answer->within_tolerance(-3.49));
+        $this->assertTrue($answer->within_tolerance(-3.5));
+        $this->assertTrue($answer->within_tolerance(-7));
+        $this->assertTrue($answer->within_tolerance(-14));
+        $this->assertFalse($answer->within_tolerance(-14.01));
     }
 }

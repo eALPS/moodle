@@ -44,12 +44,40 @@ abstract class qtype_gapselect_base extends question_type {
      * @param array $choice the form data relating to this choice.
      * @return string ready to store in the database.
      */
-    protected abstract function choice_options_to_feedback($choice);
+    abstract protected function choice_options_to_feedback($choice);
 
     public function save_question_options($question) {
         global $DB;
         $context = $question->context;
-        $result = new stdClass();
+
+        // This question type needs the choices to be consecutively numbered, but
+        // there is no reason why the question author should have done that,
+        // so renumber if necessary.
+        // Insert all the new answers.
+        $nonblankchoices = [];
+        $questiontext = $question->questiontext;
+        $newkey = 0;
+        foreach ($question->choices as $key => $choice) {
+            if (trim($choice['answer']) == '') {
+                continue;
+            }
+
+            $nonblankchoices[] = $choice;
+            if ($newkey != $key) {
+                // Safe to do this in this order, because we will always be replacing
+                // a bigger number with a smaller number that is not present.
+                // Numbers in the question text always one bigger than the array index.
+                $questiontext = str_replace('[[' . ($key + 1) . ']]', '[[' . ($newkey + 1) . ']]',
+                        $questiontext);
+            }
+            $newkey += 1;
+        }
+        $question->choices = $nonblankchoices;
+        if ($questiontext !== $question->questiontext) {
+            $DB->set_field('question', 'questiontext', $questiontext,
+                    ['id' => $question->id]);
+            $question->questiontext = $questiontext;
+        }
 
         $oldanswers = $DB->get_records('question_answers',
                 array('question' => $question->id), 'id ASC');
@@ -57,14 +85,12 @@ abstract class qtype_gapselect_base extends question_type {
         // Insert all the new answers.
         foreach ($question->choices as $key => $choice) {
 
-            if (trim($choice['answer']) == '') {
-                continue;
-            }
+            // Answer guaranteed to be non-blank. See above.
 
             $feedback = $this->choice_options_to_feedback($choice);
 
             if ($answer = array_shift($oldanswers)) {
-                $answer->answer = $choice['answer'];
+                $answer->answer = trim($choice['answer']);
                 $answer->feedback = $feedback;
                 $DB->update_record('question_answers', $answer);
 
@@ -121,7 +147,7 @@ abstract class qtype_gapselect_base extends question_type {
      * @param object $choicedata as loaded from the question_answers table.
      * @return object an appropriate object for representing the choice.
      */
-    protected abstract function make_choice($choicedata);
+    abstract protected function make_choice($choicedata);
 
     protected function initialise_question_instance(question_definition $question, $questiondata) {
         parent::initialise_question_instance($question, $questiondata);
@@ -156,7 +182,7 @@ abstract class qtype_gapselect_base extends question_type {
         // Break up the question text, and store the fragments, places and right answers.
 
         $bits = preg_split('/\[\[(\d+)]]/', $question->questiontext,
-                null, PREG_SPLIT_DELIM_CAPTURE);
+                -1, PREG_SPLIT_DELIM_CAPTURE);
         $question->textfragments[0] = array_shift($bits);
         $i = 1;
 
@@ -186,7 +212,7 @@ abstract class qtype_gapselect_base extends question_type {
      * @param string $feedback the data loaded from the database.
      * @return array the choice options.
      */
-    protected abstract function feedback_to_choice_options($feedback);
+    abstract protected function feedback_to_choice_options($feedback);
 
     /**
      * This method gets the choices (answers)
@@ -291,6 +317,11 @@ abstract class qtype_gapselect_base extends question_type {
             shuffle($goupofanswers);
         }
         return $goupofanswers;
+    }
+
+    public function save_defaults_for_new_questions(stdClass $fromform): void {
+        parent::save_defaults_for_new_questions($fromform);
+        $this->set_default_value('shuffleanswers', $fromform->shuffleanswers ?? 0);
     }
 
     public function get_possible_responses($questiondata) {

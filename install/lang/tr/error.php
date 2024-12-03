@@ -1,6 +1,5 @@
 <?php
-
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Automatically generated strings for Moodle installer
@@ -46,7 +45,9 @@ $string['dmlexceptiononinstall'] = '<p>Bir veritabanı hatası oluştu [{$a->err
 $string['downloadedfilecheckfailed'] = 'İndirilen dosya kontrolü hatası';
 $string['invalidmd5'] = 'Kontrol değişkeni yanlış - yeniden deneyin';
 $string['missingrequiredfield'] = 'Gerekli alanlardan bazıları eksik';
-$string['remotedownloaderror'] = 'Bileşeni sunucunuza indirirken hata oluştu, lütfen proxy(vekil) ayarlarını kontrol edin. PHP cURL eklentisi şiddetle tavsiye edilir.<br /><br /><a href="{$a->url}">{$a->url}</a><br />dosyasını kendiniz indirmeli ve indirdiğiniz dosyayı sunucunuzundaki "{$a->dest}" klasörüne kaydetmeli ve zip arşivini açmalısınız.';
+$string['remotedownloaderror'] = '<p>Bileşeni sunucunuza indirirken hata oluştu, lütfen proxy ayarlarını kontrol edin. PHP cURL eklentisi şiddetle tavsiye edilir.</p>
+<p><a href="{$a->url}">{$a->url}</a> dosyasını kendiniz indirmeli ve indirdiğiniz dosyayı sunucunuzundaki "{$a->dest}" klasörüne kaydetmeli ve zip arşivini açmalısınız.
+</p>';
 $string['wrongdestpath'] = 'Yanlış hedef yolu';
 $string['wrongsourcebase'] = 'Yanlış kaynak URL tabanı';
 $string['wrongzipfilename'] = 'Yanlış ZIP dosya adı';

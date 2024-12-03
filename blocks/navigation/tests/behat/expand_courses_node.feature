@@ -39,14 +39,15 @@ Feature: Expand the courses nodes within the navigation block
     And I log in as "admin"
     And I am on site homepage
     And I turn editing mode on
+    And the following config values are set as admin:
+      | unaddableblocks | | theme_boost|
     And I add the "Navigation" block if not present
     And I configure the "Navigation" block
     And I set the following fields to these values:
       | Page contexts | Display throughout the entire site |
     And I press "Save changes"
     And I turn editing mode off
-    And I follow "Course 2"
-    And I navigate to "Enrolment methods" node in "Course administration > Users"
+    And I am on the "Course 2" "enrolment methods" page
     And I click on "Edit" "link" in the "Guest access" "table_row"
     And I set the following fields to these values:
       | Allow guest access | Yes |
@@ -176,7 +177,7 @@ Feature: Expand the courses nodes within the navigation block
   Scenario: As guest I expand the courses and category nodes to see courses.
     When I log in as "guest"
     And I am on site homepage
-    And I should see "Home" in the "Navigation" "block"
+    And I should see "Site home" in the "Navigation" "block"
     And I should see "Courses" in the "Navigation" "block"
     And I expand "Courses" node
     And I should see "cat1" in the "Navigation" "block"

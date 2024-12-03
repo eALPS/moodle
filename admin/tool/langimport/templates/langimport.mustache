@@ -65,11 +65,11 @@
     }
 }}
 <div class="container-fluid langimport">
-    <div class="row row-fluid rtl-compatible">
-        <div class="col-md-{{#caninstall}}6{{/caninstall}}{{^caninstall}}12{{/caninstall}} span{{#caninstall}}6{{/caninstall}}{{^caninstall}}12{{/caninstall}} m-b-1">
+    <div class="row rtl-compatible">
+        <div class="col-md-{{#caninstall}}6{{/caninstall}}{{^caninstall}}12{{/caninstall}} span{{#caninstall}}6{{/caninstall}}{{^caninstall}}12{{/caninstall}} mb-1">
             <form id="uninstallform" action="{{uninstallurl}}" method="post">
                 <fieldset>
-                    <div class="form-group">
+                    <div class="mb-3">
                         <label for="menuuninstalllang">{{#str}}installedlangs, tool_langimport{{/str}}</label>
                         <select size="15" multiple="multiple" id="menuuninstalllang" class="form-control input-block-level" name="uninstalllang[]">
                             {{#installedoptions}}
@@ -77,9 +77,9 @@
                             {{/installedoptions}}
                         </select>
                     </div>
-                    <div class="form-group">
+                    <div class="mb-3">
                         <input type="hidden" name="sesskey" value="{{sesskey}}">
-                        <input id="languninstallbutton" type="submit" value="{{#str}}uninstall, tool_langimport{{/str}}" class="btn btn-default">
+                        <input id="languninstallbutton" type="submit" value="{{#str}}uninstall, tool_langimport{{/str}}" class="btn btn-secondary">
                     </div>
                 </fieldset>
             </form>
@@ -87,17 +87,21 @@
                 <div>
                     <form id="updateform" action="{{updateurl}}" method="post">
                         <fieldset>
-                            <input type="submit" value="{{#str}}updatelangs, tool_langimport{{/str}}" class="btn btn-default">
+                            <input type="hidden" name="sesskey" value="{{sesskey}}">
+                            <input type="submit" value="{{#str}}updatelangs, tool_langimport{{/str}}" class="btn btn-secondary">
+                            {{#hasmanyinstalledlanguages}}
+                                <p class="mt-2 small">{{#str}} updatelangsnote, tool_langimport, {"taskname": {{#quote}}{{updatelangstaskname}}{{/quote}} }{{/str}}</p>
+                            {{/hasmanyinstalledlanguages}}
                         </fieldset>
                     </form>
                 </div>
             {{/updateurl}}
         </div>
         {{#caninstall}}
-            <div class="col-md-6 span6 m-b-1">
+            <div class="col-md-6 mb-1">
                 <form id="installform" action="{{installurl}}" method="post">
                     <fieldset>
-                        <div class="form-group">
+                        <div class="mb-3">
                             <label for="menupack">{{#str}}availablelangs, install{{/str}}</label>
                             <select size="15" multiple="multiple" class="form-control input-block-level" id="menupack" name="pack[]">
                                 {{#toinstalloptions}}
@@ -105,9 +109,16 @@
                                 {{/toinstalloptions}}
                             </select>
                         </div>
-                        <div class="form-group">
+                        <div class="mb-3">
+                            {{< core/search_input_auto }}
+                                {{$label}}
+                                    {{#str}} search, tool_langimport {{/str}}
+                                {{/label}}
+                            {{/ core/search_input_auto }}
+                        </div>
+                        <div class="mb-3">
                             <input type="hidden" name="sesskey" value="{{sesskey}}">
-                            <input type="submit" value="{{#str}}install, tool_langimport{{/str}}" class="btn btn-default">
+                            <input type="submit" value="{{#str}}install, tool_langimport{{/str}}" class="btn btn-secondary">
                         </div>
                     </fieldset>
                 </form>
@@ -115,3 +126,9 @@
         {{/caninstall}}
     </div>
 </div>
+{{#js}}
+    require(['tool_langimport/search', 'tool_langimport/uninstall'], function(search, uninstall) {
+        search.init(document.querySelector('#installform'));
+        uninstall.init(document.querySelector('#uninstallform'));
+    });
+{{/js}}

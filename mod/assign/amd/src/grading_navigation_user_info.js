@@ -17,8 +17,6 @@
  * Javascript controller for the "User summary" panel at the top of the page.
  *
  * @module     mod_assign/grading_navigation_user_info
- * @package    mod_assign
- * @class      UserInfo
  * @copyright  2016 Damyon Wiese <damyon@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @since      3.1
@@ -28,7 +26,7 @@ define(['jquery', 'core/notification', 'core/ajax', 'core/templates'], function(
     /**
      * UserInfo class.
      *
-     * @class UserInfo
+     * @class mod_assign/grading_navigation_user_info
      * @param {String} selector The selector for the page region containing the user navigation.
      */
     var UserInfo = function(selector) {
@@ -39,16 +37,16 @@ define(['jquery', 'core/notification', 'core/ajax', 'core/templates'], function(
         $(document).on('user-changed', this._refreshUserInfo.bind(this));
     };
 
-    /** @type {String} Selector for the page region containing the user navigation. */
+    /** @property {String} Selector for the page region containing the user navigation. */
     UserInfo.prototype._regionSelector = null;
 
-    /** @type {Array} Cache of user info contexts. */
+    /** @property {Array} Cache of user info contexts. */
     UserInfo.prototype._userCache = null;
 
-    /** @type {JQuery} JQuery node for the page region containing the user navigation. */
+    /** @property {JQuery} JQuery node for the page region containing the user navigation. */
     UserInfo.prototype._region = null;
 
-    /** @type {Integer} Remember the last user id to prevent unnessecary reloads. */
+    /** @property {Integer} Remember the last user id to prevent unnecessary reloads. */
     UserInfo.prototype._lastUserId = 0;
 
     /**
@@ -73,6 +71,9 @@ define(['jquery', 'core/notification', 'core/ajax', 'core/templates'], function(
     UserInfo.prototype._refreshUserInfo = function(event, userid) {
         var promise = $.Deferred();
 
+        // Put the current user ID in the DOM so yui can access it.
+        this._region.attr('data-userid', userid);
+
         // Skip reloading if it is the same user.
         if (this._lastUserId == userid) {
             return;
@@ -90,11 +91,13 @@ define(['jquery', 'core/notification', 'core/ajax', 'core/templates'], function(
             if (userid < 0) {
                 // Render the template.
                 templates.render('mod_assign/grading_navigation_no_users', {}).done(function(html, js) {
-                    // Update the page.
-                    this._region.fadeOut("fast", function() {
-                        templates.replaceNodeContents(this._region, html, js);
-                        this._region.fadeIn("fast");
-                    }.bind(this));
+                    if (userid == this._lastUserId) {
+                        // Update the page.
+                        this._region.fadeOut("fast", function() {
+                            templates.replaceNodeContents(this._region, html, js);
+                            this._region.fadeIn("fast");
+                        }.bind(this));
+                    }
                 }.bind(this)).fail(notification.exception);
                 return;
             }
@@ -147,10 +150,12 @@ define(['jquery', 'core/notification', 'core/ajax', 'core/templates'], function(
 
                 templates.render('mod_assign/grading_navigation_user_summary', context).done(function(html, js) {
                     // Update the page.
-                    this._region.fadeOut("fast", function() {
-                        templates.replaceNodeContents(this._region, html, js);
-                        this._region.fadeIn("fast");
-                    }.bind(this));
+                    if (userid == this._lastUserId) {
+                        this._region.fadeOut("fast", function() {
+                            templates.replaceNodeContents(this._region, html, js);
+                            this._region.fadeIn("fast");
+                        }.bind(this));
+                    }
                 }.bind(this)).fail(notification.exception);
             }.bind(this)).fail(function() {
                 // Render the template.

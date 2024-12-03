@@ -52,8 +52,8 @@ class block_activity_modules extends block_list {
         $archetypes = array();
 
         foreach($modinfo->cms as $cm) {
-            // Exclude activities which are not visible or have no link (=label)
-            if (!$cm->uservisible or !$cm->has_view()) {
+            // Exclude activities that aren't visible or have no view link (e.g. label). Account for folder being displayed inline.
+            if (!$cm->uservisible || (!$cm->has_view() && strcmp($cm->modname, 'folder') !== 0)) {
                 continue;
             }
             if (array_key_exists($cm->modname, $modfullnames)) {
@@ -75,10 +75,10 @@ class block_activity_modules extends block_list {
 
         foreach ($modfullnames as $modname => $modfullname) {
             if ($modname === 'resources') {
-                $icon = $OUTPUT->pix_icon('icon', '', 'mod_page', array('class' => 'icon'));
+                $icon = $OUTPUT->pix_icon('monologo', '', 'mod_page', array('class' => 'icon'));
                 $this->content->items[] = '<a href="'.$CFG->wwwroot.'/course/resources.php?id='.$course->id.'">'.$icon.$modfullname.'</a>';
             } else {
-                $icon = '<img src="'.$OUTPUT->pix_url('icon', $modname) . '" class="icon" alt="" />';
+                $icon = $OUTPUT->image_icon('monologo', get_string('pluginname', $modname), $modname);
                 $this->content->items[] = '<a href="'.$CFG->wwwroot.'/mod/'.$modname.'/index.php?id='.$course->id.'">'.$icon.$modfullname.'</a>';
             }
         }

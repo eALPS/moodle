@@ -14,13 +14,15 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace tool_templatelibrary;
+
+use externallib_advanced_testcase;
+
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 
 require_once($CFG->dirroot . '/webservice/tests/helpers.php');
-
-use tool_templatelibrary\external;
 
 /**
  * External learning plans webservice API tests.
@@ -29,12 +31,12 @@ use tool_templatelibrary\external;
  * @copyright 2015 Damyon Wiese
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class tool_templatelibrary_external_testcase extends externallib_advanced_testcase {
+class externallib_test extends externallib_advanced_testcase {
 
     /**
      * Test list all.
      */
-    public function test_list_templates() {
+    public function test_list_templates(): void {
         $result = external::list_templates('', '');
         $count = count($result);
         // We have 3 templates in this tool - and there must be more else where.
@@ -44,7 +46,7 @@ class tool_templatelibrary_external_testcase extends externallib_advanced_testca
     /**
      * Test we can filter by component.
      */
-    public function test_list_templates_for_component() {
+    public function test_list_templates_for_component(): void {
         $result = external::list_templates('tool_templatelibrary', '');
         $count = count($result);
         $this->assertEquals(3, $count);
@@ -57,7 +59,7 @@ class tool_templatelibrary_external_testcase extends externallib_advanced_testca
     /**
      * Test we can filter by a string.
      */
-    public function test_list_templates_with_filter() {
+    public function test_list_templates_with_filter(): void {
         $result = external::list_templates('tool_templatelibrary', 'page');
         $count = count($result);
         // Should be only one matching template.
@@ -65,17 +67,17 @@ class tool_templatelibrary_external_testcase extends externallib_advanced_testca
         $this->assertEquals($result[0], "tool_templatelibrary/list_templates_page");
     }
 
-    public function test_load_canonical_template() {
+    public function test_load_canonical_template(): void {
         global $CFG;
 
         $originaltheme = $CFG->theme;
         // Change the theme to 'base' because it overrides these templates.
-        $CFG->theme = 'base';
+        $CFG->theme = 'boost';
 
         $template = external::load_canonical_template('core', 'notification_error');
 
         // Only the base template should contain the docs.
-        $this->assertContains('@template core/notification_error', $template);
+        $this->assertStringContainsString('@template core/notification_error', $template);
 
         // Restore the original theme.
         $CFG->theme = $originaltheme;

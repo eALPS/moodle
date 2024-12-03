@@ -14,6 +14,14 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+use core_external\external_api;
+use core_external\external_format_value;
+use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
+use core_external\external_warnings;
+use core_external\util;
 
 /**
  * External notes API
@@ -24,7 +32,8 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once("$CFG->libdir/externallib.php");
+defined('MOODLE_INTERNAL') || die();
+
 require_once($CFG->dirroot . "/notes/lib.php");
 
 /**
@@ -54,7 +63,7 @@ class core_notes_external extends external_api {
                             'publishstate' => new external_value(PARAM_ALPHA, '\'personal\', \'course\' or \'site\''),
                             'courseid' => new external_value(PARAM_INT, 'course id of the note (in Moodle a note can only be created into a course, even for site and personal notes)'),
                             'text' => new external_value(PARAM_RAW, 'the text of the message - text or HTML'),
-                            'format' => new external_format_value('text', VALUE_DEFAULT),
+                            'format' => new external_format_value('text', VALUE_DEFAULT, FORMAT_MOODLE),
                             'clientnoteid' => new external_value(PARAM_ALPHANUMEXT, 'your own client id for the note. If this id is provided, the fail message id will be returned to you', VALUE_OPTIONAL),
                         )
                     )
@@ -137,8 +146,9 @@ class core_notes_external extends external_api {
                         break;
                     case 'text':
                         $textformat = FORMAT_PLAIN;
+                        break;
                     default:
-                        $textformat = external_validate_format($note['format']);
+                        $textformat = util::validate_format($note['format']);
                         break;
                 }
                 $dbnote->content = $note['text'];
@@ -183,7 +193,7 @@ class core_notes_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 2.2
      */
     public static function create_notes_returns() {
@@ -250,7 +260,7 @@ class core_notes_external extends external_api {
     /**
      * Returns description of delete_notes result value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 2.5
      */
     public static function delete_notes_returns() {
@@ -303,7 +313,7 @@ class core_notes_external extends external_api {
                 $context = context_course::instance($note->courseid);
                 self::validate_context($context);
                 require_capability('moodle/notes:view', $context);
-                list($gotnote['text'], $gotnote['format']) = external_format_text($note->content,
+                list($gotnote['text'], $gotnote['format']) = util::format_text($note->content,
                                                                                   $note->format,
                                                                                   $context->id,
                                                                                   'notes',
@@ -327,7 +337,7 @@ class core_notes_external extends external_api {
     /**
      * Returns description of get_notes result value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 2.5
      */
     public static function get_notes_returns() {
@@ -406,7 +416,7 @@ class core_notes_external extends external_api {
                 $dbnote = new stdClass;
                 $dbnote->id = $note['id'];
                 $dbnote->content = $note['text'];
-                $dbnote->format = external_validate_format($note['format']);
+                $dbnote->format = util::validate_format($note['format']);
                 // Get the state ('personal', 'course', 'site').
                 switch ($note['publishstate']) {
                     case 'personal':
@@ -445,7 +455,7 @@ class core_notes_external extends external_api {
     /**
      * Returns description of update_notes result value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 2.5
      */
     public static function update_notes_returns() {
@@ -483,16 +493,18 @@ class core_notes_external extends external_api {
      * @since Moodle 2.9
      */
     protected static function create_note_list($courseid, $context, $userid, $state, $author = 0) {
-        $results = array();
+        $results = [];
         $notes = note_list($courseid, $userid, $state, $author);
         foreach ($notes as $key => $note) {
             $note = (array)$note;
-            list($note['content'], $note['format']) = external_format_text($note['content'],
-                                                                           $note['format'],
-                                                                           $context->id,
-                                                                           '',
-                                                                           '',
-                                                                           0);
+            [$note['content'], $note['format']] = util::format_text(
+                $note['content'],
+                $note['format'],
+                $context->id,
+                '',
+                '',
+                0
+            );
             $results[$key] = $note;
         }
         return $results;
@@ -532,10 +544,15 @@ class core_notes_external extends external_api {
 
         $course = get_course($params['courseid']);
 
+        $systemcontext = context_system::instance();
+        $canmanagesystemnotes = has_capability('moodle/notes:manage', $systemcontext);
+
         if ($course->id == SITEID) {
-            $context = context_system::instance();
+            $context = $systemcontext;
+            $canmanagecoursenotes = $canmanagesystemnotes;
         } else {
             $context = context_course::instance($course->id);
+            $canmanagecoursenotes = has_capability('moodle/notes:manage', $context);
         }
         self::validate_context($context);
 
@@ -546,7 +563,7 @@ class core_notes_external extends external_api {
         if ($course->id != SITEID) {
 
             require_capability('moodle/notes:view', $context);
-            $sitenotes = self::create_note_list(0, context_system::instance(), $params['userid'], NOTES_STATE_SITE);
+            $sitenotes = self::create_note_list(0, $systemcontext, $params['userid'], NOTES_STATE_SITE);
             $coursenotes = self::create_note_list($course->id, $context, $params['userid'], NOTES_STATE_PUBLIC);
             $personalnotes = self::create_note_list($course->id, $context, $params['userid'], NOTES_STATE_DRAFT,
                                                         $USER->id);
@@ -570,6 +587,8 @@ class core_notes_external extends external_api {
             'sitenotes'     => $sitenotes,
             'coursenotes'   => $coursenotes,
             'personalnotes' => $personalnotes,
+            'canmanagesystemnotes' => $canmanagesystemnotes,
+            'canmanagecoursenotes' => $canmanagecoursenotes,
             'warnings'      => $warnings
         );
         return $results;
@@ -579,7 +598,7 @@ class core_notes_external extends external_api {
     /**
      * Returns array of note structure
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 2.9
      */
     protected static function get_note_structure() {
@@ -599,28 +618,26 @@ class core_notes_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 2.9
      */
     public static function get_course_notes_returns() {
         return new external_single_structure(
             array(
-                  'sitenotes' => new external_multiple_structure(
-                      new external_single_structure(
-                          self::get_note_structure() , ''
-                      ), 'site notes', VALUE_OPTIONAL
-                   ),
-                   'coursenotes' => new external_multiple_structure(
-                      new external_single_structure(
-                          self::get_note_structure() , ''
-                      ), 'couse notes', VALUE_OPTIONAL
-                   ),
-                   'personalnotes' => new external_multiple_structure(
-                      new external_single_structure(
-                          self::get_note_structure() , ''
-                      ), 'personal notes', VALUE_OPTIONAL
-                   ),
-                 'warnings' => new external_warnings()
+                'sitenotes' => new external_multiple_structure(
+                    new external_single_structure(self::get_note_structure() , ''), 'site notes', VALUE_OPTIONAL
+                ),
+                'coursenotes' => new external_multiple_structure(
+                    new external_single_structure(self::get_note_structure() , ''), 'couse notes', VALUE_OPTIONAL
+                ),
+                'personalnotes' => new external_multiple_structure(
+                    new external_single_structure(self::get_note_structure() , ''), 'personal notes', VALUE_OPTIONAL
+                ),
+                'canmanagesystemnotes' => new external_value(PARAM_BOOL, 'Whether the user can manage notes at system level.',
+                    VALUE_OPTIONAL),
+                'canmanagecoursenotes' => new external_value(PARAM_BOOL, 'Whether the user can manage notes at the given course.',
+                    VALUE_OPTIONAL),
+                'warnings' => new external_warnings()
             ), 'notes'
         );
     }
@@ -701,7 +718,7 @@ class core_notes_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 2.9
      */
     public static function view_notes_returns() {

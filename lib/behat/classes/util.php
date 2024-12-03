@@ -31,6 +31,11 @@ require_once(__DIR__ . '/behat_command.php');
 require_once(__DIR__ . '/behat_config_manager.php');
 
 require_once(__DIR__ . '/../../filelib.php');
+require_once(__DIR__ . '/../../clilib.php');
+require_once(__DIR__ . '/../../csslib.php');
+
+use Behat\Mink\Session;
+use Behat\Mink\Exception\ExpectationException;
 
 /**
  * Init/reset utilities for Behat database and dataroot
@@ -120,11 +125,53 @@ class behat_util extends testing_util {
         // Set noreplyaddress to an example domain, as it should be valid email address and test site can be a localhost.
         set_config('noreplyaddress', 'noreply@example.com');
 
+        // Set the support email address.
+        set_config('supportemail', 'email@example.com');
+
+        // Remove any default blocked hosts and port restrictions, to avoid blocking tests (eg those using local files).
+        set_config('curlsecurityblockedhosts', '');
+        set_config('curlsecurityallowedport', '');
+
+        // Execute all the adhoc tasks.
+        while ($task = \core\task\manager::get_next_adhoc_task(time())) {
+            $task->execute();
+            \core\task\manager::adhoc_task_complete($task);
+        }
+
         // Keeps the current version of database and dataroot.
         self::store_versions_hash();
 
         // Stores the database contents for fast reset.
         self::store_database_state();
+    }
+
+    /**
+     * Build theme CSS.
+     */
+    public static function build_themes($mtraceprogress = false) {
+        global $CFG;
+        require_once("{$CFG->libdir}/outputlib.php");
+
+        $themenames = array_keys(\core_component::get_plugin_list('theme'));
+
+        // Load the theme configs.
+        $themeconfigs = array_map(function($themename) {
+            return \theme_config::load($themename);
+        }, $themenames);
+
+        // Build the list of themes and cache them in local cache.
+        $themes = theme_build_css_for_themes($themeconfigs, ['ltr'], true, $mtraceprogress);
+
+        $framework = self::get_framework();
+        $storageroot = self::get_dataroot() . "/{$framework}/themedata";
+
+        foreach ($themes as $themename => $themedata) {
+            $dirname = "{$storageroot}/{$themename}";
+            check_dir_exists($dirname);
+            foreach ($themedata as $direction => $css) {
+                file_put_contents("{$dirname}/{$direction}.css", $css);
+            }
+        }
     }
 
     /**
@@ -179,7 +226,7 @@ class behat_util extends testing_util {
 
             behat_error (BEHAT_EXITCODE_REQUIREMENT, $CFG->behat_wwwroot . ' is not available, ensure you specified ' .
                 'correct url and that the server is set up and started.' . PHP_EOL . ' More info in ' .
-                behat_command::DOCS_URL . '#Running_tests' . PHP_EOL);
+                behat_command::DOCS_URL . PHP_EOL . parent::get_site_info());
         }
 
         // Check if cli version is same as web version.
@@ -244,7 +291,6 @@ class behat_util extends testing_util {
      * @return void
      */
     public static function start_test_mode($themesuitewithallfeatures = false, $tags = '', $parallelruns = 0, $run = 0) {
-        global $CFG;
 
         if (!defined('BEHAT_UTIL')) {
             throw new coding_exception('This method can be only used by Behat CLI tool');
@@ -338,8 +384,25 @@ class behat_util extends testing_util {
      * Returns the path to the file which specifies if test environment is enabled
      * @return string
      */
-    public final static function get_test_file_path() {
+    final public static function get_test_file_path() {
         return behat_command::get_parent_behat_dir() . '/test_environment_enabled.txt';
+    }
+
+    /**
+     * Removes config settings that were added to the main $CFG config within the Behat CLI
+     * run.
+     *
+     * Database storage is already handled by reset_database and existing config values will
+     * be reset automatically by initialise_cfg(), so we only need to remove added ones.
+     */
+    public static function remove_added_config() {
+        global $CFG;
+        if (!empty($CFG->behat_cli_added_config)) {
+            foreach ($CFG->behat_cli_added_config as $key => $value) {
+                unset($CFG->{$key});
+            }
+            unset($CFG->behat_cli_added_config);
+        }
     }
 
     /**
@@ -354,23 +417,118 @@ class behat_util extends testing_util {
 
         // Reset all static caches.
         accesslib_clear_all_caches(true);
+        accesslib_reset_role_cache();
         // Reset the nasty strings list used during the last test.
         nasty_strings::reset_used_strings();
 
         filter_manager::reset_caches();
 
+        \core_reportbuilder\manager::reset_caches();
+
         // Reset course and module caches.
-        if (class_exists('format_base')) {
-            // If file containing class is not loaded, there is no cache there anyway.
-            format_base::reset_course_cache(0);
-        }
+        core_courseformat\base::reset_course_cache(0);
         get_fast_modinfo(0, 0, true);
+
+        // Reset the DI container.
+        \core\di::reset_container();
 
         // Inform data generator.
         self::get_data_generator()->reset();
 
+        // Reset the task manager.
+        \core\task\manager::reset_state();
+
         // Initialise $CFG with default values. This is needed for behat cli process, so we don't have modified
         // $CFG values from the old run. @see set_config.
+        self::remove_added_config();
         initialise_cfg();
+    }
+
+    /**
+     * Restore theme CSS stored during behat setup.
+     */
+    public static function restore_saved_themes(): void {
+        global $CFG;
+
+        $themerev = theme_get_revision();
+
+        $framework = self::get_framework();
+        $storageroot = self::get_dataroot() . "/{$framework}/themedata";
+        $themenames = array_keys(\core_component::get_plugin_list('theme'));
+        $directions = ['ltr', 'rtl'];
+
+        $themeconfigs = array_map(function($themename) {
+            return \theme_config::load($themename);
+        }, $themenames);
+
+        foreach ($themeconfigs as $themeconfig) {
+            $themename = $themeconfig->name;
+            $themesubrev = theme_get_sub_revision_for_theme($themename);
+
+            $dirname = "{$storageroot}/{$themename}";
+            foreach ($directions as $direction) {
+                $cssfile = "{$dirname}/{$direction}.css";
+                if (file_exists($cssfile)) {
+                    $themeconfig->set_css_content_cache(file_get_contents($cssfile));
+                }
+            }
+        }
+    }
+
+    /**
+     * Pause execution immediately.
+     *
+     * @param Session $session
+     * @param string $message The message to show when pausing.
+     * This will be passed through cli_ansi_format so appropriate ANSI formatting and features are available.
+     */
+    public static function pause(Session $session, string $message): void {
+        $posixexists = function_exists('posix_isatty');
+
+        // Make sure this step is only used with interactive terminal (if detected).
+        if ($posixexists && !@posix_isatty(STDOUT)) {
+            throw new ExpectationException('Break point should only be used with interactive terminal.', $session);
+        }
+
+        // Save the cursor position, ring the bell, and add a new line.
+        fwrite(STDOUT, cli_ansi_format("<cursor:save><bell><newline>"));
+
+        // Output the formatted message and reset colour back to normal.
+        $formattedmessage = cli_ansi_format("{$message}<colour:normal>");
+        fwrite(STDOUT, $formattedmessage);
+
+        // Wait for input.
+        fread(STDIN, 1024);
+
+        // Move the cursor back up to the previous position, then restore the original position stored earlier, and move
+        // it back down again.
+        fwrite(STDOUT, cli_ansi_format("<cursor:up><cursor:up><cursor:restore><cursor:down><cursor:down>"));
+
+        // Add any extra lines back if the provided message was spread over multiple lines.
+        $linecount = count(explode("\n", $formattedmessage));
+        fwrite(STDOUT, str_repeat(cli_ansi_format("<cursor:down>"), $linecount - 1));
+    }
+
+    /**
+     * Gets a text-based site version description.
+     *
+     * @return string The site info
+     */
+    public static function get_site_info() {
+        $siteinfo = parent::get_site_info();
+
+        $accessibility = empty(behat_config_manager::get_behat_run_config_value('axe')) ? 'No' : 'Yes';
+        $scssdeprecations = empty(behat_config_manager::get_behat_run_config_value('scss-deprecations')) ? 'No' : 'Yes';
+        $icondeprecations = empty(behat_config_manager::get_behat_run_config_value('no-icon-deprecations')) ? 'Yes' : 'No';
+
+        $siteinfo .= <<<EOF
+Run optional tests:
+- Accessibility: {$accessibility}
+- SCSS deprecations: {$scssdeprecations}
+- Icon deprecations: {$icondeprecations}
+
+EOF;
+
+        return $siteinfo;
     }
 }

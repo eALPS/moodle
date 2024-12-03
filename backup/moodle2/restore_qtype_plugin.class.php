@@ -175,6 +175,20 @@ abstract class restore_qtype_plugin extends restore_plugin {
                 }
             }
 
+            $rules = restore_course_task::define_decode_rules();
+            $rulesactivity = restore_quiz_activity_task::define_decode_rules();
+            $rules = array_merge($rules, $rulesactivity);
+
+            $decoder = $this->task->get_decoder();
+            foreach ($rules as $rule) {
+                $decoder->add_rule($rule);
+            }
+
+            $contentdecoded = $decoder->decode_content($data->answertext);
+            if ($contentdecoded) {
+                $data->answertext = $contentdecoded;
+            }
+
             if (!isset($this->questionanswercache[$data->answertext])) {
                 // If we haven't found the matching answer, something has gone really wrong, the question in the DB
                 // is missing answers, throw an exception.
@@ -366,16 +380,18 @@ abstract class restore_qtype_plugin extends restore_plugin {
      *
      * Only common stuff to all plugins, in this case:
      * - question: text and feedback
-     * - question_answers: text and feedbak
+     * - question_answers: text and feedback
+     * - question_hints: hint
      *
      * Note each qtype will have, if needed, its own define_decode_contents method
      */
-    static public function define_plugin_decode_contents() {
+    public static function define_plugin_decode_contents() {
 
         $contents = array();
 
-        $contents[] = new restore_decode_content('question', array('questiontext', 'generalfeedback'), 'question_created');
-        $contents[] = new restore_decode_content('question_answers', array('answer', 'feedback'), 'question_answer');
+        $contents[] = new restore_decode_content('question', ['questiontext', 'generalfeedback'], 'question_created');
+        $contents[] = new restore_decode_content('question_answers', ['answer', 'feedback'], 'question_answer');
+        $contents[] = new restore_decode_content('question_hints', ['hint'], 'question_hint');
 
         return $contents;
     }

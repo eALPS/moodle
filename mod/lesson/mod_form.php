@@ -49,7 +49,7 @@ class mod_lesson_mod_form extends moodleform_mod {
     }
 
     function definition() {
-        global $CFG, $COURSE, $DB;
+        global $CFG, $COURSE, $DB, $OUTPUT;
 
         $mform    = $this->_form;
 
@@ -163,7 +163,13 @@ class mod_lesson_mod_form extends moodleform_mod {
                 if ($module = get_coursemodule_from_instance($mod->modname, $mod->instance, $COURSE->id)) {
                     // Exclude this lesson, if it's already been saved.
                     if (!isset($this->_cm->id) || $this->_cm->id != $mod->id) {
-                        $modinstances[$mod->id] = $mod->modname.' - '.$module->name;
+                        $modinstances[$mod->id] = get_string('pluginname', $mod->modname) . ' - ' . format_string(
+                            $module->name,
+                            true,
+                            [
+                                'context' => $this->context,
+                            ],
+                        );
                     }
                 }
             }
@@ -201,8 +207,8 @@ class mod_lesson_mod_form extends moodleform_mod {
         $mform->setDefault('password', '');
         $mform->setAdvanced('password', $lessonconfig->password_adv);
         $mform->setType('password', PARAM_RAW);
-        $mform->disabledIf('password', 'usepassword', 'eq', 0);
-        $mform->disabledIf('passwordunmask', 'usepassword', 'eq', 0);
+        $mform->hideIf('password', 'usepassword', 'eq', 0);
+        $mform->hideIf('passwordunmask', 'usepassword', 'eq', 0);
 
         // Dependent on.
         if ($this->current && isset($this->current->dependency) && $this->current->dependency) {
@@ -249,6 +255,22 @@ class mod_lesson_mod_form extends moodleform_mod {
                     'completed' => 0, 'gradebetterthan' => 0));
         }
 
+        // Allow to enable offline lessons only if the Mobile services are enabled.
+        if ($CFG->enablemobilewebservice) {
+            $mform->addElement('selectyesno', 'allowofflineattempts', get_string('allowofflineattempts', 'lesson'));
+            $mform->addHelpButton('allowofflineattempts', 'allowofflineattempts', 'lesson');
+            $mform->setDefault('allowofflineattempts', 0);
+            $mform->setAdvanced('allowofflineattempts');
+            $mform->disabledIf('allowofflineattempts', 'timelimit[number]', 'neq', 0);
+
+            $mform->addElement('static', 'allowofflineattemptswarning', '',
+                    $OUTPUT->notification(get_string('allowofflineattempts_help', 'lesson'), 'warning'));
+            $mform->setAdvanced('allowofflineattemptswarning');
+        } else {
+            $mform->addElement('hidden', 'allowofflineattempts', 0);
+            $mform->setType('allowofflineattempts', PARAM_INT);
+        }
+
         // Flow control.
         $mform->addElement('header', 'flowcontrol', get_string('flowcontrol', 'lesson'));
 
@@ -262,7 +284,7 @@ class mod_lesson_mod_form extends moodleform_mod {
         $mform->setDefault('review', $lessonconfig->displayreview);
         $mform->setAdvanced('review', $lessonconfig->displayreview_adv);
 
-        $numbers = array();
+        $numbers = array('0' => get_string('unlimited'));
         for ($i = 10; $i > 0; $i--) {
             $numbers[$i] = $i;
         }
@@ -316,7 +338,7 @@ class mod_lesson_mod_form extends moodleform_mod {
         $mform->addHelpButton('usemaxgrade', 'handlingofretakes', 'lesson');
         $mform->setDefault('usemaxgrade', $lessonconfig->handlingofretakes);
         $mform->setAdvanced('usemaxgrade', $lessonconfig->handlingofretakes_adv);
-        $mform->disabledIf('usemaxgrade', 'retake', 'eq', '0');
+        $mform->hideIf('usemaxgrade', 'retake', 'eq', '0');
 
         $numbers = array();
         for ($i = 100; $i >= 0; $i--) {
@@ -342,15 +364,17 @@ class mod_lesson_mod_form extends moodleform_mod {
      **/
     public function data_preprocessing(&$defaultvalues) {
         if (isset($defaultvalues['conditions'])) {
-            $conditions = unserialize($defaultvalues['conditions']);
-            $defaultvalues['timespent'] = $conditions->timespent;
-            $defaultvalues['completed'] = $conditions->completed;
-            $defaultvalues['gradebetterthan'] = $conditions->gradebetterthan;
+            $conditions = unserialize_object($defaultvalues['conditions']);
+            $defaultvalues['timespent'] = $conditions->timespent ?? 0;
+            $defaultvalues['completed'] = !empty($conditions->completed);
+            $defaultvalues['gradebetterthan'] = $conditions->gradebetterthan ?? 0;
         }
 
         // Set up the completion checkbox which is not part of standard data.
-        $defaultvalues['completiontimespentenabled'] =
-            !empty($defaultvalues['completiontimespent']) ? 1 : 0;
+        $suffix = $this->get_suffix();
+        $completiontimespentenabledel = 'completiontimespentenabled' . $suffix;
+        $completiontimespentel = 'completiontimespent' . $suffix;
+        $defaultvalues[$completiontimespentenabledel] = !empty($defaultvalues[$completiontimespentel]) ? 1 : 0;
 
         if ($this->current->instance) {
             // Editing existing instance - copy existing files into draft area.
@@ -390,18 +414,32 @@ class mod_lesson_mod_form extends moodleform_mod {
     public function add_completion_rules() {
         $mform = $this->_form;
 
-        $mform->addElement('checkbox', 'completionendreached', get_string('completionendreached', 'lesson'),
-                get_string('completionendreached_desc', 'lesson'));
+        $suffix = $this->get_suffix();
+        $completionendreachedel = 'completionendreached' . $suffix;
+        $mform->addElement(
+            'checkbox', $completionendreachedel,
+            '',
+            get_string('completionendreached', 'lesson')
+        );
+        // Enable this completion rule by default.
+        $mform->setDefault($completionendreachedel, 1);
 
-        $group = array();
-        $group[] =& $mform->createElement('checkbox', 'completiontimespentenabled', '',
-                get_string('completiontimespent', 'lesson'));
-        $group[] =& $mform->createElement('duration', 'completiontimespent', '', array('optional' => false));
-        $mform->addGroup($group, 'completiontimespentgroup', get_string('completiontimespentgroup', 'lesson'), array(' '), false);
-        $mform->disabledIf('completiontimespent[number]', 'completiontimespentenabled', 'notchecked');
-        $mform->disabledIf('completiontimespent[timeunit]', 'completiontimespentenabled', 'notchecked');
+        $group = [];
+        $completiontimespentenabledel = 'completiontimespentenabled' . $suffix;
+        $group[] =& $mform->createElement(
+            'checkbox',
+            $completiontimespentenabledel,
+            '',
+            get_string('completiontimespentgroup', 'lesson')
+        );
+        $completiontimespentel = 'completiontimespent' . $suffix;
+        $group[] =& $mform->createElement('duration', $completiontimespentel, '', ['optional' => false]);
+        $completiontimespentgroupel = 'completiontimespentgroup' . $suffix;
+        $mform->addGroup($group, $completiontimespentgroupel, '', ' ', false);
+        $mform->hideIf($completiontimespentel . '[number]', $completiontimespentenabledel, 'notchecked');
+        $mform->hideIf($completiontimespentel . '[timeunit]', $completiontimespentenabledel, 'notchecked');
 
-        return array('completionendreached', 'completiontimespentgroup');
+        return [$completionendreachedel, $completiontimespentgroupel];
     }
 
     /**
@@ -411,28 +449,31 @@ class mod_lesson_mod_form extends moodleform_mod {
      * @return bool True if one or more rules is enabled, false if none are.
      */
     public function completion_rule_enabled($data) {
-        return !empty($data['completionendreached']) || $data['completiontimespent'] > 0;
+        $suffix = $this->get_suffix();
+        return !empty($data['completionendreached' . $suffix]) || $data['completiontimespent' . $suffix] > 0;
     }
 
-    public function get_data() {
-        $data = parent::get_data();
-        if (!$data) {
-            return false;
-        }
+    /**
+     * Allows module to modify the data returned by form get_data().
+     * This method is also called in the bulk activity completion form.
+     *
+     * Only available on moodleform_mod.
+     *
+     * @param stdClass $data the form data to be modified.
+     */
+    public function data_postprocessing($data) {
+        parent::data_postprocessing($data);
         // Turn off completion setting if the checkbox is not ticked.
         if (!empty($data->completionunlocked)) {
-            $autocompletion = !empty($data->completion) && $data->completion == COMPLETION_TRACKING_AUTOMATIC;
-            if (empty($data->completiontimespentenabled) || !$autocompletion) {
-                $data->completiontimespent = 0;
+            $suffix = $this->get_suffix();
+            $completion = $data->{'completion' . $suffix};
+            $autocompletion = !empty($completion) && $completion == COMPLETION_TRACKING_AUTOMATIC;
+            if (empty($data->{'completiontimespentenabled' . $suffix}) || !$autocompletion) {
+                $data->{'completiontimespent' . $suffix} = 0;
+            }
+            if (empty($data->{'completionendreached' . $suffix}) || !$autocompletion) {
+                $data->{'completionendreached' . $suffix} = 0;
             }
         }
-        if (!empty($data->completionunlocked)) {
-            $autocompletion = !empty($data->completion) && $data->completion == COMPLETION_TRACKING_AUTOMATIC;
-            if (empty($data->completionendreached) || !$autocompletion) {
-                $data->completionendreached = 0;
-            }
-        }
-        return $data;
     }
 }
-

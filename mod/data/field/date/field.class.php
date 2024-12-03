@@ -34,6 +34,23 @@ class data_field_date extends data_field_base {
     var $month = 0;
     var $year  = 0;
 
+    public function supports_preview(): bool {
+        return true;
+    }
+
+    public function get_data_content_preview(int $recordid): stdClass {
+        return (object)[
+            'id' => 0,
+            'fieldid' => $this->field->id,
+            'recordid' => $recordid,
+            'content' => (string) time(),
+            'content1' => null,
+            'content2' => null,
+            'content3' => null,
+            'content4' => null,
+        ];
+    }
+
     function display_add_field($recordid = 0, $formdata = null) {
         global $DB, $OUTPUT;
 
@@ -62,23 +79,48 @@ class data_field_date extends data_field_base {
             $content = time();
         }
 
-        $str = '<div title="'.s($this->field->description).'" class="mod-data-input form-inline">';
-        $dayselector = html_writer::select_time('days', 'field_'.$this->field->id.'_day', $content);
-        $monthselector = html_writer::select_time('months', 'field_'.$this->field->id.'_month', $content);
-        $yearselector = html_writer::select_time('years', 'field_'.$this->field->id.'_year', $content);
+        $str = '<div title="'.s($this->field->description).'" class="mod-data-input d-flex flex-wrap align-items-center">';
+
+        $dayselector = html_writer::select_time(
+            type: 'days',
+            name: "field_{$this->field->id}_day",
+            currenttime: $content,
+            timezone: 0,
+        );
+        $monthselector = html_writer::select_time(
+            type: 'months',
+            name: "field_{$this->field->id}_month",
+            currenttime: $content,
+            timezone: 0,
+        );
+        $yearselector = html_writer::select_time(
+            type: 'years',
+            name: "field_{$this->field->id}_year",
+            currenttime: $content,
+            timezone: 0,
+        );
+
         $str .= $dayselector . $monthselector . $yearselector;
         $str .= '</div>';
 
         return $str;
     }
 
-    //Enable the following three functions once core API issues have been addressed.
-    function display_search_field($value=0) {
-        $selectors = html_writer::select_time('days', 'f_'.$this->field->id.'_d', $value['timestamp'])
-           . html_writer::select_time('months', 'f_'.$this->field->id.'_m', $value['timestamp'])
-           . html_writer::select_time('years', 'f_'.$this->field->id.'_y', $value['timestamp']);
-        $datecheck = html_writer::checkbox('f_'.$this->field->id.'_z', 1, $value['usedate']);
-        $str = '<div class="form-inline">' . $selectors . ' ' . $datecheck . ' ' . get_string('usedate', 'data') . '</div>';
+    // Enable the following three functions once core API issues have been addressed.
+
+    /**
+     * Display the search field in advanced search page
+     * @param mixed $value
+     * @return string
+     * @throws coding_exception
+     */
+    public function display_search_field($value = null) {
+        $currenttime = time();
+        $selectors = html_writer::select_time('days', 'f_' . $this->field->id . '_d', $value['timestamp'] ?? $currenttime)
+            . html_writer::select_time('months', 'f_' . $this->field->id . '_m', $value['timestamp'] ?? $currenttime)
+            . html_writer::select_time('years', 'f_' . $this->field->id . '_y', $value['timestamp'] ?? $currenttime);
+        $datecheck = html_writer::checkbox('f_' . $this->field->id . '_z', 1, $value['usedate'] ?? 0);
+        $str = '<div class="d-flex flex-wrap">' . $selectors . ' ' . $datecheck . ' ' . get_string('usedate', 'data') . '</div>';
 
         return $str;
     }
@@ -93,11 +135,20 @@ class data_field_date extends data_field_base {
         return array(" ({$tablealias}.fieldid = {$this->field->id} AND $varcharcontent = :$name) ", array($name => $value['timestamp']));
     }
 
-    function parse_search_field() {
-        $day   = optional_param('f_'.$this->field->id.'_d', 0, PARAM_INT);
-        $month = optional_param('f_'.$this->field->id.'_m', 0, PARAM_INT);
-        $year  = optional_param('f_'.$this->field->id.'_y', 0, PARAM_INT);
-        $usedate = optional_param('f_'.$this->field->id.'_z', 0, PARAM_INT);
+    public function parse_search_field($defaults = null) {
+        $paramday = 'f_'.$this->field->id.'_d';
+        $parammonth = 'f_'.$this->field->id.'_m';
+        $paramyear = 'f_'.$this->field->id.'_y';
+        $paramusedate = 'f_'.$this->field->id.'_z';
+        if (empty($defaults[$paramday])) {  // One empty means the other ones are empty too.
+            $defaults = array($paramday => 0, $parammonth => 0, $paramyear => 0, $paramusedate => 0);
+        }
+
+        $day   = optional_param($paramday, $defaults[$paramday], PARAM_INT);
+        $month = optional_param($parammonth, $defaults[$parammonth], PARAM_INT);
+        $year  = optional_param($paramyear, $defaults[$paramyear], PARAM_INT);
+        $usedate = optional_param($paramusedate, $defaults[$paramusedate], PARAM_INT);
+
         $data = array();
         if (!empty($day) && !empty($month) && !empty($year) && $usedate == 1) {
             $calendartype = \core_calendar\type_factory::get_calendar_instance();
@@ -155,17 +206,30 @@ class data_field_date extends data_field_base {
     }
 
     function display_browse_field($recordid, $template) {
-        global $CFG, $DB;
-
-        if ($content = $DB->get_field('data_content', 'content', array('fieldid'=>$this->field->id, 'recordid'=>$recordid))) {
-            return userdate($content, get_string('strftimedate'), 0);
+        $content = $this->get_data_content($recordid);
+        if (!$content || empty($content->content)) {
+            return '';
         }
+        return userdate($content->content, get_string('strftimedate'), 0);
     }
 
     function get_sort_sql($fieldname) {
         global $DB;
-        return $DB->sql_cast_char2int($fieldname, true);
+        return $DB->sql_cast_char2real($fieldname, true);
     }
 
-
+    /**
+     * Return the plugin configs for external functions.
+     *
+     * @return array the list of config parameters
+     * @since Moodle 3.3
+     */
+    public function get_config_for_external() {
+        // Return all the config parameters.
+        $configs = [];
+        for ($i = 1; $i <= 10; $i++) {
+            $configs["param$i"] = $this->field->{"param$i"};
+        }
+        return $configs;
+    }
 }

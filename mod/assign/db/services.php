@@ -240,5 +240,19 @@ $functions = array(
             'capabilities'  => 'mod/assign:view',
             'services'      => array(MOODLE_OFFICIAL_MOBILE_SERVICE)
         ),
-
+        'mod_assign_start_submission' => [
+            'classname'     => 'mod_assign\external\start_submission',
+            'methodname'    => 'execute',
+            'description'   => 'Start a submission for user if assignment has a time limit.',
+            'type'          => 'write',
+            'capabilities'  => 'mod/assign:view',
+            'services'      => array(MOODLE_OFFICIAL_MOBILE_SERVICE)
+        ],
+        'mod_assign_remove_submission' => [
+            'classname'     => 'mod_assign\external\remove_submission',
+            'description'   => 'Remove submission.',
+            'type'          => 'write',
+            'capabilities'  => 'mod/assign:submit',
+            'services'      => [MOODLE_OFFICIAL_MOBILE_SERVICE],
+        ],
 );

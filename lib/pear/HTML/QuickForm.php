@@ -21,6 +21,10 @@
 
 require_once('PEAR.php');
 require_once('HTML/Common.php');
+/**
+ * Static utility methods.
+ */
+require_once('HTML/QuickForm/utils.php');
 
 $GLOBALS['HTML_QUICKFORM_ELEMENT_TYPES'] =
         array(
@@ -61,6 +65,7 @@ $GLOBALS['_HTML_QuickForm_registered_rules'] = array(
     'numeric'       => array('html_quickform_rule_regex',    'HTML/QuickForm/Rule/Regex.php'),
     'nopunctuation' => array('html_quickform_rule_regex',    'HTML/QuickForm/Rule/Regex.php'),
     'nonzero'       => array('html_quickform_rule_regex',    'HTML/QuickForm/Rule/Regex.php'),
+    'positiveint'   => array('html_quickform_rule_regex',    'HTML/QuickForm/Rule/Regex.php'),
     'callback'      => array('html_quickform_rule_callback', 'HTML/QuickForm/Rule/Callback.php'),
     'compare'       => array('html_quickform_rule_compare',  'HTML/QuickForm/Rule/Compare.php')
 );
@@ -262,21 +267,8 @@ class HTML_QuickForm extends HTML_Common {
         $attributes = array('action'=>$action, 'method'=>$method, 'name'=>$formName, 'id'=>$formName) + $target;
         $this->updateAttributes($attributes);
         if (!$trackSubmit || isset($_REQUEST['_qf__' . $formName])) {
-            if (1 == get_magic_quotes_gpc()) {
-                $this->_submitValues = ('get' == $method? $_GET: $_POST); // we already eliminated magic quotes in moodle setup.php
-                foreach ($_FILES as $keyFirst => $valFirst) {
-                    foreach ($valFirst as $keySecond => $valSecond) {
-                        if ('name' == $keySecond) {
-                            $this->_submitFiles[$keyFirst][$keySecond] = $valSecond; // we already eliminated magic quotes in moodle setup.php
-                        } else {
-                            $this->_submitFiles[$keyFirst][$keySecond] = $valSecond;
-                        }
-                    }
-                }
-            } else {
-                $this->_submitValues = 'get' == $method? $_GET: $_POST;
-                $this->_submitFiles  = $_FILES;
-            }
+            $this->_submitValues = 'get' == $method? $_GET: $_POST;
+            $this->_submitFiles  = $_FILES;
             $this->_flagSubmitted = count($this->_submitValues) > 0 || count($this->_submitFiles) > 0;
         }
         if ($trackSubmit) {
@@ -584,7 +576,7 @@ class HTML_QuickForm extends HTML_Common {
         $includeFile = $GLOBALS['HTML_QUICKFORM_ELEMENT_TYPES'][$type][0];
         include_once($includeFile);
         $elementObject = new $className(); //Moodle: PHP 5.3 compatibility
-        for ($i = 0; $i < 5; $i++) {
+        for ($i = 0; $i < 6; $i++) {
             if (!isset($args[$i])) {
                 $args[$i] = null;
             }
@@ -729,23 +721,24 @@ class HTML_QuickForm extends HTML_Common {
      * @param    array      $elements       array of elements composing the group
      * @param    string     $name           (optional)group name
      * @param    string     $groupLabel     (optional)group label
-     * @param    string     $separator      (optional)string to separate elements
-     * @param    string     $appendName     (optional)specify whether the group name should be
+     * @param    string|array $separator    (optional) Use a string for one separator, or use an array to alternate the separators
+     * @param    bool       $appendName     (optional)specify whether the group name should be
      *                                      used in the form element name ex: group[element]
+     * @param     mixed     $attributes     Either a typical HTML attribute string or an associative array
      * @return   object     reference to added group of elements
      * @since    2.8
      * @access   public
      * @throws   PEAR_Error
      */
-    function &addGroup($elements, $name=null, $groupLabel='', $separator=null, $appendName = true)
+    function &addGroup($elements, $name = null, $groupLabel = '', $separator = null, $appendName = true, $attributes = null)
     {
         static $anonGroups = 1;
 
-        if (0 == strlen($name)) {
+        if (0 == strlen($name ?? '')) {
             $name       = 'qf_group_' . $anonGroups++;
             $appendName = false;
         }
-        $group =& $this->addElement('group', $name, $groupLabel, $elements, $separator, $appendName);
+        $group =& $this->addElement('group', $name, $groupLabel, $elements, $separator, $appendName, $attributes);
         return $group;
     } // end func addGroup
 
@@ -821,6 +814,7 @@ class HTML_QuickForm extends HTML_Common {
     function getSubmitValue($elementName)
     {
         $value = null;
+        $elementName = $elementName ?? '';
         if (isset($this->_submitValues[$elementName]) || isset($this->_submitFiles[$elementName])) {
             $value = isset($this->_submitValues[$elementName])? $this->_submitValues[$elementName]: array();
             if (is_array($value) && isset($this->_submitFiles[$elementName])) {
@@ -834,9 +828,15 @@ class HTML_QuickForm extends HTML_Common {
 
         } elseif (false !== ($pos = strpos($elementName, '['))) {
             $base = substr($elementName, 0, $pos);
-            $idx  = "['" . str_replace(array(']', '['), array('', "']['"), substr($elementName, $pos + 1, -1)) . "']";
+            $keys = str_replace(
+                array('\\', '\'', ']', '['), array('\\\\', '\\\'', '', "']['"),
+                substr($elementName, $pos + 1, -1)
+            );
+            $idx  = "['" . $keys . "']";
+            $keyArray = explode("']['", $keys);
+
             if (isset($this->_submitValues[$base])) {
-                $value = eval("return (isset(\$this->_submitValues['{$base}']{$idx})) ? \$this->_submitValues['{$base}']{$idx} : null;");
+                $value = HTML_QuickForm_utils::recursiveValue($this->_submitValues[$base], $keyArray, NULL);
             }
 
             if ((is_array($value) || null === $value) && isset($this->_submitFiles[$base])) {
@@ -904,7 +904,7 @@ class HTML_QuickForm extends HTML_Common {
      * @param     string    $element        Name of form element to check
      * @since     1.0
      * @access    public
-     * @return    string    error message corresponding to checked element
+     * @return    ?string    error message corresponding to checked element
      */
     function getElementError($element)
     {
@@ -1242,7 +1242,7 @@ class HTML_QuickForm extends HTML_Common {
      * @param     mixed    $value     submitted values
      * @since     2.0
      * @access    private
-     * @return    cleaned values
+     * @return    mixed cleaned values
      */
     function _recursiveFilter($filter, $value)
     {
@@ -1571,15 +1571,16 @@ class HTML_QuickForm extends HTML_Common {
             $elementList = array_flip($elementList);
         }
 
+        $frozen = [];
         foreach (array_keys($this->_elements) as $key) {
             $name = $this->_elements[$key]->getName();
             if ($this->_freezeAll || isset($elementList[$name])) {
                 $this->_elements[$key]->freeze();
-                unset($elementList[$name]);
+                $frozen[$name] = true;
             }
         }
 
-        if (!empty($elementList)) {
+        if (count($elementList) != count($frozen)) {
             return self::raiseError(null, QUICKFORM_NONEXIST_ELEMENT, null, E_USER_WARNING, "Nonexistant element(s): '" . implode("', '", array_keys($elementList)) . "' in HTML_QuickForm::freeze()", 'HTML_QuickForm_Error', true);
         }
         return true;

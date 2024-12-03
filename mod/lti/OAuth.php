@@ -54,21 +54,35 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle. If not, see <http://www.gnu.org/licenses/>.
 
+/**
+ * This file contains the OAuth 1.0a implementation used for support for LTI 1.1.
+ *
+ * @package    mod_lti
+ * @copyright moodle
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 namespace moodle\mod\lti;//Using a namespace as the basicLTI module imports classes with the same names
 
 defined('MOODLE_INTERNAL') || die;
 
-$oauth_last_computed_signature = false;
+$lastcomputedsignature = false;
 
-/* Generic exception class
+/**
+ * Generic exception class
  */
 class OAuthException extends \Exception {
     // pass
 }
 
+/**
+ * OAuth 1.0 Consumer class
+ */
 class OAuthConsumer {
     public $key;
     public $secret;
+
+    /** @var string|null callback URL. */
+    public ?string $callback_url;
 
     function __construct($key, $secret, $callback_url = null) {
         $this->key = $key;
@@ -118,17 +132,25 @@ class OAuthSignatureMethod {
     }
 }
 
-class OAuthSignatureMethod_HMAC_SHA1 extends OAuthSignatureMethod {
-    function get_name() {
-        return "HMAC-SHA1";
-    }
+
+/**
+ * Base class for the HMac based signature methods.
+ */
+abstract class OAuthSignatureMethod_HMAC extends OAuthSignatureMethod {
+
+    /**
+     * Name of the Algorithm used.
+     *
+     * @return string algorithm name.
+     */
+    abstract public function get_name(): string;
 
     public function build_signature($request, $consumer, $token) {
-        global $oauth_last_computed_signature;
-        $oauth_last_computed_signature = false;
+        global $lastcomputedsignature;
+        $lastcomputedsignature = false;
 
-        $base_string = $request->get_signature_base_string();
-        $request->base_string = $base_string;
+        $basestring = $request->get_signature_base_string();
+        $request->base_string = $basestring;
 
         $key_parts = array(
             $consumer->secret,
@@ -138,15 +160,48 @@ class OAuthSignatureMethod_HMAC_SHA1 extends OAuthSignatureMethod {
         $key_parts = OAuthUtil::urlencode_rfc3986($key_parts);
         $key = implode('&', $key_parts);
 
-        $computed_signature = base64_encode(hash_hmac('sha1', $base_string, $key, true));
-        $oauth_last_computed_signature = $computed_signature;
-        return $computed_signature;
+        $computedsignature = base64_encode(hash_hmac(strtolower(substr($this->get_name(), 5)), $basestring, $key, true));
+        $lastcomputedsignature = $computedsignature;
+        return $computedsignature;
     }
 
 }
 
+/**
+ * Implementation for SHA 1.
+ */
+class OAuthSignatureMethod_HMAC_SHA1 extends OAuthSignatureMethod_HMAC {
+    /**
+     * Name of the Algorithm used.
+     *
+     * @return string algorithm name.
+     */
+    public function get_name(): string {
+        return "HMAC-SHA1";
+    }
+}
+
+/**
+ * Implementation for SHA 256.
+ */
+class OAuthSignatureMethod_HMAC_SHA256 extends OAuthSignatureMethod_HMAC {
+    /**
+     * Name of the Algorithm used.
+     *
+     * @return string algorithm name.
+     */
+    public function get_name(): string {
+        return "HMAC-SHA256";
+    }
+}
+
 class OAuthSignatureMethod_PLAINTEXT extends OAuthSignatureMethod {
-    public function get_name() {
+    /**
+     * Name of the Algorithm used.
+     *
+     * @return string algorithm name.
+     */
+    public function get_name(): string {
         return "PLAINTEXT";
     }
 
@@ -170,7 +225,12 @@ class OAuthSignatureMethod_PLAINTEXT extends OAuthSignatureMethod {
 }
 
 class OAuthSignatureMethod_RSA_SHA1 extends OAuthSignatureMethod {
-    public function get_name() {
+    /**
+     * Name of the Algorithm used.
+     *
+     * @return string algorithm name.
+     */
+    public function get_name(): string {
         return "RSA-SHA1";
     }
 
@@ -205,8 +265,16 @@ class OAuthSignatureMethod_RSA_SHA1 extends OAuthSignatureMethod {
         // Sign using the key
         $ok = openssl_sign($base_string, $signature, $privatekeyid);
 
-        // Release the key resource
-        openssl_free_key($privatekeyid);
+        // Avoid passing null values to base64_encode.
+        if (!$ok) {
+            throw new OAuthException("OpenSSL unable to sign data");
+        }
+
+        // TODO: Remove this block once PHP 8.0 becomes required.
+        if (PHP_MAJOR_VERSION < 8) {
+            // Release the key resource
+            openssl_free_key($privatekeyid);
+        }
 
         return base64_encode($signature);
     }
@@ -225,8 +293,11 @@ class OAuthSignatureMethod_RSA_SHA1 extends OAuthSignatureMethod {
         // Check the computed signature against the one passed in the query
         $ok = openssl_verify($base_string, $decoded_sig, $publickeyid);
 
-        // Release the key resource
-        openssl_free_key($publickeyid);
+        // TODO: Remove this block once PHP 8.0 becomes required.
+        if (PHP_MAJOR_VERSION < 8) {
+            // Release the key resource
+            openssl_free_key($publickeyid);
+        }
 
         return $ok == 1;
     }
@@ -388,10 +459,15 @@ class OAuthRequest {
     }
 
     /**
-     * parses the url and rebuilds it to be
-     * scheme://host/path
+     * Parses {@see http_url} and returns normalized scheme://host/path if non-empty, otherwise return empty string
+     *
+     * @return string
      */
     public function get_normalized_http_url() {
+        if ($this->http_url === '') {
+            return '';
+        }
+
         $parts = parse_url($this->http_url);
 
         $port = @$parts['port'];
@@ -539,8 +615,8 @@ class OAuthServer {
      * verify an api call, checks all the parameters
      */
     public function verify_request(&$request) {
-        global $oauth_last_computed_signature;
-        $oauth_last_computed_signature = false;
+        global $lastcomputedsignature;
+        $lastcomputedsignature = false;
         $this->get_version($request);
         $consumer = $this->get_consumer($request);
         $token = $this->get_token($request, $consumer, "access");
@@ -620,8 +696,8 @@ class OAuthServer {
      */
     private function check_signature(&$request, $consumer, $token) {
         // this should probably be in a different method
-        global $oauth_last_computed_signature;
-        $oauth_last_computed_signature = false;
+        global $lastcomputedsignature;
+        $lastcomputedsignature = false;
 
         $timestamp = @ $request->get_parameter('oauth_timestamp');
         $nonce = @ $request->get_parameter('oauth_nonce');
@@ -636,8 +712,8 @@ class OAuthServer {
 
         if (!$valid_sig) {
             $ex_text = "Invalid signature";
-            if ($oauth_last_computed_signature) {
-                $ex_text = $ex_text . " ours= $oauth_last_computed_signature yours=$signature";
+            if ($lastcomputedsignature) {
+                $ex_text = $ex_text . " ours= $lastcomputedsignature yours=$signature";
             }
             throw new OAuthException($ex_text);
         }

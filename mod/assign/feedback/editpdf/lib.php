@@ -24,6 +24,9 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+global $CFG;
+require_once($CFG->dirroot . '/mod/assign/locallib.php');
+
 /**
  * Serves assignment feedback and other files.
  *
@@ -33,33 +36,55 @@ defined('MOODLE_INTERNAL') || die();
  * @param string $filearea
  * @param array $args
  * @param bool $forcedownload
+ * @param array $options - List of options affecting file serving.
  * @return bool false if file not found, does not return if found - just send the file
  */
-function assignfeedback_editpdf_pluginfile($course,
-                                           $cm,
-                                           context $context,
-                                           $filearea,
-                                           $args,
-                                           $forcedownload) {
-    global $USER, $DB, $CFG;
+function assignfeedback_editpdf_pluginfile(
+    $course,
+    $cm,
+    context $context,
+    $filearea,
+    $args,
+    $forcedownload,
+    array $options = array()
+) {
+    global $DB;
+    if ($filearea === 'systemstamps') {
+
+        if ($context->contextlevel !== CONTEXT_SYSTEM) {
+            return false;
+        }
+
+        $filename = array_pop($args);
+        $filepath = '/' . implode('/', $args) . '/';
+
+        $fs = get_file_storage();
+        $file = $fs->get_file($context->id, 'assignfeedback_editpdf', $filearea, 0, $filepath, $filename);
+        if (!$file) {
+            return false;
+        }
+
+        $options['cacheability'] = 'public';
+        $options['immutable'] = true;
+
+        send_stored_file($file, null, 0, false, $options);
+    }
 
     if ($context->contextlevel == CONTEXT_MODULE) {
 
         require_login($course, false, $cm);
         $itemid = (int)array_shift($args);
 
-        if (!$assign = $DB->get_record('assign', array('id'=>$cm->instance))) {
-            return false;
-        }
+        $assign = new assign($context, $cm, $course);
 
-        $record = $DB->get_record('assign_grades', array('id'=>$itemid), 'userid,assignment', MUST_EXIST);
+        $record = $DB->get_record('assign_grades', array('id' => $itemid), 'userid,assignment', MUST_EXIST);
         $userid = $record->userid;
-        if ($assign->id != $record->assignment) {
+        if ($assign->get_instance()->id != $record->assignment) {
             return false;
         }
 
-        // Check is users feedback or has grading permission.
-        if ($USER->id != $userid and !has_capability('mod/assign:grade', $context)) {
+        // Rely on mod_assign checking permissions.
+        if (!$assign->can_view_submission($userid)) {
             return false;
         }
 
@@ -72,7 +97,38 @@ function assignfeedback_editpdf_pluginfile($course,
             return false;
         }
         // Download MUST be forced - security!
-        send_stored_file($file, 0, 0, true);// Check if we want to retrieve the stamps.
+        send_stored_file($file, 0, 0, true, $options);// Check if we want to retrieve the stamps.
     }
 
+}
+
+/**
+ * Files API hook to remove stale conversion records.
+ *
+ * When a file is update, its contenthash will change, but its ID
+ * remains the same. The document converter API records source file
+ * IDs and destination file IDs. When a file is updated, the document
+ * converter API has no way of knowing that the content of the file
+ * has changed, so it just serves the previously stored destination
+ * file.
+ *
+ * In this hook we check if the contenthash has changed, and if it has
+ * we delete the existing conversion so that a new one will be created.
+ *
+ * @param stdClass $file The updated file record.
+ * @param stdClass $filepreupdate The file record pre-update.
+ */
+function assignfeedback_editpdf_after_file_updated(stdClass $file, stdClass $filepreupdate) {
+    $contenthashchanged = $file->contenthash !== $filepreupdate->contenthash;
+    if ($contenthashchanged && $file->component == 'assignsubmission_file' && $file->filearea == 'submission_files') {
+        $fs = get_file_storage();
+        $file = $fs->get_file_by_id($file->id);
+        $conversions = \core_files\conversion::get_conversions_for_file($file, 'pdf');
+
+        foreach ($conversions as $conversion) {
+            if ($conversion->get('id')) {
+                $conversion->delete();
+            }
+        }
+    }
 }

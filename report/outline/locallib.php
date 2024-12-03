@@ -31,7 +31,7 @@ require_once($CFG->dirroot.'/course/lib.php');
 function report_outline_print_row($mod, $instance, $result) {
     global $OUTPUT, $CFG;
 
-    $image = "<img src=\"" . $OUTPUT->pix_url('icon', $mod->modname) . "\" class=\"icon\" alt=\"$mod->modfullname\" />";
+    $image = $OUTPUT->image_icon('monologo', $mod->modfullname, $mod->modname);
 
     echo "<tr>";
     echo "<td valign=\"top\">$image</td>";
@@ -82,11 +82,6 @@ function report_outline_get_common_log_variables() {
     // Get preferred reader.
     if (!empty($readers)) {
         foreach ($readers as $readerpluginname => $reader) {
-            // If legacy reader is preferred reader.
-            if ($readerpluginname == 'logstore_legacy') {
-                $uselegacyreader = true;
-            }
-
             // If sql_internal_table_reader is preferred reader.
             if ($reader instanceof \core\log\sql_internal_table_reader) {
                 $useinternalreader = true;

@@ -52,22 +52,28 @@ class qtype_ddtoimage_renderer_base extends qtype_with_combined_feedback_rendere
 
     public function formulation_and_controls(question_attempt $qa,
             question_display_options $options) {
-        global $PAGE;
-
         $question = $qa->get_question();
         $response = $qa->get_last_qt_data();
 
         $questiontext = $question->format_questiontext($qa);
 
-        $output = html_writer::tag('div', $questiontext, array('class' => 'qtext'));
+        $dropareaclass = 'droparea';
+        $draghomesclass = 'draghomes';
+        if ($options->readonly) {
+            $dropareaclass .= ' readonly';
+            $draghomesclass .= ' readonly';
+        }
 
-        $bgimage = self::get_url_for_image($qa, 'bgimage');
+        $output = html_writer::div($questiontext, 'qtext');
 
-        $img = html_writer::empty_tag('img', array(
-                'src' => $bgimage, 'class' => 'dropbackground',
-                'alt' => get_string('dropbackground', 'qtype_ddimageortext')));
+        $output .= html_writer::start_div('ddarea');
+        $output .= html_writer::start_div($dropareaclass);
+        $output .= html_writer::img(self::get_url_for_image($qa, 'bgimage'), get_string('dropbackground', 'qtype_ddmarker'),
+                ['class' => 'dropbackground img-fluid w-100']);
 
-        $droparea = html_writer::tag('div', $img, array('class' => 'droparea'));
+        $output .= html_writer::div('', 'dropzones');
+        $output .= html_writer::end_div();
+        $output .= html_writer::start_div($draghomesclass);
 
         $dragimagehomes = '';
         foreach ($question->choices as $groupno => $group) {
@@ -75,57 +81,50 @@ class qtype_ddtoimage_renderer_base extends qtype_with_combined_feedback_rendere
             $orderedgroup = $question->get_ordered_choices($groupno);
             foreach ($orderedgroup as $choiceno => $dragimage) {
                 $dragimageurl = self::get_url_for_image($qa, 'dragimage', $dragimage->id);
-                $classes = array("group{$groupno}",
-                                 'draghome',
-                                 "dragitemhomes{$dragimage->no}",
-                                 "choice{$choiceno}");
+                $classes = [
+                        'group' . $groupno,
+                        'draghome',
+                        'user-select-none',
+                        'choice' . $choiceno
+                ];
                 if ($dragimage->infinite) {
                     $classes[] = 'infinite';
                 }
                 if ($dragimageurl === null) {
-                    $classes[] = 'yui3-cssfonts';
-                    $dragimagehomesgroup .= html_writer::tag('div', $dragimage->text,
-                            array('src' => $dragimageurl, 'class' => join(' ', $classes)));
+                    $dragimage->text = question_utils::format_question_fragment($dragimage->text, $this->page->context);
+                    $dragimagehomesgroup .= html_writer::div($dragimage->text, join(' ', $classes), ['src' => $dragimageurl]);
                 } else {
-                    $dragimagehomesgroup .= html_writer::empty_tag('img',
-                            array('src' => $dragimageurl, 'alt' => $dragimage->text,
-                                    'class' => join(' ', $classes)));
+                    $dragimagehomesgroup .= html_writer::img($dragimageurl, $dragimage->text, ['class' => join(' ', $classes)]);
                 }
             }
-            $dragimagehomes .= html_writer::tag('div', $dragimagehomesgroup,
-                    array('class' => 'dragitemgroup' . $groupno));
+            $dragimagehomes .= html_writer::div($dragimagehomesgroup, 'dragitemgroup' . $groupno);
         }
 
-        $dragitemsclass = 'dragitems';
-        if ($options->readonly) {
-            $dragitemsclass .= ' readonly';
-        }
-        $dragitems = html_writer::tag('div', $dragimagehomes, array('class' => $dragitemsclass));
-        $dropzones = html_writer::tag('div', '', array('class' => 'dropzones'));
+        $output .= $dragimagehomes;
+        $output .= html_writer::end_div();
 
-        $hiddens = '';
+        // Note, the mobile app implementation of ddimageortext relies on extracting the
+        // blob of places data out of the rendered HTML, which makes it impossible
+        // to clean up this structure of otherwise unnecessary stuff.
+        $placeinfoforjsandmobileapp = [];
         foreach ($question->places as $placeno => $place) {
             $varname = $question->field($placeno);
-            list($fieldname, $html) = $this->hidden_field_for_qt_var($qa, $varname);
-            $hiddens .= $html;
-            $question->places[$placeno]->fieldname = $fieldname;
+            [$fieldname, $html] = $this->hidden_field_for_qt_var($qa, $varname, null,
+                    ['placeinput', 'place' . $placeno, 'group' . $place->group]);
+            $output .= $html;
+            $placeinfo = (object) (array) $place;
+            $placeinfo->fieldname = $fieldname;
+            $placeinfoforjsandmobileapp[$placeno] = $placeinfo;
         }
-        $output .= html_writer::tag('div',
-                $droparea . $dragitems . $dropzones . $hiddens, array('class' => 'ddarea'));
-        $topnode = 'div#q'.$qa->get_slot().' div.ddarea';
-        $params = array('drops' => $question->places,
-                        'topnode' => $topnode,
-                        'readonly' => $options->readonly);
 
-        $PAGE->requires->string_for_js('blank', 'qtype_ddimageortext');
-        $PAGE->requires->yui_module('moodle-qtype_ddimageortext-dd',
-                                        'M.qtype_ddimageortext.init_question',
-                                        array($params));
+        $output .= html_writer::end_div();
+
+        $this->page->requires->string_for_js('blank', 'qtype_ddimageortext');
+        $this->page->requires->js_call_amd('qtype_ddimageortext/question', 'init',
+                [$qa->get_outer_question_div_unique_id(), $options->readonly, $placeinfoforjsandmobileapp]);
 
         if ($qa->get_state() == question_state::$invalid) {
-            $output .= html_writer::nonempty_tag('div',
-                                        $question->get_validation_error($qa->get_last_qt_data()),
-                                        array('class' => 'validationerror'));
+            $output .= html_writer::div($question->get_validation_error($qa->get_last_qt_data()), 'validationerror');
         }
         return $output;
     }

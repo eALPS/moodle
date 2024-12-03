@@ -23,7 +23,11 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once($CFG->libdir.'/externallib.php');
+use core_external\external_api;
+use core_external\external_multiple_structure;
+use core_external\external_settings;
+use core_external\external_single_structure;
+use core_external\external_value;
 
 /**
  * WEBSERVICE_AUTHMETHOD_USERNAME - username/password authentication (also called simple authentication)
@@ -48,6 +52,14 @@ define('WEBSERVICE_AUTHMETHOD_SESSION_TOKEN', 2);
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class webservice {
+    /**
+     * Only update token last access once per this many seconds. (This constant controls update of
+     * the external tokens last access field. There is a similar define LASTACCESS_UPDATE_SECS
+     * which controls update of the web site last access fields.)
+     *
+     * @var int
+     */
+    const TOKEN_LASTACCESS_UPDATE_SECS = 60;
 
     /**
      * Authenticate user (used by download/upload file scripts)
@@ -83,8 +95,6 @@ class webservice {
             $params['other']['reason'] = 'token_expired';
             $event = \core\event\webservice_login_failed::create($params);
             $event->add_record_snapshot('external_tokens', $token);
-            $event->set_legacy_logdata(array(SITEID, 'webservice', get_string('tokenauthlog', 'webservice'), '',
-                get_string('invalidtimedtoken', 'webservice'), 0));
             $event->trigger();
             $DB->delete_records('external_tokens', array('token' => $token->token));
             throw new webservice_access_exception('Invalid token - token expired - check validuntil time for the token');
@@ -96,8 +106,6 @@ class webservice {
             $params['other']['reason'] = 'ip_restricted';
             $event = \core\event\webservice_login_failed::create($params);
             $event->add_record_snapshot('external_tokens', $token);
-            $event->set_legacy_logdata(array(SITEID, 'webservice', get_string('tokenauthlog', 'webservice'), '',
-                get_string('failedtolog', 'webservice') . ": " . getremoteaddr(), 0));
             $event->trigger();
             throw new webservice_access_exception('Invalid token - IP:' . getremoteaddr()
                     . ' is not supported');
@@ -107,7 +115,7 @@ class webservice {
         $user = $DB->get_record('user', array('id' => $token->userid, 'deleted' => 0), '*', MUST_EXIST);
 
         // let enrol plugins deal with new enrolments if necessary
-        enrol_check_plugins($user);
+        enrol_check_plugins($user, false);
 
         // setup user session to check capability
         \core\session\manager::set_user($user);
@@ -166,7 +174,6 @@ class webservice {
             $params['other']['reason'] = 'user_unconfirmed';
             $event = \core\event\webservice_login_failed::create($params);
             $event->add_record_snapshot('external_tokens', $token);
-            $event->set_legacy_logdata(array(SITEID, 'webservice', 'user unconfirmed', '', $user->username));
             $event->trigger();
             throw new moodle_exception('usernotconfirmed', 'moodle', '', $user->username);
         }
@@ -177,9 +184,8 @@ class webservice {
             $params['other']['reason'] = 'user_suspended';
             $event = \core\event\webservice_login_failed::create($params);
             $event->add_record_snapshot('external_tokens', $token);
-            $event->set_legacy_logdata(array(SITEID, 'webservice', 'user suspended', '', $user->username));
             $event->trigger();
-            throw new webservice_access_exception('Refused web service access for suspended username: ' . $user->username);
+            throw new moodle_exception('wsaccessusersuspended', 'moodle', '', $user->username);
         }
 
         //check if the auth method is nologin (in this case refuse connection)
@@ -188,9 +194,8 @@ class webservice {
             $params['other']['reason'] = 'nologin';
             $event = \core\event\webservice_login_failed::create($params);
             $event->add_record_snapshot('external_tokens', $token);
-            $event->set_legacy_logdata(array(SITEID, 'webservice', 'nologin auth attempt with web service', '', $user->username));
             $event->trigger();
-            throw new webservice_access_exception('Refused web service access for nologin authentication username: ' . $user->username);
+            throw new moodle_exception('wsaccessusernologin', 'moodle', '', $user->username);
         }
 
         //Check if the user password is expired
@@ -202,16 +207,36 @@ class webservice {
                 $params['other']['reason'] = 'password_expired';
                 $event = \core\event\webservice_login_failed::create($params);
                 $event->add_record_snapshot('external_tokens', $token);
-                $event->set_legacy_logdata(array(SITEID, 'webservice', 'expired password', '', $user->username));
                 $event->trigger();
                 throw new moodle_exception('passwordisexpired', 'webservice');
             }
         }
 
         // log token access
-        $DB->set_field('external_tokens', 'lastaccess', time(), array('id' => $token->id));
+        self::update_token_lastaccess($token);
 
         return array('user' => $user, 'token' => $token, 'service' => $service);
+    }
+
+    /**
+     * Updates the last access time for a token.
+     *
+     * @param \stdClass $token Token object (must include id, lastaccess fields)
+     * @param int $time Time of access (0 = use current time)
+     * @throws dml_exception If database error
+     */
+    public static function update_token_lastaccess($token, int $time = 0) {
+        global $DB;
+
+        if (!$time) {
+            $time = time();
+        }
+
+        // Only update the field if it is a different time from previous request,
+        // so as not to waste database effort.
+        if ($time >= $token->lastaccess + self::TOKEN_LASTACCESS_UPDATE_SECS) {
+            $DB->set_field('external_tokens', 'lastaccess', $time, array('id' => $token->id));
+        }
     }
 
     /**
@@ -256,17 +281,23 @@ class webservice {
      */
     public function get_ws_authorised_users($serviceid) {
         global $DB, $CFG;
+
         $params = array($CFG->siteguest, $serviceid);
-        $sql = " SELECT u.id as id, esu.id as serviceuserid, u.email as email, u.firstname as firstname,
-                        u.lastname as lastname,
+
+        $userfields = \core_user\fields::for_identity(context_system::instance())->with_name()->excluding('id');
+        $fieldsql = $userfields->get_sql('u');
+
+        $sql = " SELECT u.id as id, esu.id as serviceuserid {$fieldsql->selects},
                         esu.iprestriction as iprestriction, esu.validuntil as validuntil,
                         esu.timecreated as timecreated
-                   FROM {user} u, {external_services_users} esu
+                   FROM {user} u
+                   JOIN {external_services_users} esu ON esu.userid = u.id
+                        {$fieldsql->joins}
                   WHERE u.id <> ? AND u.deleted = 0 AND u.confirmed = 1
-                        AND esu.userid = u.id
                         AND esu.externalserviceid = ?";
 
-        $users = $DB->get_records_sql($sql, $params);
+        $users = $DB->get_records_sql($sql, array_merge($fieldsql->params, $params));
+
         return $users;
     }
 
@@ -341,7 +372,9 @@ class webservice {
                     $newtoken->contextid = context_system::instance()->id;
                     $newtoken->creatorid = $userid;
                     $newtoken->timecreated = time();
-                    $newtoken->privatetoken = null;
+                    $newtoken->name = \core_external\util::generate_token_name();
+                    // Generate the private token, it must be transmitted only via https.
+                    $newtoken->privatetoken = random_string(64);
 
                     $DB->insert_record('external_tokens', $newtoken);
                 }
@@ -363,7 +396,8 @@ class webservice {
         global $DB;
         //here retrieve token list (including linked users firstname/lastname and linked services name)
         $sql = "SELECT
-                    t.id, t.creatorid, t.token, u.firstname, u.lastname, s.id as wsid, s.name, s.enabled, s.restrictedusers, t.validuntil
+                    t.id, t.creatorid, t.name as tokenname, u.firstname, u.lastname,
+                    s.id as wsid, s.name as servicename, s.enabled, s.restrictedusers, t.validuntil, t.lastaccess
                 FROM
                     {external_tokens} t, {user} u, {external_services} s
                 WHERE
@@ -379,8 +413,10 @@ class webservice {
      * The returned value is a stdClass:
      * ->id token id
      * ->token
+     * ->tokenname
      * ->firstname user firstname
      * ->lastname
+     * ->externalserviceid
      * ->name service name
      *
      * @param int $userid user id
@@ -390,7 +426,7 @@ class webservice {
     public function get_created_by_user_ws_token($userid, $tokenid) {
         global $DB;
         $sql = "SELECT
-                        t.id, t.token, u.firstname, u.lastname, s.name
+                        t.id, t.token, t.name AS tokenname, u.firstname, u.lastname, t.externalserviceid, s.name
                     FROM
                         {external_tokens} t, {user} u, {external_services} s
                     WHERE
@@ -399,6 +435,29 @@ class webservice {
                 . " AND s.id = t.externalserviceid AND t.userid = u.id";
         //must be the token creator
         $token = $DB->get_record_sql($sql, array($userid, $tokenid), MUST_EXIST);
+        return $token;
+    }
+
+    /**
+     * Return a token of an arbitrary user by tokenid, including details of the associated user and the service name.
+     * If no tokens exist an exception is thrown
+     *
+     * The returned value is a stdClass:
+     * ->id token id
+     * ->token
+     * ->firstname user firstname
+     * ->lastname
+     * ->name service name
+     *
+     * @param int $tokenid token id
+     * @return stdClass
+     */
+    public function get_token_by_id_with_details($tokenid) {
+        global $DB;
+        $sql = "SELECT t.id, t.token, u.id AS userid, u.firstname, u.lastname, s.name, t.creatorid
+                FROM {external_tokens} t, {user} u, {external_services} s
+                WHERE t.id=? AND t.tokentype = ? AND s.id = t.externalserviceid AND t.userid = u.id";
+        $token = $DB->get_record_sql($sql, array($tokenid, EXTERNAL_TOKEN_PERMANENT), MUST_EXIST);
         return $token;
     }
 
@@ -570,11 +629,16 @@ class webservice {
      * as the front end does not display it itself. In pratice,
      * admins would like the info, for more info you can follow: MDL-29962
      *
+     * @deprecated since Moodle 3.11 in MDL-67748 without a replacement.
+     * @todo MDL-70187 Please delete this method completely in Moodle 4.3, thank you.
      * @param int $userid user id
      * @return array
      */
     public function get_user_capabilities($userid) {
         global $DB;
+
+        debugging('webservice::get_user_capabilities() has been deprecated.', DEBUG_DEVELOPER);
+
         //retrieve the user capabilities
         $sql = "SELECT DISTINCT rc.id, rc.capability FROM {role_capabilities} rc, {role_assignments} ra
             WHERE rc.roleid=ra.roleid AND ra.userid= ? AND rc.permission = ?";
@@ -587,45 +651,98 @@ class webservice {
     }
 
     /**
-     * Get missing user capabilities for a given service
-     * WARNING: do not use this "broken" function. It was created in the goal to display some capabilities
-     * required by users. In theory we should not need to display this kind of information
-     * as the front end does not display it itself. In pratice,
-     * admins would like the info, for more info you can follow: MDL-29962
+     * Get missing user capabilities for the given service's functions.
      *
-     * @param array $users users
-     * @param int $serviceid service id
-     * @return array of missing capabilities, keys being the user ids
+     * Every external function can declare some required capabilities to allow for easier setup of the web services.
+     * However, that is supposed to be used for informational admin report only. There is no automatic evaluation of
+     * the declared capabilities and the context of the capability evaluation is ignored. Also, actual capability
+     * evaluation is much more complex as it allows for overrides etc.
+     *
+     * Returned are capabilities that the given users do not seem to have assigned anywhere at the site and that should
+     * be checked by the admin.
+     *
+     * Do not use this method for anything else, particularly not for any security related checks. See MDL-29962 for the
+     * background of why we have this - there are arguments for dropping this feature completely.
+     *
+     * @param array $users List of users to check, consisting of objects, arrays or integer ids.
+     * @param int $serviceid The id of the external service to check.
+     * @return array List of missing capabilities: (int)userid => array of (string)capabilitynames
      */
-    public function get_missing_capabilities_by_users($users, $serviceid) {
+    public function get_missing_capabilities_by_users(array $users, int $serviceid): array {
         global $DB;
-        $usersmissingcaps = array();
 
-        //retrieve capabilities required by the service
-        $servicecaps = $this->get_service_required_capabilities($serviceid);
+        // The following are default capabilities for all authenticated users and we will assume them granted.
+        $commoncaps = get_default_capabilities('user');
 
-        //retrieve users missing capabilities
-        foreach ($users as $user) {
-            //cast user array into object to be a bit more flexible
-            if (is_array($user)) {
-                $user = (object) $user;
-            }
-            $usercaps = $this->get_user_capabilities($user->id);
-
-            //detect the missing capabilities
-            foreach ($servicecaps as $functioname => $functioncaps) {
-                foreach ($functioncaps as $functioncap) {
-                    if (!array_key_exists($functioncap, $usercaps)) {
-                        if (!isset($usersmissingcaps[$user->id])
-                                or array_search($functioncap, $usersmissingcaps[$user->id]) === false) {
-                            $usersmissingcaps[$user->id][] = $functioncap;
-                        }
-                    }
+        // Get the list of additional capabilities required by the service.
+        $servicecaps = [];
+        foreach ($this->get_service_required_capabilities($serviceid) as $service => $caps) {
+            foreach ($caps as $cap) {
+                if (empty($commoncaps[$cap])) {
+                    $servicecaps[$cap] = true;
                 }
             }
         }
 
-        return $usersmissingcaps;
+        // Bail out early if there's nothing to process.
+        if (empty($users) || empty($servicecaps)) {
+            return [];
+        }
+
+        // Prepare a list of user ids we want to check.
+        $userids = [];
+        foreach ($users as $user) {
+            if (is_object($user) && isset($user->id)) {
+                $userids[$user->id] = true;
+            } else if (is_array($user) && isset($user['id'])) {
+                $userids[$user['id']] = true;
+            } else {
+                throw new coding_exception('Unexpected format of users list in webservice::get_missing_capabilities_by_users().');
+            }
+        }
+
+        // Prepare a matrix of missing capabilities x users - consider them all missing by default.
+        foreach (array_keys($userids) as $userid) {
+            foreach (array_keys($servicecaps) as $capname) {
+                $matrix[$userid][$capname] = true;
+            }
+        }
+
+        list($capsql, $capparams) = $DB->get_in_or_equal(array_keys($servicecaps), SQL_PARAMS_NAMED, 'paramcap');
+        list($usersql, $userparams) = $DB->get_in_or_equal(array_keys($userids), SQL_PARAMS_NAMED, 'paramuser');
+
+        $sql = "SELECT c.name AS capability, u.id AS userid
+                  FROM {capabilities} c
+                  JOIN {role_capabilities} rc ON c.name = rc.capability
+                  JOIN {role_assignments} ra ON ra.roleid = rc.roleid
+                  JOIN {user} u ON ra.userid = u.id
+                 WHERE rc.permission = :capallow
+                   AND c.name {$capsql}
+                   AND u.id {$usersql}";
+
+        $params = $capparams + $userparams + [
+            'capallow' => CAP_ALLOW,
+        ];
+
+        $rs = $DB->get_recordset_sql($sql, $params);
+
+        foreach ($rs as $record) {
+            // If there was a potential role assignment found that might grant the user the given capability,
+            // remove it from the matrix. Again, we ignore all the contexts, prohibits, prevents and other details
+            // of the permissions evaluations. See the function docblock for details.
+            unset($matrix[$record->userid][$record->capability]);
+        }
+
+        $rs->close();
+
+        foreach ($matrix as $userid => $caps) {
+            $matrix[$userid] = array_keys($caps);
+            if (empty($matrix[$userid])) {
+                unset($matrix[$userid]);
+            }
+        }
+
+        return $matrix;
     }
 
     /**
@@ -748,9 +865,10 @@ class webservice {
     public static function get_active_tokens($userid) {
         global $DB;
 
-        $sql = 'SELECT t.*, s.name as servicename FROM {external_tokens} t JOIN
-                {external_services} s ON t.externalserviceid = s.id WHERE
-                t.userid = :userid AND (t.validuntil IS NULL OR t.validuntil > :now)';
+        $sql = 'SELECT t.id, t.creatorid, t.externalserviceid, t.name AS tokenname, t.validuntil, s.name AS servicename
+                  FROM {external_tokens} t
+                  JOIN {external_services} s ON t.externalserviceid = s.id
+                 WHERE t.userid = :userid AND (COALESCE(t.validuntil, 0) = 0 OR t.validuntil > :now)';
         $params = array('userid' => $userid, 'now' => time());
         return $DB->get_records_sql($sql, $params);
     }
@@ -782,13 +900,13 @@ class webservice_access_exception extends moodle_exception {
 /**
  * Check if a protocol is enabled
  *
- * @param string $protocol name of WS protocol ('rest', 'soap', 'xmlrpc'...)
+ * @param string $protocol name of WS protocol ('rest', 'soap', ...)
  * @return bool true if the protocol is enabled
  */
 function webservice_protocol_is_enabled($protocol) {
     global $CFG;
 
-    if (empty($CFG->enablewebservices)) {
+    if (empty($CFG->enablewebservices) || empty($CFG->webserviceprotocols)) {
         return false;
     }
 
@@ -890,7 +1008,6 @@ abstract class webservice_server implements webservice_server_interface {
         }
 
         $loginfaileddefaultparams = array(
-            'context' => context_system::instance(),
             'other' => array(
                 'method' => $this->authmethod,
                 'reason' => null
@@ -926,8 +1043,6 @@ abstract class webservice_server implements webservice_server_interface {
                 $params['other']['reason'] = 'password';
                 $params['other']['username'] = $this->username;
                 $event = \core\event\webservice_login_failed::create($params);
-                $event->set_legacy_logdata(array(SITEID, 'webservice', get_string('simpleauthlog', 'webservice'), '' ,
-                    get_string('failedtolog', 'webservice').": ".$this->username."/".$this->password." - ".getremoteaddr() , 0));
                 $event->trigger();
 
                 throw new moodle_exception('wrongusernamepassword', 'webservice');
@@ -953,10 +1068,8 @@ abstract class webservice_server implements webservice_server_interface {
             $params['other']['reason'] = 'user_deleted';
             $params['other']['username'] = $user->username;
             $event = \core\event\webservice_login_failed::create($params);
-            $event->set_legacy_logdata(array(SITEID, '', '', '', get_string('wsaccessuserdeleted', 'webservice',
-                $user->username) . " - ".getremoteaddr(), 0, $user->id));
             $event->trigger();
-            throw new webservice_access_exception('Refused web service access for deleted username: ' . $user->username);
+            throw new moodle_exception('wsaccessuserdeleted', 'webservice', '', $user->username);
         }
 
         //only confirmed user should be able to call web service
@@ -965,8 +1078,6 @@ abstract class webservice_server implements webservice_server_interface {
             $params['other']['reason'] = 'user_unconfirmed';
             $params['other']['username'] = $user->username;
             $event = \core\event\webservice_login_failed::create($params);
-            $event->set_legacy_logdata(array(SITEID, '', '', '', get_string('wsaccessuserunconfirmed', 'webservice',
-                $user->username) . " - ".getremoteaddr(), 0, $user->id));
             $event->trigger();
             throw new moodle_exception('wsaccessuserunconfirmed', 'webservice', '', $user->username);
         }
@@ -977,10 +1088,8 @@ abstract class webservice_server implements webservice_server_interface {
             $params['other']['reason'] = 'user_unconfirmed';
             $params['other']['username'] = $user->username;
             $event = \core\event\webservice_login_failed::create($params);
-            $event->set_legacy_logdata(array(SITEID, '', '', '', get_string('wsaccessusersuspended', 'webservice',
-                $user->username) . " - ".getremoteaddr(), 0, $user->id));
             $event->trigger();
-            throw new webservice_access_exception('Refused web service access for suspended username: ' . $user->username);
+            throw new moodle_exception('wsaccessusersuspended', 'webservice', '', $user->username);
         }
 
         //retrieve the authentication plugin if no previously done
@@ -996,10 +1105,8 @@ abstract class webservice_server implements webservice_server_interface {
                 $params['other']['reason'] = 'password_expired';
                 $params['other']['username'] = $user->username;
                 $event = \core\event\webservice_login_failed::create($params);
-                $event->set_legacy_logdata(array(SITEID, '', '', '', get_string('wsaccessuserexpired', 'webservice',
-                    $user->username) . " - ".getremoteaddr(), 0, $user->id));
                 $event->trigger();
-                throw new webservice_access_exception('Refused web service access for password expired username: ' . $user->username);
+                throw new moodle_exception('wsaccessuserexpired', 'webservice', '', $user->username);
             }
         }
 
@@ -1009,20 +1116,19 @@ abstract class webservice_server implements webservice_server_interface {
             $params['other']['reason'] = 'login';
             $params['other']['username'] = $user->username;
             $event = \core\event\webservice_login_failed::create($params);
-            $event->set_legacy_logdata(array(SITEID, '', '', '', get_string('wsaccessusernologin', 'webservice',
-                $user->username) . " - ".getremoteaddr(), 0, $user->id));
             $event->trigger();
-            throw new webservice_access_exception('Refused web service access for nologin authentication username: ' . $user->username);
+            throw new moodle_exception('wsaccessusernologin', 'webservice', '', $user->username);
         }
 
         // now fake user login, the session is completely empty too
-        enrol_check_plugins($user);
+        enrol_check_plugins($user, false);
         \core\session\manager::set_user($user);
         set_login_session_preferences();
         $this->userid = $user->id;
 
         if ($this->authmethod != WEBSERVICE_AUTHMETHOD_SESSION_TOKEN && !has_capability("webservice/$this->wsname:use", $this->restricted_context)) {
-            throw new webservice_access_exception('You are not allowed to use the {$a} protocol (missing capability: webservice/' . $this->wsname . ':use)');
+            throw new webservice_access_exception("You are not allowed to use the {$this->wsname} protocol " .
+                "(missing capability: webservice/{$this->wsname}:use)");
         }
 
         external_api::set_context_restriction($this->restricted_context);
@@ -1039,7 +1145,6 @@ abstract class webservice_server implements webservice_server_interface {
         global $DB;
 
         $loginfaileddefaultparams = array(
-            'context' => context_system::instance(),
             'other' => array(
                 'method' => $this->authmethod,
                 'reason' => null
@@ -1051,8 +1156,6 @@ abstract class webservice_server implements webservice_server_interface {
             $params = $loginfaileddefaultparams;
             $params['other']['reason'] = 'invalid_token';
             $event = \core\event\webservice_login_failed::create($params);
-            $event->set_legacy_logdata(array(SITEID, 'webservice', get_string('tokenauthlog', 'webservice'), '' ,
-                get_string('failedtolog', 'webservice').": ".$this->token. " - ".getremoteaddr() , 0));
             $event->trigger();
             throw new moodle_exception('invalidtoken', 'webservice');
         }
@@ -1075,8 +1178,6 @@ abstract class webservice_server implements webservice_server_interface {
             $params['other']['tokenid'] = $token->id;
             $event = \core\event\webservice_login_failed::create($params);
             $event->add_record_snapshot('external_tokens', $token);
-            $event->set_legacy_logdata(array(SITEID, 'webservice', get_string('tokenauthlog', 'webservice'), '' ,
-                get_string('failedtolog', 'webservice').": ".getremoteaddr() , 0));
             $event->trigger();
             throw new webservice_access_exception('Invalid service - IP:' . getremoteaddr()
                     . ' is not supported - check this allowed user');
@@ -1088,7 +1189,7 @@ abstract class webservice_server implements webservice_server_interface {
         $user = $DB->get_record('user', array('id'=>$token->userid), '*', MUST_EXIST);
 
         // log token access
-        $DB->set_field('external_tokens', 'lastaccess', time(), array('id'=>$token->id));
+        webservice::update_token_lastaccess($token);
 
         return $user;
 
@@ -1105,18 +1206,21 @@ abstract class webservice_server implements webservice_server_interface {
         // Must be the same XXX key name as the external_settings::set_XXX function.
         // Must be the same XXX ws parameter name as 'moodlewssettingXXX'.
         $externalsettings = array(
-            'raw' => false,
-            'fileurl' => true,
-            'filter' =>  false);
+            'raw' => array('default' => false, 'type' => PARAM_BOOL),
+            'fileurl' => array('default' => true, 'type' => PARAM_BOOL),
+            'filter' => array('default' => false, 'type' => PARAM_BOOL),
+            'lang' => array('default' => '', 'type' => PARAM_LANG),
+            'timezone' => array('default' => '', 'type' => PARAM_TIMEZONE),
+        );
 
         // Load the external settings with the web service settings.
         $settings = external_settings::get_instance();
-        foreach ($externalsettings as $name => $default) {
+        foreach ($externalsettings as $name => $settingdata) {
 
             $wsparamname = 'moodlewssetting' . $name;
 
             // Retrieve and remove the setting parameter from the request.
-            $value = optional_param($wsparamname, $default, PARAM_BOOL);
+            $value = optional_param($wsparamname, $settingdata['default'], $settingdata['type']);
             unset($_GET[$wsparamname]);
             unset($_POST[$wsparamname]);
 
@@ -1156,6 +1260,9 @@ abstract class webservice_base_server extends webservice_server {
     /** @var  array List of struct classes generated for the web service methods. */
     protected $servicestructs;
 
+    /** @var string service class name. */
+    protected $serviceclass;
+
     /**
      * This method parses the request input, it needs to get:
      *  1/ user authentication - username+password or token
@@ -1182,6 +1289,8 @@ abstract class webservice_base_server extends webservice_server {
      * @uses die
      */
     public function run() {
+        global $CFG, $USER, $SESSION;
+
         // we will probably need a lot of memory in some functions
         raise_memory_limit(MEMORY_EXTRA);
 
@@ -1212,8 +1321,30 @@ abstract class webservice_base_server extends webservice_server {
             )
         );
         $event = \core\event\webservice_function_called::create($params);
-        $event->set_legacy_logdata(array(SITEID, 'webservice', $this->functionname, '' , getremoteaddr() , 0, $this->userid));
         $event->trigger();
+
+        // Do additional setup stuff.
+        $settings = external_settings::get_instance();
+        $sessionlang = $settings->get_lang();
+        if (!empty($sessionlang)) {
+            $SESSION->lang = $sessionlang;
+        }
+
+        setup_lang_from_browser();
+
+        if (empty($CFG->lang)) {
+            if (empty($SESSION->lang)) {
+                $CFG->lang = 'en';
+            } else {
+                $CFG->lang = $SESSION->lang;
+            }
+        }
+
+        // Change timezone only in sites where it isn't forced.
+        $newtimezone = $settings->get_timezone();
+        if (!empty($newtimezone) && (!isset($CFG->forcetimezone) || $CFG->forcetimezone == 99)) {
+            $USER->timezone = $newtimezone;
+        }
 
         // finally, execute the function - any errors are catched by the default exception handler
         $this->execute();
@@ -1337,7 +1468,7 @@ abstract class webservice_base_server extends webservice_server {
                      7. The function is called with username/password (no user token is sent)
                      and none of the services has the function to allow the user.
                      These settings can be found in Administration > Site administration
-                     > Plugins > Web services > External services and Manage tokens.');
+                     > Server > Web services > External services and Manage tokens.');
         }
 
         // we have all we need now
@@ -1350,9 +1481,27 @@ abstract class webservice_base_server extends webservice_server {
     protected function execute() {
         // validate params, this also sorts the params properly, we need the correct order in the next part
         $params = call_user_func(array($this->function->classname, 'validate_parameters'), $this->function->parameters_desc, $this->parameters);
+        $params = array_values($params);
+
+        // Allow any Moodle plugin a chance to override this call. This is a convenient spot to
+        // make arbitrary behaviour customisations, for example to affect the mobile app behaviour.
+        // The overriding plugin could call the 'real' function first and then modify the results,
+        // or it could do a completely separate thing.
+        $callbacks = get_plugins_with_function('override_webservice_execution');
+        foreach ($callbacks as $plugintype => $plugins) {
+            foreach ($plugins as $plugin => $callback) {
+                $result = $callback($this->function, $params);
+                if ($result !== false) {
+                    // If the callback returns anything other than false, we assume it replaces the
+                    // real function.
+                    $this->returns = $result;
+                    return;
+                }
+            }
+        }
 
         // execute - yay!
-        $this->returns = call_user_func_array(array($this->function->classname, $this->function->methodname), array_values($params));
+        $this->returns = call_user_func_array(array($this->function->classname, $this->function->methodname), $params);
     }
 
     /**
@@ -1417,10 +1566,7 @@ abstract class webservice_base_server extends webservice_server {
         $rs->close();
 
         // Generate the virtual class name.
-        $classname = 'webservices_virtual_class_000000';
-        while (class_exists($classname)) {
-            $classname++;
-        }
+        $classname = $this->get_unique_classname('webservices_virtual_class');
         $this->serviceclass = $classname;
 
         // Get the list of all available external functions.
@@ -1469,10 +1615,7 @@ EOD;
         $fieldsstr = implode("\n", $fields);
 
         // We do this after the call to get_phpdoc_type() to avoid duplicate class creation.
-        $classname = 'webservices_struct_class_000000';
-        while (class_exists($classname)) {
-            $classname++;
-        }
+        $classname = $this->get_unique_classname('webservices_struct_class');
         $code = <<<EOD
 /**
  * Virtual struct class for web services for user id $USER->id in context {$this->restricted_context->id}.
@@ -1631,6 +1774,26 @@ EOD;
     }
 
     /**
+     * Get a unique integer-suffixed classname for dynamic code creation.
+     *
+     * @param string $prefix The class name prefix to use.
+     * @return string The unused class name
+     */
+    protected function get_unique_classname(string $prefix): string {
+        $suffix = 0;
+        do {
+            $classname = sprintf(
+                "%s_%06d",
+                $prefix,
+                $suffix,
+            );
+            $suffix++;
+        } while (class_exists($classname));
+
+        return $classname;
+    }
+
+    /**
      * Generates the method body of the virtual external function.
      *
      * @param stdClass $function a record from external_function.
@@ -1659,8 +1822,25 @@ $castingcode
         $function->classname::$function->methodname($paramsstr);
         return null;
     }
-    return external_api::clean_returnvalue($callforreturnvaluedesc, $function->classname::$function->methodname($paramsstr));
+    return \\core_external\\external_api::clean_returnvalue($callforreturnvaluedesc, $function->classname::$function->methodname($paramsstr));
 EOD;
         return $methodbody;
     }
+}
+
+/**
+ * Early WS exception handler.
+ * It handles exceptions during setup and returns the Exception text in the WS format.
+ * If a raise function is found nothing is returned. Throws Exception otherwise.
+ *
+ * @param  Exception $ex Raised exception.
+ * @throws Exception
+ */
+function early_ws_exception_handler(Exception $ex): void {
+    if (function_exists('raise_early_ws_exception')) {
+        raise_early_ws_exception($ex);
+        die;
+    }
+
+    throw $ex;
 }

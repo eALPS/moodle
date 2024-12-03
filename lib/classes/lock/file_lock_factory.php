@@ -14,22 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Flock based file locking factory.
- *
- * The file lock factory returns file locks locked with the flock function. Works OK, except on some
- * NFS, exotic shared storage and exotic server OSes (like windows). On windows, a second attempt to get a
- * lock will block indefinitely instead of timing out.
- *
- * @package    core
- * @category   lock
- * @copyright  Damyon Wiese 2013
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 namespace core\lock;
 
-defined('MOODLE_INTERNAL') || die();
+use coding_exception;
 
 /**
  * Flock based file locking factory.
@@ -58,12 +45,15 @@ class file_lock_factory implements lock_factory {
      * Create this lock factory.
      *
      * @param string $type - The type, e.g. cron, cache, session
+     * @param string|null $lockdirectory - Optional path to the lock directory, to override defaults.
      */
-    public function __construct($type) {
+    public function __construct($type, ?string $lockdirectory = null) {
         global $CFG;
 
         $this->type = $type;
-        if (!isset($CFG->file_lock_root)) {
+        if (!is_null($lockdirectory)) {
+            $this->lockdirectory = $lockdirectory;
+        } else if (!isset($CFG->file_lock_root)) {
             $this->lockdirectory = $CFG->dataroot . '/lock';
         } else {
             $this->lockdirectory = $CFG->file_lock_root;
@@ -100,18 +90,17 @@ class file_lock_factory implements lock_factory {
         global $CFG;
         $preventfilelocking = !empty($CFG->preventfilelocking);
         $lockdirisdataroot = true;
-        if (!empty($CFG->file_lock_root) && strpos($CFG->file_lock_root, $CFG->dataroot) !== 0) {
+        if (strpos($this->lockdirectory, $CFG->dataroot) !== 0) {
             $lockdirisdataroot = false;
         }
         return !$preventfilelocking || !$lockdirisdataroot;
     }
 
     /**
-     * Multiple locks for the same resource cannot be held from a single process.
-     * @return boolean - False
+     * @deprecated since Moodle 3.10.
      */
     public function supports_recursion() {
-        return false;
+        throw new coding_exception('The function supports_recursion() has been removed, please do not use it anymore.');
     }
 
     /**
@@ -152,7 +141,7 @@ class file_lock_factory implements lock_factory {
             // Will block on windows. So sad.
             $wouldblock = false;
             $locked = flock($filehandle, LOCK_EX | LOCK_NB, $wouldblock);
-            if (!$locked && $wouldblock) {
+            if (!$locked && $wouldblock && $timeout > 0) {
                 usleep(rand(10000, 250000)); // Sleep between 10 and 250 milliseconds.
             }
             // Try until the giveup time.
@@ -187,14 +176,10 @@ class file_lock_factory implements lock_factory {
     }
 
     /**
-     * Extend a lock that was previously obtained with @lock.
-     * @param lock $lock - not used
-     * @param int $maxlifetime - not used
-     * @return boolean - true if the lock was extended.
+     * @deprecated since Moodle 3.10.
      */
-    public function extend_lock(lock $lock, $maxlifetime = 86400) {
-        // Not supported by this factory.
-        return false;
+    public function extend_lock() {
+        throw new coding_exception('The function extend_lock() has been removed, please do not use it anymore.');
     }
 
 }

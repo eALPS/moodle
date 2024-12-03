@@ -14,25 +14,27 @@ Feature: Check that the page listing the shared external tools is functioning as
     And the following "course enrolments" exist:
       | user | course | role |
       | teacher1 | C1 | editingteacher |
+    And the following "activities" exist:
+      | activity | name                 | intro                    | course | idnumber  | section |
+      | assign   | Test assignment name | Submit your online text  | C1     | assign1   | 1       |
     And I log in as "admin"
-    And I navigate to "Manage enrol plugins" node in "Site administration > Plugins > Enrolments"
+    And I navigate to "Plugins > Enrolments > Manage enrol plugins" in site administration
     And I click on "Enable" "link" in the "Publish as LTI tool" "table_row"
     And I log out
 
   Scenario: I want to edit an external tool
     Given I log in as "teacher1"
-    And I follow "Course 1"
     And I turn editing mode on
-    And I add a "Assignment" to section "1" and I fill the form with:
-      | Assignment name | Test assignment name |
-      | Description | Submit your online text |
-    And I navigate to "Enrolment methods" node in "Course administration > Users"
+    And I am on the "Course 1" "enrolment methods" page
     And I select "Publish as LTI tool" from the "Add method" singleselect
     And I set the following fields to these values:
       | Custom instance name | Assignment - LTI |
       | Tool to be published | Test assignment name |
+      | LTI version          | Legacy LTI (1.1/2.0) |
     And I press "Add method"
-    And I navigate to "Published as LTI tools" node in "Course administration"
+    And I am on "Course 1" course homepage
+    And I navigate to "Published as LTI tools" in current page administration
+    And I click on "Legacy LTI (1.1/2.0" "link"
     And I should see "Assignment - LTI" in the ".generaltable" "css_element"
     When I click on "Disable" "link" in the "Assignment - LTI" "table_row"
     Then ".dimmed_text" "css_element" should exist in the "Assignment - LTI" "table_row"
@@ -49,5 +51,5 @@ Feature: Check that the page listing the shared external tools is functioning as
     And I should see "Course - LTI" in the ".generaltable" "css_element"
     And I click on "Delete" "link" in the "Course - LTI" "table_row"
     And I press "Continue"
-    And I should see "No tools provided"
+    And I should see "No resources or activities are published yet"
     And I should not see "Course - LTI"

@@ -45,20 +45,11 @@ use Behat\Gherkin\Node\TableNode;
 class behat_transformations extends behat_base {
 
     /**
-     * Transformations for TableNode arguments.
-     *
-     * Transformations applicable to TableNode arguments should also
-     * be applied, adding them in a different method for Behat API restrictions.
-     *
-     * @deprecated since Moodle 3.2 MDL-56335 - please do not use this function any more.
-     * @param TableNode $tablenode
-     * @return TableNode The transformed table
+     * @deprecated since Moodle 3.2
      */
-    public function prefixed_tablenode_transformations(TableNode $tablenode) {
-        debugging('prefixed_tablenode_transformations() is deprecated. Please use tablenode_transformations() instead.',
-            DEBUG_DEVELOPER);
-
-        return $this->tablenode_transformations($tablenode);
+    public function prefixed_tablenode_transformations() {
+        throw new coding_exception('prefixed_tablenode_transformations() can not be used anymore. ' .
+            'Please use tablenode_transformations() instead.');
     }
 
     /**
@@ -116,6 +107,7 @@ class behat_transformations extends behat_base {
      * @return TableNode The transformed table
      */
     public function tablenode_transformations(TableNode $tablenode) {
+        global $CFG;
         // Walk through all values including the optional headers.
         $rows = $tablenode->getRows();
         foreach ($rows as $rowkey => $row) {
@@ -132,6 +124,11 @@ class behat_transformations extends behat_base {
                         $rows[$rowkey][$colkey] = $this->get_transformed_timestamp($match[1]);
                     }
                 }
+
+                // Transform wwwroot.
+                if (preg_match('/#wwwroot#/', $rows[$rowkey][$colkey])) {
+                    $rows[$rowkey][$colkey] = $this->replace_wwwroot($rows[$rowkey][$colkey]);
+                }
             }
         }
 
@@ -140,6 +137,30 @@ class behat_transformations extends behat_base {
         $tablenode = new TableNode($rows);
 
         return $tablenode;
+    }
+
+    /**
+     * Convert #wwwroot# to the wwwroot config value, so it is
+     * possible to reference fully qualified URLs within the site.
+     *
+     * @Transform /^((.*)#wwwroot#(.*))$/
+     * @param string $string
+     * @return string
+     */
+    public function arg_insert_wwwroot(string $string): string {
+        return $this->replace_wwwroot($string);
+    }
+
+    /**
+     * Convert #dirroot# to the dirroot config value, so it is
+     * possible to reference files (e.g. fixtures) with an absolute path.
+     *
+     * @Transform /^((.*)#dirroot#(.*))$/
+     * @param string $string
+     * @return string
+     */
+    public function arg_insert_dirroot(string $string): string {
+        return $this->replace_dirroot($string);
     }
 
     /**
@@ -176,13 +197,35 @@ class behat_transformations extends behat_base {
 
         $count = count($timepassed);
         if ($count === 2) {
-            // If timestamp with spcified format, then retrun date.
-            return date($timepassed[1], $timestamp);
+            // If timestamp with specified strftime format, then return formatted date string.
+            return userdate($timestamp, $timepassed[1]);
         } else if ($count === 1) {
             return $timestamp;
         } else {
             // If not a valid time string, then just return what was passed.
             return $time;
         }
+    }
+
+    /**
+     * Replace #wwwroot# with the actual wwwroot config value.
+     *
+     * @param string $string String to attempt the replacement in.
+     * @return string
+     */
+    protected function replace_wwwroot(string $string): string {
+        global $CFG;
+        return str_replace('#wwwroot#', $CFG->wwwroot, $string);
+    }
+
+    /**
+     * Replace #dirroot# with the actual dirroot config value.
+     *
+     * @param string $string String to attempt the replacement in.
+     * @return string
+     */
+    protected function replace_dirroot(string $string): string {
+        global $CFG;
+        return str_replace('#dirroot#', $CFG->dirroot, $string);
     }
 }

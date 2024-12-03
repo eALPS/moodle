@@ -28,7 +28,6 @@ require_once($CFG->dirroot.'/cohort/upload_form.php');
 require_once($CFG->libdir . '/csvlib.class.php');
 
 $contextid = optional_param('contextid', 0, PARAM_INT);
-$returnurl = optional_param('returnurl', '', PARAM_URL);
 
 require_login();
 
@@ -38,7 +37,7 @@ if ($contextid) {
     $context = context_system::instance();
 }
 if ($context->contextlevel != CONTEXT_COURSECAT && $context->contextlevel != CONTEXT_SYSTEM) {
-    print_error('invalidcontext');
+    throw new \moodle_exception('invalidcontext');
 }
 
 require_capability('moodle/cohort:manage', $context);
@@ -46,29 +45,31 @@ require_capability('moodle/cohort:manage', $context);
 $PAGE->set_context($context);
 $baseurl = new moodle_url('/cohort/upload.php', array('contextid' => $context->id));
 $PAGE->set_url($baseurl);
-$PAGE->set_heading($COURSE->fullname);
 $PAGE->set_pagelayout('admin');
 
 if ($context->contextlevel == CONTEXT_COURSECAT) {
-    $PAGE->set_category_by_id($context->instanceid);
-    navigation_node::override_active_url(new moodle_url('/cohort/index.php', array('contextid' => $context->id)));
+    core_course_category::page_setup();
+    // Set the cohorts node active in the settings navigation block.
+    if ($cohortsnode = $PAGE->settingsnav->find('cohort', navigation_node::TYPE_SETTING)) {
+        $cohortsnode->make_active();
+    }
+
+    $PAGE->set_secondary_active_tab('cohort');
 } else {
     navigation_node::override_active_url(new moodle_url('/cohort/index.php', array()));
+    $PAGE->set_heading($COURSE->fullname);
 }
 
-$uploadform = new cohort_upload_form(null, array('contextid' => $context->id, 'returnurl' => $returnurl));
+$uploadform = new cohort_upload_form(null, array('contextid' => $context->id));
 
-if ($returnurl) {
-    $returnurl = new moodle_url($returnurl);
-} else {
-    $returnurl = new moodle_url('/cohort/index.php', array('contextid' => $context->id));
-}
+$returnurl = new moodle_url('/cohort/index.php', array('contextid' => $context->id));
 
 if ($uploadform->is_cancelled()) {
     redirect($returnurl);
 }
 
 $strheading = get_string('uploadcohorts', 'cohort');
+$PAGE->set_title($strheading);
 $PAGE->navbar->add($strheading);
 
 echo $OUTPUT->header();

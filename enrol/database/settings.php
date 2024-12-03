@@ -31,7 +31,7 @@ if ($ADMIN->fulltree) {
 
     $settings->add(new admin_setting_heading('enrol_database_exdbheader', get_string('settingsheaderdb', 'enrol_database'), ''));
 
-    $options = array('', "access","ado_access", "ado", "ado_mssql", "borland_ibase", "csv", "db2", "fbsql", "firebird", "ibase", "informix72", "informix", "mssql", "mssql_n", "mssqlnative", "mysql", "mysqli", "mysqlt", "oci805", "oci8", "oci8po", "odbc", "odbc_mssql", "odbc_oracle", "oracle", "postgres64", "postgres7", "postgres", "proxy", "sqlanywhere", "sybase", "vfp");
+    $options = array('', "access", "ado_access", "ado", "ado_mssql", "borland_ibase", "csv", "db2", "fbsql", "firebird", "ibase", "informix72", "informix", "mssql", "mssql_n", "mssqlnative", "mysql", "mysqli", "mysqlt", "oci805", "oci8", "oci8po", "odbc", "odbc_mssql", "odbc_oracle", "oracle", "pdo", "postgres64", "postgres7", "postgres", "proxy", "sqlanywhere", "sybase", "vfp");
     $options = array_combine($options, $options);
     $settings->add(new admin_setting_configselect('enrol_database/dbtype', get_string('dbtype', 'enrol_database'), get_string('dbtype_desc', 'enrol_database'), '', $options));
 
@@ -86,7 +86,11 @@ if ($ADMIN->fulltree) {
         $options = get_default_enrol_roles(context_system::instance());
         $student = get_archetype_roles('student');
         $student = reset($student);
-        $settings->add(new admin_setting_configselect('enrol_database/defaultrole', get_string('defaultrole', 'enrol_database'), get_string('defaultrole_desc', 'enrol_database'), $student->id, $options));
+        $settings->add(new admin_setting_configselect('enrol_database/defaultrole',
+            get_string('defaultrole', 'enrol_database'),
+            get_string('defaultrole_desc', 'enrol_database'),
+            $student->id ?? null,
+            $options));
     }
 
     $settings->add(new admin_setting_configcheckbox('enrol_database/ignorehiddencourses', get_string('ignorehiddencourses', 'enrol_database'), get_string('ignorehiddencourses_desc', 'enrol_database'), 0));
@@ -109,11 +113,21 @@ if ($ADMIN->fulltree) {
 
     $settings->add(new admin_setting_configtext('enrol_database/newcourseidnumber', get_string('newcourseidnumber', 'enrol_database'), '', 'idnumber'));
 
+    $settings->add(new admin_setting_configtext(
+        'enrol_database/newcoursestartdate',
+        get_string('newcoursestartdate', 'enrol_database'),
+        get_string('newcoursestartdate_desc', 'enrol_database'), ''));
+
+    $settings->add(new admin_setting_configtext(
+        'enrol_database/newcourseenddate',
+        get_string('newcourseenddate', 'enrol_database'),
+        get_string('newcourseenddate_desc', 'enrol_database'), ''));
+
     $settings->add(new admin_setting_configtext('enrol_database/newcoursecategory', get_string('newcoursecategory', 'enrol_database'), '', ''));
 
-    require_once($CFG->dirroot.'/enrol/database/settingslib.php');
-
-    $settings->add(new enrol_database_admin_setting_category('enrol_database/defaultcategory', get_string('defaultcategory', 'enrol_database'), get_string('defaultcategory_desc', 'enrol_database')));
+    $settings->add(new admin_settings_coursecat_select('enrol_database/defaultcategory',
+        get_string('defaultcategory', 'enrol_database'),
+        get_string('defaultcategory_desc', 'enrol_database'), 1));
 
     $settings->add(new admin_setting_configtext('enrol_database/templatecourse', get_string('templatecourse', 'enrol_database'), get_string('templatecourse_desc', 'enrol_database'), ''));
 }

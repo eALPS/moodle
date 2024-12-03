@@ -115,7 +115,7 @@ class repository_equella extends repository {
      * @return int
      */
     public function supported_returntypes() {
-        return FILE_REFERENCE;
+        return (FILE_INTERNAL | FILE_REFERENCE);
     }
 
     /**
@@ -214,9 +214,7 @@ class repository_equella extends repository {
             $path = $this->prepare_file('');
             $result = $c->download_one($url, null, array('filepath' => $path, 'followlocation' => true, 'timeout' => $CFG->repositorysyncimagetimeout));
             if ($result === true) {
-                $fs = get_file_storage();
-                list($contenthash, $filesize, $newfile) = $fs->add_file_to_pool($path);
-                $file->set_synchronized($contenthash, $filesize);
+                $file->set_synchronised_content_from_file($path);
                 return true;
             }
         } else {
@@ -249,7 +247,7 @@ class repository_equella extends repository {
      * @param bool $forcedownload If true (default false), forces download of file rather than view in browser/plugin
      * @param array $options additional options affecting the file serving
      */
-    public function send_file($stored_file, $lifetime=null , $filter=0, $forcedownload=false, array $options = null) {
+    public function send_file($stored_file, $lifetime=null , $filter=0, $forcedownload=false, ?array $options = null) {
         $reference  = unserialize(base64_decode($stored_file->get_reference()));
         $url = $this->appendtoken($reference->url);
         if ($url) {
@@ -262,14 +260,28 @@ class repository_equella extends repository {
     /**
      * Add Instance settings input to Moodle form
      *
-     * @param moodleform $mform
+     * @param MoodleQuickForm $mform
      */
     public static function instance_config_form($mform) {
+        global $CFG;
+        require_once("{$CFG->dirroot}/user/profile/lib.php");
+
         $mform->addElement('text', 'equella_url', get_string('equellaurl', 'repository_equella'));
         $mform->setType('equella_url', PARAM_URL);
 
         $strrequired = get_string('required');
         $mform->addRule('equella_url', $strrequired, 'required', null, 'client');
+
+        $userfieldoptions = ['default' => get_string('equellausername', 'repository_equella')];
+        foreach (profile_get_custom_fields() as $field) {
+            if ($field->datatype != 'text') {
+                continue;
+            }
+            $userfieldoptions[$field->shortname] = format_string($field->name, true, ['context' => context_system::instance()]);
+        }
+        $mform->addElement('select', 'equella_userfield', get_string('equellauserfield', 'repository_equella'), $userfieldoptions);
+        $mform->setDefault('equella_userfield', $userfieldoptions['default']);
+        $mform->addHelpButton('equella_userfield', 'equellauserfield', 'repository_equella');
 
         $mform->addElement('text', 'equella_options', get_string('equellaoptions', 'repository_equella'));
         $mform->setType('equella_options', PARAM_NOTAGS);
@@ -293,7 +305,7 @@ class repository_equella extends repository {
 
         foreach (self::get_all_editing_roles() as $role) {
             $mform->addElement('header', 'groupheader_'.$role->shortname, get_string('group', 'repository_equella',
-                format_string($role->name)));
+                role_get_name($role)));
             $mform->addElement('text', "equella_{$role->shortname}_shareid", get_string('sharedid', 'repository_equella'));
             $mform->setType("equella_{$role->shortname}_shareid", PARAM_RAW);
             $mform->addElement('text', "equella_{$role->shortname}_sharedsecret",
@@ -309,7 +321,7 @@ class repository_equella extends repository {
      */
     public static function get_instance_option_names() {
         $rv = array('equella_url', 'equella_select_restriction', 'equella_options',
-            'equella_shareid', 'equella_sharedsecret'
+            'equella_shareid', 'equella_sharedsecret', 'equella_userfield',
         );
 
         foreach (self::get_all_editing_roles() as $role) {
@@ -366,7 +378,7 @@ class repository_equella extends repository {
         if (empty($USER->username)) {
             return false;
         }
-
+        $equellauserfield = $this->get_userfield_value();
         if ($readwrite == 'write') {
 
             foreach (self::get_all_editing_roles() as $role) {
@@ -374,7 +386,7 @@ class repository_equella extends repository {
                     // See if the user has a role that is linked to an equella role.
                     $shareid = $this->get_option("equella_{$role->shortname}_shareid");
                     if (!empty($shareid)) {
-                        return $this->getssotoken_raw($USER->username, $shareid,
+                        return $this->getssotoken_raw($equellauserfield, $shareid,
                             $this->get_option("equella_{$role->shortname}_sharedsecret"));
                     }
                 }
@@ -383,7 +395,7 @@ class repository_equella extends repository {
         // If we are only reading, use the unadorned shareid and secret.
         $shareid = $this->get_option('equella_shareid');
         if (!empty($shareid)) {
-            return $this->getssotoken_raw($USER->username, $shareid, $this->get_option('equella_sharedsecret'));
+            return $this->getssotoken_raw($equellauserfield, $shareid, $this->get_option('equella_sharedsecret'));
         }
     }
 
@@ -437,5 +449,20 @@ class repository_equella extends repository {
      */
     public function contains_private_data() {
         return false;
+    }
+
+    /**
+     * Retrieve the userfield/username.
+     *
+     * @return string
+     */
+    public function get_userfield_value(): string {
+        global $USER;
+        $userfield = $this->get_option('equella_userfield');
+        if ($userfield != 'default' && isset($USER->profile[$userfield])) {
+            return $USER->profile[$userfield];
+        } else {
+            return $USER->username;
+        }
     }
 }

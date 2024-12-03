@@ -22,31 +22,58 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
+namespace core;
+
+use core\exception\coding_exception;
+use core\output\theme_config;
+use stdClass;
+use ArrayIterator;
+use DirectoryIterator;
+use Exception;
+use RegexIterator;
 
 // Constants used in version.php files, these must exist when core_component executes.
 
+// We make use of error_log as debugging is not always available.
+// phpcs:disable moodle.PHP.ForbiddenFunctions.FoundWithAlternative
+// We make use of empty if statements to make complex decisions clearer.
+// phpcs:disable Generic.CodeAnalysis.EmptyStatement.DetectedIf
+
 /** Software maturity level - internals can be tested using white box techniques. */
-define('MATURITY_ALPHA',    50);
+define('MATURITY_ALPHA', 50);
 /** Software maturity level - feature complete, ready for preview and testing. */
-define('MATURITY_BETA',     100);
+define('MATURITY_BETA', 100);
 /** Software maturity level - tested, will be released unless there are fatal bugs. */
-define('MATURITY_RC',       150);
+define('MATURITY_RC', 150);
 /** Software maturity level - ready for production deployment. */
-define('MATURITY_STABLE',   200);
+define('MATURITY_STABLE', 200);
 /** Any version - special value that can be used in $plugin->dependencies in version.php files. */
 define('ANY_VERSION', 'any');
-
 
 /**
  * Collection of components related methods.
  */
-class core_component {
-    /** @var array list of ignored directories - watch out for auth/db exception */
-    protected static $ignoreddirs = array('CVS'=>true, '_vti_cnf'=>true, 'simpletest'=>true, 'db'=>true, 'yui'=>true, 'tests'=>true, 'classes'=>true, 'fonts'=>true);
+class component {
+    /** @var array list of ignored directories in plugin type roots - watch out for auth/db exception */
+    protected static $ignoreddirs = [
+        'CVS' => true,
+        '_vti_cnf' => true,
+        'amd' => true,
+        'classes' => true,
+        'db' => true,
+        'fonts' => true,
+        'lang' => true,
+        'pix' => true,
+        'simpletest' => true,
+        'templates' => true,
+        'tests' => true,
+        'yui' => true,
+    ];
     /** @var array list plugin types that support subplugins, do not add more here unless absolutely necessary */
-    protected static $supportsubplugins = array('mod', 'editor', 'tool', 'local');
+    protected static $supportsubplugins = ['mod', 'editor', 'tool', 'local'];
 
+    /** @var object JSON source of the component data */
+    protected static $componentsource = null;
     /** @var array cache of plugin types */
     protected static $plugintypes = null;
     /** @var array cache of plugin locations */
@@ -57,6 +84,8 @@ class core_component {
     protected static $parents = null;
     /** @var array subplugins */
     protected static $subplugins = null;
+    /** @var array cache of core APIs */
+    protected static $apis = null;
     /** @var array list of all known classes that can be autoloaded */
     protected static $classmap = null;
     /** @var array list of all classes that have been renamed to be autoloaded */
@@ -66,24 +95,101 @@ class core_component {
     /** @var int|float core version. */
     protected static $version = null;
     /** @var array list of the files to map. */
-    protected static $filestomap = array('lib.php', 'settings.php');
+    protected static $filestomap = ['lib.php', 'settings.php'];
     /** @var array associative array of PSR-0 namespaces and corresponding paths. */
-    protected static $psr0namespaces = array(
-        'Horde' => 'lib/horde/framework/Horde',
+    protected static $psr0namespaces = [
         'Mustache' => 'lib/mustache/src/Mustache',
-    );
-    /** @var array associative array of PRS-4 namespaces and corresponding paths. */
-    protected static $psr4namespaces = array(
-        'MaxMind' => 'lib/maxmind/MaxMind',
-        'GeoIp2' => 'lib/maxmind/GeoIp2',
-        'Sabberworm\\CSS' => 'lib/php-css-parser',
-        'MoodleHQ\\RTLCSS' => 'lib/rtlcss',
-        'Leafo\\ScssPhp' => 'lib/scssphp',
-        'Box\\Spout' => 'lib/spout/src/Spout',
-        'MatthiasMullie\\Minify' => 'lib/minify/matthiasmullie-minify/src/',
-        'MatthiasMullie\\PathConverter' => 'lib/minify/matthiasmullie-pathconverter/src/',
-        'IMSGlobal\LTI' => 'lib/ltiprovider/src',
-    );
+        'CFPropertyList' => 'lib/plist/classes/CFPropertyList',
+    ];
+    /** @var array<string|array<string>> associative array of PRS-4 namespaces and corresponding paths. */
+    protected static $psr4namespaces = [
+        \Html2Text::class => 'lib/html2text/src',
+        \MaxMind::class => 'lib/maxmind/MaxMind',
+        \GeoIp2::class => 'lib/maxmind/GeoIp2',
+        \Sabberworm\CSS::class => 'lib/php-css-parser',
+        \MoodleHQ\RTLCSS::class => 'lib/rtlcss',
+        \ScssPhp\ScssPhp::class => 'lib/scssphp',
+        \OpenSpout::class => 'lib/openspout/src',
+        \MatthiasMullie\Minify::class => 'lib/minify/matthiasmullie-minify/src/',
+        \MatthiasMullie\PathConverter::class => 'lib/minify/matthiasmullie-pathconverter/src/',
+        \IMSGlobal\LTI::class => 'lib/ltiprovider/src',
+        \Packback\Lti1p3::class => 'lib/lti1p3/src',
+        \Phpml::class => 'lib/mlbackend/php/phpml/src/Phpml',
+        \PHPMailer\PHPMailer::class => 'lib/phpmailer/src',
+        \RedeyeVentures\GeoPattern::class => 'lib/geopattern-php/GeoPattern',
+        \Firebase\JWT::class => 'lib/php-jwt/src',
+        \ZipStream::class => 'lib/zipstream/src/',
+        \MyCLabs\Enum::class => 'lib/php-enum/src',
+        \PhpXmlRpc::class => 'lib/phpxmlrpc',
+        \Psr\Http\Client::class => 'lib/psr/http-client/src',
+        \Psr\Http\Message::class => [
+            'lib/psr/http-message/src',
+            'lib/psr/http-factory/src',
+        ],
+        \Psr\Http\Server::class => [
+            "lib/psr/http-server-handler/src",
+            "lib/psr/http-server-middleware/src",
+        ],
+        \Psr\EventDispatcher::class => 'lib/psr/event-dispatcher/src',
+        \Psr\Clock::class => 'lib/psr/clock/src',
+        \Psr\Container::class => 'lib/psr/container/src',
+        \Psr\Log::class => "lib/psr/log/src",
+        \Psr\SimpleCache::class => 'lib/psr/simple-cache/src',
+        \GuzzleHttp\Psr7::class => 'lib/guzzlehttp/psr7/src',
+        \GuzzleHttp\Promise::class => 'lib/guzzlehttp/promises/src',
+        \GuzzleHttp::class => 'lib/guzzlehttp/guzzle/src',
+        \Kevinrob\GuzzleCache::class => 'lib/guzzlehttp/kevinrob/guzzlecache/src',
+        \Aws::class => 'lib/aws-sdk/src',
+        \JmesPath::class => 'lib/jmespath/src',
+        \Laravel\SerializableClosure::class => 'lib/laravel/serializable-closure/src',
+        \DI::class => 'lib/php-di/php-di/src',
+        \Complex::class => 'lib/phpspreadsheet/markbaker/classes/src',
+        \Matrix::class => 'lib/phpspreadsheet/markbaker/classes/src',
+        \PhpOffice\PhpSpreadsheet::class => 'lib/phpspreadsheet/phpspreadsheet/src/PhpSpreadsheet',
+        \Invoker::class => 'lib/php-di/invoker/src',
+        \FastRoute::class => 'lib/nikic/fast-route/src',
+        \Slim::class => 'lib/slim/slim/Slim',
+        \libphonenumber::class => 'lib/giggsey/libphonenumber-for-php-lite/src',
+        \Spatie\Cloneable::class => 'lib/spatie/php-cloneable/src',
+    ];
+
+    /**
+     *  An array containing files which are normally in a package's composer/autoload.files section.
+     *
+     * PHP does not provide a mechanism for automatically including the files that methods are in.
+     *
+     * The Composer autoloader includes all files in this section of the composer.json file during the instantiation of the loader.
+     *
+     * @var array<string>
+     */
+    protected static $composerautoloadfiles = [
+        'lib/aws-sdk/src/functions.php',
+        'lib/guzzlehttp/guzzle/src/functions_include.php',
+        'lib/jmespath/src/JmesPath.php',
+        'lib/php-di/php-di/src/functions.php',
+        'lib/ralouphi/getallheaders/src/getallheaders.php',
+        'lib/symfony/deprecation-contracts/function.php',
+    ];
+
+    /**
+     * Register the Moodle class autoloader.
+     */
+    public static function register_autoloader(): void {
+        if (defined('COMPONENT_CLASSLOADER')) {
+            spl_autoload_register(COMPONENT_CLASSLOADER);
+        } else {
+            spl_autoload_register([self::class, 'classloader']);
+        }
+
+        // Load any composer-driven autoload files.
+        // This is intended to mimic the behaviour of the standard Composer Autoloader.
+        foreach (static::$composerautoloadfiles as $file) {
+            $path = dirname(__DIR__, 2) . '/' . $file;
+            if (file_exists($path)) {
+                require_once($path);
+            }
+        }
+    }
 
     /**
      * Class loader for Frankenstyle named classes in standard locations.
@@ -116,7 +222,7 @@ class core_component {
             $debugging = "Class '%s' has been renamed for the autoloader and is now deprecated. Please use '%s' instead.";
             debugging(sprintf($debugging, $classname, $newclassname), DEBUG_DEVELOPER);
             if (PHP_VERSION_ID >= 70000 && preg_match('#\\\null(\\\|$)#', $classname)) {
-                throw new \coding_exception("Cannot alias $classname to $newclassname");
+                throw new coding_exception("Cannot alias $classname to $newclassname");
             }
             class_alias($newclassname, $classname);
             return;
@@ -127,6 +233,38 @@ class core_component {
         if (!empty($file)) {
             require($file);
             return;
+        }
+
+        if (defined('PHPUNIT_TEST') && PHPUNIT_TEST) {
+            // For unit tests we support classes in `\frankenstyle_component\tests\` to be loaded from
+            // `path/to/frankenstyle/component/tests/classes` directory.
+            // Note: We do *not* support the legacy `\frankenstyle_component_tests_style_classnames`.
+            if ($component = self::get_component_from_classname($classname)) {
+                $pathoptions = [
+                    '/tests/classes' => "{$component}\\tests\\",
+                    '/tests/behat' => "{$component}\\behat\\",
+                ];
+                foreach ($pathoptions as $path => $testnamespace) {
+                    if (preg_match("#^" . preg_quote($testnamespace) . "#", $classname)) {
+                        $path = self::get_component_directory($component) . $path;
+                        $relativeclassname = str_replace(
+                            $testnamespace,
+                            '',
+                            $classname,
+                        );
+                        $file = sprintf(
+                            "%s/%s.php",
+                            $path,
+                            str_replace('\\', '/', $relativeclassname),
+                        );
+                        if (!empty($file) && file_exists($file)) {
+                            require($file);
+                            return;
+                        }
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -142,16 +280,21 @@ class core_component {
      */
     protected static function psr_classloader($class) {
         // Iterate through each PSR-4 namespace prefix.
-        foreach (self::$psr4namespaces as $prefix => $path) {
-            $file = self::get_class_file($class, $prefix, $path, array('\\'));
-            if (!empty($file) && file_exists($file)) {
-                return $file;
+        foreach (self::$psr4namespaces as $prefix => $paths) {
+            if (!is_array($paths)) {
+                $paths = [$paths];
+            }
+            foreach ($paths as $path) {
+                $file = self::get_class_file($class, $prefix, $path, ['\\']);
+                if (!empty($file) && file_exists($file)) {
+                    return $file;
+                }
             }
         }
 
         // Iterate through each PSR-0 namespace prefix.
         foreach (self::$psr0namespaces as $prefix => $path) {
-            $file = self::get_class_file($class, $prefix, $path, array('\\', '_'));
+            $file = self::get_class_file($class, $prefix, $path, ['\\', '_']);
             if (!empty($file) && file_exists($file)) {
                 return $file;
             }
@@ -193,7 +336,6 @@ class core_component {
         return $file;
     }
 
-
     /**
      * Initialise caches, always call before accessing self:: caches.
      */
@@ -205,7 +347,7 @@ class core_component {
             return;
         }
 
-        if (defined('IGNORE_COMPONENT_CACHE') and IGNORE_COMPONENT_CACHE) {
+        if (defined('IGNORE_COMPONENT_CACHE') && IGNORE_COMPONENT_CACHE) {
             self::fill_all_caches();
             return;
         }
@@ -223,13 +365,14 @@ class core_component {
                     }
                     return;
                 }
-                $cache = array();
+                $cache = [];
                 include($cachefile);
                 self::$plugintypes      = $cache['plugintypes'];
                 self::$plugins          = $cache['plugins'];
                 self::$subsystems       = $cache['subsystems'];
                 self::$parents          = $cache['parents'];
                 self::$subplugins       = $cache['subplugins'];
+                self::$apis             = $cache['apis'];
                 self::$classmap         = $cache['classmap'];
                 self::$classmaprenames  = $cache['classmaprenames'];
                 self::$filemap          = $cache['filemap'];
@@ -237,46 +380,40 @@ class core_component {
             }
 
             if (!is_writable(dirname($cachefile))) {
-                die('Can not create alternative component cache file defined in $CFG->alternative_component_cache, can not continue');
+                die(
+                    'Can not create alternative component cache file defined in ' .
+                    '$CFG->alternative_component_cache, can not continue'
+                );
             }
 
             // Lets try to create the file, it might be in some writable directory or a local cache dir.
-
         } else {
             // Note: $CFG->cachedir MUST be shared by all servers in a cluster,
-            //       use $CFG->alternative_component_cache if you do not like it.
+            // use $CFG->alternative_component_cache if you do not like it.
             $cachefile = "$CFG->cachedir/core_component.php";
         }
 
-        if (!CACHE_DISABLE_ALL and !self::is_developer()) {
+        if (!CACHE_DISABLE_ALL && !self::is_developer()) {
             // 1/ Use the cache only outside of install and upgrade.
             // 2/ Let developers add/remove classes in developer mode.
             if (is_readable($cachefile)) {
                 $cache = false;
                 include($cachefile);
-                if (!is_array($cache)) {
-                    // Something is very wrong.
-                } else if (!isset($cache['version'])) {
-                    // Something is very wrong.
-                } else if ((float) $cache['version'] !== (float) self::fetch_core_version()) {
-                    // Outdated cache. We trigger an error log to track an eventual repetitive failure of float comparison.
-                    error_log('Resetting core_component cache after core upgrade to version ' . self::fetch_core_version());
-                } else if ($cache['plugintypes']['mod'] !== "$CFG->dirroot/mod") {
-                    // $CFG->dirroot was changed.
-                } else {
+                if (is_array($cache) && self::is_cache_valid($cache)) {
                     // The cache looks ok, let's use it.
                     self::$plugintypes      = $cache['plugintypes'];
                     self::$plugins          = $cache['plugins'];
                     self::$subsystems       = $cache['subsystems'];
                     self::$parents          = $cache['parents'];
                     self::$subplugins       = $cache['subplugins'];
+                    self::$apis             = $cache['apis'];
                     self::$classmap         = $cache['classmap'];
                     self::$classmaprenames  = $cache['classmaprenames'];
                     self::$filemap          = $cache['filemap'];
                     return;
                 }
                 // Note: we do not verify $CFG->admin here intentionally,
-                //       they must visit admin/index.php after any change.
+                // they must visit admin/index.php after any change.
             }
         }
 
@@ -302,15 +439,74 @@ class core_component {
                 mkdir($cachedir, $dirpermissions, true);
             }
 
-            if ($fp = @fopen($cachefile.'.tmp', 'xb')) {
+            if ($fp = @fopen($cachefile . '.tmp', 'xb')) {
                 fwrite($fp, $content);
                 fclose($fp);
-                @rename($cachefile.'.tmp', $cachefile);
+                @rename($cachefile . '.tmp', $cachefile);
                 @chmod($cachefile, $filepermissions);
             }
-            @unlink($cachefile.'.tmp'); // Just in case anything fails (race condition).
+            @unlink($cachefile . '.tmp'); // Just in case anything fails (race condition).
             self::invalidate_opcode_php_cache($cachefile);
         }
+    }
+
+    /**
+     * Reset the initialisation of the component utility.
+     *
+     * Note: It should not be necessary to call this in regular code.
+     * Please only use it where strictly required.
+     */
+    public static function reset(): void {
+        // The autoloader will re-initialise if plugintypes is null.
+        self::$plugintypes = null;
+    }
+
+    /**
+     * Check whether the cache content in the supplied cache is valid.
+     *
+     * @param array $cache The content being loaded
+     * @return bool Whether it is valid
+     */
+    protected static function is_cache_valid(array $cache): bool {
+        global $CFG;
+
+        if (!isset($cache['version'])) {
+            // Something is very wrong.
+            return false;
+        }
+
+        if ((float) $cache['version'] !== (float) self::fetch_core_version()) {
+            // Outdated cache. We trigger an error log to track an eventual repetitive failure of float comparison.
+            error_log('Resetting core_component cache after core upgrade to version ' . self::fetch_core_version());
+            return false;
+        }
+
+        if ($cache['plugintypes']['mod'] !== "$CFG->dirroot/mod") {
+            // phpcs:ignore moodle.Commenting.InlineComment.NotCapital
+            // $CFG->dirroot was changed.
+            return false;
+        }
+
+        // Check for key classes which block access to the upgrade in some way.
+        // Note: This list should be kept _extremely_ minimal and generally
+        // when adding a newly discovered classes older ones should be removed.
+        // Always keep moodle_exception in place.
+        $keyclasses = [
+            \core\exception\moodle_exception::class,
+            \core\output\bootstrap_renderer::class,
+            \core_cache\cache::class,
+        ];
+        foreach ($keyclasses as $classname) {
+            if (!array_key_exists($classname, $cache['classmap'])) {
+                // The cache is missing some key classes. This is likely before the upgrade has run.
+                error_log(
+                    "The '{$classname}' class was not found in the component class cache. Resetting the classmap.",
+                );
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -331,7 +527,7 @@ class core_component {
             return false;
         }
 
-        if ($debug & E_ALL and $debug & E_STRICT) {
+        if ($debug & E_ALL && $debug & E_STRICT) {
             return true;
         }
 
@@ -350,20 +546,21 @@ class core_component {
             self::fill_all_caches();
         }
 
-        $cache = array(
+        $cache = [
             'subsystems'        => self::$subsystems,
             'plugintypes'       => self::$plugintypes,
             'plugins'           => self::$plugins,
             'parents'           => self::$parents,
             'subplugins'        => self::$subplugins,
+            'apis'              => self::$apis,
             'classmap'          => self::$classmap,
             'classmaprenames'   => self::$classmaprenames,
             'filemap'           => self::$filemap,
             'version'           => self::$version,
-        );
+        ];
 
         return '<?php
-$cache = '.var_export($cache, true).';
+$cache = ' . var_export($cache, true) . ';
 ';
     }
 
@@ -373,12 +570,14 @@ $cache = '.var_export($cache, true).';
     protected static function fill_all_caches() {
         self::$subsystems = self::fetch_subsystems();
 
-        list(self::$plugintypes, self::$parents, self::$subplugins) = self::fetch_plugintypes();
+        [self::$plugintypes, self::$parents, self::$subplugins] = self::fetch_plugintypes();
 
-        self::$plugins = array();
+        self::$plugins = [];
         foreach (self::$plugintypes as $type => $fulldir) {
             self::$plugins[$type] = self::fetch_plugins($type, $fulldir);
         }
+
+        self::$apis = self::fetch_apis();
 
         self::fill_classmap_cache();
         self::fill_classmap_renames_cache();
@@ -411,78 +610,30 @@ $cache = '.var_export($cache, true).';
         global $CFG;
 
         // NOTE: Any additions here must be verified to not collide with existing add-on modules and subplugins!!!
+        $info = [];
+        foreach (self::fetch_component_source('subsystems') as $subsystem => $path) {
+            // Replace admin/ directory with the config setting.
+            if ($CFG->admin !== 'admin') {
+                if ($path === 'admin') {
+                    $path = $CFG->admin;
+                }
+                if (strpos($path, 'admin/') === 0) {
+                    $path = $CFG->admin . substr($path, 5);
+                }
+            }
 
-        $info = array(
-            'access'      => null,
-            'admin'       => $CFG->dirroot.'/'.$CFG->admin,
-            'antivirus'   => $CFG->dirroot . '/lib/antivirus',
-            'auth'        => $CFG->dirroot.'/auth',
-            'availability' => $CFG->dirroot . '/availability',
-            'backup'      => $CFG->dirroot.'/backup/util/ui',
-            'badges'      => $CFG->dirroot.'/badges',
-            'block'       => $CFG->dirroot.'/blocks',
-            'blog'        => $CFG->dirroot.'/blog',
-            'bulkusers'   => null,
-            'cache'       => $CFG->dirroot.'/cache',
-            'calendar'    => $CFG->dirroot.'/calendar',
-            'cohort'      => $CFG->dirroot.'/cohort',
-            'comment'     => $CFG->dirroot.'/comment',
-            'competency'  => $CFG->dirroot.'/competency',
-            'completion'  => $CFG->dirroot.'/completion',
-            'countries'   => null,
-            'course'      => $CFG->dirroot.'/course',
-            'currencies'  => null,
-            'dbtransfer'  => null,
-            'debug'       => null,
-            'editor'      => $CFG->dirroot.'/lib/editor',
-            'edufields'   => null,
-            'enrol'       => $CFG->dirroot.'/enrol',
-            'error'       => null,
-            'filepicker'  => null,
-            'files'       => $CFG->dirroot.'/files',
-            'filters'     => null,
-            //'fonts'       => null, // Bogus.
-            'form'        => $CFG->dirroot.'/lib/form',
-            'grades'      => $CFG->dirroot.'/grade',
-            'grading'     => $CFG->dirroot.'/grade/grading',
-            'group'       => $CFG->dirroot.'/group',
-            'help'        => null,
-            'hub'         => null,
-            'imscc'       => null,
-            'install'     => null,
-            'iso6392'     => null,
-            'langconfig'  => null,
-            'license'     => null,
-            'mathslib'    => null,
-            'media'       => $CFG->dirroot.'/media',
-            'message'     => $CFG->dirroot.'/message',
-            'mimetypes'   => null,
-            'mnet'        => $CFG->dirroot.'/mnet',
-            //'moodle.org'  => null, // Not used any more.
-            'my'          => $CFG->dirroot.'/my',
-            'notes'       => $CFG->dirroot.'/notes',
-            'pagetype'    => null,
-            'pix'         => null,
-            'plagiarism'  => $CFG->dirroot.'/plagiarism',
-            'plugin'      => null,
-            'portfolio'   => $CFG->dirroot.'/portfolio',
-            'publish'     => $CFG->dirroot.'/course/publish',
-            'question'    => $CFG->dirroot.'/question',
-            'rating'      => $CFG->dirroot.'/rating',
-            'register'    => $CFG->dirroot.'/'.$CFG->admin.'/registration', // Broken badly if $CFG->admin changed.
-            'repository'  => $CFG->dirroot.'/repository',
-            'rss'         => $CFG->dirroot.'/rss',
-            'role'        => $CFG->dirroot.'/'.$CFG->admin.'/roles',
-            'search'      => $CFG->dirroot.'/search',
-            'table'       => null,
-            'tag'         => $CFG->dirroot.'/tag',
-            'timezones'   => null,
-            'user'        => $CFG->dirroot.'/user',
-            'userkey'     => null,
-            'webservice'  => $CFG->dirroot.'/webservice',
-        );
+            $info[$subsystem] = empty($path) ? null : "{$CFG->dirroot}/{$path}";
+        }
 
         return $info;
+    }
+
+    /**
+     * Returns list of core APIs.
+     * @return stdClass[]
+     */
+    protected static function fetch_apis() {
+        return (array) json_decode(file_get_contents(__DIR__ . '/../apis.json'));
     }
 
     /**
@@ -492,47 +643,22 @@ $cache = '.var_export($cache, true).';
     protected static function fetch_plugintypes() {
         global $CFG;
 
-        $types = array(
-            'antivirus'     => $CFG->dirroot . '/lib/antivirus',
-            'availability'  => $CFG->dirroot . '/availability/condition',
-            'qtype'         => $CFG->dirroot.'/question/type',
-            'mod'           => $CFG->dirroot.'/mod',
-            'auth'          => $CFG->dirroot.'/auth',
-            'calendartype'  => $CFG->dirroot.'/calendar/type',
-            'enrol'         => $CFG->dirroot.'/enrol',
-            'message'       => $CFG->dirroot.'/message/output',
-            'block'         => $CFG->dirroot.'/blocks',
-            'media'         => $CFG->dirroot.'/media/player',
-            'filter'        => $CFG->dirroot.'/filter',
-            'editor'        => $CFG->dirroot.'/lib/editor',
-            'format'        => $CFG->dirroot.'/course/format',
-            'dataformat'    => $CFG->dirroot.'/dataformat',
-            'profilefield'  => $CFG->dirroot.'/user/profile/field',
-            'report'        => $CFG->dirroot.'/report',
-            'coursereport'  => $CFG->dirroot.'/course/report', // Must be after system reports.
-            'gradeexport'   => $CFG->dirroot.'/grade/export',
-            'gradeimport'   => $CFG->dirroot.'/grade/import',
-            'gradereport'   => $CFG->dirroot.'/grade/report',
-            'gradingform'   => $CFG->dirroot.'/grade/grading/form',
-            'mnetservice'   => $CFG->dirroot.'/mnet/service',
-            'webservice'    => $CFG->dirroot.'/webservice',
-            'repository'    => $CFG->dirroot.'/repository',
-            'portfolio'     => $CFG->dirroot.'/portfolio',
-            'search'        => $CFG->dirroot.'/search/engine',
-            'qbehaviour'    => $CFG->dirroot.'/question/behaviour',
-            'qformat'       => $CFG->dirroot.'/question/format',
-            'plagiarism'    => $CFG->dirroot.'/plagiarism',
-            'tool'          => $CFG->dirroot.'/'.$CFG->admin.'/tool',
-            'cachestore'    => $CFG->dirroot.'/cache/stores',
-            'cachelock'     => $CFG->dirroot.'/cache/locks',
-        );
-        $parents = array();
-        $subplugins = array();
+        $types = [];
+        foreach (self::fetch_component_source('plugintypes') as $plugintype => $path) {
+            // Replace admin/ with the config setting.
+            if ($CFG->admin !== 'admin' && strpos($path, 'admin/') === 0) {
+                $path = $CFG->admin . substr($path, 5);
+            }
+            $types[$plugintype] = "{$CFG->dirroot}/{$path}";
+        }
 
-        if (!empty($CFG->themedir) and is_dir($CFG->themedir) ) {
+        $parents = [];
+        $subplugins = [];
+
+        if (!empty($CFG->themedir) && is_dir($CFG->themedir)) {
             $types['theme'] = $CFG->themedir;
         } else {
-            $types['theme'] = $CFG->dirroot.'/theme';
+            $types['theme'] = $CFG->dirroot . '/theme';
         }
 
         foreach (self::$supportsubplugins as $type) {
@@ -546,20 +672,20 @@ $cache = '.var_export($cache, true).';
                 if (!$subtypes) {
                     continue;
                 }
-                $subplugins[$type.'_'.$plugin] = array();
-                foreach($subtypes as $subtype => $subdir) {
+                $subplugins[$type . '_' . $plugin] = [];
+                foreach ($subtypes as $subtype => $subdir) {
                     if (isset($types[$subtype])) {
                         error_log("Invalid subtype '$subtype', duplicate detected.");
                         continue;
                     }
                     $types[$subtype] = $subdir;
-                    $parents[$subtype] = $type.'_'.$plugin;
-                    $subplugins[$type.'_'.$plugin][$subtype] = array_keys(self::fetch_plugins($subtype, $subdir));
+                    $parents[$subtype] = $type . '_' . $plugin;
+                    $subplugins[$type . '_' . $plugin][$subtype] = array_keys(self::fetch_plugins($subtype, $subdir));
                 }
             }
         }
         // Local is always last!
-        $types['local'] = $CFG->dirroot.'/local';
+        $types['local'] = $CFG->dirroot . '/local';
 
         if (in_array('local', self::$supportsubplugins)) {
             $type = 'local';
@@ -569,20 +695,33 @@ $cache = '.var_export($cache, true).';
                 if (!$subtypes) {
                     continue;
                 }
-                $subplugins[$type.'_'.$plugin] = array();
-                foreach($subtypes as $subtype => $subdir) {
+                $subplugins[$type . '_' . $plugin] = [];
+                foreach ($subtypes as $subtype => $subdir) {
                     if (isset($types[$subtype])) {
                         error_log("Invalid subtype '$subtype', duplicate detected.");
                         continue;
                     }
                     $types[$subtype] = $subdir;
-                    $parents[$subtype] = $type.'_'.$plugin;
-                    $subplugins[$type.'_'.$plugin][$subtype] = array_keys(self::fetch_plugins($subtype, $subdir));
+                    $parents[$subtype] = $type . '_' . $plugin;
+                    $subplugins[$type . '_' . $plugin][$subtype] = array_keys(self::fetch_plugins($subtype, $subdir));
                 }
             }
         }
 
-        return array($types, $parents, $subplugins);
+        return [$types, $parents, $subplugins];
+    }
+
+    /**
+     * Returns the component source content as loaded from /lib/components.json.
+     *
+     * @return array
+     */
+    protected static function fetch_component_source(string $key) {
+        if (null === self::$componentsource) {
+            self::$componentsource = (array) json_decode(file_get_contents(__DIR__ . '/../components.json'));
+        }
+
+        return (array) self::$componentsource[$key];
     }
 
     /**
@@ -593,29 +732,46 @@ $cache = '.var_export($cache, true).';
     protected static function fetch_subtypes($ownerdir) {
         global $CFG;
 
-        $types = array();
-        if (file_exists("$ownerdir/db/subplugins.php")) {
-            $subplugins = array();
-            include("$ownerdir/db/subplugins.php");
-            foreach ($subplugins as $subtype => $dir) {
-                if (!preg_match('/^[a-z][a-z0-9]*$/', $subtype)) {
-                    error_log("Invalid subtype '$subtype'' detected in '$ownerdir', invalid characters present.");
-                    continue;
+        $types = [];
+        $subplugins = [];
+        if (file_exists("$ownerdir/db/subplugins.json")) {
+            $subplugins = [];
+            $subpluginsjson = json_decode(file_get_contents("$ownerdir/db/subplugins.json"));
+            if (json_last_error() === JSON_ERROR_NONE) {
+                if (!empty($subpluginsjson->plugintypes)) {
+                    $subplugins = (array) $subpluginsjson->plugintypes;
+                } else {
+                    error_log("No plugintypes defined in $ownerdir/db/subplugins.json");
                 }
-                if (isset(self::$subsystems[$subtype])) {
-                    error_log("Invalid subtype '$subtype'' detected in '$ownerdir', duplicates core subsystem.");
-                    continue;
-                }
-                if ($CFG->admin !== 'admin' and strpos($dir, 'admin/') === 0) {
-                    $dir = preg_replace('|^admin/|', "$CFG->admin/", $dir);
-                }
-                if (!is_dir("$CFG->dirroot/$dir")) {
-                    error_log("Invalid subtype directory '$dir' detected in '$ownerdir'.");
-                    continue;
-                }
-                $types[$subtype] = "$CFG->dirroot/$dir";
+            } else {
+                $jsonerror = json_last_error_msg();
+                error_log("$ownerdir/db/subplugins.json is invalid ($jsonerror)");
             }
+        } else if (file_exists("$ownerdir/db/subplugins.php")) {
+            error_log('Use of subplugins.php has been deprecated. ' .
+                "Please update your '$ownerdir' plugin to provide a subplugins.json file instead.");
+            include("$ownerdir/db/subplugins.php");
         }
+
+        foreach ($subplugins as $subtype => $dir) {
+            if (!preg_match('/^[a-z][a-z0-9]*$/', $subtype)) {
+                error_log("Invalid subtype '$subtype'' detected in '$ownerdir', invalid characters present.");
+                continue;
+            }
+            if (isset(self::$subsystems[$subtype])) {
+                error_log("Invalid subtype '$subtype'' detected in '$ownerdir', duplicates core subsystem.");
+                continue;
+            }
+            if ($CFG->admin !== 'admin' && strpos($dir, 'admin/') === 0) {
+                $dir = preg_replace('|^admin/|', "$CFG->admin/", $dir);
+            }
+            if (!is_dir("$CFG->dirroot/$dir")) {
+                error_log("Invalid subtype directory '$dir' detected in '$ownerdir'.");
+                continue;
+            }
+            $types[$subtype] = "$CFG->dirroot/$dir";
+        }
+
         return $types;
     }
 
@@ -630,25 +786,25 @@ $cache = '.var_export($cache, true).';
 
         $fulldirs = (array)$fulldir;
         if ($plugintype === 'theme') {
-            if (realpath($fulldir) !== realpath($CFG->dirroot.'/theme')) {
+            if (realpath($fulldir) !== realpath($CFG->dirroot . '/theme')) {
                 // Include themes in standard location too.
-                array_unshift($fulldirs, $CFG->dirroot.'/theme');
+                array_unshift($fulldirs, $CFG->dirroot . '/theme');
             }
         }
 
-        $result = array();
+        $result = [];
 
         foreach ($fulldirs as $fulldir) {
             if (!is_dir($fulldir)) {
                 continue;
             }
-            $items = new \DirectoryIterator($fulldir);
+            $items = new DirectoryIterator($fulldir);
             foreach ($items as $item) {
-                if ($item->isDot() or !$item->isDir()) {
+                if ($item->isDot() || !$item->isDir()) {
                     continue;
                 }
                 $pluginname = $item->getFilename();
-                if ($plugintype === 'auth' and $pluginname === 'db') {
+                if ($plugintype === 'auth' && $pluginname === 'db') {
                     // Special exception for this wrong plugin name.
                 } else if (isset(self::$ignoreddirs[$pluginname])) {
                     continue;
@@ -657,7 +813,7 @@ $cache = '.var_export($cache, true).';
                     // Always ignore plugins with problematic names here.
                     continue;
                 }
-                $result[$pluginname] = $fulldir.'/'.$pluginname;
+                $result[$pluginname] = $fulldir . '/' . $pluginname;
                 unset($item);
             }
             unset($items);
@@ -673,20 +829,22 @@ $cache = '.var_export($cache, true).';
     protected static function fill_classmap_cache() {
         global $CFG;
 
-        self::$classmap = array();
+        self::$classmap = [];
 
         self::load_classes('core', "$CFG->dirroot/lib/classes");
+        self::load_legacy_classes($CFG->libdir, true);
 
         foreach (self::$subsystems as $subsystem => $fulldir) {
             if (!$fulldir) {
                 continue;
             }
-            self::load_classes('core_'.$subsystem, "$fulldir/classes");
+            self::load_classes('core_' . $subsystem, "$fulldir/classes");
         }
 
         foreach (self::$plugins as $plugintype => $plugins) {
             foreach ($plugins as $pluginname => $fulldir) {
-                self::load_classes($plugintype.'_'.$pluginname, "$fulldir/classes");
+                self::load_classes($plugintype . '_' . $pluginname, "$fulldir/classes");
+                self::load_legacy_classes($fulldir);
             }
         }
         ksort(self::$classmap);
@@ -701,15 +859,15 @@ $cache = '.var_export($cache, true).';
     protected static function fill_filemap_cache() {
         global $CFG;
 
-        self::$filemap = array();
+        self::$filemap = [];
 
         foreach (self::$filestomap as $file) {
             if (!isset(self::$filemap[$file])) {
-                self::$filemap[$file] = array();
+                self::$filemap[$file] = [];
             }
             foreach (self::$plugins as $plugintype => $plugins) {
                 if (!isset(self::$filemap[$file][$plugintype])) {
-                    self::$filemap[$file][$plugintype] = array();
+                    self::$filemap[$file][$plugintype] = [];
                 }
                 foreach ($plugins as $pluginname => $fulldir) {
                     if (file_exists("$fulldir/$file")) {
@@ -738,14 +896,14 @@ $cache = '.var_export($cache, true).';
             return;
         }
 
-        $items = new \DirectoryIterator($fulldir);
+        $items = new DirectoryIterator($fulldir);
         foreach ($items as $item) {
             if ($item->isDot()) {
                 continue;
             }
             if ($item->isDir()) {
                 $dirname = $item->getFilename();
-                self::load_classes($component, "$fulldir/$dirname", $namespace.'\\'.$dirname);
+                self::load_classes($component, "$fulldir/$dirname", $namespace . '\\' . $dirname);
                 continue;
             }
 
@@ -758,10 +916,10 @@ $cache = '.var_export($cache, true).';
             }
             if ($namespace === '') {
                 // Legacy long frankenstyle class name.
-                self::$classmap[$component.'_'.$classname] = "$fulldir/$filename";
+                self::$classmap[$component . '_' . $classname] = "$fulldir/$filename";
             }
             // New namespaced classes.
-            self::$classmap[$component.$namespace.'\\'.$classname] = "$fulldir/$filename";
+            self::$classmap[$component . $namespace . '\\' . $classname] = "$fulldir/$filename";
         }
         unset($item);
         unset($items);
@@ -771,7 +929,7 @@ $cache = '.var_export($cache, true).';
     /**
      * List all core subsystems and their location
      *
-     * This is a whitelist of components that are part of the core and their
+     * This is a list of components that are part of the core and their
      * language strings are defined in /lang/en/<<subsystem>>.php. If a given
      * plugin is not listed here and it does not have proper plugintype prefix,
      * then it is considered as course activity module.
@@ -785,6 +943,22 @@ $cache = '.var_export($cache, true).';
     public static function get_core_subsystems() {
         self::init();
         return self::$subsystems;
+    }
+
+    /**
+     * List all core APIs and their attributes.
+     *
+     * This is a list of all the existing / allowed APIs in moodle, each one with the
+     * following attributes:
+     *   - component: the component, usually a subsystem or core, the API belongs to.
+     *   - allowedlevel2: if the API is allowed as level2 namespace or no.
+     *   - allowedspread: if the API can spread out from its component or no.
+     *
+     * @return stdClass[] array of APIs (as keys) with their attributes as object instances.
+     */
+    public static function get_core_apis() {
+        self::init();
+        return self::$apis;
     }
 
     /**
@@ -807,7 +981,7 @@ $cache = '.var_export($cache, true).';
         self::init();
 
         if (!isset(self::$plugins[$plugintype])) {
-            return array();
+            return [];
         }
         return self::$plugins[$plugintype];
     }
@@ -835,7 +1009,7 @@ $cache = '.var_export($cache, true).';
             $suffix = '';
         }
 
-        $pluginclasses = array();
+        $pluginclasses = [];
         $plugins = self::get_plugin_list($plugintype);
         foreach ($plugins as $plugin => $fulldir) {
             // Try class in frankenstyle namespace.
@@ -855,7 +1029,7 @@ $cache = '.var_export($cache, true).';
             }
 
             // Fall back to old file location and class name.
-            if ($file and file_exists("$fulldir/$file")) {
+            if ($file && file_exists("$fulldir/$file")) {
                 include_once("$fulldir/$file");
                 if (class_exists($classname, false)) {
                     $pluginclasses[$plugintype . '_' . $plugin] = $classname;
@@ -879,7 +1053,7 @@ $cache = '.var_export($cache, true).';
      */
     public static function get_plugin_list_with_file($plugintype, $file, $include = false) {
         global $CFG; // Necessary in case it is referenced by included PHP scripts.
-        $pluginfiles = array();
+        $pluginfiles = [];
 
         if (isset(self::$filemap[$file])) {
             // If the file was supposed to be mapped, then it should have been set in the array.
@@ -913,32 +1087,36 @@ $cache = '.var_export($cache, true).';
      *
      * e.g. get_component_classes_in_namespace('mod_forum', 'event')
      *
-     * @param string $component A valid moodle component (frankenstyle)
-     * @param string $namespace Namespace from the component name or empty if all $component namespace classes.
-     * @return array The full class name as key and the class path as value.
+     * @param string|null $component A valid moodle component (frankenstyle) or null if searching all components
+     * @param string $namespace Namespace from the component name or empty string if all $component classes.
+     * @return array The full class name as key and the class path as value, empty array if $component is `null`
+     * and $namespace is empty.
      */
-    public static function get_component_classes_in_namespace($component, $namespace = '') {
+    public static function get_component_classes_in_namespace($component = null, $namespace = '') {
 
-        $component = self::normalize_componentname($component);
+        $classes = [];
 
-        if ($namespace) {
+        // Only look for components if a component name is set or a namespace is set.
+        if (isset($component) || !empty($namespace)) {
+            // If a component parameter value is set we only want to look in that component.
+            // Otherwise we want to check all components.
+            $component = (isset($component)) ? self::normalize_componentname($component) : '\w+';
+            if ($namespace) {
+                // We will add them later.
+                $namespace = trim($namespace, '\\');
 
-            // We will add them later.
-            $namespace = trim($namespace, '\\');
+                // We need add double backslashes as it is how classes are stored into self::$classmap.
+                $namespace = implode('\\\\', explode('\\', $namespace));
+                $namespace = $namespace . '\\\\';
+            }
+            $regex = '|^' . $component . '\\\\' . $namespace . '|';
+            $it = new RegexIterator(new ArrayIterator(self::$classmap), $regex, RegexIterator::GET_MATCH, RegexIterator::USE_KEY);
 
-            // We need add double backslashes as it is how classes are stored into self::$classmap.
-            $namespace = implode('\\\\', explode('\\', $namespace));
-            $namespace = $namespace . '\\\\';
-        }
-
-        $regex = '|^' . $component . '\\\\' . $namespace . '|';
-        $it = new RegexIterator(new ArrayIterator(self::$classmap), $regex, RegexIterator::GET_MATCH, RegexIterator::USE_KEY);
-
-        // We want to be sure that they exist.
-        $classes = array();
-        foreach ($it as $classname => $classpath) {
-            if (class_exists($classname)) {
-                $classes[$classname] = $classpath;
+            // We want to be sure that they exist.
+            foreach ($it as $classname => $classpath) {
+                if (class_exists($classname)) {
+                    $classes[$classname] = $classpath;
+                }
             }
         }
 
@@ -1000,10 +1178,9 @@ $cache = '.var_export($cache, true).';
             }
             // Modules MUST NOT have any underscores,
             // component normalisation would break very badly otherwise!
-            return (bool)preg_match('/^[a-z][a-z0-9]*$/', $pluginname);
-
+            return !is_null($pluginname) && (bool) preg_match('/^[a-z][a-z0-9]*$/', $pluginname);
         } else {
-            return (bool)preg_match('/^[a-z](?:[a-z0-9_](?!__))*[a-z0-9]+$/', $pluginname);
+            return !is_null($pluginname) && (bool) preg_match('/^[a-z](?:[a-z0-9_](?!__))*[a-z0-9]+$/', $pluginname);
         }
     }
 
@@ -1016,7 +1193,7 @@ $cache = '.var_export($cache, true).';
      * @return string
      */
     public static function normalize_componentname($componentname) {
-        list($plugintype, $pluginname) = self::normalize_component($componentname);
+        [$plugintype, $pluginname] = self::normalize_component($componentname);
         if ($plugintype === 'core' && is_null($pluginname)) {
             return $plugintype;
         }
@@ -1032,8 +1209,8 @@ $cache = '.var_export($cache, true).';
      * @return array two-items list of [(string)type, (string|null)name]
      */
     public static function normalize_component($component) {
-        if ($component === 'moodle' or $component === 'core' or $component === '') {
-            return array('core', null);
+        if ($component === 'moodle' || $component === 'core' || $component === '') {
+            return ['core', null];
         }
 
         if (strpos($component, '_') === false) {
@@ -1046,16 +1223,44 @@ $cache = '.var_export($cache, true).';
                 $type   = 'mod';
                 $plugin = $component;
             }
-
         } else {
-            list($type, $plugin) = explode('_', $component, 2);
+            [$type, $plugin] = explode('_', $component, 2);
             if ($type === 'moodle') {
                 $type = 'core';
             }
             // Any unknown type must be a subplugin.
         }
 
-        return array($type, $plugin);
+        return [$type, $plugin];
+    }
+
+    /**
+     * Fetch the component name from a Moodle PSR-like namespace.
+     *
+     * Note: Classnames in the flat underscore_class_name_format are not supported.
+     *
+     * @param string $classname
+     * @return null|string The component name, or null if a matching component was not found
+     */
+    public static function get_component_from_classname(string $classname): ?string {
+        $components = static::get_component_names(true);
+
+        $classname = ltrim($classname, '\\');
+
+        // Prefer PSR-4 classnames.
+        $parts = explode('\\', $classname);
+        if ($parts) {
+            $component = array_shift($parts);
+            if (array_search($component, $components) !== false) {
+                return $component;
+            }
+        }
+
+        // Note: Frankenstyle classnames are not supported as they lead to false positives, for example:
+        // \core_typo\example => \core instead of \core_typo because it does not exist
+        // Please *do not* add support for Frankenstyle classnames. They will break other things.
+
+        return null;
     }
 
     /**
@@ -1067,7 +1272,7 @@ $cache = '.var_export($cache, true).';
     public static function get_component_directory($component) {
         global $CFG;
 
-        list($type, $plugin) = self::normalize_component($component);
+        [$type, $plugin] = self::normalize_component($component);
 
         if ($type === 'core') {
             if ($plugin === null) {
@@ -1086,7 +1291,7 @@ $cache = '.var_export($cache, true).';
     public static function get_plugin_types_with_subplugins() {
         self::init();
 
-        $return = array();
+        $return = [];
         foreach (self::$supportsubplugins as $type) {
             $return[$type] = self::$plugintypes[$type];
         }
@@ -1132,11 +1337,22 @@ $cache = '.var_export($cache, true).';
      * @return string sha1 hash
      */
     public static function get_all_versions_hash() {
+        return sha1(serialize(self::get_all_versions()));
+    }
+
+    /**
+     * Returns hash of all versions including core and all plugins.
+     *
+     * This is relatively slow and not fully cached, use with care!
+     *
+     * @return array as (string)plugintype_pluginname => (int)version
+     */
+    public static function get_all_versions(): array {
         global $CFG;
 
         self::init();
 
-        $versions = array();
+        $versions = [];
 
         // Main version first.
         $versions['core'] = self::fetch_core_version();
@@ -1144,15 +1360,15 @@ $cache = '.var_export($cache, true).';
         // The problem here is tha the component cache might be stable,
         // we want this to work also on frontpage without resetting the component cache.
         $usecache = false;
-        if (CACHE_DISABLE_ALL or (defined('IGNORE_COMPONENT_CACHE') and IGNORE_COMPONENT_CACHE)) {
+        if (CACHE_DISABLE_ALL || (defined('IGNORE_COMPONENT_CACHE') && IGNORE_COMPONENT_CACHE)) {
             $usecache = true;
         }
 
         // Now all plugins.
-        $plugintypes = core_component::get_plugin_types();
+        $plugintypes = self::get_plugin_types();
         foreach ($plugintypes as $type => $typedir) {
             if ($usecache) {
-                $plugs = core_component::get_plugin_list($type);
+                $plugs = self::get_plugin_list($type);
             } else {
                 $plugs = self::fetch_plugins($type, $typedir);
             }
@@ -1160,12 +1376,89 @@ $cache = '.var_export($cache, true).';
                 $plugin = new stdClass();
                 $plugin->version = null;
                 $module = $plugin;
-                include($fullplug.'/version.php');
-                $versions[$type.'_'.$plug] = $plugin->version;
+                include($fullplug . '/version.php');
+                $versions[$type . '_' . $plug] = $plugin->version;
             }
         }
 
-        return sha1(serialize($versions));
+        return $versions;
+    }
+
+    /**
+     * Returns hash of all core + plugin /db/ directories.
+     *
+     * This is relatively slow and not fully cached, use with care!
+     *
+     * @param array|null $components optional component directory => hash array to use. Only used in PHPUnit.
+     * @return string sha1 hash.
+     */
+    public static function get_all_component_hash(?array $components = null): string {
+        $tohash = $components ?? self::get_all_directory_hashes();
+        return sha1(serialize($tohash));
+    }
+
+    /**
+     * Get the hashes of all core + plugin /db/ directories.
+     *
+     * @param array|null $directories optional component directory array to hash. Only used in PHPUnit.
+     * @return array of directory => hash.
+     */
+    public static function get_all_directory_hashes(?array $directories = null): array {
+        global $CFG;
+
+        self::init();
+
+        // The problem here is that the component cache might be stale,
+        // we want this to work also on frontpage without resetting the component cache.
+        $usecache = false;
+        if (CACHE_DISABLE_ALL || (defined('IGNORE_COMPONENT_CACHE') && IGNORE_COMPONENT_CACHE)) {
+            $usecache = true;
+        }
+
+        if (empty($directories)) {
+            $directories = [
+                $CFG->libdir . '/db',
+            ];
+            // For all components, get the directory of the /db directory.
+            $plugintypes = self::get_plugin_types();
+            foreach ($plugintypes as $type => $typedir) {
+                if ($usecache) {
+                    $plugs = self::get_plugin_list($type);
+                } else {
+                    $plugs = self::fetch_plugins($type, $typedir);
+                }
+                foreach ($plugs as $plug) {
+                    $directories[] = $plug . '/db';
+                }
+            }
+        }
+
+        // Create a mapping of directories to their hash.
+        $hashes = [];
+        foreach ($directories as $directory) {
+            if (!is_dir($directory)) {
+                // Just hash an empty string as the non-existing representation.
+                $hashes[$directory] = sha1('');
+                continue;
+            }
+
+            $scan = scandir($directory);
+            if ($scan) {
+                sort($scan);
+            }
+            $scanhashes = [];
+            foreach ($scan as $file) {
+                $file = $directory . '/' . $file;
+                // Moodle ignores directories.
+                if (!is_dir($file)) {
+                    $scanhashes[] = hash_file('sha1', $file);
+                }
+            }
+            // Finally we can serialize and hash the whole dir.
+            $hashes[$directory] = sha1(serialize($scanhashes));
+        }
+
+        return $hashes;
     }
 
     /**
@@ -1196,12 +1489,22 @@ $cache = '.var_export($cache, true).';
     }
 
     /**
+     * Return true if apiname is a core API.
+     *
+     * @param string $apiname name of the API.
+     * @return bool true if core API.
+     */
+    public static function is_core_api($apiname) {
+        return isset(self::$apis[$apiname]);
+    }
+
+    /**
      * Records all class renames that have been made to facilitate autoloading.
      */
     protected static function fill_classmap_renames_cache() {
         global $CFG;
 
-        self::$classmaprenames = array();
+        self::$classmaprenames = [];
 
         self::load_renamed_classes("$CFG->dirroot/lib/");
 
@@ -1223,9 +1526,13 @@ $cache = '.var_export($cache, true).';
      * and the value is the new class name.
      * It is only included when we are populating the component cache. After that is not needed.
      *
-     * @param string $fulldir
+     * @param string|null $fulldir The directory to the renamed classes.
      */
-    protected static function load_renamed_classes($fulldir) {
+    protected static function load_renamed_classes(?string $fulldir) {
+        if (is_null($fulldir)) {
+            return;
+        }
+
         $file = $fulldir . '/db/renamedclasses.php';
         if (is_readable($file)) {
             $renamedclasses = null;
@@ -1237,4 +1544,158 @@ $cache = '.var_export($cache, true).';
             }
         }
     }
+
+    /**
+     * Load legacy classes based upon the db/legacyclasses.php file.
+     *
+     * The legacyclasses.php should contain a key => value array ($legacyclasses) where the key is the class name,
+     * and the value is the path to the class file within the relative ../classes/ directory.
+     *
+     * @param string|null $fulldir The directory to the legacy classes.
+     * @param bool $allowsubsystems Whether to allow the specification of alternative subsystems for this path.
+     */
+    protected static function load_legacy_classes(
+        ?string $fulldir,
+        bool $allowsubsystems = false,
+    ): void {
+        if (is_null($fulldir)) {
+            return;
+        }
+
+        $file = $fulldir . '/db/legacyclasses.php';
+        if (is_readable($file)) {
+            $legacyclasses = null;
+            require($file);
+            if (is_array($legacyclasses)) {
+                foreach ($legacyclasses as $classname => $path) {
+                    if (is_array($path)) {
+                        if (!$allowsubsystems) {
+                            throw new Exception(
+                                "Invalid legacy classes path entry for {$classname}. " .
+                                    "Only files within the component can be specified.",
+                            );
+                        }
+                        if (count($path) !== 2) {
+                            throw new Exception(
+                                "Invalid legacy classes path entry for {$classname}. " .
+                                    "Entries must be in the format [subsystem, path].",
+                            );
+                        }
+                        [$subsystem, $path] = $path;
+                        $subsystem = substr($subsystem, 5);
+                        if (!array_key_exists($subsystem, self::$subsystems)) {
+                            throw new Exception(
+                                "Unknown subsystem '{$subsystem}' for legacy classes entry of '{$classname}'",
+                            );
+                        }
+
+                        $subsystemfulldir = self::$subsystems[$subsystem];
+                        self::$classmap[$classname] = "{$subsystemfulldir}/classes/{$path}";
+                    } else {
+                        self::$classmap[$classname] = "{$fulldir}/classes/{$path}";
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Returns a list of frankenstyle component names and their paths, for all components (plugins and subsystems).
+     *
+     * E.g.
+     *  [
+     *      'mod' => [
+     *          'mod_forum' => FORUM_PLUGIN_PATH,
+     *          ...
+     *      ],
+     *      ...
+     *      'core' => [
+     *          'core_comment' => COMMENT_SUBSYSTEM_PATH,
+     *          ...
+     *      ]
+     * ]
+     *
+     * @return array an associative array of components and their corresponding paths.
+     */
+    public static function get_component_list(): array {
+        $components = [];
+        // Get all plugins.
+        foreach (self::get_plugin_types() as $plugintype => $typedir) {
+            $components[$plugintype] = [];
+            foreach (self::get_plugin_list($plugintype) as $pluginname => $plugindir) {
+                $components[$plugintype][$plugintype . '_' . $pluginname] = $plugindir;
+            }
+        }
+        // Get all subsystems.
+        foreach (self::get_core_subsystems() as $subsystemname => $subsystempath) {
+            $components['core']['core_' . $subsystemname] = $subsystempath;
+        }
+        return $components;
+    }
+
+    /**
+     * Returns a list of frankenstyle component names, including all plugins, subplugins, and subsystems.
+     *
+     * Note: By default the 'core' subsystem is not included.
+     *
+     * @param bool $includecore Whether to include the 'core' subsystem
+     * @return string[] the list of frankenstyle component names.
+     */
+    public static function get_component_names(
+        bool $includecore = false,
+    ): array {
+        $componentnames = [];
+        // Get all plugins.
+        foreach (self::get_plugin_types() as $plugintype => $typedir) {
+            foreach (self::get_plugin_list($plugintype) as $pluginname => $plugindir) {
+                $componentnames[] = $plugintype . '_' . $pluginname;
+            }
+        }
+        // Get all subsystems.
+        foreach (self::get_core_subsystems() as $subsystemname => $subsystempath) {
+            $componentnames[] = 'core_' . $subsystemname;
+        }
+
+        if ($includecore) {
+            $componentnames[] = 'core';
+        }
+
+        return $componentnames;
+    }
+
+    /**
+     * Returns the list of available API names.
+     *
+     * @return string[] the list of available API names.
+     */
+    public static function get_core_api_names(): array {
+        return array_keys(self::get_core_apis());
+    }
+
+    /**
+     * Checks for the presence of monologo icons within a plugin.
+     *
+     * Only checks monologo icons in PNG and SVG formats as they are
+     * formats that can have transparent background.
+     *
+     * @param string $plugintype The plugin type.
+     * @param string $pluginname The plugin name.
+     * @return bool True if the plugin has a monologo icon
+     */
+    public static function has_monologo_icon(string $plugintype, string $pluginname): bool {
+        global $PAGE;
+        $plugindir = self::get_plugin_directory($plugintype, $pluginname);
+        if ($plugindir === null) {
+            return false;
+        }
+        $theme = theme_config::load($PAGE->theme->name);
+        $component = self::normalize_componentname("{$plugintype}_{$pluginname}");
+        $hassvgmonologo = $theme->resolve_image_location('monologo', $component, true) !== null;
+        $haspngmonologo = $theme->resolve_image_location('monologo', $component) !== null;
+        return $haspngmonologo || $hassvgmonologo;
+    }
 }
+
+// Alias this class to the old name.
+// This should be kept here because we use this class in external tooling.
+class_alias(component::class, \core_component::class);

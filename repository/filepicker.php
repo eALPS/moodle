@@ -73,7 +73,7 @@ $user_context = context_user::instance($USER->id);
 
 $PAGE->set_context($user_context);
 if (!$course = $DB->get_record('course', array('id'=>$courseid))) {
-    print_error('invalidcourseid');
+    throw new \moodle_exception('invalidcourseid');
 }
 $PAGE->set_course($course);
 
@@ -101,7 +101,7 @@ $home_url = new moodle_url('/repository/draftfiles_manager.php', $params);
 
 $params['savepath'] = $savepath;
 $params['repo_id'] = $repo_id;
-$url = new moodle_url($CFG->httpswwwroot."/repository/filepicker.php", $params);
+$url = new moodle_url("/repository/filepicker.php", $params);
 $PAGE->set_url('/repository/filepicker.php', $params);
 
 switch ($action) {
@@ -212,7 +212,7 @@ case 'sign':
                 // TODO MDL-28482: need a better solution
                 // paging_bar is not a good option because it starts page numbering from 0 and
                 // repositories number pages starting from 1.
-                $pagingurl = new moodle_url("$CFG->httpswwwroot/repository/filepicker.php?action=list&itemid=$itemid&ctx_id=$contextid&repo_id=$repo_id&course=$courseid&sesskey=".  sesskey());
+                $pagingurl = new moodle_url("/repository/filepicker.php?action=list&itemid=$itemid&ctx_id=$contextid&repo_id=$repo_id&course=$courseid&sesskey=".  sesskey());
                 if (!isset($list['perpage']) && !isset($list['total'])) {
                     $list['perpage'] = 10; // instead of setting perpage&total we use number of pages, the result is the same
                 }
@@ -281,7 +281,7 @@ case 'sign':
 case 'download':
     // Check that user has permission to access this file
     if (!$repo->file_is_accessible($fileurl)) {
-        print_error('storedfilecannotread');
+        throw new \moodle_exception('storedfilecannotread');
     }
     $record = new stdClass();
     $reference = $repo->get_file_reference($fileurl);
@@ -327,12 +327,17 @@ case 'download':
             $filesize = filesize($thefile['path']);
             if ($maxbytes != -1 && $filesize>$maxbytes) {
                 unlink($thefile['path']);
-                print_error('maxbytes');
+                throw new \moodle_exception('maxbytes');
             }
             // Ensure the file will not make the area exceed its size limit.
             if (file_is_draft_area_limit_reached($record->itemid, $areamaxbytes, $filesize)) {
                 unlink($thefile['path']);
-                print_error('maxareabytes');
+                throw new \moodle_exception('maxareabytes');
+            }
+            // Ensure the user does not upload too many draft files in a short period.
+            if (file_is_draft_areas_limit_reached($USER->id)) {
+                unlink($thefile['path']);
+                throw new \moodle_exception('maxdraftitemids');
             }
             try {
                 $info = repository::move_to_filepool($thefile['path'], $record);
@@ -344,7 +349,7 @@ case 'download':
                 throw $e;
             }
         } else {
-            print_error('cannotdownload', 'repository');
+            throw new \moodle_exception('cannotdownload', 'repository');
         }
     }
 
@@ -393,7 +398,7 @@ case 'plugins':
         $aurl->params(array('savepath'=>$savepath, 'action' => 'list', 'repo_id' => $info->id, 'draftpath'=>$draftpath));
 
         echo '<li>';
-        echo html_writer::empty_tag('img', array('src'=>$info->icon, 'alt'=>$info->name, 'class'=>'icon icon-pre'));
+        echo html_writer::empty_tag('img', ['src' => $info->icon, 'alt' => $info->name, 'class' => 'icon']);
         echo html_writer::link($aurl, s($info->name));
         echo '</li>';
     }

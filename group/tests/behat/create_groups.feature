@@ -24,8 +24,7 @@ Feature: Organize students into groups
       | student2 | C1 | student |
       | student3 | C1 | student |
     And I log in as "teacher1"
-    And I follow "Course 1"
-    And I navigate to "Users > Groups" in current page administration
+    And I am on the "Course 1" "groups" page
     And I press "Create group"
     And I set the following fields to these values:
       | Group name | Group 1 |
@@ -39,22 +38,56 @@ Feature: Organize students into groups
     And I add "Student 2 (student2@example.com)" user to "Group 2" group members
     And I add "Student 3 (student3@example.com)" user to "Group 2" group members
     Then I set the field "groups" to "Group 1 (2)"
-    And the "members" select box should contain "Student 0"
-    And the "members" select box should contain "Student 1"
-    And the "members" select box should not contain "Student 2"
+    And the "members" select box should contain "Student 0 (student0@example.com)"
+    And the "members" select box should contain "Student 1 (student1@example.com)"
+    And the "members" select box should not contain "Student 2 (student2@example.com)"
+    And the "members" select box should not contain "Student 3 (student3@example.com)"
     And I set the field "groups" to "Group 2 (2)"
-    And the "members" select box should contain "Student 2"
-    And the "members" select box should contain "Student 3"
-    And the "members" select box should not contain "Student 0"
+    And the "members" select box should contain "Student 2 (student2@example.com)"
+    And the "members" select box should contain "Student 3 (student3@example.com)"
+    And the "members" select box should not contain "Student 0 (student0@example.com)"
+    And the "members" select box should not contain "Student 1 (student1@example.com)"
     And I navigate to course participants
-    And I set the field "Separate groups" to "Group 1"
+    And I set the field "type" in the "Filter 1" "fieldset" to "Groups"
+    And I set the field "Type or select..." in the "Filter 1" "fieldset" to "Group 1"
+    And I click on "Apply filters" "button"
     And I should see "Student 0"
     And I should see "Student 1"
     And I should not see "Student 2"
-    And I set the field "Separate groups" to "Group 2"
+    And I set the field "Type or select..." in the "Filter 1" "fieldset" to "Group 2"
+    And I click on "Apply filters" "button"
     And I should see "Student 2"
     And I should see "Student 3"
     And I should not see "Student 0"
+
+  @javascript
+  Scenario: Assign students to groups with site user identity configured
+    Given the following "courses" exist:
+      | fullname | shortname | groupmode |
+      | Course 1 | C1        | 1         |
+    And the following "users" exist:
+      | username | firstname | lastname | email               | country |
+      | teacher  | Teacher   | 1        | teacher@example.com | GB      |
+      | student  | Student   | 1        | student@example.com | DE      |
+    And the following "course enrolments" exist:
+      | user    | course | role           |
+      | teacher | C1     | editingteacher |
+      | student | C1     | student        |
+    And the following config values are set as admin:
+      | showuseridentity | email,country |
+    And I log in as "teacher"
+    And I am on the "Course 1" "groups" page
+    And I press "Create group"
+    And I set the following fields to these values:
+      | Group name | Group 1 |
+    And I press "Save changes"
+    When I add "Student 1 (student@example.com, DE)" user to "Group 1" group members
+    And I set the field "groups" to "Group 1 (1)"
+    Then the "members" select box should contain "Student 1 (student@example.com\, DE)"
+    # Non-AJAX version of the groups page.
+    And I press "Add/remove users"
+    And I press "Back to groups"
+    And the "members" select box should contain "Student 1 (student@example.com\, DE)"
 
   Scenario: Create groups and groupings without the 'moodle/course:changeidnumber' capability
     Given the following "courses" exist:
@@ -66,20 +99,18 @@ Feature: Organize students into groups
     And the following "course enrolments" exist:
       | user | course | role |
       | teacher1 | C1 | editingteacher |
-    And I log in as "admin"
-    And I set the following system permissions of "Teacher" role:
-      | moodle/course:changeidnumber | Prevent |
-    And I log out
+    And the following "role capability" exists:
+      | role                         | editingteacher |
+      | moodle/course:changeidnumber | prevent        |
     And I log in as "teacher1"
-    And I follow "Course 1"
-    And I navigate to "Users > Groups" in current page administration
+    And I am on the "Course 1" "groups" page
     When I press "Create group"
     Then the "idnumber" "field" should be readonly
     And I set the following fields to these values:
       | Group name | The greatest group that never existed |
     And I press "Save changes"
     And I should see "The greatest group that never existed"
-    And I follow "Groupings"
+    And I am on the "Course 1" "groupings" page
     And I press "Create grouping"
     And the "idnumber" "field" should be readonly
     And I set the following fields to these values:
@@ -93,9 +124,7 @@ Feature: Organize students into groups
       | Course 1 | C1 | 0 | 1 |
       | Course 2 | C2 | 0 | 1 |
     And I log in as "admin"
-    And I am on site homepage
-    And I follow "Course 1"
-    And I navigate to "Users > Groups" in current page administration
+    And I am on the "Course 1" "groups" page
     When I press "Create group"
     And I set the following fields to these values:
       | Group name | Group A |
@@ -116,9 +145,7 @@ Feature: Organize students into groups
       | Enrolment key | Abcdef-2 |
     And I press "Save changes"
     And the "groups" select box should contain "Group B (0)"
-    And I am on site homepage
-    And I follow "Course 2"
-    And I navigate to "Users > Groups" in current page administration
+    And I am on the "Course 2" "groups" page
     And I press "Create group"
     And I set the following fields to these values:
       | Group name | Group A |

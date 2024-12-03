@@ -12,6 +12,15 @@
             padding: $card-spacer-x;
             margin-bottom: $card-spacer-x;
         }
+
+        &.subsection_level {
+            background-color: $card-bg;
+            @include border-radius($card-border-radius);
+            border: $card-border-width solid $card-border-color;
+            @include clearfix;
+            padding: $card-spacer-x;
+            margin: 0 $card-spacer-x $card-spacer-x $card-spacer-x;
+        }
     }
 
     /* These are long labels with checkboxes on the right. */
@@ -19,13 +28,13 @@
         width: 50%;
         display: inline-block;
         float: left;
-        padding: $table-sm-cell-padding;
+        padding: $table-cell-padding-sm;
     }
     .normal_setting {
         width: 50%;
         display: inline-block;
         float: left;
-        padding: $table-sm-cell-padding;
+        padding: $table-cell-padding-sm;
     }
 }
 
@@ -37,9 +46,8 @@
     .section_level .activity_level {
         font-weight: normal;
     }
-
     .proceedbutton {
-        float: right;
+        margin-left: auto;
     }
 }
 
@@ -49,12 +57,12 @@
     .grouped_settings {
         /* Striped rows like a table */
         &:nth-of-type(odd) {
-            background-color: $table-bg-accent;
+            background-color: $table-accent-bg;
         }
         &:nth-of-type(even) {
             background-color: $card-bg;
         }
-        .form-group {
+        .fitem {
             /* These checkboxes with no label on the left. */
             .col-md-3.checkbox {
                 width: 0%;
@@ -62,17 +70,6 @@
             .col-md-9.checkbox {
                 width: 100%;
                 left: 0;
-            }
-            /* These are labels with a value on the right */
-            .col-md-3 {
-                width: 50%;
-            }
-            .col-md-9 {
-                width: 50%;
-                left: 0;
-            }
-            .icon:first-of-type {
-                margin-left: 1rem;
             }
         }
     }
@@ -126,16 +123,16 @@
 }
 
 .path-backup .notification.dependencies_enforced {
-    color: $state-danger-text;
+    color: $danger;
     font-weight: bold;
 }
 
 .path-backup .backup_progress {
-    margin-top: $spacer-y;
-    margin-bottom: $spacer-y;
+    margin-top: $spacer;
+    margin-bottom: $spacer;
 
     .backup_stage {
-        @extend .text-muted;
+        color: $text-muted;
 
         &.backup_stage_current {
             font-weight: bold;
@@ -160,9 +157,9 @@
 .path-backup .wibbler {
     width: 500px;
     margin: 0 auto 10px;
-    border-bottom: 1px solid black;
-    border-right: 1px solid black;
-    border-left: 1px solid black;
+    border-bottom: 1px solid $backup-restore-wibbler-border-color;
+    border-right: 1px solid $backup-restore-wibbler-border-color;
+    border-left: 1px solid $backup-restore-wibbler-border-color;
     position: relative;
     min-height: 4px;
 
@@ -175,43 +172,42 @@
     }
 
     .state0 {
-        background: #eee;
+        background: $backup-restore-state0-bg;
     }
     .state1 {
-        background: #ddd;
+        background: $backup-restore-state1-bg;
     }
     .state2 {
-        background: #ccc;
+        background: $backup-restore-state2-bg;
     }
     .state3 {
-        background: #bbb;
+        background: $backup-restore-state3-bg;
     }
     .state4 {
-        background: #aaa;
+        background: $backup-restore-state4-bg;
     }
     .state5 {
-        background: #999;
+        background: $backup-restore-state5-bg;
     }
     .state6 {
-        background: #888;
+        background: $backup-restore-state6-bg;
     }
     .state7 {
-        background: #777;
+        background: $backup-restore-state7-bg;
     }
     .state8 {
-        background: #666;
+        background: $backup-restore-state8-bg;
     }
     .state9 {
-        background: #555;
+        background: $backup-restore-state9-bg;
     }
     .state10 {
-        background: #444;
+        background: $backup-restore-state10-bg;
     }
     .state11 {
-        background: #333;
+        background: $backup-restore-state11-bg;
     }
     .state12 {
-        background: #222;
+        background: $backup-restore-state12-bg;
     }
 }
-

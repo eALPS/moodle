@@ -37,7 +37,7 @@ require_once($CFG->dirroot . '/question/type/multianswer/question.php');
  */
 class qtype_multianswer_test_helper extends question_test_helper {
     public function get_test_questions() {
-        return array('twosubq', 'fourmc', 'numericalzero', 'dollarsigns', 'multiple');
+        return array('twosubq', 'fourmc', 'numericalzero', 'dollarsigns', 'multiple', 'zeroweight');
     }
 
     /**
@@ -78,7 +78,7 @@ class qtype_multianswer_test_helper extends question_test_helper {
             15 => new question_answer(15, '*', 0.0, 'Wrong answer', FORMAT_HTML),
         );
         $sa->qtype = question_bank::get_qtype('shortanswer');
-        $sa->maxmark = 1;
+        $sa->defaultmark = 1;
 
         // Multiple-choice subquestion.
         question_bank::load_question_definition_classes('multichoice');
@@ -104,7 +104,7 @@ class qtype_multianswer_test_helper extends question_test_helper {
                     'Well done!', FORMAT_HTML),
         );
         $mc->qtype = question_bank::get_qtype('multichoice');
-        $mc->maxmark = 1;
+        $mc->defaultmark = 1;
 
         $q->subquestions = array(
             1 => $sa,
@@ -131,6 +131,7 @@ class qtype_multianswer_test_helper extends question_test_helper {
 
         $qdata->defaultmark = 2.0;
         $qdata->qtype = 'multianswer';
+        $qdata->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
 
         $sa = new stdClass();
         test_question_maker::initialise_question_data($sa);
@@ -140,6 +141,7 @@ class qtype_multianswer_test_helper extends question_test_helper {
         $sa->generalfeedback = '';
         $sa->penalty = 0.0;
         $sa->qtype = 'shortanswer';
+        $sa->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
 
         $sa->options = new stdClass();
         $sa->options->usecase = 0;
@@ -159,6 +161,7 @@ class qtype_multianswer_test_helper extends question_test_helper {
         $mc->generalfeedback = '';
         $mc->penalty = 0.0;
         $mc->qtype = 'multichoice';
+        $mc->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
 
         $mc->options = new stdClass();
         $mc->options->layout = 0;
@@ -214,6 +217,7 @@ class qtype_multianswer_test_helper extends question_test_helper {
 
         $qdata->defaultmark = 1.0;
         $qdata->qtype = 'multianswer';
+        $qdata->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
 
         $mc = new stdClass();
         test_question_maker::initialise_question_data($mc);
@@ -223,6 +227,7 @@ class qtype_multianswer_test_helper extends question_test_helper {
         $mc->generalfeedback = '';
         $mc->penalty = 0.0;
         $mc->qtype = 'multichoice';
+        $mc->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
 
         $mc->options = new stdClass();
         $mc->options->layout = 0;
@@ -273,6 +278,8 @@ class qtype_multianswer_test_helper extends question_test_helper {
             0 => array('text' => 'Hint 1', 'format' => FORMAT_HTML, 'itemid' => 0),
             1 => array('text' => 'Hint 2', 'format' => FORMAT_HTML, 'itemid' => 0),
         );
+
+        $formdata->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
 
         return $formdata;
     }
@@ -335,7 +342,7 @@ class qtype_multianswer_test_helper extends question_test_helper {
                          $data['Arizona'], FORMAT_HTML),
             );
             $mc->qtype = question_bank::get_qtype('multichoice');
-            $mc->maxmark = 1;
+            $mc->defaultmark = 1;
 
             $q->subquestions[$i] = $mc;
         }
@@ -378,7 +385,7 @@ class qtype_multianswer_test_helper extends question_test_helper {
         );
         $sub->qtype = question_bank::get_qtype('numerical');
         $sub->ap = new qtype_numerical_answer_processor(array());
-        $sub->maxmark = 1;
+        $sub->defaultmark = 1;
 
         $q->subquestions = array(
             1 => $sub,
@@ -421,7 +428,6 @@ class qtype_multianswer_test_helper extends question_test_helper {
         $mc->shuffleanswers = 0;
         $mc->answernumbering = 'none';
         $mc->layout = qtype_multichoice_base::LAYOUT_VERTICAL;
-        $mc->single = 0;
 
         $mc->answers = array(
             16 => new question_answer(16, 'Apple', 0.3333333,
@@ -438,7 +444,7 @@ class qtype_multianswer_test_helper extends question_test_helper {
                                       '', FORMAT_HTML),
         );
         $mc->qtype = question_bank::get_qtype('multichoice');
-        $mc->maxmark = 1;
+        $mc->defaultmark = 1;
 
         // Multiple-choice subquestion.
         question_bank::load_question_definition_classes('multichoice');
@@ -454,7 +460,6 @@ class qtype_multianswer_test_helper extends question_test_helper {
         $mc2->shuffleanswers = 0;
         $mc2->answernumbering = 'none';
         $mc2->layout = qtype_multichoice_base::LAYOUT_VERTICAL;
-        $mc2->single = 0;
 
         $mc2->answers = array(
             22 => new question_answer(22, 'Raddish', 0.5,
@@ -469,11 +474,55 @@ class qtype_multianswer_test_helper extends question_test_helper {
                                       'Correct', FORMAT_HTML),
         );
         $mc2->qtype = question_bank::get_qtype('multichoice');
-        $mc2->maxmark = 1;
+        $mc2->defaultmark = 1;
 
         $q->subquestions = array(
             1 => $mc,
             2 => $mc2,
+        );
+
+        return $q;
+    }
+
+    /**
+     * Makes a multianswer question with zero weight.
+     * This is used for testing the MDL-77378 bug.
+     * @return qtype_multianswer_question
+     */
+    public function make_multianswer_question_zeroweight() {
+        question_bank::load_question_definition_classes('multianswer');
+        $q = new qtype_multianswer_question();
+        test_question_maker::initialise_a_question($q);
+        $q->name = 'Zero weight';
+        $q->questiontext =
+            'Optional question: {#1}.';
+        $q->generalfeedback = '';
+        $q->qtype = question_bank::get_qtype('multianswer');
+        $q->textfragments = array(
+            'Optional question: ',
+            '.',
+        );
+        $q->places = array('1' => '1');
+
+        // Shortanswer subquestion.
+        question_bank::load_question_definition_classes('shortanswer');
+        $sa = new qtype_shortanswer_question();
+        test_question_maker::initialise_a_question($sa);
+        $sa->name = 'Zero weight';
+        $sa->questiontext = '{0:SHORTANSWER:~%0%Input box~%100%*}';
+        $sa->questiontextformat = FORMAT_HTML;
+        $sa->generalfeedback = '';
+        $sa->generalfeedbackformat = FORMAT_HTML;
+        $sa->usecase = true;
+        $sa->answers = array(
+            13 => new question_answer(13, 'Input box', 0.0, '', FORMAT_HTML),
+            14 => new question_answer(14, '*', 1.0, '', FORMAT_HTML),
+        );
+        $sa->qtype = question_bank::get_qtype('shortanswer');
+        $sa->defaultmark = 0;
+
+        $q->subquestions = array(
+            1 => $sa,
         );
 
         return $q;

@@ -48,6 +48,7 @@ class edit_field_save extends XMLDBAction {
             'floatincorrectlength' => 'tool_xmldb',
             'charincorrectlength' => 'tool_xmldb',
             'numberincorrectdecimals' => 'tool_xmldb',
+            'numberincorrectwholepart' => 'tool_xmldb',
             'floatincorrectdecimals' => 'tool_xmldb',
             'defaultincorrect' => 'tool_xmldb',
             'back' => 'tool_xmldb',
@@ -75,7 +76,7 @@ class edit_field_save extends XMLDBAction {
         // Do the job, setting result as needed
 
         if (!data_submitted()) { // Basic prevention
-            print_error('wrongcall', 'error');
+            throw new \moodle_exception('wrongcall', 'error');
         }
 
         // Get parameters
@@ -90,12 +91,12 @@ class edit_field_save extends XMLDBAction {
         $comment = trim($comment);
 
         $type       = required_param('type', PARAM_INT);
-        $length     = strtolower(optional_param('length', NULL, PARAM_ALPHANUM));
+        $length     = optional_param('length', null, PARAM_INT);
         $decimals   = optional_param('decimals', NULL, PARAM_INT);
         $notnull    = optional_param('notnull', false, PARAM_BOOL);
         $sequence   = optional_param('sequence', false, PARAM_BOOL);
         $default    = optional_param('default', NULL, PARAM_PATH);
-        $default    = trim($default);
+        $default    = is_null($default) ? $default : trim($default);
 
         $editeddir = $XMLDB->editeddirs[$dirpath];
         $structure = $editeddir->xml_file->getStructure();
@@ -157,6 +158,9 @@ class edit_field_save extends XMLDBAction {
                                        $decimals >= 0 &&
                                        $decimals < $length))) {
                 $errors[] = $this->str['numberincorrectdecimals'];
+            }
+            if (!empty($decimals) && ($length - $decimals > xmldb_field::INTEGER_MAX_LENGTH)) {
+                $errors[] = $this->str['numberincorrectwholepart'];
             }
             if (!(empty($default) || (is_numeric($default) &&
                                        !empty($default)))) {

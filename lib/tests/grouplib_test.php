@@ -14,25 +14,21 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace core;
+
+use core_group\visibility;
+
 /**
- * Tests groups subsystems.
+ * Unit tests for lib/grouplib.php
  *
- * @package    core_group
- * @category   phpunit
+ * @package    core
  * @copyright  2007 onwards Martin Dougiamas (http://dougiamas.com)
  * @author     Andrew Nicols
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+class grouplib_test extends \advanced_testcase {
 
-defined('MOODLE_INTERNAL') || die();
-
-/**
- * Unit tests for lib/grouplib.php
- * @group core_group
- */
-class core_grouplib_testcase extends advanced_testcase {
-
-    public function test_groups_get_group_by_idnumber() {
+    public function test_groups_get_group_by_idnumber(): void {
         $this->resetAfterTest(true);
 
         $generator = $this->getDataGenerator();
@@ -104,7 +100,7 @@ class core_grouplib_testcase extends advanced_testcase {
         $this->assertEquals($group, groups_get_group_by_idnumber($course->id, $idnumber2));
     }
 
-    public function test_groups_get_grouping_by_idnumber() {
+    public function test_groups_get_grouping_by_idnumber(): void {
         $this->resetAfterTest(true);
 
         $generator = $this->getDataGenerator();
@@ -176,8 +172,7 @@ class core_grouplib_testcase extends advanced_testcase {
         $this->assertEquals($grouping, groups_get_grouping_by_idnumber($course->id, $idnumber2));
     }
 
-
-    public function test_groups_get_members_ids_sql() {
+    public function test_groups_get_members_ids_sql(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -185,7 +180,9 @@ class core_grouplib_testcase extends advanced_testcase {
         $generator = $this->getDataGenerator();
 
         $course = $generator->create_course();
-        $student = $generator->create_user();
+        $coursecontext = \context_course::instance($course->id);
+        $student1 = $generator->create_user();
+        $student2 = $generator->create_user();
         $plugin = enrol_get_plugin('manual');
         $role = $DB->get_record('role', array('shortname' => 'student'));
         $group = $generator->create_group(array('courseid' => $course->id));
@@ -196,23 +193,318 @@ class core_grouplib_testcase extends advanced_testcase {
 
         $this->assertNotEquals($instance, false);
 
-        // Enrol the user in the course.
-        $plugin->enrol_user($instance, $student->id, $role->id);
+        // Enrol users in the course.
+        $plugin->enrol_user($instance, $student1->id, $role->id);
+        $plugin->enrol_user($instance, $student2->id, $role->id);
 
-        list($sql, $params) = groups_get_members_ids_sql($group->id, true);
+        list($sql, $params) = groups_get_members_ids_sql($group->id);
 
         // Test an empty group.
         $users = $DB->get_records_sql($sql, $params);
-
-        $this->assertFalse(array_key_exists($student->id, $users));
-        groups_add_member($group->id, $student->id);
+        $this->assertFalse(array_key_exists($student1->id, $users));
 
         // Test with a group member.
+        groups_add_member($group->id, $student1->id);
         $users = $DB->get_records_sql($sql, $params);
-        $this->assertTrue(array_key_exists($student->id, $users));
+        $this->assertTrue(array_key_exists($student1->id, $users));
     }
 
-    public function test_groups_get_group_by_name() {
+    public function test_groups_get_members_ids_sql_multiple_groups(): void {
+        global $DB;
+
+        $this->resetAfterTest(true);
+
+        $generator = $this->getDataGenerator();
+
+        $course = $generator->create_course();
+        $student1 = $generator->create_user();
+        $student2 = $generator->create_user();
+        $plugin = enrol_get_plugin('manual');
+        $role = $DB->get_record('role', array('shortname' => 'student'));
+        $group1 = $generator->create_group(array('courseid' => $course->id));
+        $group2 = $generator->create_group(array('courseid' => $course->id));
+        $groupids = [
+            $group1->id,
+            $group2->id,
+        ];
+        $instance = $DB->get_record('enrol', array(
+                'courseid' => $course->id,
+                'enrol' => 'manual',
+        ));
+
+        $this->assertNotEquals($instance, false);
+
+        // Enrol users in the course.
+        $plugin->enrol_user($instance, $student1->id, $role->id);
+        $plugin->enrol_user($instance, $student2->id, $role->id);
+
+        list($sql, $params) = groups_get_members_ids_sql($groupids);
+
+        // Test an empty group.
+        $users = $DB->get_records_sql($sql, $params);
+        $this->assertFalse(array_key_exists($student1->id, $users));
+
+        // Test with a member of one of the two group.
+        groups_add_member($group1->id, $student1->id);
+        $users = $DB->get_records_sql($sql, $params);
+        $this->assertTrue(array_key_exists($student1->id, $users));
+
+        // Test with members of two groups.
+        groups_add_member($group2->id, $student2->id);
+        $users = $DB->get_records_sql($sql, $params);
+        $this->assertTrue(array_key_exists($student1->id, $users));
+        $this->assertTrue(array_key_exists($student2->id, $users));
+    }
+
+    public function test_groups_get_members_ids_sql_multiple_groups_join_types(): void {
+        global $DB;
+
+        $this->resetAfterTest(true);
+
+        $generator = $this->getDataGenerator();
+
+        $course = $generator->create_course();
+        $student1 = $generator->create_user();
+        $student2 = $generator->create_user();
+        $student3 = $generator->create_user();
+        $student4 = $generator->create_user();
+        $student5 = $generator->create_user();
+        $student6 = $generator->create_user();
+        $plugin = enrol_get_plugin('manual');
+        $role = $DB->get_record('role', array('shortname' => 'student'));
+        $group1 = $generator->create_group(array('courseid' => $course->id));
+        $group2 = $generator->create_group(array('courseid' => $course->id));
+        $group3 = $generator->create_group(array('courseid' => $course->id));
+        // Only groups 1 and 2 specified in SQL (group 3 helps cover the None case).
+        $groupids = [
+            $group1->id,
+            $group2->id,
+        ];
+        $instance = $DB->get_record('enrol', array(
+                'courseid' => $course->id,
+                'enrol' => 'manual',
+        ));
+
+        $this->assertNotEquals($instance, false);
+
+        // Enrol users in the course.
+        $plugin->enrol_user($instance, $student1->id, $role->id);
+        $plugin->enrol_user($instance, $student2->id, $role->id);
+        $plugin->enrol_user($instance, $student3->id, $role->id);
+        $plugin->enrol_user($instance, $student4->id, $role->id);
+        $plugin->enrol_user($instance, $student5->id, $role->id);
+        $plugin->enrol_user($instance, $student6->id, $role->id);
+
+        // Generate SQL with the different groups join types for members of group1 and group2.
+        list($sqlany, $paramsany) = groups_get_members_ids_sql($groupids, null, GROUPS_JOIN_ANY);
+        list($sqlall, $paramsall) = groups_get_members_ids_sql($groupids, null, GROUPS_JOIN_ALL);
+        list($sqlnone, $paramsnone) = groups_get_members_ids_sql($groupids, null, GROUPS_JOIN_NONE);
+
+        // Any - Test empty groups, no matches.
+        $users = $DB->get_records_sql($sqlany, $paramsany);
+        $this->assertFalse(array_key_exists($student1->id, $users));
+        $this->assertFalse(array_key_exists($student2->id, $users));
+        $this->assertFalse(array_key_exists($student3->id, $users));
+        $this->assertFalse(array_key_exists($student4->id, $users));
+        $this->assertFalse(array_key_exists($student5->id, $users));
+        $this->assertFalse(array_key_exists($student6->id, $users));
+
+        // All - Test empty groups, no matches.
+        $users = $DB->get_records_sql($sqlall, $paramsall);
+        $this->assertFalse(array_key_exists($student1->id, $users));
+        $this->assertFalse(array_key_exists($student2->id, $users));
+        $this->assertFalse(array_key_exists($student3->id, $users));
+        $this->assertFalse(array_key_exists($student4->id, $users));
+        $this->assertFalse(array_key_exists($student5->id, $users));
+        $this->assertFalse(array_key_exists($student6->id, $users));
+
+        // None - Test empty groups, all match.
+        $users = $DB->get_records_sql($sqlnone, $paramsnone);
+        $this->assertTrue(array_key_exists($student1->id, $users));
+        $this->assertTrue(array_key_exists($student2->id, $users));
+        $this->assertTrue(array_key_exists($student3->id, $users));
+        $this->assertTrue(array_key_exists($student4->id, $users));
+        $this->assertTrue(array_key_exists($student5->id, $users));
+        $this->assertTrue(array_key_exists($student6->id, $users));
+
+        // Assign various group member combinations.
+        groups_add_member($group1->id, $student1->id);
+        groups_add_member($group1->id, $student2->id);
+        groups_add_member($group1->id, $student3->id);
+        groups_add_member($group2->id, $student2->id);
+        groups_add_member($group2->id, $student3->id);
+        groups_add_member($group2->id, $student4->id);
+        groups_add_member($group3->id, $student5->id);
+
+        // Any - Test students in one or both of groups 1 and 2 matched.
+        $users = $DB->get_records_sql($sqlany, $paramsany);
+        $this->assertTrue(array_key_exists($student1->id, $users));
+        $this->assertTrue(array_key_exists($student2->id, $users));
+        $this->assertTrue(array_key_exists($student3->id, $users));
+        $this->assertTrue(array_key_exists($student4->id, $users));
+        $this->assertFalse(array_key_exists($student5->id, $users));
+        $this->assertFalse(array_key_exists($student6->id, $users));
+
+        // All - Test only students in both groups 1 and 2 matched.
+        $users = $DB->get_records_sql($sqlall, $paramsall);
+        $this->assertTrue(array_key_exists($student2->id, $users));
+        $this->assertTrue(array_key_exists($student3->id, $users));
+        $this->assertFalse(array_key_exists($student1->id, $users));
+        $this->assertFalse(array_key_exists($student4->id, $users));
+        $this->assertFalse(array_key_exists($student5->id, $users));
+        $this->assertFalse(array_key_exists($student6->id, $users));
+
+        // None - Test only students not in group 1 or 2 matched.
+        $users = $DB->get_records_sql($sqlnone, $paramsnone);
+        $this->assertTrue(array_key_exists($student5->id, $users));
+        $this->assertTrue(array_key_exists($student6->id, $users));
+        $this->assertFalse(array_key_exists($student1->id, $users));
+        $this->assertFalse(array_key_exists($student2->id, $users));
+        $this->assertFalse(array_key_exists($student3->id, $users));
+        $this->assertFalse(array_key_exists($student4->id, $users));
+    }
+
+    public function test_groups_get_members_ids_sql_valid_context(): void {
+        global $DB;
+
+        $this->resetAfterTest(true);
+
+        $generator = $this->getDataGenerator();
+
+        $course = $generator->create_course();
+        $coursecontext = \context_course::instance($course->id);
+        $student1 = $generator->create_user();
+        $student2 = $generator->create_user();
+        $plugin = enrol_get_plugin('manual');
+        $role = $DB->get_record('role', array('shortname' => 'student'));
+        $group = $generator->create_group(array('courseid' => $course->id));
+        $instance = $DB->get_record('enrol', array(
+                'courseid' => $course->id,
+                'enrol' => 'manual',
+        ));
+
+        $this->assertNotEquals($instance, false);
+
+        // Enrol users in the course.
+        $plugin->enrol_user($instance, $student1->id, $role->id);
+        $plugin->enrol_user($instance, $student2->id, $role->id);
+
+        // Add student1 to the group.
+        groups_add_member($group->id, $student1->id);
+
+        // Test with members at any group and with a valid $context.
+        list($sql, $params) = groups_get_members_ids_sql(USERSWITHOUTGROUP, $coursecontext);
+        $users = $DB->get_records_sql($sql, $params);
+        $this->assertFalse(array_key_exists($student1->id, $users));
+        $this->assertTrue(array_key_exists($student2->id, $users));
+    }
+
+    public function test_groups_get_members_ids_sql_empty_context(): void {
+        global $DB;
+
+        $this->resetAfterTest(true);
+
+        $generator = $this->getDataGenerator();
+
+        $course = $generator->create_course();
+        $coursecontext = \context_course::instance($course->id);
+        $student1 = $generator->create_user();
+        $student2 = $generator->create_user();
+        $plugin = enrol_get_plugin('manual');
+        $role = $DB->get_record('role', array('shortname' => 'student'));
+        $group = $generator->create_group(array('courseid' => $course->id));
+        $instance = $DB->get_record('enrol', array(
+                'courseid' => $course->id,
+                'enrol' => 'manual',
+        ));
+
+        $this->assertNotEquals($instance, false);
+
+        // Enrol users in the course.
+        $plugin->enrol_user($instance, $student1->id, $role->id);
+        $plugin->enrol_user($instance, $student2->id, $role->id);
+
+        // Add student1 to the group.
+        groups_add_member($group->id, $student1->id);
+
+        // Test with members at any group and without the $context.
+        $this->expectException('coding_exception');
+        list($sql, $params) = groups_get_members_ids_sql(USERSWITHOUTGROUP);
+    }
+
+    public function test_groups_get_members_ids_sql_invalid_context(): void {
+        global $DB;
+
+        $this->resetAfterTest(true);
+
+        $generator = $this->getDataGenerator();
+
+        $course = $generator->create_course();
+        $coursecontext = \context_course::instance($course->id);
+        $student1 = $generator->create_user();
+        $student2 = $generator->create_user();
+        $plugin = enrol_get_plugin('manual');
+        $role = $DB->get_record('role', array('shortname' => 'student'));
+        $group = $generator->create_group(array('courseid' => $course->id));
+        $instance = $DB->get_record('enrol', array(
+                'courseid' => $course->id,
+                'enrol' => 'manual',
+        ));
+
+        $this->assertNotEquals($instance, false);
+
+        // Enrol users in the course.
+        $plugin->enrol_user($instance, $student1->id, $role->id);
+        $plugin->enrol_user($instance, $student2->id, $role->id);
+
+        // Add student1 to the group.
+        groups_add_member($group->id, $student1->id);
+
+        // Test with members at any group and with an invalid $context.
+        $syscontext = \context_system::instance();
+        $this->expectException('coding_exception');
+        list($sql, $params) = groups_get_members_ids_sql(USERSWITHOUTGROUP, $syscontext);
+    }
+
+    /**
+     * Test retrieving users with concatenated group names from a course
+     */
+    public function test_groups_get_names_concat_sql(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        // Create a course containing two groups.
+        $course = $this->getDataGenerator()->create_course();
+        $group1 = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $group2 = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+
+        // Create first user, add them to group 1 and group 2.
+        $user1 = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->getDataGenerator()->create_group_member(['userid' => $user1->id, 'groupid' => $group1->id]);
+        $this->getDataGenerator()->create_group_member(['userid' => $user1->id, 'groupid' => $group2->id]);
+
+        // Create second user, add them to group 1 only.
+        $user2 = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->getDataGenerator()->create_group_member(['userid' => $user2->id, 'groupid' => $group1->id]);
+
+        // Call our method, and assertion.
+        [$sql, $params] = groups_get_names_concat_sql($course->id);
+        $records = $DB->get_records_sql($sql, $params);
+
+        $this->assertEqualsCanonicalizing([
+            (object) [
+                'userid' => $user1->id,
+                'groupnames' => "{$group1->name}, {$group2->name}",
+            ],
+            (object) [
+                'userid' => $user2->id,
+                'groupnames' => $group1->name,
+            ],
+        ], $records);
+    }
+
+    public function test_groups_get_group_by_name(): void {
         $this->resetAfterTest(true);
 
         $generator = $this->getDataGenerator();
@@ -276,7 +568,7 @@ class core_grouplib_testcase extends advanced_testcase {
         $this->assertEquals($group2->id, groups_get_group_by_name($course->id, $name2));
     }
 
-    public function test_groups_get_grouping() {
+    public function test_groups_get_grouping(): void {
         $this->resetAfterTest(true);
 
         $generator = $this->getDataGenerator();
@@ -340,7 +632,7 @@ class core_grouplib_testcase extends advanced_testcase {
         $this->assertEquals($group2->id, groups_get_grouping_by_name($course->id, $name2));
     }
 
-    public function test_groups_get_course_data() {
+    public function test_groups_get_course_data(): void {
         $this->resetAfterTest(true);
 
         $generator = $this->getDataGenerator();
@@ -364,9 +656,9 @@ class core_grouplib_testcase extends advanced_testcase {
         // Get the data.
         $data = groups_get_course_data($course->id);
         $this->assertInstanceOf('stdClass', $data);
-        $this->assertObjectHasAttribute('groups', $data);
-        $this->assertObjectHasAttribute('groupings', $data);
-        $this->assertObjectHasAttribute('mappings', $data);
+        $this->assertObjectHasProperty('groups', $data);
+        $this->assertObjectHasProperty('groupings', $data);
+        $this->assertObjectHasProperty('mappings', $data);
 
         // Test we have the expected items returns.
         $this->assertCount(4, $data->groups);
@@ -383,8 +675,8 @@ class core_grouplib_testcase extends advanced_testcase {
         $this->assertSame($group3->name, $data->groups[$group3->id]->name);
 
         // Check we have the expected number of groupings.
-        $this->assertContains($grouping1->id, array_keys($data->groupings));
-        $this->assertContains($grouping2->id, array_keys($data->groupings));
+        $this->assertArrayHasKey($grouping1->id, $data->groupings);
+        $this->assertArrayHasKey($grouping2->id, $data->groupings);
 
         // Test a grouping-id is mapped correctly.
         $this->assertEquals($grouping2->name, $data->groupings[$grouping2->id]->name);
@@ -399,10 +691,10 @@ class core_grouplib_testcase extends advanced_testcase {
         foreach ($data->mappings as $mapping) {
             if ($mapping->groupingid === $grouping1->id) {
                 $grouping1maps++;
-                $this->assertContains($mapping->groupid, array($group1->id, $group2->id));
+                $this->assertContainsEquals($mapping->groupid, array($group1->id, $group2->id));
             } else if ($mapping->groupingid === $grouping2->id) {
                 $grouping2maps++;
-                $this->assertContains($mapping->groupid, array($group3->id, $group4->id));
+                $this->assertContainsEquals($mapping->groupid, array($group3->id, $group4->id));
             } else {
                 $this->fail('Unexpected groupingid');
             }
@@ -422,42 +714,38 @@ class core_grouplib_testcase extends advanced_testcase {
 
         // Test the groups_get_all_groups which uses this functionality.
         $groups  = groups_get_all_groups($course->id);
-        $groupkeys = array_keys($groups);
         $this->assertCount(4, $groups);
-        $this->assertContains($group1->id, $groupkeys);
-        $this->assertContains($group2->id, $groupkeys);
-        $this->assertContains($group3->id, $groupkeys);
-        $this->assertContains($group4->id, $groupkeys);
+        $this->assertArrayHasKey($group1->id, $groups);
+        $this->assertArrayHasKey($group2->id, $groups);
+        $this->assertArrayHasKey($group3->id, $groups);
+        $this->assertArrayHasKey($group4->id, $groups);
 
         $groups  = groups_get_all_groups($course->id, null, $grouping1->id);
-        $groupkeys = array_keys($groups);
         $this->assertCount(2, $groups);
-        $this->assertContains($group1->id, $groupkeys);
-        $this->assertContains($group2->id, $groupkeys);
-        $this->assertNotContains($group3->id, $groupkeys);
-        $this->assertNotContains($group4->id, $groupkeys);
+        $this->assertArrayHasKey($group1->id, $groups);
+        $this->assertArrayHasKey($group2->id, $groups);
+        $this->assertArrayNotHasKey($group3->id, $groups);
+        $this->assertArrayNotHasKey($group4->id, $groups);
 
         $groups  = groups_get_all_groups($course->id, null, $grouping2->id);
-        $groupkeys = array_keys($groups);
         $this->assertCount(2, $groups);
-        $this->assertNotContains($group1->id, $groupkeys);
-        $this->assertNotContains($group2->id, $groupkeys);
-        $this->assertContains($group3->id, $groupkeys);
-        $this->assertContains($group4->id, $groupkeys);
+        $this->assertArrayNotHasKey($group1->id, $groups);
+        $this->assertArrayNotHasKey($group2->id, $groups);
+        $this->assertArrayHasKey($group3->id, $groups);
+        $this->assertArrayHasKey($group4->id, $groups);
 
         // Test this function using an alternate column for the result index
         $groups  = groups_get_all_groups($course->id, null, $grouping2->id, 'g.name, g.id');
-        $groupkeys = array_keys($groups);
         $this->assertCount(2, $groups);
-        $this->assertNotContains($group3->id, $groupkeys);
-        $this->assertContains($group3->name, $groupkeys);
+        $this->assertArrayNotHasKey($group3->id, $groups);
+        $this->assertArrayHasKey($group3->name, $groups);
         $this->assertEquals($group3->id, $groups[$group3->name]->id);
     }
 
     /**
      * Tests for groups_group_visible.
      */
-    public function test_groups_group_visible() {
+    public function test_groups_group_visible(): void {
         global $CFG, $DB;
 
         $generator = $this->getDataGenerator();
@@ -467,7 +755,7 @@ class core_grouplib_testcase extends advanced_testcase {
         // Create a course category, course and groups.
         $cat = $generator->create_category(array('parent' => 0));
         $course = $generator->create_course(array('category' => $cat->id));
-        $coursecontext = context_course::instance($course->id);
+        $coursecontext = \context_course::instance($course->id);
         $group1 = $generator->create_group(array('courseid' => $course->id, 'name' => 'Group 1'));
         $group2 = $generator->create_group(array('courseid' => $course->id, 'name' => 'Group 2'));
         $group3 = $generator->create_group(array('courseid' => $course->id, 'name' => 'Group 3'));
@@ -641,7 +929,7 @@ class core_grouplib_testcase extends advanced_testcase {
         $this->assertTrue($result); // Cm with visible groups.
     }
 
-    function test_groups_get_groupmode() {
+    function test_groups_get_groupmode(): void {
         global $DB;
         $generator = $this->getDataGenerator();
         $this->resetAfterTest();
@@ -712,14 +1000,14 @@ class core_grouplib_testcase extends advanced_testcase {
     /**
      * Tests for groups_allgroups_course_menu() .
      */
-    public function test_groups_allgroups_course_menu() {
+    public function test_groups_allgroups_course_menu(): void {
         global $SESSION;
 
         $this->resetAfterTest();
 
         // Generate data.
         $course = $this->getDataGenerator()->create_course();
-        $record = new stdClass();
+        $record = new \stdClass();
         $record->courseid = $course->id;
         $group1 = $this->getDataGenerator()->create_group($record);
         $group2 = $this->getDataGenerator()->create_group($record);
@@ -736,29 +1024,29 @@ class core_grouplib_testcase extends advanced_testcase {
         // Now user can access one of the group. We can't assert an exact match here because of random ids generated by yui. So do
         // partial match to see if all groups are listed or not.
         $html = groups_allgroups_course_menu($course, 'someurl.php');
-        $this->assertContains(format_string($group1->name), $html);
-        $this->assertNotContains(format_string($group2->name), $html);
+        $this->assertStringContainsString(format_string($group1->name), $html);
+        $this->assertStringNotContainsString(format_string($group2->name), $html);
 
         $this->setAdminUser();
 
         // Now user can access everything.
         $html = groups_allgroups_course_menu($course, 'someurl.php');
-        $this->assertContains(format_string($group1->name), $html);
-        $this->assertContains(format_string($group2->name), $html);
+        $this->assertStringContainsString(format_string($group1->name), $html);
+        $this->assertStringContainsString(format_string($group2->name), $html);
 
         // Make sure separate groups mode, doesn't change anything.
         $course->groupmode = SEPARATEGROUPS;
         update_course($course);
         $html = groups_allgroups_course_menu($course, 'someurl.php');
-        $this->assertContains(format_string($group1->name), $html);
-        $this->assertContains(format_string($group2->name), $html);
+        $this->assertStringContainsString(format_string($group1->name), $html);
+        $this->assertStringContainsString(format_string($group2->name), $html);
 
         // Make sure Visible groups mode, doesn't change anything.
         $course->groupmode = VISIBLEGROUPS;
         update_course($course);
         $html = groups_allgroups_course_menu($course, 'someurl.php');
-        $this->assertContains(format_string($group1->name), $html);
-        $this->assertContains(format_string($group2->name), $html);
+        $this->assertStringContainsString(format_string($group1->name), $html);
+        $this->assertStringContainsString(format_string($group2->name), $html);
 
         // Let us test activegroup changes now.
         $this->setUser($user);
@@ -776,7 +1064,7 @@ class core_grouplib_testcase extends advanced_testcase {
      * This unit test checks that groups_get_all_groups returns groups in
      * alphabetical order even if they are in a grouping.
      */
-    public function test_groups_ordering() {
+    public function test_groups_ordering(): void {
         $generator = $this->getDataGenerator();
         $this->resetAfterTest();
 
@@ -805,9 +1093,79 @@ class core_grouplib_testcase extends advanced_testcase {
     }
 
     /**
+     * Tests for groups_get_all_groups when grouping is set and we want members as well.
+     */
+    public function test_groups_get_all_groups_in_grouping_with_members(): void {
+        $generator = $this->getDataGenerator();
+        $this->resetAfterTest();
+
+        // Create courses.
+        $course1 = $generator->create_course();
+        $course2 = $generator->create_course();
+
+        // Create users.
+        $c1user1 = $generator->create_user();
+        $c12user1 = $generator->create_user();
+        $c12user2 = $generator->create_user();
+
+        // Enrol users.
+        $generator->enrol_user($c1user1->id, $course1->id);
+        $generator->enrol_user($c12user1->id, $course1->id);
+        $generator->enrol_user($c12user1->id, $course2->id);
+        $generator->enrol_user($c12user2->id, $course1->id);
+        $generator->enrol_user($c12user2->id, $course2->id);
+
+        // Create groupings and groups for course1.
+        $c1grouping1 = $generator->create_grouping(array('courseid' => $course1->id));
+        $c1grouping2 = $generator->create_grouping(array('courseid' => $course1->id));
+        $c1group1 = $generator->create_group(array('courseid' => $course1->id));
+        $c1group2 = $generator->create_group(array('courseid' => $course1->id));
+        $c1group3 = $generator->create_group(array('courseid' => $course1->id));
+        groups_assign_grouping($c1grouping1->id, $c1group1->id);
+        groups_assign_grouping($c1grouping1->id, $c1group2->id);
+        groups_assign_grouping($c1grouping2->id, $c1group3->id);
+
+        // Create groupings and groups for course2.
+        $c2grouping1 = $generator->create_grouping(array('courseid' => $course2->id));
+        $c2group1 = $generator->create_group(array('courseid' => $course1->id));
+        groups_assign_grouping($c2grouping1->id, $c2group1->id);
+
+        // Assign users to groups.
+        $generator->create_group_member(array('groupid' => $c1group1->id, 'userid' => $c1user1->id));
+        $generator->create_group_member(array('groupid' => $c1group1->id, 'userid' => $c12user1->id));
+        $generator->create_group_member(array('groupid' => $c1group2->id, 'userid' => $c12user2->id));
+        $generator->create_group_member(array('groupid' => $c2group1->id, 'userid' => $c12user2->id));
+
+        // Test without userid.
+        $groups = groups_get_all_groups($course1->id, null, $c1grouping1->id, 'g.*', true);
+
+        $this->assertEqualsCanonicalizing(
+                [$c1group1->id, $c1group2->id],
+                array_keys($groups)
+        );
+        $this->assertEquals(
+                [$c1user1->id => $c1user1->id, $c12user1->id => $c12user1->id],
+                $groups[$c1group1->id]->members
+        );
+        $this->assertEquals(
+                [$c12user2->id => $c12user2->id],
+                $groups[$c1group2->id]->members
+        );
+
+        // Test with userid.
+        $groups = groups_get_all_groups($course1->id, $c1user1->id, $c1grouping1->id, 'g.*', true);
+
+        $this->assertEquals([$c1group1->id], array_keys($groups));
+        $this->assertEqualsCanonicalizing(
+                [$c1user1->id, $c12user1->id],
+                $groups[$c1group1->id]->members
+        );
+    }
+
+    /**
      * Tests for groups_get_user_groups() method.
      */
-    public function test_groups_get_user_groups() {
+    public function test_groups_get_user_groups(): void {
         $this->resetAfterTest(true);
         $generator = $this->getDataGenerator();
 
@@ -883,7 +1241,7 @@ class core_grouplib_testcase extends advanced_testcase {
     protected function make_group_list($number) {
         $testgroups = array();
         for ($a = 0; $a < $number; $a++) {
-            $grp = new stdClass();
+            $grp = new \stdClass();
             $grp->id = 100 + $a;
             $grp->name = 'test group ' . $grp->id;
             $testgroups[$grp->id] = $grp;
@@ -891,25 +1249,25 @@ class core_grouplib_testcase extends advanced_testcase {
         return $testgroups;
     }
 
-    public function test_groups_sort_menu_options_empty() {
+    public function test_groups_sort_menu_options_empty(): void {
         $this->assertEquals(array(), groups_sort_menu_options(array(), array()));
     }
 
-    public function test_groups_sort_menu_options_allowed_goups_only() {
+    public function test_groups_sort_menu_options_allowed_goups_only(): void {
         $this->assertEquals(array(
             100 => 'test group 100',
             101 => 'test group 101',
         ), groups_sort_menu_options($this->make_group_list(2), array()));
     }
 
-    public function test_groups_sort_menu_options_user_goups_only() {
+    public function test_groups_sort_menu_options_user_goups_only(): void {
         $this->assertEquals(array(
             100 => 'test group 100',
             101 => 'test group 101',
         ), groups_sort_menu_options(array(), $this->make_group_list(2)));
     }
 
-    public function test_groups_sort_menu_options_user_both() {
+    public function test_groups_sort_menu_options_user_both(): void {
         $this->assertEquals(array(
             1 => array(get_string('mygroups', 'group') => array(
                 100 => 'test group 100',
@@ -922,7 +1280,7 @@ class core_grouplib_testcase extends advanced_testcase {
         ), groups_sort_menu_options($this->make_group_list(4), $this->make_group_list(2)));
     }
 
-    public function test_groups_sort_menu_options_user_both_many_groups() {
+    public function test_groups_sort_menu_options_user_both_many_groups(): void {
         $this->assertEquals(array(
             1 => array(get_string('mygroups', 'group') => array(
                 100 => 'test group 100',
@@ -947,8 +1305,8 @@ class core_grouplib_testcase extends advanced_testcase {
     /**
      * Tests for groups_user_groups_visible.
      */
-    public function test_groups_user_groups_visible() {
-        global $CFG, $DB;
+    public function test_groups_user_groups_visible(): void {
+        global $DB;
 
         $generator = $this->getDataGenerator();
         $this->resetAfterTest();
@@ -957,7 +1315,7 @@ class core_grouplib_testcase extends advanced_testcase {
         // Create a course category, course and groups.
         $cat = $generator->create_category(array('parent' => 0));
         $course = $generator->create_course(array('category' => $cat->id));
-        $coursecontext = context_course::instance($course->id);
+        $coursecontext = \context_course::instance($course->id);
         $group1 = $generator->create_group(array('courseid' => $course->id, 'name' => 'Group 1'));
         $group2 = $generator->create_group(array('courseid' => $course->id, 'name' => 'Group 2'));
         $group3 = $generator->create_group(array('courseid' => $course->id, 'name' => 'Group 3'));
@@ -997,7 +1355,8 @@ class core_grouplib_testcase extends advanced_testcase {
         $result = groups_user_groups_visible($course, $user2->id);
         $this->assertTrue($result);
 
-        $result = groups_user_groups_visible($course, $user2->id);
+        $cm->groupmode = NOGROUPS;
+        $result = groups_user_groups_visible($course, $user2->id, $cm);
         $this->assertTrue($result); // Cm with no groups.
 
         $cm->groupmode = SEPARATEGROUPS;
@@ -1015,7 +1374,8 @@ class core_grouplib_testcase extends advanced_testcase {
         $result = groups_user_groups_visible($course, $user2->id);
         $this->assertTrue($result);
 
-        $result = groups_user_groups_visible($course, $user2->id);
+        $cm->groupmode = NOGROUPS;
+        $result = groups_user_groups_visible($course, $user2->id, $cm);
         $this->assertTrue($result); // Cm with no groups.
 
         $cm->groupmode = SEPARATEGROUPS;
@@ -1053,7 +1413,7 @@ class core_grouplib_testcase extends advanced_testcase {
         $this->assertTrue($result);
 
         $cm->groupmode = NOGROUPS;
-        $result = groups_user_groups_visible($course, $user2->id);
+        $result = groups_user_groups_visible($course, $user2->id, $cm);
         $this->assertTrue($result); // Cm with no groups.
 
         $cm->groupmode = SEPARATEGROUPS;
@@ -1121,7 +1481,8 @@ class core_grouplib_testcase extends advanced_testcase {
         $result = groups_user_groups_visible($course, $user4->id);
         $this->assertTrue($result);
 
-        $result = groups_user_groups_visible($course, $user4->id);
+        $cm->groupmode = NOGROUPS;
+        $result = groups_user_groups_visible($course, $user4->id, $cm);
         $this->assertTrue($result); // Cm with no groups.
 
         $cm->groupmode = SEPARATEGROUPS;
@@ -1139,7 +1500,8 @@ class core_grouplib_testcase extends advanced_testcase {
         $result = groups_user_groups_visible($course, $user4->id);
         $this->assertTrue($result);
 
-        $result = groups_user_groups_visible($course, $user4->id);
+        $cm->groupmode = NOGROUPS;
+        $result = groups_user_groups_visible($course, $user4->id, $cm);
         $this->assertTrue($result); // Cm with no groups.
 
         $cm->groupmode = SEPARATEGROUPS;
@@ -1147,7 +1509,7 @@ class core_grouplib_testcase extends advanced_testcase {
         $this->assertTrue($result); // Cm with separate groups.
 
         $cm->groupmode = SEPARATEGROUPS;
-        $result = groups_user_groups_visible($course, $user4->id);
+        $result = groups_user_groups_visible($course, $user4->id, $cm);
         $this->assertTrue($result); // Cm with visible groups.
 
         // Visible groups, forced.
@@ -1177,7 +1539,7 @@ class core_grouplib_testcase extends advanced_testcase {
         $this->assertTrue($result);
 
         $cm->groupmode = NOGROUPS;
-        $result = groups_user_groups_visible($course, $user4->id);
+        $result = groups_user_groups_visible($course, $user4->id, $cm);
         $this->assertTrue($result); // Cm with no groups.
 
         $cm->groupmode = SEPARATEGROUPS;
@@ -1249,7 +1611,8 @@ class core_grouplib_testcase extends advanced_testcase {
         $result = groups_user_groups_visible($course, $user1->id);
         $this->assertTrue($result); // Requesting all groups.
 
-        $result = groups_user_groups_visible($course, $user1->id);
+        $cm->groupmode = NOGROUPS;
+        $result = groups_user_groups_visible($course, $user1->id, $cm);
         $this->assertTrue($result); // Cm with no groups.
 
         $cm->groupmode = SEPARATEGROUPS;
@@ -1271,7 +1634,8 @@ class core_grouplib_testcase extends advanced_testcase {
         $result = groups_user_groups_visible($course, $user1->id);
         $this->assertTrue($result); // Requesting all groups.
 
-        $result = groups_user_groups_visible($course, $user1->id);
+        $cm->groupmode = NOGROUPS;
+        $result = groups_user_groups_visible($course, $user1->id, $cm);
         $this->assertTrue($result); // Cm with no groups.
 
         $cm->groupmode = SEPARATEGROUPS;
@@ -1281,7 +1645,7 @@ class core_grouplib_testcase extends advanced_testcase {
         $this->assertTrue($result); // Cm with separate groups.
 
         $cm->groupmode = SEPARATEGROUPS;
-        $result = groups_user_groups_visible($course, $user1->id);
+        $result = groups_user_groups_visible($course, $user1->id, $cm);
         $this->assertTrue($result); // Cm with visible groups.
 
         // Visible groups, forced.
@@ -1317,7 +1681,7 @@ class core_grouplib_testcase extends advanced_testcase {
         $this->assertTrue($result); // Requesting all groups.
 
         $cm->groupmode = NOGROUPS;
-        $result = groups_user_groups_visible($course, $user1->id);
+        $result = groups_user_groups_visible($course, $user1->id, $cm);
         $this->assertTrue($result); // Cm with no groups.
 
         $cm->groupmode = SEPARATEGROUPS;
@@ -1387,5 +1751,614 @@ class core_grouplib_testcase extends advanced_testcase {
         $cm->groupmode = VISIBLEGROUPS;
         $result = groups_user_groups_visible($course, $user1->id, $cm);
         $this->assertTrue($result); // Cm with visible groups.
+    }
+
+    /**
+     * Tests for groups_get_groups_members() method.
+     *
+     * @covers ::groups_get_groups_members
+     */
+    public function test_groups_get_groups_members(): void {
+        $this->resetAfterTest(true);
+        $generator = $this->getDataGenerator();
+
+        // Create courses.
+        $course1 = $generator->create_course();
+        $course2 = $generator->create_course();
+
+        // Create users.
+        $user1 = $generator->create_user();
+        $user2 = $generator->create_user();
+        $user3 = $generator->create_user();
+
+        // Enrol users.
+        $generator->enrol_user($user1->id, $course1->id);
+        $generator->enrol_user($user1->id, $course2->id);
+        $generator->enrol_user($user2->id, $course2->id);
+        $generator->enrol_user($user3->id, $course2->id);
+
+        // Create groups.
+        $group1 = $generator->create_group(array('courseid' => $course1->id));
+        $group2 = $generator->create_group(array('courseid' => $course2->id));
+        $group3 = $generator->create_group(array('courseid' => $course2->id));
+
+        // Assign users to groups.
+        $this->assertTrue($generator->create_group_member(array('groupid' => $group1->id, 'userid' => $user1->id)));
+        $this->assertTrue($generator->create_group_member(array('groupid' => $group2->id, 'userid' => $user1->id)));
+        $this->assertTrue($generator->create_group_member(array('groupid' => $group2->id, 'userid' => $user2->id)));
+
+        // Test get_groups_members (with extra field and ordering).
+        $members = groups_get_groups_members([$group1->id, $group2->id], ['lastaccess'], 'u.id ASC');
+        $this->assertCount(2, $members);
+        $this->assertEquals([$user1->id, $user2->id], array_keys($members));
+        $this->assertTrue(isset($members[$user1->id]->lastaccess));
+        $this->assertTrue(isset($members[$user2->id]->lastaccess));
+
+        // Group with just one.
+        $members = groups_get_groups_members([$group1->id]);
+        $this->assertCount(1, $members);
+        $this->assertEquals($user1->id, $members[$user1->id]->id);
+
+        // Test the info matches group membership for the entire course.
+        $groups  = groups_get_all_groups($course1->id, 0, 0, 'g.*', true);
+        $group1withmembers = array_pop($groups);
+
+        // Compare the sorted keys of both arrays (should be list of user ids).
+        $members = array_keys($members);
+        sort($members);
+        $group1members = array_keys($group1withmembers->members);
+        sort($group1members);
+        $this->assertEquals($members, $group1members);
+
+        // Group with just one plus empty group.
+        $members = groups_get_groups_members([$group1->id, $group3->id]);
+        $this->assertCount(1, $members);
+        $this->assertEquals($user1->id, $members[$user1->id]->id);
+
+        // Empty group.
+        $members = groups_get_groups_members([$group3->id]);
+        $this->assertCount(0, $members);
+
+        // Our second group.
+        $members = groups_get_groups_members([$group2->id]);
+        $this->assertEqualsCanonicalizing([$user1->id, $user2->id], array_column($members, 'id'));
+
+        // Test the info matches group membership for the entire course.
+        $groups  = groups_get_all_groups($course2->id, 0, 0, 'g.*', true);
+        $group2withmembers = $groups[$group2->id];
+
+        // Compare the sorted keys of both arrays (should be list of user ids).
+        $members = array_keys($members);
+        sort($members);
+        $group2members = array_keys($group2withmembers->members);
+        sort($group2members);
+        $this->assertEquals($members, $group2members);
+
+    }
+
+    /**
+     * Tests for groups_get_activity_shared_group_members() method.
+     */
+    public function test_groups_get_activity_shared_group_members(): void {
+        $this->resetAfterTest(true);
+        $generator = $this->getDataGenerator();
+
+        // Create courses.
+        $course = $generator->create_course();
+
+        // Create cm.
+        $assign = $generator->create_module("assign", array('course' => $course->id));
+        $cm = get_coursemodule_from_instance("assign", $assign->id);
+
+        // Create users.
+        $user1 = $generator->create_user();
+        $user2 = $generator->create_user();
+        $user3 = $generator->create_user();
+        $user4 = $generator->create_user();
+
+        // Enrol users.
+        $generator->enrol_user($user1->id, $course->id);
+        $generator->enrol_user($user2->id, $course->id);
+        $generator->enrol_user($user3->id, $course->id);
+        $generator->enrol_user($user4->id, $course->id);
+
+        // Create groups.
+        $group1 = $generator->create_group(array('courseid' => $course->id));
+        $group2 = $generator->create_group(array('courseid' => $course->id));
+        $group3 = $generator->create_group(array('courseid' => $course->id));
+
+        // Assign users to groups.
+        $generator->create_group_member(array('groupid' => $group1->id, 'userid' => $user1->id));
+        $generator->create_group_member(array('groupid' => $group2->id, 'userid' => $user1->id));
+        $generator->create_group_member(array('groupid' => $group2->id, 'userid' => $user2->id));
+        $generator->create_group_member(array('groupid' => $group3->id, 'userid' => $user3->id));
+
+        // Retrieve users sharing groups with user1.
+        $members = groups_get_activity_shared_group_members($cm, $user1->id);
+        $this->assertCount(2, $members);
+        $this->assertEqualsCanonicalizing([$user1->id, $user2->id], array_keys($members));
+
+        // Retrieve users sharing groups with user2.
+        $members = groups_get_activity_shared_group_members($cm, $user2->id);
+        $this->assertCount(2, $members);
+        $this->assertEqualsCanonicalizing([$user1->id, $user2->id], array_keys($members));
+
+        // Retrieve users sharing groups with user3.
+        $members = groups_get_activity_shared_group_members($cm, $user3->id);
+        $this->assertCount(1, $members);
+        $this->assertEquals($user3->id, $members[$user3->id]->id);
+
+        // Retrieve users sharing groups with user without groups (user4).
+        $members = groups_get_activity_shared_group_members($cm, $user4->id);
+        $this->assertCount(0, $members);
+
+        // Now, create a different activity using groupings.
+        $grouping = $generator->create_grouping(array('courseid' => $course->id, 'name' => 'Grouping 1'));
+        // Skip group 2.
+        groups_assign_grouping($grouping->id, $group1->id);
+        groups_assign_grouping($grouping->id, $group3->id);
+
+        $assign = $generator->create_module("assign", array('course' => $course->id, 'groupingid' => $grouping->id));
+        $cm = get_coursemodule_from_instance("assign", $assign->id);
+
+        // Since the activity is forced to groupings (groups 1 and 3), I don't see members of group 2.
+        $members = groups_get_activity_shared_group_members($cm, $user1->id);
+        $this->assertCount(1, $members);
+        $this->assertEquals($user1->id, $members[$user1->id]->id);
+
+        // Add user1 to group 3 (in the grouping).
+        $generator->create_group_member(array('groupid' => $group3->id, 'userid' => $user1->id));
+        $members = groups_get_activity_shared_group_members($cm, $user1->id);
+        $this->assertCount(2, $members);    // Now I see members of group 3.
+        $this->assertEqualsCanonicalizing([$user1->id, $user3->id], array_keys($members));
+    }
+
+    /**
+     * Generate a set of groups with different visibility levels and users to assign to them.
+     *
+     * @return array
+     */
+    protected function create_groups_with_visibilty(): array {
+        $this->resetAfterTest(true);
+        $generator = $this->getDataGenerator();
+
+        // Create courses.
+        $course = $generator->create_course();
+
+        // Create users.
+        $users = [
+            1 => $generator->create_user(),
+            2 => $generator->create_user(),
+            3 => $generator->create_user(),
+            4 => $generator->create_user(),
+            5 => $generator->create_user(),
+        ];
+
+        // Enrol users.
+        $generator->enrol_user($users[1]->id, $course->id);
+        $generator->enrol_user($users[2]->id, $course->id);
+        $generator->enrol_user($users[3]->id, $course->id);
+        $generator->enrol_user($users[4]->id, $course->id);
+        $generator->enrol_user($users[5]->id, $course->id, 'editingteacher');
+
+        // Create groups.
+        $groups = [
+            'all' => $generator->create_group(['courseid' => $course->id, 'visibility' => GROUPS_VISIBILITY_ALL]),
+            'members' => $generator->create_group(['courseid' => $course->id, 'visibility' => GROUPS_VISIBILITY_MEMBERS]),
+            'own' => $generator->create_group(['courseid' => $course->id, 'visibility' => GROUPS_VISIBILITY_OWN]),
+            'none' => $generator->create_group(['courseid' => $course->id, 'visibility' => GROUPS_VISIBILITY_NONE]),
+        ];
+
+        return [
+             $users,
+             $groups,
+             $course,
+        ];
+    }
+
+    /**
+     * Tests getting groups and group members based on visibility settings.
+     *
+     * This also covers the groupdata cache, since calls without $withmembers = true use the cache.
+     *
+     * @covers \groups_get_all_groups()
+     */
+    public function test_get_all_groups_with_visibility(): void {
+        list($users, $groups, $course) = $this->create_groups_with_visibilty();
+
+        // Assign users to groups.
+        $generator = $this->getDataGenerator();
+        $generator->create_group_member(['groupid' => $groups['all']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['members']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['members']->id, 'userid' => $users[2]->id]);
+        $generator->create_group_member(['groupid' => $groups['own']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['own']->id, 'userid' => $users[3]->id]);
+        $generator->create_group_member(['groupid' => $groups['none']->id, 'userid' => $users[4]->id]);
+
+        $this->setUser($users[1]);
+        $groups1 = groups_get_all_groups($course->id);
+        // User1 is in groups all, members and own, and can see them.
+        $this->assertArrayHasKey($groups['all']->id, $groups1);
+        $this->assertArrayHasKey($groups['members']->id, $groups1);
+        $this->assertArrayHasKey($groups['own']->id, $groups1);
+        $this->assertArrayNotHasKey($groups['none']->id, $groups1);
+        // User1 can see members of groups all and members, but only themselves in group own.
+        $groupsmembers1 = groups_get_all_groups($course->id, 0, 0, 'g.*', true);
+        $this->assertArrayHasKey($users[1]->id, $groupsmembers1[$groups['all']->id]->members);
+        $this->assertArrayHasKey($users[1]->id, $groupsmembers1[$groups['members']->id]->members);
+        $this->assertArrayHasKey($users[2]->id, $groupsmembers1[$groups['members']->id]->members);
+        $this->assertArrayHasKey($users[1]->id, $groupsmembers1[$groups['own']->id]->members);
+        $this->assertArrayNotHasKey($users[3]->id, $groupsmembers1[$groups['own']->id]->members);
+
+        $this->setUser($users[2]);
+        $groups2 = groups_get_all_groups($course->id);
+        // User2 is in group members, and can see group all as well.
+        $this->assertArrayHasKey($groups['all']->id, $groups2);
+        $this->assertArrayHasKey($groups['members']->id, $groups2);
+        $this->assertArrayNotHasKey($groups['own']->id, $groups2);
+        $this->assertArrayNotHasKey($groups['none']->id, $groups2);
+        // User2 can see members of groups all and members.
+        $groupsmembers2 = groups_get_all_groups($course->id, 0, 0, 'g.*', true);
+        $this->assertArrayHasKey($users[1]->id, $groupsmembers2[$groups['all']->id]->members);
+        $this->assertArrayHasKey($users[1]->id, $groupsmembers2[$groups['members']->id]->members);
+        $this->assertArrayHasKey($users[2]->id, $groupsmembers2[$groups['members']->id]->members);
+
+        $this->setUser($users[3]);
+        $groups3 = groups_get_all_groups($course->id);
+        // User3 is in group own, and can see group all as well.
+        $this->assertArrayHasKey($groups['all']->id, $groups3);
+        $this->assertArrayNotHasKey($groups['members']->id, $groups3);
+        $this->assertArrayHasKey($groups['own']->id, $groups3);
+        $this->assertArrayNotHasKey($groups['none']->id, $groups3);
+        $groupsmembers3 = groups_get_all_groups($course->id, 0, 0, 'g.*', true);
+        // User3 can see members of group all, but only themselves in group own.
+        $this->assertArrayHasKey($users[1]->id, $groupsmembers3[$groups['all']->id]->members);
+        $this->assertArrayHasKey($users[3]->id, $groupsmembers3[$groups['own']->id]->members);
+        $this->assertArrayNotHasKey($users[1]->id, $groupsmembers3[$groups['own']->id]->members);
+
+        $this->setUser($users[4]);
+        $groups4 = groups_get_all_groups($course->id);
+        // User4 can see group all and its members. They are in group none but cannot see it.
+        $this->assertArrayHasKey($groups['all']->id, $groups4);
+        $this->assertArrayNotHasKey($groups['members']->id, $groups4);
+        $this->assertArrayNotHasKey($groups['own']->id, $groups4);
+        $this->assertArrayNotHasKey($groups['none']->id, $groups4);
+        // User4 can see members of group all.
+        $groupsmembers4 = groups_get_all_groups($course->id, 0, 0, 'g.*', true);
+        $this->assertArrayHasKey($users[1]->id, $groupsmembers4[$groups['all']->id]->members);
+
+        $this->setUser($users[5]);
+        $groups5 = groups_get_all_groups($course->id);
+        // User5 is has viewallgroups, so can see all groups.
+        $this->assertArrayHasKey($groups['all']->id, $groups5);
+        $this->assertArrayHasKey($groups['members']->id, $groups5);
+        $this->assertArrayHasKey($groups['own']->id, $groups5);
+        $this->assertArrayHasKey($groups['none']->id, $groups5);
+        // User5 is has viewallgroups, so can see all members.
+        $groupsmembers5 = groups_get_all_groups($course->id, 0, 0, 'g.*', true);
+        $this->assertArrayHasKey($users[1]->id, $groupsmembers5[$groups['all']->id]->members);
+        $this->assertArrayHasKey($users[1]->id, $groupsmembers5[$groups['members']->id]->members);
+        $this->assertArrayHasKey($users[2]->id, $groupsmembers5[$groups['members']->id]->members);
+        $this->assertArrayHasKey($users[1]->id, $groupsmembers5[$groups['own']->id]->members);
+        $this->assertArrayHasKey($users[3]->id, $groupsmembers5[$groups['own']->id]->members);
+        $this->assertArrayHasKey($users[4]->id, $groupsmembers5[$groups['none']->id]->members);
+
+    }
+
+    /**
+     * Tests getting groups the current user is a member of, with visibility settings applied.
+     *
+     * @covers \groups_get_my_groups()
+     */
+    public function test_get_my_groups_with_visibility(): void {
+        list($users, $groups) = $this->create_groups_with_visibilty();
+
+        // Assign users to groups.
+        $generator = $this->getDataGenerator();
+        $generator->create_group_member(['groupid' => $groups['all']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['members']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['own']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['none']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['all']->id, 'userid' => $users[5]->id]);
+        $generator->create_group_member(['groupid' => $groups['members']->id, 'userid' => $users[5]->id]);
+        $generator->create_group_member(['groupid' => $groups['own']->id, 'userid' => $users[5]->id]);
+        $generator->create_group_member(['groupid' => $groups['none']->id, 'userid' => $users[5]->id]);
+
+        $generator->role_assign('editingteacher', $users[5]->id, \context_system::instance());
+
+        // User can see all groups they are in, except group with visibility::NONE.
+        $this->setUser($users[1]);
+        $groups1 = groups_get_my_groups();
+        $this->assertCount(3, $groups1);
+        $groupids1 = array_map(function($groupmember) {
+            return $groupmember->groupid;
+        }, $groups1);
+        sort($groupids1);
+        $this->assertEquals([$groups['all']->id, $groups['members']->id, $groups['own']->id], $groupids1);
+
+        $this->setUser($users[5]);
+        $groups2 = groups_get_my_groups();
+        $this->assertCount(4, $groups2);
+        $groupids2 = array_map(function($groupmember) {
+            return $groupmember->groupid;
+        }, $groups2);
+        sort($groupids2);
+        $this->assertEquals([$groups['all']->id, $groups['members']->id, $groups['own']->id, $groups['none']->id], $groupids2);
+    }
+
+    /**
+     * Tests getting groups a user is a member of, with visibility settings applied.
+     *
+     * @covers \groups_get_user_groups()
+     */
+    public function test_get_user_groups_with_visibility(): void {
+        list($users, $groups, $course) = $this->create_groups_with_visibilty();
+
+        // Assign users to groups.
+        $generator = $this->getDataGenerator();
+        $generator->create_group_member(['groupid' => $groups['all']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['members']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['members']->id, 'userid' => $users[2]->id]);
+        $generator->create_group_member(['groupid' => $groups['own']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['own']->id, 'userid' => $users[3]->id]);
+        $generator->create_group_member(['groupid' => $groups['none']->id, 'userid' => $users[4]->id]);
+        $generator->create_group_member(['groupid' => $groups['none']->id, 'userid' => $users[1]->id]);
+
+        // Run as unprivileged user.
+        $this->setUser($users[1]);
+        // Own groups - should see all groups except group with visibility::NONE.
+        $usergroups1 = groups_get_user_groups($course->id, $users[1]->id);
+        $this->assertEquals([$groups['all']->id, $groups['members']->id, $groups['own']->id], $usergroups1[0]);
+        // Own groups including hidden - should see all groups.
+        $usergroups1hidden = groups_get_user_groups($course->id, $users[1]->id, true);
+        $this->assertEquals(
+            [$groups['all']->id, $groups['members']->id, $groups['own']->id, $groups['none']->id],
+            $usergroups1hidden[0]
+        );
+        // Fellow member of a group with visiblity::MEMBERS. Should see that group.
+        $usergroups2 = groups_get_user_groups($course->id, $users[2]->id);
+        $this->assertEquals([$groups['members']->id], $usergroups2[0]);
+        // Fellow member of a group with visiblity::OWN. Should not see that group.
+        $usergroups3 = groups_get_user_groups($course->id, $users[3]->id);
+        $this->assertEmpty($usergroups3[0]);
+        // Fellow member of a group with visiblity::NONE. Should not see that group.
+        $usergroups4 = groups_get_user_groups($course->id, $users[4]->id);
+        $this->assertEmpty($usergroups4[0]);
+        // Fellow member of a group with visiblity::NONE including hidden. Should see that group.
+        $usergroups4hidden = groups_get_user_groups($course->id, $users[4]->id, true);
+        $this->assertEquals([$groups['none']->id], $usergroups4hidden[0]);
+
+        // Run as a user with viewhiddengroups. Should see all group memberships for each member.
+        $this->setUser($users[5]);
+        $usergroups1 = groups_get_user_groups($course->id, $users[1]->id);
+        $this->assertEquals([$groups['all']->id, $groups['members']->id, $groups['own']->id, $groups['none']->id], $usergroups1[0]);
+        // Fellow member of a group with visiblity::MEMBERS. Should see that group.
+        $usergroups2 = groups_get_user_groups($course->id, $users[2]->id);
+        $this->assertEquals([$groups['members']->id], $usergroups2[0]);
+        // Fellow member of a group with visiblity::OWN. Should not see that group.
+        $usergroups3 = groups_get_user_groups($course->id, $users[3]->id);
+        $this->assertEquals([$groups['own']->id], $usergroups3[0]);
+        // Fellow member of a group with visiblity::NONE. Should not see that group.
+        $usergroups4 = groups_get_user_groups($course->id, $users[4]->id);
+        $this->assertEquals([$groups['none']->id], $usergroups4[0]);
+
+    }
+
+    /**
+     * Test groups_is_member() using groups with different visibility settings.
+     *
+     * @covers \groups_is_member()
+     */
+    public function test_groups_is_member_with_visibility(): void {
+        list($users, $groups) = $this->create_groups_with_visibilty();
+
+        // Assign users to groups.
+        $generator = $this->getDataGenerator();
+        $generator->create_group_member(['groupid' => $groups['all']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['members']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['members']->id, 'userid' => $users[2]->id]);
+        $generator->create_group_member(['groupid' => $groups['own']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['own']->id, 'userid' => $users[3]->id]);
+        $generator->create_group_member(['groupid' => $groups['none']->id, 'userid' => $users[4]->id]);
+        $generator->create_group_member(['groupid' => $groups['none']->id, 'userid' => $users[1]->id]);
+
+        // Run as unprivileged user.
+        $this->setUser($users[1]);
+        $this->assertTrue(groups_is_member($groups['all']->id, $users[1]->id)); // All can see members.
+        $this->assertTrue(groups_is_member($groups['members']->id, $users[1]->id)); // Can see members.
+        $this->assertTrue(groups_is_member($groups['own']->id, $users[1]->id)); // Can see own membership.
+        $this->assertFalse(groups_is_member($groups['none']->id, $users[1]->id)); // Cannot see group.
+
+        $this->assertFalse(groups_is_member($groups['all']->id, $users[2]->id)); // Not a member.
+        $this->assertTrue(groups_is_member($groups['members']->id, $users[2]->id)); // Can see other members.
+        $this->assertFalse(groups_is_member($groups['own']->id, $users[3]->id)); // Can only see own membership, not others.
+        $this->assertFalse(groups_is_member($groups['none']->id, $users[4]->id)); // Cannot see group.
+
+        // Run as a user not in group 1 or 2.
+        $this->setUser($users[3]);
+        $this->assertTrue(groups_is_member($groups['all']->id, $users[1]->id)); // All can see members.
+        $this->assertFalse(groups_is_member($groups['members']->id, $users[2]->id)); // Cannot see members of the group.
+
+        // Run as a user with viewhiddengroups. Should be able to see memberships that exist in any group.
+        $this->setUser($users[5]);
+        $this->assertTrue(groups_is_member($groups['all']->id, $users[1]->id));
+        $this->assertTrue(groups_is_member($groups['members']->id, $users[1]->id));
+        $this->assertTrue(groups_is_member($groups['own']->id, $users[1]->id));
+        $this->assertTrue(groups_is_member($groups['none']->id, $users[1]->id));
+
+        $this->assertFalse(groups_is_member($groups['all']->id, $users[2]->id)); // Not a member.
+        $this->assertTrue(groups_is_member($groups['members']->id, $users[2]->id));
+        $this->assertTrue(groups_is_member($groups['own']->id, $users[3]->id));
+        $this->assertTrue(groups_is_member($groups['none']->id, $users[4]->id));
+    }
+
+    /**
+     * Test groups_get_members
+     *
+     * @covers ::groups_get_members
+     */
+    public function test_groups_get_members(): void {
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+        $userone = $this->getDataGenerator()->create_and_enrol($course);
+        $usertwo = $this->getDataGenerator()->create_and_enrol($course);
+
+        $group = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $this->getDataGenerator()->create_group_member(['groupid' => $group->id, 'userid' => $userone->id]);
+        $this->getDataGenerator()->create_group_member(['groupid' => $group->id, 'userid' => $usertwo->id]);
+
+        $users = groups_get_members($group->id);
+        $this->assertEqualsCanonicalizing([$userone->id, $usertwo->id], array_column($users, 'id'));
+
+        // Test invalid group.
+        $users = groups_get_members(-1);
+        $this->assertEmpty($users);
+    }
+
+    /**
+     * Test groups_get_members() using groups with different visibility settings.
+     *
+     * @covers ::groups_get_members
+     */
+    public function test_groups_get_members_with_visibility(): void {
+        list($users, $groups) = $this->create_groups_with_visibilty();
+
+        // Assign users to groups.
+        $generator = $this->getDataGenerator();
+        $generator->create_group_member(['groupid' => $groups['all']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['members']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['members']->id, 'userid' => $users[2]->id]);
+        $generator->create_group_member(['groupid' => $groups['own']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['own']->id, 'userid' => $users[3]->id]);
+        $generator->create_group_member(['groupid' => $groups['none']->id, 'userid' => $users[4]->id]);
+        $generator->create_group_member(['groupid' => $groups['none']->id, 'userid' => $users[1]->id]);
+
+        // Run as unprivileged user.
+        $this->setUser($users[1]);
+        $this->assertEquals([$users[1]->id],
+                array_keys(groups_get_members($groups['all']->id, 'u.id', 'u.id'))); // All can see members.
+        $this->assertEquals([$users[1]->id, $users[2]->id],
+                array_keys(groups_get_members($groups['members']->id, 'u.id', 'u.id'))); // Can see members.
+        $this->assertEquals([$users[1]->id],
+                array_keys(groups_get_members($groups['own']->id, 'u.id', 'u.id'))); // Can see own membership.
+        $this->assertEquals([], array_keys(groups_get_members($groups['none']->id, 'u.id', 'u.id'))); // Cannot see group.
+
+        // Run as a user not in group 1 or 2.
+        $this->setUser($users[3]);
+        $this->assertEquals([$users[1]->id],
+                array_keys(groups_get_members($groups['all']->id, 'u.id', 'u.id'))); // All can see members.
+        $this->assertEquals([], array_keys(groups_get_members($groups['members']->id, 'u.id', 'u.id'))); // Cannot see members.
+
+        // Run as a user with viewhiddengroups. Should be able to see memberships that exist in any group.
+        $this->setUser($users[5]);
+        $this->assertEquals([$users[1]->id], array_keys(groups_get_members($groups['all']->id, 'u.id', 'u.id')));
+        $this->assertEquals([$users[1]->id, $users[2]->id],
+                array_keys(groups_get_members($groups['members']->id, 'u.id', 'u.id')));
+        $this->assertEquals([$users[1]->id, $users[3]->id],
+                array_keys(groups_get_members($groups['own']->id, 'u.id', 'u.id')));
+        $this->assertEquals([$users[1]->id, $users[4]->id],
+                array_keys(groups_get_members($groups['none']->id, 'u.id', 'u.id')));
+    }
+
+    /**
+     * Test groups_get_groups_members() using groups with different visibility settings.
+     *
+     * @covers \groups_get_groups_members()
+     */
+    public function test_groups_get_groups_members_with_visibility(): void {
+        list($users, $groups) = $this->create_groups_with_visibilty();
+
+        // Assign users to groups.
+        $generator = $this->getDataGenerator();
+        $generator->create_group_member(['groupid' => $groups['all']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['members']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['members']->id, 'userid' => $users[2]->id]);
+        $generator->create_group_member(['groupid' => $groups['own']->id, 'userid' => $users[1]->id]);
+        $generator->create_group_member(['groupid' => $groups['own']->id, 'userid' => $users[3]->id]);
+        $generator->create_group_member(['groupid' => $groups['none']->id, 'userid' => $users[4]->id]);
+        $generator->create_group_member(['groupid' => $groups['none']->id, 'userid' => $users[1]->id]);
+
+        $groupids = [$groups['all']->id, $groups['members']->id, $groups['own']->id, $groups['none']->id];
+
+        $this->setUser($users[1]);
+        // Can see self in group1/3, other users in group2.
+        $this->assertEquals([$users[1]->id, $users[2]->id], array_keys(groups_get_groups_members($groupids, null, 'id ASC')));
+
+        $this->setUser($users[2]);
+        // Can see self in group2, user1 from group1/2.
+        $this->assertEquals([$users[1]->id, $users[2]->id], array_keys(groups_get_groups_members($groupids, null, 'id ASC')));
+
+        $this->setUser($users[3]);
+        // Can see self in group3, user1 from group1.
+        $this->assertEquals([$users[1]->id, $users[3]->id], array_keys(groups_get_groups_members($groupids, null, 'id ASC')));
+
+        $this->setUser($users[4]);
+        // Can see user1 from group1, cannot see self in group4.
+        $this->assertEquals([$users[1]->id], array_keys(groups_get_groups_members($groupids, null, 'id ASC')));
+
+        $this->setUser($users[5]);
+        // Can see all users from all groups.
+        $this->assertEquals([$users[1]->id, $users[2]->id, $users[3]->id, $users[4]->id],
+                array_keys(groups_get_groups_members($groupids, null, 'id ASC')));
+    }
+
+    /**
+     * Only groups with participation == true should be returned for an activity.
+     *
+     * @covers \groups_get_activity_allowed_groups()
+     * @return void
+     * @throws \coding_exception
+     */
+    public function test_groups_get_activity_allowed_groups(): void {
+        $this->resetAfterTest(true);
+        $generator = $this->getDataGenerator();
+
+        // Create courses.
+        $course = $generator->create_course();
+
+        // Create user.
+        $user = $generator->create_user();
+
+        // Enrol user.
+        $generator->enrol_user($user->id, $course->id);
+
+        // Create groups.
+        $groups = [
+            'all-p' => $generator->create_group(['courseid' => $course->id, 'visibility' => GROUPS_VISIBILITY_ALL]),
+            'members-p' => $generator->create_group(['courseid' => $course->id, 'visibility' => GROUPS_VISIBILITY_MEMBERS]),
+            'all-n' => $generator->create_group([
+                'courseid' => $course->id,
+                'visibility' => GROUPS_VISIBILITY_ALL,
+                'participation' => false
+            ]),
+            'members-n' => $generator->create_group([
+                'courseid' => $course->id,
+                'visibility' => GROUPS_VISIBILITY_MEMBERS,
+                'participation' => false
+            ]),
+            'own' => $generator->create_group(['courseid' => $course->id, 'visibility' => GROUPS_VISIBILITY_OWN]),
+            'none' => $generator->create_group(['courseid' => $course->id, 'visibility' => GROUPS_VISIBILITY_NONE]),
+        ];
+        // Add user to all groups.
+        $generator->create_group_member(['groupid' => $groups['all-p']->id, 'userid' => $user->id]);
+        $generator->create_group_member(['groupid' => $groups['members-p']->id, 'userid' => $user->id]);
+        $generator->create_group_member(['groupid' => $groups['all-n']->id, 'userid' => $user->id]);
+        $generator->create_group_member(['groupid' => $groups['members-n']->id, 'userid' => $user->id]);
+        $generator->create_group_member(['groupid' => $groups['own']->id, 'userid' => $user->id]);
+        $generator->create_group_member(['groupid' => $groups['none']->id, 'userid' => $user->id]);
+
+        $module = $generator->create_module('forum', ['course' => $course->id]);
+        $cm = get_fast_modinfo($course)->get_cm($module->cmid);
+
+        $activitygroups = groups_get_activity_allowed_groups($cm, $user->id);
+
+        $this->assertContains((int)$groups['all-p']->id, array_keys($activitygroups));
+        $this->assertContains((int)$groups['members-p']->id, array_keys($activitygroups));
+        $this->assertNotContains((int)$groups['all-n']->id, array_keys($activitygroups));
+        $this->assertNotContains((int)$groups['members-n']->id, array_keys($activitygroups));
+        $this->assertNotContains((int)$groups['own']->id, array_keys($activitygroups));
+        $this->assertNotContains((int)$groups['none']->id, array_keys($activitygroups));
+
     }
 }

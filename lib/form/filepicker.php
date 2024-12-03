@@ -155,7 +155,7 @@ class MoodleQuickForm_filepicker extends HTML_QuickForm_input implements templat
         $args->maxbytes = $this->_options['maxbytes'];
         $args->context = $PAGE->context;
         $args->buttonname = $elname.'choose';
-        $args->elementname = $elname;
+        $args->elementid = $id;
 
         $html = $this->_getTabs();
         $fp = new file_picker($args);
@@ -183,6 +183,13 @@ class MoodleQuickForm_filepicker extends HTML_QuickForm_input implements templat
         $html .= '<noscript>';
         $html .= "<div><object type='text/html' data='$nonjsfilepicker' height='160' width='600' style='border:1px solid #000'></object></div>";
         $html .= '</noscript>';
+
+        if (!empty($args->accepted_types) && $args->accepted_types != '*') {
+            $html .= html_writer::tag('p', get_string('filesofthesetypes', 'form'));
+            $util = new \core_form\filetypes_util();
+            $filetypedescriptions = $util->describe_file_types($args->accepted_types);
+            $html .= $OUTPUT->render_from_template('core_form/filetypes-descriptions', $filetypedescriptions);
+        }
 
         return $html;
     }
@@ -229,5 +236,46 @@ class MoodleQuickForm_filepicker extends HTML_QuickForm_input implements templat
         $context = $this->export_for_template_base($output);
         $context['html'] = $this->toHtml();
         return $context;
+    }
+
+    /**
+     * Check that the file has the allowed type.
+     *
+     * @param array $value Draft item id with the uploaded files.
+     * @return string|null Validation error message or null.
+     */
+    public function validateSubmitValue($value) {
+
+        $filetypesutil = new \core_form\filetypes_util();
+        $allowlist = $filetypesutil->normalize_file_types($this->_options['accepted_types']);
+
+        if (empty($allowlist) || $allowlist === ['*']) {
+            // Any file type is allowed, nothing to check here.
+            return;
+        }
+
+        $draftfiles = file_get_drafarea_files($value);
+        $wrongfiles = array();
+
+        if (empty($draftfiles)) {
+            // No file uploaded, nothing to check here.
+            return;
+        }
+
+        foreach ($draftfiles->list as $file) {
+            if (!$filetypesutil->is_allowed_file_type($file->filename, $allowlist)) {
+                $wrongfiles[] = $file->filename;
+            }
+        }
+
+        if ($wrongfiles) {
+            $a = array(
+                'allowlist' => implode(', ', $allowlist),
+                'wrongfiles' => implode(', ', $wrongfiles),
+            );
+            return get_string('err_wrongfileextension', 'core_form', $a);
+        }
+
+        return;
     }
 }

@@ -23,6 +23,7 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use core_question\output\question_version_info;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -36,36 +37,12 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class core_question_renderer extends plugin_renderer_base {
-    public function get_page() {
-        return $this->page;
-    }
 
     /**
-     * Render an icon, optionally with the word 'Preview' beside it, to preview
-     * a given question.
-     * @param int $questionid the id of the question to be previewed.
-     * @param context $context the context in which the preview is happening.
-     *      Must be a course or category context.
-     * @param bool $showlabel if true, show the word 'Preview' after the icon.
-     *      If false, just show the icon.
+     * @deprecated since Moodle 4.0
      */
-    public function question_preview_link($questionid, context $context, $showlabel) {
-        if ($showlabel) {
-            $alt = '';
-            $label = ' ' . get_string('preview');
-            $attributes = array();
-        } else {
-            $alt = get_string('preview');
-            $label = '';
-            $attributes = array('title' => $alt);
-        }
-
-        $image = $this->pix_icon('t/preview', $alt, '', array('class' => 'iconsmall'));
-        $link = question_preview_url($questionid, null, null, null, null, $context);
-        $action = new popup_action('click', $link, 'questionpreview',
-                question_preview_popup_params());
-
-        return $this->action_link($link, $image . $label, $action, $attributes);
+    public function question_preview_link() {
+        throw new coding_exception(__FUNCTION__ . '() has been removed.');
     }
 
     /**
@@ -87,12 +64,18 @@ class core_question_renderer extends plugin_renderer_base {
     public function question(question_attempt $qa, qbehaviour_renderer $behaviouroutput,
             qtype_renderer $qtoutput, question_display_options $options, $number) {
 
+        // If not already set, record the questionidentifier.
+        $options = clone($options);
+        if (!$options->has_question_identifier()) {
+            $options->questionidentifier = $this->question_number_text($number);
+        }
+
         $output = '';
         $output .= html_writer::start_tag('div', array(
-            'id' => 'q' . $qa->get_slot(),
+            'id' => $qa->get_outer_question_div_unique_id(),
             'class' => implode(' ', array(
                 'que',
-                $qa->get_question()->qtype->name(),
+                $qa->get_question(false)->get_type_name(),
                 $qa->get_behaviour_name(),
                 $qa->get_state_class($options->correctness && $qa->has_marks()),
             ))
@@ -118,7 +101,7 @@ class core_question_renderer extends plugin_renderer_base {
                 array('class' => 'comment clearfix'));
         $output .= html_writer::nonempty_tag('div',
                 $this->response_history($qa, $behaviouroutput, $qtoutput, $options),
-                array('class' => 'history clearfix'));
+                array('class' => 'history clearfix border p-2'));
 
         $output .= html_writer::end_tag('div');
         $output .= html_writer::end_tag('div');
@@ -146,6 +129,9 @@ class core_question_renderer extends plugin_renderer_base {
         $output .= $this->mark_summary($qa, $behaviouroutput, $options);
         $output .= $this->question_flag($qa, $options->flags);
         $output .= $this->edit_question_link($qa, $options);
+        if ($options->versioninfo) {
+            $output .= $this->render(new question_version_info($qa->get_question(), true));
+        }
         return $output;
     }
 
@@ -156,17 +142,36 @@ class core_question_renderer extends plugin_renderer_base {
      * @return HTML fragment.
      */
     protected function number($number) {
-        $numbertext = '';
-        if (is_numeric($number)) {
-            $numbertext = get_string('questionx', 'question',
-                    html_writer::tag('span', $number, array('class' => 'qno')));
-        } else if ($number == 'i') {
-            $numbertext = get_string('information', 'question');
-        }
-        if (!$numbertext) {
+        if (trim($number ?? '') === '') {
             return '';
         }
+        if (trim($number) === 'i') {
+            $numbertext = get_string('information', 'question');
+        } else {
+            $numbertext = get_string('questionx', 'question',
+                    html_writer::tag('span', s($number), array('class' => 'qno')));
+        }
         return html_writer::tag('h3', $numbertext, array('class' => 'no'));
+    }
+
+    /**
+     * Get the question number as a string.
+     *
+     * @param string|null $number e.g. '123' or 'i'. null or '' means do not display anything number-related.
+     * @return string e.g. 'Question 123' or 'Information' or ''.
+     */
+    protected function question_number_text(?string $number): string {
+        $number = $number ?? '';
+        // Trim the question number of whitespace, including &nbsp;.
+        $trimmed = trim(html_entity_decode($number), " \n\r\t\v\x00\xC2\xA0");
+        if ($trimmed === '') {
+            return '';
+        }
+        if (trim($number) === 'i') {
+            return get_string('information', 'question');
+        } else {
+            return get_string('questionx', 'question', s($number));
+        }
     }
 
     /**
@@ -263,8 +268,6 @@ class core_question_renderer extends plugin_renderer_base {
      * @param int $flagsoption the option that says whether flags should be displayed.
      */
     protected function question_flag(question_attempt $qa, $flagsoption) {
-        global $CFG;
-
         $divattributes = array('class' => 'questionflag');
 
         switch ($flagsoption) {
@@ -290,17 +293,14 @@ class core_question_renderer extends plugin_renderer_base {
 
                 $flagcontent = html_writer::empty_tag('input',
                                 array('type' => 'hidden', 'name' => $id, 'value' => 0)) .
-                        html_writer::empty_tag('input', $checkboxattributes) .
                         html_writer::empty_tag('input',
                                 array('type' => 'hidden', 'value' => $postdata, 'class' => 'questionflagpostdata')) .
+                        html_writer::empty_tag('input', $checkboxattributes) .
                         html_writer::tag('label', $this->get_flag_html($qa->is_flagged(), $id . 'img'),
                                 array('id' => $id . 'label', 'for' => $id . 'checkbox')) . "\n";
 
                 $divattributes = array(
                     'class' => 'questionflag editable',
-                    'aria-atomic' => 'true',
-                    'aria-relevant' => 'text',
-                    'aria-live' => 'assertive',
                 );
 
                 break;
@@ -322,29 +322,33 @@ class core_question_renderer extends plugin_renderer_base {
     protected function get_flag_html($flagged, $id = '') {
         if ($flagged) {
             $icon = 'i/flagged';
-            $alt = get_string('flagged', 'question');
+            $label = get_string('clickunflag', 'question');
         } else {
             $icon = 'i/unflagged';
-            $alt = get_string('notflagged', 'question');
+            $label = get_string('clickflag', 'question');
         }
-        $attributes = array(
-            'src' => $this->pix_url($icon),
-            'alt' => $alt,
-        );
+        $attributes = [
+            'src' => $this->image_url($icon),
+            'alt' => '',
+            'class' => 'questionflagimage',
+        ];
         if ($id) {
             $attributes['id'] = $id;
         }
         $img = html_writer::empty_tag('img', $attributes);
-        if ($flagged) {
-            $img .= ' ' . get_string('flagged', 'question');
-        }
+        $img .= html_writer::span($label);
+
         return $img;
     }
 
-    protected function edit_question_link(question_attempt $qa,
-            question_display_options $options) {
-        global $CFG;
-
+    /**
+     * Generate the display of the edit question link.
+     *
+     * @param question_attempt $qa The question attempt to display.
+     * @param question_display_options $options controls what should and should not be displayed.
+     * @return string
+     */
+    protected function edit_question_link(question_attempt $qa, question_display_options $options) {
         if (empty($options->editquestionparams)) {
             return '';
         }
@@ -353,8 +357,8 @@ class core_question_renderer extends plugin_renderer_base {
         if ($params['returnurl'] instanceof moodle_url) {
             $params['returnurl'] = $params['returnurl']->out_as_local_url(false);
         }
-        $params['id'] = $qa->get_question()->id;
-        $editurl = new moodle_url('/question/question.php', $params);
+        $params['id'] = $qa->get_question_id();
+        $editurl = new moodle_url('/question/bank/editquestion/question.php', $params);
 
         return html_writer::tag('div', html_writer::link(
                 $editurl, $this->pix_icon('t/edit', get_string('edit'), '', array('class' => 'iconsmall')) .
@@ -469,14 +473,10 @@ class core_question_renderer extends plugin_renderer_base {
 
             $restrictedqa = new question_attempt_with_restricted_history($qa, $i, null);
 
-            $user = new stdClass();
-            $user->id = $step->get_user_id();
-            $row = array(
-                $stepno,
-                userdate($step->get_timecreated(), get_string('strftimedatetimeshort')),
-                s($qa->summarise_action($step)),
-                $restrictedqa->get_state_string($options->correctness),
-            );
+            $row = [$stepno,
+                    userdate($step->get_timecreated(), get_string('strftimedatetimeshortaccurate', 'core_langconfig')),
+                    s($qa->summarise_action($step)) . $this->action_author($step, $options),
+                    $restrictedqa->get_state_string($options->correctness)];
 
             if ($options->marks >= question_display_options::MARK_AND_MAX) {
                 $row[] = $qa->format_fraction_as_mark($step->get_fraction(), $options->markdp);
@@ -493,4 +493,20 @@ class core_question_renderer extends plugin_renderer_base {
                         array('class' => 'responsehistoryheader'));
     }
 
+    /**
+     * Action author's profile link.
+     *
+     * @param question_attempt_step $step The step.
+     * @param question_display_options $options The display options.
+     * @return string The link to user's profile.
+     */
+    protected function action_author(question_attempt_step $step, question_display_options $options): string {
+        if ($options->userinfoinhistory && $step->get_user_id() != $options->userinfoinhistory) {
+            return html_writer::link(
+                    new moodle_url('/user/view.php', ['id' => $step->get_user_id(), 'course' => $this->page->course->id]),
+                    $step->get_user_fullname(), ['class' => 'd-table-cell']);
+        } else {
+            return '';
+        }
+    }
 }

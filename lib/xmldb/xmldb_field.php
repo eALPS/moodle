@@ -53,33 +53,33 @@ class xmldb_field extends xmldb_object {
      *  - MySQL: VARCHAR 65,535 chars
      *  - PostgreSQL: no limit
      *
-     * @const maximum length of text field
+     * @var maximum length of text field
      */
     const CHAR_MAX_LENGTH = 1333;
 
 
     /**
-     * @const maximum number of digits of integers
+     * @var maximum number of digits of integers
      */
     const INTEGER_MAX_LENGTH = 20;
 
     /**
-     * @const max length of decimals
+     * @var max length (precision, the total number of digits) of decimals
      */
-    const NUMBER_MAX_LENGTH = 20;
+    const NUMBER_MAX_LENGTH = 38;
 
     /**
-     * @const max length of floats
+     * @var max length of floats
      */
     const FLOAT_MAX_LENGTH = 20;
 
     /**
      * Note:
-     *  - Oracle has 30 chars limit for all names
+     *  - PostgreSQL has a limit of 63 ascii chars (bytes) for table names. Others have greater limits.
      *
-     * @const maximumn length of field names
+     * @var int max length of field names.
      */
-    const NAME_MAX_LENGTH = 30;
+    const NAME_MAX_LENGTH = 63;
 
     /**
      * Creates one new xmldb_field
@@ -90,7 +90,7 @@ class xmldb_field extends xmldb_object {
      * @param bool $notnull XMLDB_NOTNULL or null (or false)
      * @param bool $sequence XMLDB_SEQUENCE or null (or false)
      * @param mixed $default meaningful default o null (or false)
-     * @param xmldb_object $previous
+     * @param string $previous
      */
     public function __construct($name, $type=null, $precision=null, $unsigned=null, $notnull=null, $sequence=null, $default=null, $previous=null) {
         $this->type = null;
@@ -112,28 +112,30 @@ class xmldb_field extends xmldb_object {
      * @param bool $notnull XMLDB_NOTNULL or null (or false)
      * @param bool $sequence XMLDB_SEQUENCE or null (or false)
      * @param mixed $default meaningful default o null (or false)
-     * @param xmldb_object $previous
+     * @param string $previous
      */
     public function set_attributes($type, $precision=null, $unsigned=null, $notnull=null, $sequence=null, $default=null, $previous=null) {
         $this->type = $type;
-    /// Try to split the precision into length and decimals and apply
-    /// each one as needed
-        $precisionarr = explode(',', $precision);
-        if (isset($precisionarr[0])) {
-            $this->length = trim($precisionarr[0]);
+
+        // LOBs (BINARY OR TEXT) don't support any precision (neither length or decimals).
+        if ($type == XMLDB_TYPE_BINARY || $this->type == XMLDB_TYPE_TEXT) {
+            $this->length = null;
+            $this->decimals = null;
+
+        } else if (!is_null($precision)) {
+            // Try to split the not null precision into length and decimals and apply each one as needed.
+            $precisionarr = explode(',', $precision);
+            if (isset($precisionarr[0])) {
+                $this->length = trim($precisionarr[0]);
+            }
+            if (isset($precisionarr[1])) {
+                $this->decimals = trim($precisionarr[1]);
+            }
         }
-        if (isset($precisionarr[1])) {
-            $this->decimals = trim($precisionarr[1]);
-        }
-        $this->precision = $type;
+
         $this->notnull = !empty($notnull) ? true : false;
         $this->sequence = !empty($sequence) ? true : false;
         $this->setDefault($default);
-
-        if ($this->type == XMLDB_TYPE_BINARY || $this->type == XMLDB_TYPE_TEXT) {
-            $this->length = null;
-            $this->decimals = null;
-        }
 
         $this->previous = $previous;
     }
@@ -523,7 +525,7 @@ class xmldb_field extends xmldb_object {
             $o.= ' DECIMALS="' . $this->decimals . '"';
         }
         if ($this->comment) {
-            $o.= ' COMMENT="' . htmlspecialchars($this->comment) . '"';
+            $o.= ' COMMENT="' . htmlspecialchars($this->comment, ENT_COMPAT) . '"';
         }
         $o.= '/>' . "\n";
 
@@ -533,7 +535,7 @@ class xmldb_field extends xmldb_object {
     /**
      * This function will set all the attributes of the xmldb_field object
      * based on information passed in one ADOField
-     * @param string $adofield
+     * @param database_column_info $adofield
      * @return void, sets $this->type
      */
     public function setFromADOField($adofield) {
@@ -758,7 +760,7 @@ class xmldb_field extends xmldb_object {
      * @param xmldb_table $xmldb_table optional when object is table
      * @return string null if ok, error message if problem found
      */
-    public function validateDefinition(xmldb_table $xmldb_table=null) {
+    public function validateDefinition(?xmldb_table $xmldb_table=null) {
         if (!$xmldb_table) {
             return 'Invalid xmldb_field->validateDefinition() call, $xmldb_table is required.';
         }
@@ -786,10 +788,6 @@ class xmldb_field extends xmldb_object {
 
             case XMLDB_TYPE_NUMBER:
                 $maxlength = self::NUMBER_MAX_LENGTH;
-                if ($xmldb_table->getName() === 'question_numerical_units' and $name === 'multiplier') {
-                    //TODO: remove after MDL-32113 is resolved
-                    $maxlength = 40;
-                }
                 $length = $this->getLength();
                 if (!is_number($length) or $length <= 0 or $length > $maxlength) {
                     return 'Invalid field definition in table {'.$xmldb_table->getName().'}: XMLDB_TYPE_NUMBER field "'.$this->getName().'" has invalid length';
@@ -798,6 +796,10 @@ class xmldb_field extends xmldb_object {
                 $decimals = empty($decimals) ? 0 : $decimals; // fix missing decimals
                 if (!is_number($decimals) or $decimals < 0 or $decimals > $length) {
                     return 'Invalid field definition in table {'.$xmldb_table->getName().'}: XMLDB_TYPE_NUMBER field "'.$this->getName().'" has invalid decimals';
+                }
+                if ($length - $decimals > self::INTEGER_MAX_LENGTH) {
+                    return 'Invalid field definition in table {'.$xmldb_table->getName().'}: XMLDB_TYPE_NUMBER field "'.
+                        $this->getName().'" has too big whole number part';
                 }
                 $default = $this->getDefault();
                 if (!empty($default) and !is_numeric($default)) {

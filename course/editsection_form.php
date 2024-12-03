@@ -17,39 +17,38 @@ require_once($CFG->libdir.'/gradelib.php');
 class editsection_form extends moodleform {
 
     function definition() {
+        global $CFG, $OUTPUT;
 
         $mform  = $this->_form;
         $course = $this->_customdata['course'];
+        $sectioninfo = $this->_customdata['cs'];
 
         $mform->addElement('header', 'generalhdr', get_string('general'));
 
-        $elementgroup = array();
-        $elementgroup[] = $mform->createElement('text', 'name', '', array('size' => '30', 'maxlength' => '255'));
-
-        // Get default section name.
-        $defaultsectionname = $this->_customdata['defaultsectionname'];
-        if ($defaultsectionname) {
-            $defaultsectionname = ' [' . $defaultsectionname . ']';
-        }
-
-        $elementgroup[] = $mform->createElement('checkbox', 'usedefaultname', '',
-                                                get_string('sectionusedefaultname') . $defaultsectionname);
-
-        $mform->addGroup($elementgroup, 'name_group', get_string('sectionname'), ' ', false);
-        $mform->addGroupRule('name_group', array('name' => array(array(get_string('maximumchars', '', 255), 'maxlength', 255))));
-
-        $mform->setDefault('usedefaultname', true);
-        $mform->setType('name', PARAM_TEXT);
-        $mform->disabledIf('name','usedefaultname','checked');
+        $mform->addElement(
+            'text',
+            'name',
+            get_string('sectionname'),
+            [
+                'placeholder' => $this->_customdata['defaultsectionname'],
+                'size' => 30,
+                'maxlength' => 255,
+            ],
+        );
+        $mform->setType('name', PARAM_RAW);
+        $mform->setDefault('name', $sectioninfo->name);
+        $mform->addRule('name', get_string('maximumchars', '', 255), 'maxlength', 255, 'client');
 
         /// Prepare course and the editor
 
-        $mform->addElement('editor', 'summary_editor', get_string('summary'), null, $this->_customdata['editoroptions']);
-        $mform->addHelpButton('summary_editor', 'summary');
+        $mform->addElement('editor', 'summary_editor', get_string('description'), null, $this->_customdata['editoroptions']);
         $mform->setType('summary_editor', PARAM_RAW);
 
         $mform->addElement('hidden', 'id');
         $mform->setType('id', PARAM_INT);
+
+        $mform->addElement('hidden', 'course', 0);
+        $mform->setType('course', PARAM_INT);
 
         // additional fields that course format has defined
         $courseformat = course_get_format($course);
@@ -58,26 +57,37 @@ class editsection_form extends moodleform {
             $elements = $courseformat->create_edit_form_elements($mform, true);
         }
 
-        $mform->_registerCancelButton('cancel');
-    }
-
-    public function definition_after_data() {
-        global $CFG, $DB;
-
-        $mform  = $this->_form;
-        $course = $this->_customdata['course'];
-        $context = context_course::instance($course->id);
-
         if (!empty($CFG->enableavailability)) {
             $mform->addElement('header', 'availabilityconditions',
-                    get_string('restrictaccess', 'availability'));
+                get_string('restrictaccess', 'availability'));
             $mform->setExpanded('availabilityconditions', false);
 
             // Availability field. This is just a textarea; the user interface
             // interaction is all implemented in JavaScript. The field is named
             // availabilityconditionsjson for consistency with moodleform_mod.
             $mform->addElement('textarea', 'availabilityconditionsjson',
-                    get_string('accessrestrictions', 'availability'));
+                get_string('accessrestrictions', 'availability'),
+                ['class' => 'd-none']
+            );
+            // Availability loading indicator.
+            $loadingcontainer = $OUTPUT->container(
+                $OUTPUT->render_from_template('core/loading', []),
+                'd-flex justify-content-center py-5 icon-size-5',
+                'availabilityconditions-loading'
+            );
+            $mform->addElement('html', $loadingcontainer);
+        }
+
+        $mform->_registerCancelButton('cancel');
+    }
+
+    public function definition_after_data() {
+        global $CFG;
+
+        $mform  = $this->_form;
+        $course = $this->_customdata['course'];
+
+        if (!empty($CFG->enableavailability)) {
             \core_availability\frontend::include_all_javascript($course, null,
                     $this->_customdata['cs']);
         }
@@ -98,7 +108,6 @@ class editsection_form extends moodleform {
         $editoroptions = $this->_customdata['editoroptions'];
         $default_values = file_prepare_standard_editor($default_values, 'summary', $editoroptions,
                 $editoroptions['context'], 'course', 'section', $default_values->id);
-        $default_values->usedefaultname = (strval($default_values->name) === '');
         parent::set_data($default_values);
     }
 
@@ -113,7 +122,7 @@ class editsection_form extends moodleform {
         if ($data !== null) {
             $editoroptions = $this->_customdata['editoroptions'];
             // Set name as an empty string if use default section name is checked.
-            if (!empty($data->usedefaultname)) {
+            if ($data->name === false) {
                 $data->name = '';
             }
             $data = file_postupdate_standard_editor($data, 'summary', $editoroptions,

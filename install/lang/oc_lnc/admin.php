@@ -1,6 +1,5 @@
 <?php
-
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Automatically generated strings for Moodle installer
@@ -33,13 +32,13 @@ defined('MOODLE_INTERNAL') || die();
 $string['clianswerno'] = 'n';
 $string['cliansweryes'] = 'y';
 $string['cliincorrectvalueerror'] = 'Error, valor incorrècta « {$a->value} » pel paramètre « {$a->option} »';
-$string['cliincorrectvalueretry'] = 'Valor incorrècta, ensajar tornamai';
+$string['cliincorrectvalueretry'] = 'Valor incorrècta, tornatz ensajar';
 $string['clitypevalue'] = 'tipe valor';
-$string['clitypevaluedefault'] = 'tipe valor, tapez Entrée per utilizar la valor per defaut ({$a})';
+$string['clitypevaluedefault'] = 'tipe valor, picatz Entrada per utilizar la valor per defaut ({$a})';
 $string['cliunknowoption'] = 'Options non reconegudas :
  {$a}.
-Utilisez l\'option --help.';
+Utilizatz l\'opcion --help.';
 $string['cliyesnoprompt'] = 'Picatz y (per òc) o n (per non)';
-$string['environmentrequireinstall'] = 'doit èsser installat e activat';
+$string['environmentrequireinstall'] = 'deu èsser installat e activat';
 $string['environmentrequireversion'] = 'la version {$a->needed} es requesida ; utilizatz actualament la version {$a->current}';
 $string['upgradekeyset'] = 'Metre a jorn la clau (daissar void per la definir pas)';

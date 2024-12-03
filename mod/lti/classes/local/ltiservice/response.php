@@ -54,6 +54,8 @@ class response {
     private $body;
     /** @var array HTTP response codes. */
     private $responsecodes;
+    /** @var array HTTP additional headers. */
+    private $additionalheaders;
 
     /**
      * Class constructor.
@@ -83,6 +85,7 @@ class response {
             500 => 'Internal Server Error',
             501 => 'Not Implemented'
         );
+        $this->additionalheaders = array();
 
     }
 
@@ -111,12 +114,16 @@ class response {
      * @return string
      */
     public function get_reason() {
-        if (empty($this->reason)) {
-            $this->reason = $this->responsecodes[$this->code];
+        $code = $this->code;
+        if (($code < 200) || ($code >= 600)) {
+            $code = 500;  // Status code must be between 200 and 599.
+        }
+        if (empty($this->reason) && array_key_exists($code, $this->responsecodes)) {
+            $this->reason = $this->responsecodes[$code];
         }
         // Use generic reason for this category (based on first digit) if a specific reason is not defined.
         if (empty($this->reason)) {
-            $this->reason = $this->responsecodes[intval($this->code / 100) * 100];
+            $this->reason = $this->responsecodes[intval($code / 100) * 100];
         }
         return $this->reason;
     }
@@ -194,6 +201,15 @@ class response {
     }
 
     /**
+     * Get the response body.
+     *
+     * @return string
+     */
+    public function get_body() {
+        return $this->body;
+    }
+
+    /**
      * Set the response body.
      *
      * @param string $body Body data
@@ -203,17 +219,44 @@ class response {
     }
 
     /**
+     * Add an additional header.
+     *
+     * @param string $header The new header
+     */
+    public function add_additional_header($header) {
+        array_push($this->additionalheaders, $header);
+    }
+
+    /**
      * Send the response.
      */
     public function send() {
         header("HTTP/1.0 {$this->code} {$this->get_reason()}");
-        if (($this->code >= 200) && ($this->code < 300)) {
+        foreach ($this->additionalheaders as $header) {
+            header($header);
+        }
+        if ((($this->code >= 200) && ($this->code < 300)) || !empty($this->body)) {
             if (!empty($this->contenttype)) {
-                header("Content-Type: {$this->contenttype};charset=UTF-8");
+                header("Content-Type: {$this->contenttype}; charset=utf-8");
             }
             if (!empty($this->body)) {
                 echo $this->body;
             }
+        } else if ($this->code >= 400) {
+            header("Content-Type: application/json; charset=utf-8");
+            $body = new \stdClass();
+            $body->status = $this->code;
+            $body->reason = $this->get_reason();
+            $body->request = new \stdClass();
+            $body->request->method = $_SERVER['REQUEST_METHOD'];
+            $body->request->url = $_SERVER['REQUEST_URI'];
+            if (isset($_SERVER['HTTP_ACCEPT'])) {
+                $body->request->accept = $_SERVER['HTTP_ACCEPT'];
+            }
+            if (isset($_SERVER['CONTENT_TYPE'])) {
+                $body->request->contentType = explode(';', $_SERVER['CONTENT_TYPE'], 2)[0];
+            }
+            echo json_encode($body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
         }
     }
 

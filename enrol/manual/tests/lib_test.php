@@ -22,6 +22,10 @@
  * @copyright  2012 Petr Skoda {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+namespace enrol_manual;
+
+use course_enrolment_manager;
+use stdClass;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -34,11 +38,11 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright  2012 Petr Skoda {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class enrol_manual_lib_testcase extends advanced_testcase {
+class lib_test extends \advanced_testcase {
     /**
      * Test enrol migration function used when uninstalling enrol plugins.
      */
-    public function test_migrate_plugin_enrolments() {
+    public function test_migrate_plugin_enrolments(): void {
         global $DB, $CFG;
         require_once($CFG->dirroot.'/enrol/manual/locallib.php');
 
@@ -60,10 +64,10 @@ class enrol_manual_lib_testcase extends advanced_testcase {
         $course4 = $this->getDataGenerator()->create_course();
         $course5 = $this->getDataGenerator()->create_course();
 
-        $context1 = context_course::instance($course1->id);
-        $context2 = context_course::instance($course2->id);
-        $context3 = context_course::instance($course3->id);
-        $context4 = context_course::instance($course4->id);
+        $context1 = \context_course::instance($course1->id);
+        $context2 = \context_course::instance($course2->id);
+        $context3 = \context_course::instance($course3->id);
+        $context4 = \context_course::instance($course4->id);
 
         $user1 = $this->getDataGenerator()->create_user();
         $user2 = $this->getDataGenerator()->create_user();
@@ -203,14 +207,14 @@ class enrol_manual_lib_testcase extends advanced_testcase {
         enrol_manual_migrate_plugin_enrolments('yyyy');
     }
 
-    public function test_expired() {
+    public function test_expired(): void {
         global $DB;
         $this->resetAfterTest();
 
         /** @var $manualplugin enrol_manual_plugin */
         $manualplugin = enrol_get_plugin('manual');
 
-        $trace = new null_progress_trace();
+        $trace = new \null_progress_trace();
 
         $now = time();
 
@@ -231,9 +235,9 @@ class enrol_manual_lib_testcase extends advanced_testcase {
         $course1 = $this->getDataGenerator()->create_course();
         $course2 = $this->getDataGenerator()->create_course();
         $course3 = $this->getDataGenerator()->create_course();
-        $context1 = context_course::instance($course1->id);
-        $context2 = context_course::instance($course2->id);
-        $context3 = context_course::instance($course3->id);
+        $context1 = \context_course::instance($course1->id);
+        $context2 = \context_course::instance($course2->id);
+        $context3 = \context_course::instance($course3->id);
 
         $this->assertEquals(3, $DB->count_records('enrol', array('enrol'=>'manual')));
         $instance1 = $DB->get_record('enrol', array('courseid'=>$course1->id, 'enrol'=>'manual'), '*', MUST_EXIST);
@@ -330,12 +334,12 @@ class enrol_manual_lib_testcase extends advanced_testcase {
         $this->assertTrue($DB->record_exists('user_enrolments', array('enrolid'=>$maninstance2->id, 'userid'=>$user3->id, 'status'=>ENROL_USER_SUSPENDED)));
     }
 
-    public function test_send_expiry_notifications() {
+    public function test_send_expiry_notifications(): void {
         global $DB, $CFG;
         $this->resetAfterTest();
         $this->preventResetByRollback(); // Messaging does not like transactions...
 
-        $trace = new null_progress_trace();
+        $trace = new \null_progress_trace();
 
         /** @var $manualplugin enrol_manual_plugin */
         $manualplugin = enrol_get_plugin('manual');
@@ -431,49 +435,49 @@ class enrol_manual_lib_testcase extends advanced_testcase {
         // First individual notifications from course1.
         $this->assertEquals($user3->id, $messages[0]->useridto);
         $this->assertEquals($user8->id, $messages[0]->useridfrom);
-        $this->assertContains('xcourse1', $messages[0]->fullmessagehtml);
+        $this->assertStringContainsString('xcourse1', $messages[0]->fullmessagehtml);
 
         $this->assertEquals($user4->id, $messages[1]->useridto);
         $this->assertEquals($user8->id, $messages[1]->useridfrom);
-        $this->assertContains('xcourse1', $messages[1]->fullmessagehtml);
+        $this->assertStringContainsString('xcourse1', $messages[1]->fullmessagehtml);
 
         // Then summary for course1.
         $this->assertEquals($user8->id, $messages[2]->useridto);
         $this->assertEquals($admin->id, $messages[2]->useridfrom);
-        $this->assertContains('xcourse1', $messages[2]->fullmessagehtml);
-        $this->assertNotContains('xuser1', $messages[2]->fullmessagehtml);
-        $this->assertNotContains('xuser2', $messages[2]->fullmessagehtml);
-        $this->assertContains('xuser3', $messages[2]->fullmessagehtml);
-        $this->assertContains('xuser4', $messages[2]->fullmessagehtml);
-        $this->assertContains('xuser5', $messages[2]->fullmessagehtml);
-        $this->assertNotContains('xuser6', $messages[2]->fullmessagehtml);
+        $this->assertStringContainsString('xcourse1', $messages[2]->fullmessagehtml);
+        $this->assertStringNotContainsString('xuser1', $messages[2]->fullmessagehtml);
+        $this->assertStringNotContainsString('xuser2', $messages[2]->fullmessagehtml);
+        $this->assertStringContainsString('xuser3', $messages[2]->fullmessagehtml);
+        $this->assertStringContainsString('xuser4', $messages[2]->fullmessagehtml);
+        $this->assertStringContainsString('xuser5', $messages[2]->fullmessagehtml);
+        $this->assertStringNotContainsString('xuser6', $messages[2]->fullmessagehtml);
 
         // First individual notifications from course2.
         $this->assertEquals($user3->id, $messages[3]->useridto);
         $this->assertEquals($admin->id, $messages[3]->useridfrom);
-        $this->assertContains('xcourse2', $messages[3]->fullmessagehtml);
+        $this->assertStringContainsString('xcourse2', $messages[3]->fullmessagehtml);
 
         // Then summary for course2.
         $this->assertEquals($admin->id, $messages[4]->useridto);
         $this->assertEquals($admin->id, $messages[4]->useridfrom);
-        $this->assertContains('xcourse2', $messages[4]->fullmessagehtml);
-        $this->assertNotContains('xuser1', $messages[4]->fullmessagehtml);
-        $this->assertNotContains('xuser2', $messages[4]->fullmessagehtml);
-        $this->assertContains('xuser3', $messages[4]->fullmessagehtml);
-        $this->assertNotContains('xuser4', $messages[4]->fullmessagehtml);
-        $this->assertNotContains('xuser5', $messages[4]->fullmessagehtml);
-        $this->assertNotContains('xuser6', $messages[4]->fullmessagehtml);
+        $this->assertStringContainsString('xcourse2', $messages[4]->fullmessagehtml);
+        $this->assertStringNotContainsString('xuser1', $messages[4]->fullmessagehtml);
+        $this->assertStringNotContainsString('xuser2', $messages[4]->fullmessagehtml);
+        $this->assertStringContainsString('xuser3', $messages[4]->fullmessagehtml);
+        $this->assertStringNotContainsString('xuser4', $messages[4]->fullmessagehtml);
+        $this->assertStringNotContainsString('xuser5', $messages[4]->fullmessagehtml);
+        $this->assertStringNotContainsString('xuser6', $messages[4]->fullmessagehtml);
 
         // Only summary in course3.
         $this->assertEquals($user1->id, $messages[5]->useridto);
         $this->assertEquals($admin->id, $messages[5]->useridfrom);
-        $this->assertContains('xcourse3', $messages[5]->fullmessagehtml);
-        $this->assertNotContains('xuser1', $messages[5]->fullmessagehtml);
-        $this->assertNotContains('xuser2', $messages[5]->fullmessagehtml);
-        $this->assertContains('xuser3', $messages[5]->fullmessagehtml);
-        $this->assertNotContains('xuser4', $messages[5]->fullmessagehtml);
-        $this->assertNotContains('xuser5', $messages[5]->fullmessagehtml);
-        $this->assertNotContains('xuser6', $messages[5]->fullmessagehtml);
+        $this->assertStringContainsString('xcourse3', $messages[5]->fullmessagehtml);
+        $this->assertStringNotContainsString('xuser1', $messages[5]->fullmessagehtml);
+        $this->assertStringNotContainsString('xuser2', $messages[5]->fullmessagehtml);
+        $this->assertStringContainsString('xuser3', $messages[5]->fullmessagehtml);
+        $this->assertStringNotContainsString('xuser4', $messages[5]->fullmessagehtml);
+        $this->assertStringNotContainsString('xuser5', $messages[5]->fullmessagehtml);
+        $this->assertStringNotContainsString('xuser6', $messages[5]->fullmessagehtml);
 
 
         // Make sure that notifications are not repeated.
@@ -493,4 +497,449 @@ class enrol_manual_lib_testcase extends advanced_testcase {
         $manualplugin->send_expiry_notifications($trace);
         $this->assertEquals(6, $sink->count());
     }
+
+    /**
+     * Test for getting user enrolment actions.
+     */
+    public function test_get_user_enrolment_actions(): void {
+        global $CFG, $PAGE;
+        $this->resetAfterTest();
+
+        // Set page URL to prevent debugging messages.
+        $PAGE->set_url('/enrol/editinstance.php');
+
+        $pluginname = 'manual';
+
+        // Only enable the manual enrol plugin.
+        $CFG->enrol_plugins_enabled = $pluginname;
+
+        $generator = $this->getDataGenerator();
+
+        // Get the enrol plugin.
+        $plugin = enrol_get_plugin($pluginname);
+
+        // Create a course.
+        $course = $generator->create_course();
+        // Enable this enrol plugin for the course.
+        $plugin->add_instance($course);
+
+        // Create a teacher.
+        $teacher = $generator->create_user();
+        // Enrol the teacher to the course.
+        $generator->enrol_user($teacher->id, $course->id, 'editingteacher', $pluginname);
+        // Create a student.
+        $student = $generator->create_user();
+        // Enrol the student to the course.
+        $generator->enrol_user($student->id, $course->id, 'student', $pluginname);
+
+        // Login as the teacher.
+        $this->setUser($teacher);
+        require_once($CFG->dirroot . '/enrol/locallib.php');
+        $manager = new course_enrolment_manager($PAGE, $course);
+        $userenrolments = $manager->get_user_enrolments($student->id);
+        $this->assertCount(1, $userenrolments);
+
+        $ue = reset($userenrolments);
+        $actions = $plugin->get_user_enrolment_actions($manager, $ue);
+        // Manual enrol has 2 enrol actions -- edit and unenrol.
+        $this->assertCount(2, $actions);
+    }
+
+    /**
+     * Test how the default enrolment instance inherits its settings from the global plugin settings.
+     *
+     * @dataProvider default_enrolment_instance_data_provider
+     * @param stdClass $expectation
+     * @param stdClass $globalsettings
+     * @covers \enrol_manual::add_default_instance
+     */
+    public function test_default_enrolment_instance_acquires_correct_settings(stdClass $expectation, stdClass $globalsettings): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $generator = $this->getDataGenerator();
+
+        // Given the plugin is globally configured with the following settings.
+        $plugin = enrol_get_plugin('manual');
+        $plugin->set_config('status', $globalsettings->status);
+        $plugin->set_config('roleid', $globalsettings->roleid);
+        $plugin->set_config('enrolperiod', $globalsettings->enrolperiod);
+        $plugin->set_config('expirynotify', $globalsettings->expirynotify);
+        $plugin->set_config('expirythreshold', $globalsettings->expirythreshold);
+
+        // When creating a course.
+        $course = $generator->create_course();
+
+        // Then the default manual enrolment instance being created is properly configured.
+        $enrolinstance = $DB->get_record('enrol', ['courseid' => $course->id, 'enrol' => 'manual']);
+        $this->assertEquals($expectation->status, $enrolinstance->status);
+        $this->assertEquals($expectation->roleid, $enrolinstance->roleid);
+        $this->assertEquals($expectation->enrolperiod, $enrolinstance->enrolperiod);
+        $this->assertEquals($expectation->expirynotify, $enrolinstance->expirynotify);
+        $this->assertEquals($expectation->notifyall, $enrolinstance->notifyall);
+        $this->assertEquals($expectation->expirythreshold, $enrolinstance->expirythreshold);
+    }
+
+    /**
+     * Data provider for test_default_enrolment_instance_acquires_correct_settings().
+     *
+     * @return array
+     */
+    public static function default_enrolment_instance_data_provider(): array {
+        $studentroles = get_archetype_roles('student');
+        $studentrole = array_shift($studentroles);
+
+        $teacherroles = get_archetype_roles('teacher');
+        $teacherrole = array_shift($teacherroles);
+
+        return [
+            'enabled, student role, no duration set, notify no one on expiry, 12 hours notification threshold' => [
+                'expectation' => (object) [
+                    'status' => ENROL_INSTANCE_ENABLED,
+                    'roleid' => $studentrole->id,
+                    'enrolperiod' => 0,
+                    'expirynotify' => 0,
+                    'notifyall' => 0,
+                    'expirythreshold' => 12 * HOURSECS,
+                ],
+                'global settings' => (object) [
+                    'status' => ENROL_INSTANCE_ENABLED,
+                    'roleid' => $studentrole->id,
+                    'enrolperiod' => 0,
+                    'expirynotify' => 0,
+                    'expirythreshold' => 12 * HOURSECS,
+                ],
+            ],
+            'enabled, student role, 72 hours duration, notify enroller only on expiry, 1 day notification threshold' => [
+                'expectation' => (object) [
+                    'status' => ENROL_INSTANCE_ENABLED,
+                    'roleid' => $studentrole->id,
+                    'enrolperiod' => 72 * HOURSECS,
+                    'expirynotify' => 1,
+                    'notifyall' => 0,
+                    'expirythreshold' => DAYSECS,
+                ],
+                'global settings' => (object) [
+                    'status' => ENROL_INSTANCE_ENABLED,
+                    'roleid' => $studentrole->id,
+                    'enrolperiod' => 72 * HOURSECS,
+                    'expirynotify' => 1,
+                    'expirythreshold' => DAYSECS,
+                ],
+            ],
+            'disabled, teacher role, no duration set, notify enroller and enrolled on expiry, 0 notification threshold' => [
+                'expectation' => (object) [
+                    'status' => ENROL_INSTANCE_DISABLED,
+                    'roleid' => $teacherrole->id,
+                    'enrolperiod' => 0,
+                    'expirynotify' => 2,
+                    'notifyall' => 1,
+                    'expirythreshold' => 0
+                ],
+                'global settings' => (object) [
+                    'status' => ENROL_INSTANCE_DISABLED,
+                    'roleid' => $teacherrole->id,
+                    'enrolperiod' => 0,
+                    'expirynotify' => 2,
+                    'expirythreshold' => 0,
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Tests an enrolment instance is updated properly.
+     *
+     * @covers \enrol_manual::update_instance
+     * @dataProvider update_enrolment_instance_data_provider
+     *
+     * @param stdClass $expectation
+     * @param stdClass $updatedata
+     */
+    public function test_enrolment_instance_is_updated(stdClass $expectation, stdClass $updatedata): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $generator = $this->getDataGenerator();
+
+        $studentroles = get_archetype_roles('student');
+        $studentrole = array_shift($studentroles);
+
+        // Given the plugin is globally configured with the following settings.
+        $plugin = enrol_get_plugin('manual');
+        $plugin->set_config('status', ENROL_INSTANCE_ENABLED);
+        $plugin->set_config('roleid', $studentrole->id);
+        $plugin->set_config('enrolperiod', 30 * DAYSECS);
+        $plugin->set_config('expirynotify', 1);
+        $plugin->set_config('expirythreshold', 2 * DAYSECS);
+
+        // And a course is created with the default enrolment instance.
+        $course = $generator->create_course();
+
+        // When the enrolment instance is being updated.
+        $enrolinstance = $DB->get_record('enrol', ['courseid' => $course->id, 'enrol' => 'manual']);
+        $successfullyupdated = $plugin->update_instance($enrolinstance, $updatedata);
+
+        // Then the update is successful.
+        $this->assertTrue($successfullyupdated);
+
+        // And the updated enrolment instance contains the expected values.
+        $enrolinstance = $DB->get_record('enrol', ['id' => $enrolinstance->id]);
+        $this->assertEquals($expectation->status, $enrolinstance->status);
+        $this->assertEquals($expectation->roleid, $enrolinstance->roleid);
+        $this->assertEquals($expectation->enrolperiod, $enrolinstance->enrolperiod);
+        $this->assertEquals($expectation->expirynotify, $enrolinstance->expirynotify);
+        $this->assertEquals($expectation->notifyall, $enrolinstance->notifyall);
+        $this->assertEquals($expectation->expirythreshold, $enrolinstance->expirythreshold);
+    }
+
+    /**
+     * Data provider for test_enrolment_instance_is_updated().
+     *
+     * @return array
+     */
+    public static function update_enrolment_instance_data_provider(): array {
+        $studentroles = get_archetype_roles('student');
+        $studentrole = array_shift($studentroles);
+
+        $teacherroles = get_archetype_roles('teacher');
+        $teacherrole = array_shift($teacherroles);
+
+        return [
+            'disabled, all the others are default' => [
+                'expectation' => (object) [
+                    'status' => ENROL_INSTANCE_DISABLED,
+                    'roleid' => $studentrole->id,
+                    'enrolperiod' => 30 * DAYSECS,
+                    'expirynotify' => 1,
+                    'notifyall' => 0,
+                    'expirythreshold' => 2 * DAYSECS,
+                ],
+                'update data' => (object) [
+                    'status' => ENROL_INSTANCE_DISABLED,
+                    'roleid' => $studentrole->id,
+                    'enrolperiod' => 30 * DAYSECS,
+                    'expirynotify' => 1,
+                    'expirythreshold' => 2 * DAYSECS,
+                ],
+            ],
+            'enabled, teacher role, no duration set, notify no one on expiry, 0 notification threshold' => [
+                'expectation' => (object) [
+                    'status' => ENROL_INSTANCE_ENABLED,
+                    'roleid' => $teacherrole->id,
+                    'enrolperiod' => 0,
+                    'expirynotify' => 0,
+                    'notifyall' => 0,
+                    'expirythreshold' => 0,
+                ],
+                'update data' => (object) [
+                    'status' => ENROL_INSTANCE_ENABLED,
+                    'roleid' => $teacherrole->id,
+                    'enrolperiod' => 0,
+                    'expirynotify' => 0,
+                    'expirythreshold' => 0,
+                ],
+            ],
+            'notify enroller and enrolled on expiry, all the others are default' => [
+                'expectation' => (object) [
+                    'status' => ENROL_INSTANCE_ENABLED,
+                    'roleid' => $studentrole->id,
+                    'enrolperiod' => 30 * DAYSECS,
+                    'expirynotify' => 2,
+                    'notifyall' => 1,
+                    'expirythreshold' => 2 * DAYSECS,
+                ],
+                'update data' => (object) [
+                    'status' => ENROL_INSTANCE_ENABLED,
+                    'roleid' => $studentrole->id,
+                    'enrolperiod' => 30 * DAYSECS,
+                    'expirynotify' => 2,
+                    'expirythreshold' => 2 * DAYSECS,
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Test the behaviour of find_instance().
+     *
+     * @covers ::find_instance
+     */
+    public function test_find_instance(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $cat = $this->getDataGenerator()->create_category();
+        // When we create a course, a manual enrolment instance is also created.
+        $course = $this->getDataGenerator()->create_course(['category' => $cat->id, 'shortname' => 'ANON']);
+
+        $teacherrole = $DB->get_record('role', ['shortname' => 'teacher']);
+        $manualplugin = enrol_get_plugin('manual');
+
+        $expected = $DB->get_record('enrol', ['courseid' => $course->id, 'enrol' => 'manual']);
+
+        // Let's try to add second instance - only 1 manual instance is possible.
+        $instanceid2 = $manualplugin->add_instance($course, ['roleid' => $teacherrole->id]);
+        $this->assertNull($instanceid2);
+
+        $enrolmentdata = [];
+        $actual = $manualplugin->find_instance($enrolmentdata, $course->id);
+        $this->assertEquals($expected->id, $actual->id);
+    }
+
+    /**
+     * Test send_course_welcome_message_to_user() method.
+     *
+     * @covers \enrol_plugin::send_course_welcome_message_to_user
+     */
+    public function test_send_course_welcome_message(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        // Create course.
+        $course = $this->getDataGenerator()->create_course([
+            'fullname' => 'Course 1 & 2',
+            'shortname' => 'C1',
+        ]);
+        // Create users.
+        $student = $this->getDataGenerator()->create_user();
+        $teacher1 = $this->getDataGenerator()->create_user();
+        $teacher2 = $this->getDataGenerator()->create_user();
+        $noreplyuser = \core_user::get_noreply_user();
+        // Enrol users.
+        $this->getDataGenerator()->enrol_user($teacher1->id, $course->id, 'editingteacher');
+        $this->getDataGenerator()->enrol_user($teacher2->id, $course->id, 'editingteacher');
+        // Get manual plugin.
+        $manualplugin = enrol_get_plugin('manual');
+        $maninstance = $DB->get_record(
+            'enrol',
+            ['courseid' => $course->id, 'enrol' => 'manual'],
+            '*',
+            MUST_EXIST,
+        );
+
+        // Test 1: Send welcome message to user from course contact with default message.
+        // Redirect messages.
+        $messagesink = $this->redirectMessages();
+        $manualplugin->send_course_welcome_message_to_user(
+            instance: $maninstance,
+            userid: $student->id,
+            sendoption: ENROL_SEND_EMAIL_FROM_COURSE_CONTACT,
+            message: '',
+        );
+        $messages = $messagesink->get_messages_by_component_and_type(
+            'moodle',
+            'enrolcoursewelcomemessage',
+        );
+        $this->assertNotEmpty($messages);
+        $message = reset($messages);
+
+        // The message should be sent from the first teacher.
+        $this->assertEquals($teacher1->id, $message->useridfrom);
+        $this->assertStringContainsString($course->fullname, $message->subject);
+        $this->assertEquals(
+            get_string(
+                'customwelcomemessageplaceholder',
+                'core_enrol',
+                ['firstname' => $student->firstname, 'coursename' => $course->fullname],
+            ),
+            $message->fullmessage,
+        );
+
+        // Clear sink.
+        $messagesink->clear();
+
+        // Test 2: Send welcome message to user from course contact with a custom message.
+        // Unenrol the first teacher from course.
+        $manualplugin->unenrol_user($maninstance, $teacher1->id);
+        // Redirect messages.
+        $messagesink = $this->redirectMessages();
+        $manualplugin->send_course_welcome_message_to_user(
+            instance: $maninstance,
+            userid: $student->id,
+            sendoption: ENROL_SEND_EMAIL_FROM_COURSE_CONTACT,
+            message: 'Your email address: {$a->email}, your first name: {$a->firstname}, your last name: {$a->lastname}, ' .
+                'your course: {$a->coursename}',
+        );
+        $messages = $messagesink->get_messages_by_component_and_type(
+            'moodle',
+            'enrolcoursewelcomemessage',
+        );
+        $this->assertNotEmpty($messages);
+        $message = reset($messages);
+
+        // The message should be sent from the second teacher.
+        $this->assertEquals($teacher2->id, $message->useridfrom);
+        $this->assertStringContainsString($course->fullname, $message->subject);
+        $this->assertEquals(
+            'Your email address: ' . $student->email . ', your first name: ' . $student->firstname . ', your last name: ' .
+                $student->lastname . ', your course: ' . $course->fullname,
+            $message->fullmessage,
+        );
+        // Clear sink.
+        $messagesink->clear();
+
+        // Test 3: Send welcome message to user from no-reply user with a custom message.
+        // Redirect messages.
+        $messagesink = $this->redirectMessages();
+        $manualplugin->send_course_welcome_message_to_user(
+            instance: $maninstance,
+            userid: $student->id,
+            sendoption: ENROL_SEND_EMAIL_FROM_NOREPLY,
+            message: 'Your email address: {$a->email}, your first name: {$a->firstname}, your last name: {$a->lastname}',
+        );
+        $messages = $messagesink->get_messages_by_component_and_type(
+            'moodle',
+            'enrolcoursewelcomemessage',
+        );
+        $this->assertNotEmpty($messages);
+        $message = reset($messages);
+
+        // The message should be sent from the noreply user.
+        $this->assertEquals($noreplyuser->id, $message->useridfrom);
+        $this->assertStringContainsString($course->fullname, $message->subject);
+        $this->assertEquals(
+            'Your email address: ' . $student->email . ', your first name: ' . $student->firstname . ', your last name: ' .
+            $student->lastname,
+            $message->fullmessage,
+        );
+        // Clear sink.
+        $messagesink->clear();
+
+    }
+
+    /**
+     * Test send_course_welcome_message_to_user() method via hook.
+     *
+     * @covers \enrol_plugin::send_course_welcome_message_to_user
+     */
+    public function test_send_course_welcome_message_via_hook(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $messagesink = $this->redirectMessages();
+        $course = $this->getDataGenerator()->create_course([
+            'fullname' => 'Course 1',
+            'shortname' => 'C1',
+        ]);
+        $maninstance = $DB->get_record(
+            'enrol',
+            ['courseid' => $course->id, 'enrol' => 'manual'],
+            '*',
+            MUST_EXIST,
+        );
+        $maninstance->customint1 = ENROL_SEND_EMAIL_FROM_NOREPLY;
+        $DB->update_record('enrol', $maninstance);
+        $student = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($student->id, $course->id);
+        $messages = $messagesink->get_messages_by_component_and_type(
+            'moodle',
+            'enrolcoursewelcomemessage',
+        );
+        $this->assertNotEmpty($messages);
+        $message = reset($messages);
+        $this->assertStringContainsString($course->fullname, $message->subject);
+    }
+
 }

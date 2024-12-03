@@ -77,7 +77,7 @@ abstract class condition extends tree_node {
      * @param int $userid User ID to check availability for
      * @return bool True if available
      */
-    public abstract function is_available($not, info $info, $grabthelot, $userid);
+    abstract public function is_available($not, info $info, $grabthelot, $userid);
 
     public function check_available($not, info $info, $grabthelot, $userid) {
         // Use is_available, and we always display (at this stage).
@@ -109,6 +109,64 @@ abstract class condition extends tree_node {
     }
 
     /**
+     * Returns a marker indicating that an activity name should be placed in a description.
+     *
+     * Gets placeholder text which will be decoded by info::format_info later when we can safely
+     * display names.
+     *
+     * @param int $cmid Course-module id
+     * @return string Placeholder text
+     * @since Moodle 4.0
+     */
+    public static function description_cm_name(int $cmid): string {
+        return '<AVAILABILITY_CMNAME_' . $cmid . '/>';
+    }
+
+    /**
+     * Returns a marker indicating that formatted text should be placed in a description.
+     *
+     * Gets placeholder text which will be decoded by info::format_info later when we can safely
+     * call format_string.
+     *
+     * @param string $str Text to be processed with format_string
+     * @return string Placeholder text
+     * @since Moodle 4.0
+     */
+    public static function description_format_string(string $str): string {
+        return '<AVAILABILITY_FORMAT_STRING>' . htmlspecialchars($str, ENT_NOQUOTES) .
+                '</AVAILABILITY_FORMAT_STRING>';
+    }
+
+    /**
+     * Returns a marker indicating that some of the description text should be computed at display
+     * time.
+     *
+     * This will result in a call to the get_description_callback_value static function within
+     * the condition class.
+     *
+     * Gets placeholder text which will be decoded by info::format_info later when we can safely
+     * call most Moodle functions.
+     *
+     * @param string[] $params Array of arbitrary parameters
+     * @return string Placeholder text
+     * @since Moodle 4.0
+     */
+    public function description_callback(array $params): string {
+        $out = '<AVAILABILITY_CALLBACK type="' . $this->get_type() . '">';
+        $first = true;
+        foreach ($params as $param) {
+            if ($first) {
+                $first = false;
+            } else {
+                $out .= '<P/>';
+            }
+            $out .= htmlspecialchars($param, ENT_NOQUOTES);
+        }
+        $out .= '</AVAILABILITY_CALLBACK>';
+        return $out;
+    }
+
+    /**
      * Obtains a string describing this restriction (whether or not
      * it actually applies). Used to obtain information that is displayed to
      * students if the activity is not available to them, and for staff to see
@@ -119,11 +177,17 @@ abstract class condition extends tree_node {
      * (when displaying only conditions they don't meet).
      *
      * If implementations require a course or modinfo, they should use
-     * the get methods in $info.
+     * the get methods in $info. They should not use any other functions that
+     * might rely on modinfo, such as format_string.
      *
-     * The special string <AVAILABILITY_CMNAME_123/> can be returned, where
-     * 123 is any number. It will be replaced with the correctly-formatted
-     * name for that activity.
+     * To work around this limitation, use the functions:
+     *
+     * description_cm_name()
+     * description_format_string()
+     * description_callback()
+     *
+     * These return special markers which will be added to the string and processed
+     * later after modinfo is complete.
      *
      * @param bool $full Set true if this is the 'full information' view
      * @param bool $not Set true if we are inverting the condition
@@ -131,7 +195,7 @@ abstract class condition extends tree_node {
      * @return string Information string (for admin) about all restrictions on
      *   this item
      */
-    public abstract function get_description($full, $not, info $info);
+    abstract public function get_description($full, $not, info $info);
 
     /**
      * Obtains a string describing this restriction, used when there is only
@@ -142,11 +206,17 @@ abstract class condition extends tree_node {
      * the list, in front of the standard get_description call.
      *
      * If implementations require a course or modinfo, they should use
-     * the get methods in $info.
+     * the get methods in $info. They should not use any other functions that
+     * might rely on modinfo, such as format_string.
      *
-     * The special string <AVAILABILITY_CMNAME_123/> can be returned, where
-     * 123 is any number. It will be replaced with the correctly-formatted
-     * name for that activity.
+     * To work around this limitation, use the functions:
+     *
+     * description_cm_name()
+     * description_format_string()
+     * description_callback()
+     *
+     * These return special markers which will be added to the string and processed
+     * later after modinfo is complete.
      *
      * @param bool $full Set true if this is the 'full information' view
      * @param bool $not Set true if we are inverting the condition
@@ -165,7 +235,7 @@ abstract class condition extends tree_node {
      *
      * @return string Text representation of parameters
      */
-    protected abstract function get_debug_string();
+    abstract protected function get_debug_string();
 
     public function update_dependency_id($table, $oldid, $newid) {
         // By default, assumes there are no dependent ids.

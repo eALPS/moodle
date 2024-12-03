@@ -14,6 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace enrol_meta;
+use core\plugininfo\enrol;
+
+use context_course;
+use enrol_meta_plugin;
+
 /**
  * Meta enrolment sync functional test.
  *
@@ -22,12 +28,7 @@
  * @copyright  2013 Petr Skoda {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
-
-class enrol_meta_plugin_testcase extends advanced_testcase {
+class plugin_test extends \advanced_testcase {
 
     protected function enable_plugin() {
         $enabled = enrol_get_plugins(true);
@@ -60,7 +61,7 @@ class enrol_meta_plugin_testcase extends advanced_testcase {
     protected function has_role($user, $enrol, $role) {
         global $DB;
 
-        $context = context_course::instance($enrol->courseid);
+        $context = \context_course::instance($enrol->courseid);
 
         if ($role === false) {
             if ($DB->record_exists('role_assignments', array('contextid'=>$context->id, 'userid'=>$user->id, 'component'=>'enrol_meta', 'itemid'=>$enrol->id))) {
@@ -73,7 +74,7 @@ class enrol_meta_plugin_testcase extends advanced_testcase {
         return true;
     }
 
-    public function test_sync() {
+    public function test_sync(): void {
         global $CFG, $DB;
 
         $this->resetAfterTest(true);
@@ -294,7 +295,7 @@ class enrol_meta_plugin_testcase extends advanced_testcase {
         $this->assertEquals(10, $DB->count_records('user_enrolments', array('status'=>ENROL_USER_ACTIVE)));
         $this->assertFalse($this->is_meta_enrolled($user1, $enrol1, $student));
 
-        role_assign($teacher->id, $user1->id, context_course::instance($course1->id)->id);
+        role_assign($teacher->id, $user1->id, \context_course::instance($course1->id)->id);
         $this->assertEquals(11, $DB->count_records('user_enrolments'));
         $this->assertEquals(10, $DB->count_records('role_assignments'));
         $this->assertEquals(11, $DB->count_records('user_enrolments', array('status'=>ENROL_USER_ACTIVE)));
@@ -305,7 +306,7 @@ class enrol_meta_plugin_testcase extends advanced_testcase {
         $this->assertEquals(11, $DB->count_records('user_enrolments', array('status'=>ENROL_USER_ACTIVE)));
         $this->assertTrue($this->is_meta_enrolled($user1, $enrol1, $teacher));
 
-        role_unassign($teacher->id, $user1->id, context_course::instance($course1->id)->id);
+        role_unassign($teacher->id, $user1->id, \context_course::instance($course1->id)->id);
         $this->assertEquals(10, $DB->count_records('user_enrolments'));
         $this->assertEquals(8, $DB->count_records('role_assignments'));
         $this->assertEquals(10, $DB->count_records('user_enrolments', array('status'=>ENROL_USER_ACTIVE)));
@@ -443,7 +444,7 @@ class enrol_meta_plugin_testcase extends advanced_testcase {
 
     }
 
-    public function test_add_to_group() {
+    public function test_add_to_group(): void {
         global $CFG, $DB;
 
         require_once($CFG->dirroot.'/group/lib.php');
@@ -510,36 +511,36 @@ class enrol_meta_plugin_testcase extends advanced_testcase {
         enrol_get_plugin('manual')->unenrol_user($manualenrol1, $user1->id);
         $this->assertFalse(groups_is_member($group31->id, $user1->id));
         $this->assertTrue(groups_is_member($group32->id, $user1->id));
-        $this->assertTrue(is_enrolled(context_course::instance($course3->id), $user1, '', true)); // He still has active enrolment.
+        $this->assertTrue(is_enrolled(\context_course::instance($course3->id), $user1, '', true)); // He still has active enrolment.
         // And the same after sync.
         enrol_meta_sync(null, false);
         $this->assertFalse(groups_is_member($group31->id, $user1->id));
         $this->assertTrue(groups_is_member($group32->id, $user1->id));
-        $this->assertTrue(is_enrolled(context_course::instance($course3->id), $user1, '', true));
+        $this->assertTrue(is_enrolled(\context_course::instance($course3->id), $user1, '', true));
 
         // Unenroll user1 from course2 and make sure he is completely unenrolled from course3.
         enrol_get_plugin('manual')->unenrol_user($manualenrol2, $user1->id);
         $this->assertFalse(groups_is_member($group32->id, $user1->id));
-        $this->assertFalse(is_enrolled(context_course::instance($course3->id), $user1));
+        $this->assertFalse(is_enrolled(\context_course::instance($course3->id), $user1));
 
         set_config('unenrolaction', ENROL_EXT_REMOVED_SUSPENDNOROLES, 'enrol_meta');
 
         // When user is unenrolled in this case, he is still a member of a group (but enrolment is suspended).
         enrol_get_plugin('manual')->unenrol_user($manualenrol1, $user4->id);
         $this->assertTrue(groups_is_member($group31->id, $user4->id));
-        $this->assertTrue(is_enrolled(context_course::instance($course3->id), $user4));
-        $this->assertFalse(is_enrolled(context_course::instance($course3->id), $user4, '', true));
+        $this->assertTrue(is_enrolled(\context_course::instance($course3->id), $user4));
+        $this->assertFalse(is_enrolled(\context_course::instance($course3->id), $user4, '', true));
         enrol_meta_sync(null, false);
         $this->assertTrue(groups_is_member($group31->id, $user4->id));
-        $this->assertTrue(is_enrolled(context_course::instance($course3->id), $user4));
-        $this->assertFalse(is_enrolled(context_course::instance($course3->id), $user4, '', true));
+        $this->assertTrue(is_enrolled(\context_course::instance($course3->id), $user4));
+        $this->assertFalse(is_enrolled(\context_course::instance($course3->id), $user4, '', true));
     }
 
     /**
      * Enrol users from another course into a course where one of the members is already enrolled
      * and is a member of the same group.
      */
-    public function test_add_to_group_with_member() {
+    public function test_add_to_group_with_member(): void {
         global $CFG, $DB;
 
         require_once($CFG->dirroot.'/group/lib.php');
@@ -598,9 +599,43 @@ class enrol_meta_plugin_testcase extends advanced_testcase {
     }
 
     /**
+     * Test enrolling users in a course, where the customint2 (group) property of the instance points to an invalid group
+     *
+     * @covers \enrol_meta_handler::sync_with_parent_course
+     * @covers ::enrol_meta_sync
+     */
+    public function test_add_to_group_invalid(): void {
+        $this->resetAfterTest();
+
+        $this->enable_plugin();
+
+        $courseone = $this->getDataGenerator()->create_course();
+        $coursetwo = $this->getDataGenerator()->create_course();
+
+        /** @var enrol_meta_plugin $plugin */
+        $plugin = enrol_get_plugin('meta');
+        $plugin->add_instance($coursetwo, ['customint1' => $courseone->id, 'customint2' => 42]);
+
+        // Ensure the event observer works for invalid groups.
+        $userone = $this->getDataGenerator()->create_and_enrol($courseone);
+
+        // Now disable the plugin, add another enrolment.
+        $this->disable_plugin();
+        $usertwo = $this->getDataGenerator()->create_and_enrol($courseone);
+
+        // Re-enable the plugin, run sync task - should also work for invalid groups.
+        $this->enable_plugin();
+        enrol_meta_sync($coursetwo->id);
+
+        $coursetwocontext = context_course::instance($coursetwo->id);
+        $this->assertTrue(is_enrolled($coursetwocontext, $userone));
+        $this->assertTrue(is_enrolled($coursetwocontext, $usertwo));
+    }
+
+    /**
      * Test user_enrolment_created event.
      */
-    public function test_user_enrolment_created_event() {
+    public function test_user_enrolment_created_event(): void {
         global $DB;
 
         $this->resetAfterTest();
@@ -626,18 +661,13 @@ class enrol_meta_plugin_testcase extends advanced_testcase {
         $dbuserenrolled = $DB->get_record('user_enrolments', array('userid' => $user1->id));
         $this->assertInstanceOf('\core\event\user_enrolment_created', $event);
         $this->assertEquals($dbuserenrolled->id, $event->objectid);
-        $this->assertEquals('user_enrolled', $event->get_legacy_eventname());
-        $expectedlegacyeventdata = $dbuserenrolled;
-        $expectedlegacyeventdata->enrol = 'meta';
-        $expectedlegacyeventdata->courseid = $course2->id;
-        $this->assertEventLegacyData($expectedlegacyeventdata, $event);
         $this->assertEventContextNotUsed($event);
     }
 
     /**
      * Test user_enrolment_deleted event.
      */
-    public function test_user_enrolment_deleted_event() {
+    public function test_user_enrolment_deleted_event(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -664,14 +694,13 @@ class enrol_meta_plugin_testcase extends advanced_testcase {
 
         $this->assertEquals(0, $DB->count_records('user_enrolments'));
         $this->assertInstanceOf('\core\event\user_enrolment_deleted', $event);
-        $this->assertEquals('user_unenrolled', $event->get_legacy_eventname());
         $this->assertEventContextNotUsed($event);
     }
 
     /**
      * Test user_enrolment_updated event.
      */
-    public function test_user_enrolment_updated_event() {
+    public function test_user_enrolment_updated_event(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -700,26 +729,22 @@ class enrol_meta_plugin_testcase extends advanced_testcase {
         $dbuserenrolled = $DB->get_record('user_enrolments', array('userid' => $user1->id));
         $this->assertInstanceOf('\core\event\user_enrolment_updated', $event);
         $this->assertEquals($dbuserenrolled->id, $event->objectid);
-        $this->assertEquals('user_enrol_modified', $event->get_legacy_eventname());
-        $expectedlegacyeventdata = $dbuserenrolled;
-        $expectedlegacyeventdata->enrol = 'meta';
-        $expectedlegacyeventdata->courseid = $course2->id;
-        $url = new \moodle_url('/enrol/editenrolment.php', array('ue' => $event->objectid));
-        $this->assertEquals($url, $event->get_url());
-        $this->assertEventLegacyData($expectedlegacyeventdata, $event);
         $this->assertEventContextNotUsed($event);
     }
 
     /**
      * Test that a new group with the name of the course is created.
      */
-    public function test_enrol_meta_create_new_group() {
-        global $DB;
+    public function test_enrol_meta_create_new_group(): void {
+        global $DB, $CFG;
         $this->resetAfterTest();
         // Create two courses.
         $course = $this->getDataGenerator()->create_course(array('fullname' => 'Mathematics'));
         $course2 = $this->getDataGenerator()->create_course(array('fullname' => 'Physics'));
         $metacourse = $this->getDataGenerator()->create_course(array('fullname' => 'All sciences'));
+
+        require_once($CFG->dirroot.'/enrol/meta/locallib.php');
+
         // Run the function.
         $groupid = enrol_meta_create_new_group($metacourse->id, $course->id);
         // Check the results.
@@ -730,7 +755,7 @@ class enrol_meta_plugin_testcase extends advanced_testcase {
         $this->assertEquals($metacourse->id, $group->courseid);
 
         // Create a group that will have the same name as the course.
-        $groupdata = new stdClass();
+        $groupdata = new \stdClass();
         $groupdata->courseid = $metacourse->id;
         $groupdata->name = 'Physics course';
         groups_create_group($groupdata);
@@ -750,7 +775,7 @@ class enrol_meta_plugin_testcase extends advanced_testcase {
     /**
      * Test that enrolment timestart-timeend is respected in meta course.
      */
-    public function test_timeend() {
+    public function test_timeend(): void {
         global $CFG, $DB;
 
         $this->resetAfterTest(true);
@@ -869,5 +894,368 @@ class enrol_meta_plugin_testcase extends advanced_testcase {
         $enrolments = $DB->get_records('user_enrolments', array('enrolid' => $meta3id), '', 'userid, timestart, timeend, status');
         $this->assertEquals($expectedenrolments, $enrolments);
         $sink->close();
+    }
+
+    /**
+     * Test for getting user enrolment actions.
+     */
+    public function test_get_user_enrolment_actions(): void {
+        global $CFG, $PAGE;
+        $this->resetAfterTest();
+
+        // Set page URL to prevent debugging messages.
+        $PAGE->set_url('/enrol/editinstance.php');
+
+        $pluginname = 'meta';
+
+        // Only enable the meta enrol plugin.
+        $CFG->enrol_plugins_enabled = $pluginname;
+
+        $generator = $this->getDataGenerator();
+
+        // Get the enrol plugin.
+        $plugin = enrol_get_plugin($pluginname);
+
+        // Create a course.
+        $course = $generator->create_course();
+        // Enable this enrol plugin for the course.
+        $plugin->add_instance($course);
+
+        // Create a student.
+        $student = $generator->create_user();
+        // Enrol the student to the course.
+        $generator->enrol_user($student->id, $course->id, 'student', $pluginname);
+
+        // Teachers don't have enrol/meta:unenrol capability by default. Login as admin for simplicity.
+        $this->setAdminUser();
+        require_once($CFG->dirroot . '/enrol/locallib.php');
+        $manager = new \course_enrolment_manager($PAGE, $course);
+
+        $userenrolments = $manager->get_user_enrolments($student->id);
+        $this->assertCount(1, $userenrolments);
+
+        $ue = reset($userenrolments);
+        $actions = $plugin->get_user_enrolment_actions($manager, $ue);
+        // Meta-link enrolment has no enrol actions for active students.
+        $this->assertCount(0, $actions);
+
+        // Enrol actions for a suspended student.
+        // Suspend the student.
+        $ue->status = ENROL_USER_SUSPENDED;
+
+        $actions = $plugin->get_user_enrolment_actions($manager, $ue);
+        // Meta-link enrolment has enrol actions for suspended students -- unenrol.
+        $this->assertCount(1, $actions);
+    }
+
+    /**
+     * Test how data for instance editing is validated.
+     */
+    public function test_edit_instance_validation(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $metaplugin = enrol_get_plugin('meta');
+
+        // A course with meta enrolment.
+        $course = $this->getDataGenerator()->create_course();
+        $coursecontext = \context_course::instance($course->id);
+
+        // Create a meta enrolment instance.
+        $instance = (object)$metaplugin->get_instance_defaults();
+        $instance->id       = null;
+        $instance->courseid = $course->id;
+        $instance->status   = ENROL_INSTANCE_ENABLED;
+        // Emulate the form data.
+        $data = [
+            'customint1' => 0,
+            'customint2' => 0
+        ];
+        // Test when no valid 'customint1' field (meta courses links) is provided.
+        $errors = $metaplugin->edit_instance_validation($data, [], $instance, $coursecontext);
+        // We're going to check the string contents of the errors returned as this is the only way
+        // to differentiate the errors produced by the 'edit_instance_validation()' method somehow.
+        // The method always returns what the edit instance form expects and this is an array of form fields
+        // with the corresponding errors messages.
+        $this->assertEquals('Required', $errors['customint1']);
+
+        // Test when 'customint1' contains an unknown course.
+        // Fetch the max course id from the courses table and increment it to get
+        // the course id which surely doesn't exist.
+        $maxid = $DB->get_field_sql('SELECT MAX(id) FROM {course}');
+        // Use the same instance as before but set another data.
+        $data = [
+            'customint1' => [$maxid + 1],
+            'customint2' => 0
+        ];
+        $errors = $metaplugin->edit_instance_validation($data, [], $instance, $coursecontext);
+        $this->assertEquals('You are trying to use an invalid course ID', $errors['customint1']);
+
+        // Test when 'customint1' field already contains courses meta linked with the current one.
+        $metacourse1 = $this->getDataGenerator()->create_course();
+        $metaplugin->add_instance($course, array('customint1' => $metacourse1->id));
+        // Use the same instance as before but set another data.
+        $data = [
+            'customint1' => [$metacourse1->id],
+            'customint2' => 0
+        ];
+        $errors = $metaplugin->edit_instance_validation($data, [], $instance, $coursecontext);
+        $this->assertEquals('You are trying to use an invalid course ID', $errors['customint1']);
+
+        // Test when a course is set as a not visible and a user doesn't have the capability to use it here.
+        $metacourse2record = new \stdClass();
+        $metacourse2record->visible = 0;
+        $metacourse2 = $this->getDataGenerator()->create_course($metacourse2record);
+        $metacourse2context = \context_course::instance($metacourse2->id);
+
+        $user = $this->getDataGenerator()->create_user();
+        $teacherrole = $DB->get_record('role', array('shortname' => 'teacher'));
+        role_assign($teacherrole->id, $user->id, $metacourse2context->id);
+        unassign_capability('moodle/course:viewhiddencourses', $teacherrole->id);
+        $this->setUser($user);
+
+        // Use the same instance as before but set another data.
+        $data = [
+            'customint1' => [$metacourse2->id],
+            'customint2' => 0
+        ];
+        $errors = $metaplugin->edit_instance_validation($data, [], $instance, $coursecontext);
+        $this->assertEquals('Sorry, but you do not currently have permissions to do that (moodle/course:viewhiddencourses).',
+            $errors['customint1']);
+
+        // Revert some changes from the last assertion to reuse the course.
+        $metacourse2->visible = 1;
+        $DB->update_record('course', $metacourse2);
+        assign_capability('moodle/course:viewhiddencourses', CAP_ALLOW,
+            $teacherrole->id, \context_course::instance($metacourse2->id));
+
+        // Test with no 'enrol/meta:selectaslinked' capability.
+        unassign_capability('enrol/meta:selectaslinked', $teacherrole->id);
+        $errors = $metaplugin->edit_instance_validation($data, [], $instance, $coursecontext);
+        $this->assertEquals('Sorry, but you do not currently have permissions to do that (enrol/meta:selectaslinked).',
+            $errors['customint1']);
+
+        // Back to admin user to regain the capabilities quickly.
+        $this->setAdminUser();
+
+        // Test when meta course id is the site id.
+        $site = $DB->get_record('course', ['id' => SITEID]);
+        // Use the same instance as before but set another data.
+        $data = [
+            'customint1' => [$site->id],
+            'customint2' => 0
+        ];
+        $errors = $metaplugin->edit_instance_validation($data, [], $instance, $coursecontext);
+        $this->assertEquals('You are trying to use an invalid course ID', $errors['customint1']);
+
+        // Test when meta course id is id of the current course.
+        // Use the same instance as before but set another data.
+        $data = [
+            'customint1' => [$course->id],
+            'customint2' => 0
+        ];
+        $errors = $metaplugin->edit_instance_validation($data, [], $instance, $coursecontext);
+        $this->assertEquals('You are trying to use an invalid course ID', $errors['customint1']);
+
+        // Test with the 'customint2' field set (which is groups).
+        // Prepare some groups data.
+        $this->getDataGenerator()->create_group(array('courseid' => $course->id));
+        $this->getDataGenerator()->create_group(array('courseid' => $course->id));
+        $groups = [];
+        foreach (groups_get_all_groups($course->id) as $group) {
+            $groups[$group->id] = format_string($group->name, true, array('context' => $coursecontext));
+        }
+
+        // Use the same instance as before but set another data.
+        // Use a non-existing group id.
+        if (!$maxid = $DB->get_field_sql('SELECT MAX(id) FROM {groups}')) {
+            $maxid = 0;
+        }
+        $data = [
+            'customint1' => [$metacourse2->id],
+            'customint2' => [$maxid + 1]
+        ];
+        $errors = $metaplugin->edit_instance_validation($data, [], $instance, $coursecontext);
+        $this->assertArrayHasKey('customint2', $errors);
+
+        // Test with valid data.
+        reset($groups);
+        $validgroup = key($groups);
+        $data = [
+            'customint1' => [$metacourse2->id],
+            'customint2' => $validgroup
+        ];
+        $errors = $metaplugin->edit_instance_validation($data, [], $instance, $coursecontext);
+        $this->assertArrayNotHasKey('customint1', $errors);
+        $this->assertArrayNotHasKey('customint2', $errors);
+    }
+
+    /**
+     * Test the behaviour of fill_enrol_custom_fields().
+     *
+     * @covers ::fill_enrol_custom_fields
+     */
+    public function test_fill_enrol_custom_fields(): void {
+        $this->resetAfterTest();
+
+        $metaplugin = enrol_get_plugin('meta');
+
+        $cat = $this->getDataGenerator()->create_category();
+        $course1 = $this->getDataGenerator()->create_course(['category' => $cat->id, 'shortname' => 'course1']);
+        $course2 = $this->getDataGenerator()->create_course(['category' => $cat->id, 'shortname' => 'course2']);
+
+        $group = $this->getDataGenerator()->create_group(['courseid' => $course1->id]);
+
+        $enrolmentdata['metacoursename'] = $course2->shortname;
+        $enrolmentdata = $metaplugin->fill_enrol_custom_fields($enrolmentdata, $course1->id);
+        $this->assertArrayHasKey('customint1', $enrolmentdata);
+        $this->assertEquals($course2->id, $enrolmentdata['customint1']);
+        $this->assertNull($enrolmentdata['customint2']);
+
+        $enrolmentdata['metacoursename'] = 'notexist';
+        $enrolmentdata = $metaplugin->fill_enrol_custom_fields($enrolmentdata, $course1->id);
+        $this->assertArrayHasKey('customint1', $enrolmentdata);
+        $this->assertFalse($enrolmentdata['customint1']);
+        $this->assertNull($enrolmentdata['customint2']);
+
+        $enrolmentdata['metacoursename'] = $course2->shortname;
+
+        $enrolmentdata['addtogroup'] = 0;
+        $enrolmentdata = $metaplugin->fill_enrol_custom_fields($enrolmentdata, $course1->id);
+        $this->assertArrayHasKey('customint1', $enrolmentdata);
+        $this->assertEquals($course2->id, $enrolmentdata['customint1']);
+        $this->assertArrayHasKey('customint2', $enrolmentdata);
+        $this->assertEquals(0, $enrolmentdata['customint2']);
+
+        unset($enrolmentdata['addtogroup']);
+        $enrolmentdata['groupname'] = $group->name;
+        $enrolmentdata = $metaplugin->fill_enrol_custom_fields($enrolmentdata, $course1->id);
+        $this->assertArrayHasKey('customint1', $enrolmentdata);
+        $this->assertEquals($course2->id, $enrolmentdata['customint1']);
+        $this->assertArrayHasKey('customint2', $enrolmentdata);
+        $this->assertEquals($group->id, $enrolmentdata['customint2']);
+
+        $enrolmentdata['groupname'] = 'notexist';
+        $enrolmentdata = $metaplugin->fill_enrol_custom_fields($enrolmentdata, $course1->id);
+        $this->assertArrayHasKey('customint1', $enrolmentdata);
+        $this->assertEquals($course2->id, $enrolmentdata['customint1']);
+        $this->assertArrayHasKey('customint2', $enrolmentdata);
+        $this->assertFalse($enrolmentdata['customint2']);
+    }
+
+    /**
+     * Test the behaviour of validate_enrol_plugin_data().
+     *
+     * @covers ::validate_enrol_plugin_data
+     */
+    public function test_validate_enrol_plugin_data(): void {
+        $this->resetAfterTest();
+
+        $cat = $this->getDataGenerator()->create_category();
+
+        $course1 = $this->getDataGenerator()->create_course(['category' => $cat->id, 'shortname' => 'course1']);
+        $course2 = $this->getDataGenerator()->create_course(['category' => $cat->id, 'shortname' => 'course2']);
+
+        $group1 = $this->getDataGenerator()->create_group(['courseid' => $course1->id, 'name' => 'Group 1']);
+
+        enrol::enable_plugin('meta', false);
+
+        $metaplugin = enrol_get_plugin('meta');
+
+        // Plugin is disabled in system and meta course shortname is missing in csv.
+        $enrolmentdata = [];
+        $errors = $metaplugin->validate_enrol_plugin_data($enrolmentdata);
+        $this->assertArrayHasKey('plugindisabled', $errors);
+        $this->assertArrayHasKey('missingmandatoryfields', $errors);
+
+        enrol::enable_plugin('meta', true);
+
+        // Unknown meta course name.
+        $enrolmentdata['metacoursename'] = 'test';
+        $errors = $metaplugin->validate_enrol_plugin_data($enrolmentdata);
+        $this->assertArrayHasKey('unknownmetacourse', $errors);
+
+        // Meta course is same as original course.
+        $enrolmentdata['metacoursename'] = 'course1';
+        $errors = $metaplugin->validate_enrol_plugin_data($enrolmentdata, $course1->id);
+        $this->assertArrayHasKey('samemetacourse', $errors);
+
+        // Non-valid 'addtogroup' option.
+        $enrolmentdata['metacoursename'] = $course2->shortname;
+        $enrolmentdata['addtogroup'] = 2;
+        $errors = $metaplugin->validate_enrol_plugin_data($enrolmentdata, $course1->id);
+        $this->assertArrayHasKey('erroraddtogroup', $errors);
+
+        // Options 'addtogroup' and 'groupname' are not allowed together.
+        $enrolmentdata['addtogroup'] = 0;
+        $enrolmentdata['groupname'] = 'test';
+        $errors = $metaplugin->validate_enrol_plugin_data($enrolmentdata, $course1->id);
+        $this->assertArrayHasKey('erroraddtogroupgroupname', $errors);
+
+        // Group does not exist.
+        unset($enrolmentdata['addtogroup']);
+        $errors = $metaplugin->validate_enrol_plugin_data($enrolmentdata, $course1->id);
+        $this->assertArrayHasKey('errorinvalidgroup', $errors);
+
+        // Valid data when trying to create a group.
+        $enrolmentdata['metacoursename'] = $course2->shortname;
+        $enrolmentdata['addtogroup'] = 1;
+        unset($enrolmentdata['groupname']);
+        $errors = $metaplugin->validate_enrol_plugin_data($enrolmentdata, $course1->id);
+        $this->assertEmpty($errors);
+
+        // Valid data when trying to add to existing group.
+        $enrolmentdata['groupname'] = $group1->name;
+        unset($enrolmentdata['addtogroup']);
+        $errors = $metaplugin->validate_enrol_plugin_data($enrolmentdata, $course1->id);
+        $this->assertEmpty($errors);
+
+        // Valid data when trying without group mode.
+        $enrolmentdata['addtogroup'] = 0;
+        unset($enrolmentdata['groupname']);
+        $errors = $metaplugin->validate_enrol_plugin_data($enrolmentdata, $course1->id);
+        $this->assertEmpty($errors);
+    }
+
+    /**
+     * Test the behaviour of find_instance().
+     *
+     * @covers ::find_instance
+     */
+    public function test_find_instance(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $cat = $this->getDataGenerator()->create_category();
+        $course1 = $this->getDataGenerator()->create_course(['category' => $cat->id, 'shortname' => 'course1']);
+        $course2 = $this->getDataGenerator()->create_course(['category' => $cat->id, 'shortname' => 'course2']);
+        $course3 = $this->getDataGenerator()->create_course(['category' => $cat->id, 'shortname' => 'course3']);
+
+        $metaplugin = enrol_get_plugin('meta');
+
+        // Add two meta enrol instances.
+        $instanceid1 = $metaplugin->add_instance($course1, ['customint1' => $course2->id]);
+        $instanceid2 = $metaplugin->add_instance($course1, ['customint1' => $course3->id]);
+
+        $instance1 = $DB->get_record('enrol', ['id' => $instanceid1]);
+        $instance2 = $DB->get_record('enrol', ['id' => $instanceid2]);
+
+        $enrolmentdata = [];
+        $instance = $metaplugin->find_instance($enrolmentdata, $course1->id);
+        $this->assertNull($instance);
+
+        // Unknown meta course shortname.
+        $enrolmentdata['metacoursename'] = 'test';
+        $instance = $metaplugin->find_instance($enrolmentdata, $course1->id);
+        $this->assertNull($instance);
+
+        $enrolmentdata['metacoursename'] = $course2->shortname;
+        $instance = $metaplugin->find_instance($enrolmentdata, $course1->id);
+        $this->assertEquals($instance1->id, $instance->id);
+
+        $enrolmentdata['metacoursename'] = $course3->shortname;
+        $instance = $metaplugin->find_instance($enrolmentdata, $course1->id);
+        $this->assertEquals($instance2->id, $instance->id);
     }
 }

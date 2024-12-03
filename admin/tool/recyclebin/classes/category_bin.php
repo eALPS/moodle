@@ -108,6 +108,19 @@ class category_bin extends base_bin {
 
         require_once($CFG->dirroot . '/backup/util/includes/backup_includes.php');
 
+        // As far as recycle bin is using MODE_AUTOMATED, it observes the backup_auto_storage
+        // settings (storing backups @ real location and potentially not including files).
+        // For recycle bin we want to ensure that backup files are always stored in Moodle file
+        // area and always contain the users' files. In order to achieve that, we hack the
+        // setting here via $CFG->forced_plugin_settings, so it won't interfere other operations.
+        // See MDL-65218 and MDL-35773 for more information.
+        // This hack will be removed once recycle bin switches to use its own backup mode, with
+        // own preferences and 100% separate from MOODLE_AUTOMATED.
+        // TODO: Remove this as part of MDL-65228.
+        $forcedbackupsettings = $CFG->forced_plugin_settings['backup'] ?? [];
+        $CFG->forced_plugin_settings['backup']['backup_auto_storage'] = 0;
+        $CFG->forced_plugin_settings['backup']['backup_auto_files'] = 1;
+
         // Backup the course.
         $user = get_admin();
         $controller = new \backup_controller(
@@ -115,10 +128,14 @@ class category_bin extends base_bin {
             $course->id,
             \backup::FORMAT_MOODLE,
             \backup::INTERACTIVE_NO,
-            \backup::MODE_GENERAL,
+            \backup::MODE_AUTOMATED,
             $user->id
         );
         $controller->execute_plan();
+
+        // We don't need the forced setting anymore, hence restore previous settings.
+        // TODO: Remove this as part of MDL-65228.
+        $CFG->forced_plugin_settings['backup'] = $forcedbackupsettings;
 
         // Grab the result.
         $result = $controller->get_results();
@@ -207,9 +224,9 @@ class category_bin extends base_bin {
         // Get the backup file.
         $file = reset($files);
 
-        // Get a temp directory name and create it.
+        // Get a backup temp directory name and create it.
         $tempdir = \restore_controller::get_tempdir_name($context->id, $user->id);
-        $fulltempdir = make_temp_directory('/backup/' . $tempdir);
+        $fulltempdir = make_backup_temp_directory($tempdir);
 
         // Extract the backup to tmpdir.
         $fb = get_file_packer('application/vnd.moodle.backup');
@@ -228,12 +245,24 @@ class category_bin extends base_bin {
             throw new \moodle_exception("Could not create course to restore into.");
         }
 
+        // As far as recycle bin is using MODE_AUTOMATED, it observes the General restore settings.
+        // For recycle bin we want to ensure that backup files are always restore the users and groups information.
+        // In order to achieve that, we hack the setting here via $CFG->forced_plugin_settings,
+        // so it won't interfere other operations.
+        // See MDL-65218 and MDL-35773 for more information.
+        // This hack will be removed once recycle bin switches to use its own backup mode, with
+        // own preferences and 100% separate from MOODLE_AUTOMATED.
+        // TODO: Remove this as part of MDL-65228.
+        $forcedrestoresettings = $CFG->forced_plugin_settings['restore'] ?? [];
+        $CFG->forced_plugin_settings['restore']['restore_general_users'] = 1;
+        $CFG->forced_plugin_settings['restore']['restore_general_groups'] = 1;
+
         // Define the import.
         $controller = new \restore_controller(
             $tempdir,
             $course->id,
             \backup::INTERACTIVE_NO,
-            \backup::MODE_GENERAL,
+            \backup::MODE_AUTOMATED,
             $user->id,
             \backup::TARGET_NEW_COURSE
         );
@@ -262,6 +291,10 @@ class category_bin extends base_bin {
         // Run the import.
         $controller->execute_plan();
 
+        // We don't need the forced setting anymore, hence restore previous settings.
+        // TODO: Remove this as part of MDL-65228.
+        $CFG->forced_plugin_settings['restore'] = $forcedrestoresettings;
+
         // Have finished with the controller, let's destroy it, freeing mem and resources.
         $controller->destroy();
 
@@ -288,19 +321,35 @@ class category_bin extends base_bin {
         global $DB;
 
         // Grab the course category context.
-        $context = \context_coursecat::instance($this->_categoryid);
-
-        // Delete the files.
-        $fs = get_file_storage();
-        $files = $fs->get_area_files($context->id, 'tool_recyclebin', TOOL_RECYCLEBIN_COURSECAT_BIN_FILEAREA, $item->id);
-        foreach ($files as $file) {
-            $file->delete();
+        $context = \context_coursecat::instance($this->_categoryid, IGNORE_MISSING);
+        if (!empty($context)) {
+            // Delete the files.
+            $fs = get_file_storage();
+            $fs->delete_area_files($context->id, 'tool_recyclebin', TOOL_RECYCLEBIN_COURSECAT_BIN_FILEAREA, $item->id);
+        } else {
+            // Course category has been deleted. Find records using $item->id as this is unique for coursecat recylebin.
+            $files = $DB->get_recordset('files', [
+                'component' => 'tool_recyclebin',
+                'filearea' => TOOL_RECYCLEBIN_COURSECAT_BIN_FILEAREA,
+                'itemid' => $item->id,
+            ]);
+            $fs = get_file_storage();
+            foreach ($files as $filer) {
+                $file = $fs->get_file_instance($filer);
+                $file->delete();
+            }
+            $files->close();
         }
 
         // Delete the record.
         $DB->delete_records('tool_recyclebin_category', array(
             'id' => $item->id
         ));
+
+        // The coursecat might have been deleted, check we have a context before triggering event.
+        if (!$context) {
+            return;
+        }
 
         // Fire event.
         $event = \tool_recyclebin\event\category_bin_item_deleted::create(array(

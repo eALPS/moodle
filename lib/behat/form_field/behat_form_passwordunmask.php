@@ -48,26 +48,21 @@ class behat_form_passwordunmask extends behat_form_text {
      * @return void
      */
     public function set_value($value) {
-        if ($this->running_javascript()) {
-            $id = $this->field->getAttribute('id');
-            $js = <<<JS
-require(["jquery"], function($) {
-    var wrapper = $(document.getElementById("{$id}")).closest('[data-passwordunmask="wrapper"]');
-        wrapper.find('[data-passwordunmask="edit"]').trigger("click");
-});
-JS;
-            $this->session->executeScript($js);
+        if (!$this->running_javascript()) {
+            $this->field->setValue($value);
+
+            return;
         }
 
-        $this->field->setValue($value);
+        $id = $this->field->getAttribute('id');
+        $wrapper = $this->field->getParent()->getParent()->getParent()->find('css', '[data-passwordunmask="wrapper"]');
+        $wrapper->click();
+        $this->wait_for_pending_js();
 
-        // Ensure all pending JS is finished.
-        if ($this->running_javascript()) {
-            // Press enter key after setting password, so we have a stable page.
-            $this->field->keyDown(13);
-            $this->field->keyPress(13);
-            $this->field->keyUp(13);
-            $this->session->wait(behat_base::TIMEOUT * 1000, behat_base::PAGE_READY_JS);
-        }
+        behat_base::type_keys($this->session, str_split($value));
+        $this->wait_for_pending_js();
+
+        // Press enter key after setting password to save.
+        behat_base::type_keys($this->session, [behat_keys::ENTER]);
     }
 }

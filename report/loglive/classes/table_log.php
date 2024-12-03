@@ -47,6 +47,9 @@ class report_loglive_table_log extends table_sql {
     /** @var stdClass filters parameters */
     protected $filterparams;
 
+    /** @var int[] A list of users to filter by */
+    private ?array $lateuseridfilter = null;
+
     /**
      * Sets up the table_log parameters.
      *
@@ -64,7 +67,7 @@ class report_loglive_table_log extends table_sql {
     public function __construct($uniqueid, $filterparams = null) {
         parent::__construct($uniqueid);
 
-        $this->set_attribute('class', 'reportloglive generaltable generalbox');
+        $this->set_attribute('class', 'reportloglive generaltable table-sm');
         $this->set_attribute('aria-live', 'polite');
         $this->filterparams = $filterparams;
         // Add course column if logs are displayed for site.
@@ -116,7 +119,7 @@ class report_loglive_table_log extends table_sql {
      * @return string HTML for the time column
      */
     public function col_time($event) {
-        $recenttimestr = get_string('strftimerecent', 'core_langconfig');
+        $recenttimestr = get_string('strftimedatetimeaccurate', 'core_langconfig');
         return userdate($event->timecreated, $recenttimestr);
     }
 
@@ -230,13 +233,7 @@ class report_loglive_table_log extends table_sql {
      * @return string HTML for the event name column
      */
     public function col_eventname($event) {
-        // Event name.
-        if ($this->filterparams->logreader instanceof logstore_legacy\log\store) {
-            // Hack for support of logstore_legacy.
-            $eventname = $event->eventname;
-        } else {
-            $eventname = $event->get_name();
-        }
+        $eventname = $event->get_name();
         if ($url = $event->get_url()) {
             $eventname = $this->action_link($url, $eventname, 'action');
         }
@@ -278,7 +275,7 @@ class report_loglive_table_log extends table_sql {
         // Get extra event data for origin and realuserid.
         $logextra = $event->get_logextra();
 
-        $url = new moodle_url("/iplookup/index.php?ip={$logextra['ip']}&user=$event->userid");
+        $url = new moodle_url("/iplookup/index.php?popup=1&ip={$logextra['ip']}&user=$event->userid");
         return $this->action_link($url, $logextra['ip'], 'ip');
     }
 
@@ -293,7 +290,7 @@ class report_loglive_table_log extends table_sql {
      */
     protected function action_link(moodle_url $url, $text, $name = 'popup') {
         global $OUTPUT;
-        $link = new action_link($url, $text, new popup_action('click', $url, $name, array('height' => 440, 'width' => 700)));
+        $link = new action_link($url, $text, new popup_action('click', $url, $name, array('height' => 550, 'width' => 700)));
         return $OUTPUT->render($link);
     }
 
@@ -304,15 +301,22 @@ class report_loglive_table_log extends table_sql {
      * @param bool $useinitialsbar do you want to use the initials bar.
      */
     public function query_db($pagesize, $useinitialsbar = true) {
+        $joins = [];
+        $params = [];
 
-        $joins = array();
-        $params = array();
-
-        // Set up filtering.
         if (!empty($this->filterparams->courseid)) {
             $joins[] = "courseid = :courseid";
             $params['courseid'] = $this->filterparams->courseid;
         }
+
+        // Getting all members of a group.
+        [
+            'joins' => $groupjoins,
+            'params' => $groupparams,
+            'useridfilter' => $this->lateuseridfilter,
+        ] = \core\report_helper::get_group_filter($this->filterparams);
+        $joins = array_merge($joins, $groupjoins);
+        $params = array_merge($params, $groupparams);
 
         if (!empty($this->filterparams->date)) {
             $joins[] = "timecreated > :date";
@@ -328,8 +332,23 @@ class report_loglive_table_log extends table_sql {
 
         $total = $this->filterparams->logreader->get_events_select_count($selector, $params);
         $this->pagesize($pagesize, $total);
-        $this->rawdata = $this->filterparams->logreader->get_events_select($selector, $params, $this->filterparams->orderby,
-                $this->get_page_start(), $this->get_page_size());
+
+        $this->rawdata =
+            array_filter(
+                $this->filterparams->logreader->get_events_select(
+                    $selector,
+                    $params,
+                    $this->filterparams->orderby,
+                    $this->get_page_start(),
+                    $this->get_page_size(),
+                ),
+                function($event) {
+                    if ($this->lateuseridfilter === null) {
+                        return true;
+                    }
+                    return isset($this->lateuseridfilter[$event->userid]);
+                },
+            );
 
         // Set initial bars.
         if ($useinitialsbar) {
@@ -374,10 +393,12 @@ class report_loglive_table_log extends table_sql {
         // Get user fullname and put that in return list.
         if (!empty($userids)) {
             list($usql, $uparams) = $DB->get_in_or_equal($userids);
-            $users = $DB->get_records_sql("SELECT id," . get_all_user_name_fields(true) . " FROM {user} WHERE id " . $usql,
+            $userfieldsapi = \core_user\fields::for_name();
+            $users = $DB->get_records_sql("SELECT id," .
+                    $userfieldsapi->get_sql('', false, '', '', false)->selects . " FROM {user} WHERE id " . $usql,
                     $uparams);
             foreach ($users as $userid => $user) {
-                $this->userfullnames[$userid] = fullname($user);
+                $this->userfullnames[$userid] = fullname($user, has_capability('moodle/site:viewfullnames', $this->get_context()));
             }
         }
 
@@ -401,5 +422,20 @@ class report_loglive_table_log extends table_sql {
                         array('context' => $context)));
             }
         }
+    }
+
+    /**
+     * Returns the latest timestamp of the records in the table.
+     *
+     * @return int
+     */
+    public function get_until(): int {
+        $until = $this->filterparams->date;
+        if (!empty($this->rawdata)) {
+            foreach ($this->rawdata as $row) {
+                $until = max($row->timecreated, $until);
+            }
+        }
+        return $until;
     }
 }

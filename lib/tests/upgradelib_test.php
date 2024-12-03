@@ -27,16 +27,18 @@ defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->libdir.'/upgradelib.php');
+require_once($CFG->libdir.'/db/upgradelib.php');
+require_once($CFG->dirroot . '/calendar/tests/helpers.php');
 
 /**
  * Tests various classes and functions in upgradelib.php library.
  */
-class core_upgradelib_testcase extends advanced_testcase {
+class upgradelib_test extends advanced_testcase {
 
     /**
      * Test the {@link upgrade_stale_php_files_present() function
      */
-    public function test_upgrade_stale_php_files_present() {
+    public function test_upgrade_stale_php_files_present(): void {
         // Just call the function, must return bool false always
         // if there aren't any old files in the codebase.
         $this->assertFalse(upgrade_stale_php_files_present());
@@ -75,180 +77,7 @@ class core_upgradelib_testcase extends advanced_testcase {
         return $DB->get_record('grade_items', array('id' => $item->id));
     }
 
-    public function test_upgrade_fix_missing_root_folders_draft() {
-        global $DB, $SITE;
-
-        $this->resetAfterTest(true);
-
-        $user = $this->getDataGenerator()->create_user();
-        $usercontext = context_user::instance($user->id);
-        $this->setUser($user);
-        $resource1 = $this->getDataGenerator()->get_plugin_generator('mod_resource')
-            ->create_instance(array('course' => $SITE->id));
-        $context = context_module::instance($resource1->cmid);
-        $draftitemid = 0;
-        file_prepare_draft_area($draftitemid, $context->id, 'mod_resource', 'content', 0);
-
-        $queryparams = array(
-            'component' => 'user',
-            'contextid' => $usercontext->id,
-            'filearea' => 'draft',
-            'itemid' => $draftitemid,
-        );
-
-        // Make sure there are two records in files for the draft file area and one of them has filename '.'.
-        $records = $DB->get_records_menu('files', $queryparams, '', 'id, filename');
-        $this->assertEquals(2, count($records));
-        $this->assertTrue(in_array('.', $records));
-        $originalhash = $DB->get_field('files', 'pathnamehash', $queryparams + array('filename' => '.'));
-
-        // Delete record with filename '.' and make sure it does not exist any more.
-        $DB->delete_records('files', $queryparams + array('filename' => '.'));
-
-        $records = $DB->get_records_menu('files', $queryparams, '', 'id, filename');
-        $this->assertEquals(1, count($records));
-        $this->assertFalse(in_array('.', $records));
-
-        // Run upgrade script and make sure the record is restored.
-        upgrade_fix_missing_root_folders_draft();
-
-        $records = $DB->get_records_menu('files', $queryparams, '', 'id, filename');
-        $this->assertEquals(2, count($records));
-        $this->assertTrue(in_array('.', $records));
-        $newhash = $DB->get_field('files', 'pathnamehash', $queryparams + array('filename' => '.'));
-        $this->assertEquals($originalhash, $newhash);
-    }
-
-    /**
-     * Test upgrade minmaxgrade step.
-     */
-    public function test_upgrade_minmaxgrade() {
-        global $CFG, $DB;
-        require_once($CFG->libdir . '/gradelib.php');
-        $initialminmax = $CFG->grade_minmaxtouse;
-        $this->resetAfterTest();
-
-        $c1 = $this->getDataGenerator()->create_course();
-        $c2 = $this->getDataGenerator()->create_course();
-        $c3 = $this->getDataGenerator()->create_course();
-        $u1 = $this->getDataGenerator()->create_user();
-        $a1 = $this->getDataGenerator()->create_module('assign', array('course' => $c1, 'grade' => 100));
-        $a2 = $this->getDataGenerator()->create_module('assign', array('course' => $c2, 'grade' => 100));
-        $a3 = $this->getDataGenerator()->create_module('assign', array('course' => $c3, 'grade' => 100));
-
-        $cm1 = get_coursemodule_from_instance('assign', $a1->id);
-        $ctx1 = context_module::instance($cm1->id);
-        $assign1 = new assign($ctx1, $cm1, $c1);
-
-        $cm2 = get_coursemodule_from_instance('assign', $a2->id);
-        $ctx2 = context_module::instance($cm2->id);
-        $assign2 = new assign($ctx2, $cm2, $c2);
-
-        $cm3 = get_coursemodule_from_instance('assign', $a3->id);
-        $ctx3 = context_module::instance($cm3->id);
-        $assign3 = new assign($ctx3, $cm3, $c3);
-
-        // Give a grade to the student.
-        $ug = $assign1->get_user_grade($u1->id, true);
-        $ug->grade = 10;
-        $assign1->update_grade($ug);
-
-        $ug = $assign2->get_user_grade($u1->id, true);
-        $ug->grade = 20;
-        $assign2->update_grade($ug);
-
-        $ug = $assign3->get_user_grade($u1->id, true);
-        $ug->grade = 30;
-        $assign3->update_grade($ug);
-
-
-        // Run the upgrade.
-        upgrade_minmaxgrade();
-
-        // Nothing has happened.
-        $this->assertFalse($DB->record_exists('config', array('name' => 'show_min_max_grades_changed_' . $c1->id)));
-        $this->assertSame(false, grade_get_setting($c1->id, 'minmaxtouse', false, true));
-        $this->assertFalse($DB->record_exists('grade_items', array('needsupdate' => 1, 'courseid' => $c1->id)));
-        $this->assertFalse($DB->record_exists('config', array('name' => 'show_min_max_grades_changed_' . $c2->id)));
-        $this->assertSame(false, grade_get_setting($c2->id, 'minmaxtouse', false, true));
-        $this->assertFalse($DB->record_exists('grade_items', array('needsupdate' => 1, 'courseid' => $c2->id)));
-        $this->assertFalse($DB->record_exists('config', array('name' => 'show_min_max_grades_changed_' . $c3->id)));
-        $this->assertSame(false, grade_get_setting($c3->id, 'minmaxtouse', false, true));
-        $this->assertFalse($DB->record_exists('grade_items', array('needsupdate' => 1, 'courseid' => $c3->id)));
-
-        // Create inconsistency in c1 and c2.
-        $giparams = array('itemtype' => 'mod', 'itemmodule' => 'assign', 'iteminstance' => $a1->id,
-                'courseid' => $c1->id, 'itemnumber' => 0);
-        $gi = grade_item::fetch($giparams);
-        $gi->grademin = 5;
-        $gi->update();
-
-        $giparams = array('itemtype' => 'mod', 'itemmodule' => 'assign', 'iteminstance' => $a2->id,
-                'courseid' => $c2->id, 'itemnumber' => 0);
-        $gi = grade_item::fetch($giparams);
-        $gi->grademax = 50;
-        $gi->update();
-
-
-        // C1 and C2 should be updated, but the course setting should not be set.
-        $CFG->grade_minmaxtouse = GRADE_MIN_MAX_FROM_GRADE_GRADE;
-
-        // Run the upgrade.
-        upgrade_minmaxgrade();
-
-        // C1 and C2 were partially updated.
-        $this->assertTrue($DB->record_exists('config', array('name' => 'show_min_max_grades_changed_' . $c1->id)));
-        $this->assertSame(false, grade_get_setting($c1->id, 'minmaxtouse', false, true));
-        $this->assertTrue($DB->record_exists('grade_items', array('needsupdate' => 1, 'courseid' => $c1->id)));
-        $this->assertTrue($DB->record_exists('config', array('name' => 'show_min_max_grades_changed_' . $c2->id)));
-        $this->assertSame(false, grade_get_setting($c2->id, 'minmaxtouse', false, true));
-        $this->assertTrue($DB->record_exists('grade_items', array('needsupdate' => 1, 'courseid' => $c2->id)));
-
-        // Nothing has happened for C3.
-        $this->assertFalse($DB->record_exists('config', array('name' => 'show_min_max_grades_changed_' . $c3->id)));
-        $this->assertSame(false, grade_get_setting($c3->id, 'minmaxtouse', false, true));
-        $this->assertFalse($DB->record_exists('grade_items', array('needsupdate' => 1, 'courseid' => $c3->id)));
-
-
-        // Course setting should not be set on a course that has the setting already.
-        $CFG->grade_minmaxtouse = GRADE_MIN_MAX_FROM_GRADE_ITEM;
-        grade_set_setting($c1->id, 'minmaxtouse', -1); // Sets different value than constant to check that it remained the same.
-
-        // Run the upgrade.
-        upgrade_minmaxgrade();
-
-        // C2 was updated.
-        $this->assertSame((string) GRADE_MIN_MAX_FROM_GRADE_GRADE, grade_get_setting($c2->id, 'minmaxtouse', false, true));
-
-        // Nothing has happened for C1.
-        $this->assertSame('-1', grade_get_setting($c1->id, 'minmaxtouse', false, true));
-
-        // Nothing has happened for C3.
-        $this->assertFalse($DB->record_exists('config', array('name' => 'show_min_max_grades_changed_' . $c3->id)));
-        $this->assertSame(false, grade_get_setting($c3->id, 'minmaxtouse', false, true));
-        $this->assertFalse($DB->record_exists('grade_items', array('needsupdate' => 1, 'courseid' => $c3->id)));
-
-
-        // Final check, this time we'll unset the default config.
-        unset($CFG->grade_minmaxtouse);
-        grade_set_setting($c1->id, 'minmaxtouse', null);
-
-        // Run the upgrade.
-        upgrade_minmaxgrade();
-
-        // C1 was updated.
-        $this->assertSame((string) GRADE_MIN_MAX_FROM_GRADE_GRADE, grade_get_setting($c1->id, 'minmaxtouse', false, true));
-
-        // Nothing has happened for C3.
-        $this->assertFalse($DB->record_exists('config', array('name' => 'show_min_max_grades_changed_' . $c3->id)));
-        $this->assertSame(false, grade_get_setting($c3->id, 'minmaxtouse', false, true));
-        $this->assertFalse($DB->record_exists('grade_items', array('needsupdate' => 1, 'courseid' => $c3->id)));
-
-        // Restore value.
-        $CFG->grade_minmaxtouse = $initialminmax;
-    }
-
-    public function test_upgrade_extra_credit_weightoverride() {
+    public function test_upgrade_extra_credit_weightoverride(): void {
         global $DB, $CFG;
 
         $this->resetAfterTest(true);
@@ -316,7 +145,7 @@ class core_upgradelib_testcase extends advanced_testcase {
     /**
      * Test the upgrade function for flagging courses with calculated grade item problems.
      */
-    public function test_upgrade_calculated_grade_items_freeze() {
+    public function test_upgrade_calculated_grade_items_freeze(): void {
         global $DB, $CFG;
 
         $this->resetAfterTest();
@@ -447,7 +276,56 @@ class core_upgradelib_testcase extends advanced_testcase {
         $this->assertEquals(20150627, $CFG->{'gradebook_calculations_freeze_' . $course2->id});
     }
 
-    function test_upgrade_calculated_grade_items_regrade() {
+    /**
+     * Test the upgrade function for final grade after setting grade max for category and grade item.
+     */
+    public function test_upgrade_update_category_grademax_regrade_final_grades(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $generator = $this->getDataGenerator();
+        $user = $generator->create_user();
+
+        // Create a new course.
+        $course = $generator->create_course();
+
+        // Set the course aggregation to weighted mean of grades.
+        $unitcategory = \grade_category::fetch_course_category($course->id);
+        $unitcategory->aggregation = GRADE_AGGREGATE_WEIGHTED_MEAN;
+        $unitcategory->update();
+
+        // Set grade max for category.
+        $gradecategoryitem = grade_item::fetch(array('iteminstance' => $unitcategory->id));
+        $gradecategoryitem->grademax = 50;
+        $gradecategoryitem->update();
+
+        // Make new grade item.
+        $gradeitem = new \grade_item($generator->create_grade_item([
+            'itemname'        => 'Grade item',
+            'idnumber'        => 'git1',
+            'courseid'        => $course->id,
+            'grademin'        => 0,
+            'grademax'        => 50,
+            'aggregationcoef' => 100.0,
+        ]));
+
+        // Set final grade.
+        $grade = $gradeitem->get_grade($user->id, true);
+        $grade->finalgrade = 20;
+        $grade->update();
+
+        $courseitem = \grade_item::fetch(['courseid' => $course->id, 'itemtype' => 'course']);
+        $gradeitem->force_regrading();
+
+        // Trigger regrade because the grade items needs to be updated.
+        grade_regrade_final_grades($course->id);
+
+        $coursegrade = new \grade_grade($courseitem->get_final($user->id), false);
+        $this->assertEquals(20, $coursegrade->finalgrade);
+    }
+
+    function test_upgrade_calculated_grade_items_regrade(): void {
         global $DB, $CFG;
 
         $this->resetAfterTest();
@@ -515,71 +393,10 @@ class core_upgradelib_testcase extends advanced_testcase {
         $this->assertEquals($gradecategoryitem->grademin, $grade->rawgrademin);
     }
 
-    public function test_upgrade_course_tags() {
-        global $DB, $CFG;
-
-        $this->resetAfterTest();
-
-        require_once($CFG->libdir . '/db/upgradelib.php');
-
-        // Running upgrade script when there are no tags.
-        upgrade_course_tags();
-        $this->assertFalse($DB->record_exists('tag_instance', array()));
-
-        // No course entries.
-        $DB->insert_record('tag_instance', array('itemid' => 123, 'tagid' => 101, 'tiuserid' => 0,
-            'itemtype' => 'post', 'component' => 'core', 'contextid' => 1));
-        $DB->insert_record('tag_instance', array('itemid' => 333, 'tagid' => 103, 'tiuserid' => 1002,
-            'itemtype' => 'post', 'component' => 'core', 'contextid' => 1));
-
-        upgrade_course_tags();
-        $records = array_values($DB->get_records('tag_instance', array(), 'id', '*'));
-        $this->assertEquals(2, count($records));
-        $this->assertEquals(123, $records[0]->itemid);
-        $this->assertEquals(333, $records[1]->itemid);
-
-        // Imagine we have tags 101, 102, 103, ... and courses 1, 2, 3, ... and users 1001, 1002, ... .
-        $keys = array('itemid', 'tagid', 'tiuserid');
-        $valuesets = array(
-            array(1, 101, 0),
-            array(1, 102, 0),
-
-            array(2, 102, 0),
-            array(2, 103, 1001),
-
-            array(3, 103, 0),
-            array(3, 103, 1001),
-
-            array(3, 104, 1006),
-            array(3, 104, 1001),
-            array(3, 104, 1002),
-        );
-
-        foreach ($valuesets as $values) {
-            $DB->insert_record('tag_instance', array_combine($keys, $values) +
-                    array('itemtype' => 'course', 'component' => 'core', 'contextid' => 1));
-        }
-
-        upgrade_course_tags();
-        // There are 8 records in 'tag_instance' table and 7 of them do not have tiuserid (except for one 'post').
-        $records = array_values($DB->get_records('tag_instance', array(), 'id', '*'));
-        $this->assertEquals(8, count($records));
-        $this->assertEquals(7, $DB->count_records('tag_instance', array('tiuserid' => 0)));
-        // Course 1 is mapped to tags 101 and 102.
-        $this->assertEquals(array(101, 102), array_values($DB->get_fieldset_select('tag_instance', 'tagid',
-                'itemtype = ? AND itemid = ? ORDER BY tagid', array('course', 1))));
-        // Course 2 is mapped to tags 102 and 103.
-        $this->assertEquals(array(102, 103), array_values($DB->get_fieldset_select('tag_instance', 'tagid',
-                'itemtype = ? AND itemid = ? ORDER BY tagid', array('course', 2))));
-        // Course 1 is mapped to tags 101 and 102.
-        $this->assertEquals(array(103, 104), array_values($DB->get_fieldset_select('tag_instance', 'tagid',
-                'itemtype = ? AND itemid = ? ORDER BY tagid', array('course', 3))));
-    }
-
     /**
      * Test that the upgrade script correctly flags courses to be frozen due to letter boundary problems.
      */
-    public function test_upgrade_course_letter_boundary() {
+    public function test_upgrade_course_letter_boundary(): void {
         global $CFG, $DB;
         $this->resetAfterTest(true);
 
@@ -783,7 +600,7 @@ class core_upgradelib_testcase extends advanced_testcase {
     /**
      * Test upgrade_letter_boundary_needs_freeze function.
      */
-    public function test_upgrade_letter_boundary_needs_freeze() {
+    public function test_upgrade_letter_boundary_needs_freeze(): void {
         global $CFG;
 
         $this->resetAfterTest();
@@ -870,7 +687,7 @@ class core_upgradelib_testcase extends advanced_testcase {
     /**
      * Test libcurl custom check api.
      */
-    public function test_check_libcurl_version() {
+    public function test_check_libcurl_version(): void {
         $supportedversion = 0x071304;
         $curlinfo = curl_version();
         $currentversion = $curlinfo['version_number'];
@@ -884,45 +701,1066 @@ class core_upgradelib_testcase extends advanced_testcase {
     }
 
     /**
-     * Create two pages with blocks, delete one page and make sure upgrade script deletes orphaned blocks
+     * Create a collection of test themes to test determining parent themes.
+     *
+     * @return Url to the path containing the test themes
      */
-    public function test_delete_block_positions() {
-        global $DB, $CFG;
-        require_once($CFG->dirroot . '/my/lib.php');
-        $this->resetAfterTest();
+    public function create_testthemes() {
+        global $CFG;
 
-        // Make sure each block on system dashboard page has a position.
-        $systempage = $DB->get_record('my_pages', array('userid' => null, 'private' => MY_PAGE_PRIVATE));
-        $systemcontext = context_system::instance();
-        $blockinstances = $DB->get_records('block_instances', array('parentcontextid' => $systemcontext->id,
-            'pagetypepattern' => 'my-index', 'subpagepattern' => $systempage->id));
-        $this->assertNotEmpty($blockinstances);
-        foreach ($blockinstances as $bi) {
-            $DB->insert_record('block_positions', ['subpage' => $systempage->id, 'pagetype' => 'my-index', 'contextid' => $systemcontext->id,
-                'blockinstanceid' => $bi->id, 'visible' => 1, 'weight' => $bi->defaultweight]);
+        $themedircontent = [
+            'testtheme' => [
+                'config.php' => '<?php $THEME->name = "testtheme"; $THEME->parents = [""];',
+            ],
+            'childoftesttheme' => [
+                'config.php' => '<?php $THEME->name = "childofboost"; $THEME->parents = ["testtheme"];',
+            ],
+            'infinite' => [
+                'config.php' => '<?php $THEME->name = "infinite"; $THEME->parents = ["forever"];',
+            ],
+            'forever' => [
+                'config.php' => '<?php $THEME->name = "forever"; $THEME->parents = ["infinite", "childoftesttheme"];',
+            ],
+            'orphantheme' => [
+                'config.php' => '<?php $THEME->name = "orphantheme"; $THEME->parents = [];',
+            ],
+            'loop' => [
+                'config.php' => '<?php $THEME->name = "loop"; $THEME->parents = ["around"];',
+            ],
+            'around' => [
+                'config.php' => '<?php $THEME->name = "around"; $THEME->parents = ["loop"];',
+            ],
+            'themewithbrokenparent' => [
+                'config.php' => '<?php $THEME->name = "orphantheme"; $THEME->parents = ["nonexistent", "testtheme"];',
+            ],
+        ];
+        $vthemedir = \org\bovigo\vfs\vfsStream::setup('themes', null, $themedircontent);
+
+        return \org\bovigo\vfs\vfsStream::url('themes');
+    }
+
+    /**
+     * Data provider of serialized string.
+     *
+     * @return array
+     */
+    public static function serialized_strings_dataprovider(): array {
+        return [
+            'A configuration that uses the old object' => [
+                'O:6:"object":3:{s:4:"text";s:32:"Nothing that anyone cares about.";s:5:"title";s:16:"Really old block";s:6:"format";s:1:"1";}',
+                true,
+                'O:8:"stdClass":3:{s:4:"text";s:32:"Nothing that anyone cares about.";s:5:"title";s:16:"Really old block";s:6:"format";s:1:"1";}'
+            ],
+            'A configuration that uses stdClass' => [
+                'O:8:"stdClass":5:{s:5:"title";s:4:"Tags";s:12:"numberoftags";s:2:"80";s:12:"showstandard";s:1:"0";s:3:"ctx";s:3:"289";s:3:"rec";s:1:"1";}',
+                false,
+                'O:8:"stdClass":5:{s:5:"title";s:4:"Tags";s:12:"numberoftags";s:2:"80";s:12:"showstandard";s:1:"0";s:3:"ctx";s:3:"289";s:3:"rec";s:1:"1";}'
+            ],
+            'A setting I saw when importing a course with blocks from 1.9' => [
+                'N;',
+                false,
+                'N;'
+            ],
+            'An object in an object' => [
+                'O:6:"object":2:{s:2:"id";i:5;s:5:"other";O:6:"object":1:{s:4:"text";s:13:"something new";}}',
+                true,
+                'O:8:"stdClass":2:{s:2:"id";i:5;s:5:"other";O:8:"stdClass":1:{s:4:"text";s:13:"something new";}}'
+            ],
+            'An array with an object in it' => [
+                'a:3:{s:4:"name";s:4:"Test";s:10:"additional";O:6:"object":2:{s:2:"id";i:5;s:4:"info";s:18:"text in the object";}s:4:"type";i:1;}',
+                true,
+                'a:3:{s:4:"name";s:4:"Test";s:10:"additional";O:8:"stdClass":2:{s:2:"id";i:5;s:4:"info";s:18:"text in the object";}s:4:"type";i:1;}'
+            ]
+        ];
+    }
+
+    /**
+     * Test that objects in serialized strings will be changed over to stdClass.
+     *
+     * @dataProvider serialized_strings_dataprovider
+     * @param string $initialstring The initial serialized setting.
+     * @param bool $expectededited If the string is expected to be edited.
+     * @param string $expectedresult The expected serialized setting to be returned.
+     */
+    public function test_upgrade_fix_serialized_objects($initialstring, $expectededited, $expectedresult): void {
+        list($edited, $resultstring) = upgrade_fix_serialized_objects($initialstring);
+        $this->assertEquals($expectededited, $edited);
+        $this->assertEquals($expectedresult, $resultstring);
+    }
+
+    /**
+     * Data provider for base64_encoded block instance config data.
+     */
+    public function encoded_strings_dataprovider() {
+        return [
+            'Normal data using stdClass' => [
+                'Tzo4OiJzdGRDbGFzcyI6NTp7czo1OiJ0aXRsZSI7czo0OiJUYWdzIjtzOjEyOiJudW1iZXJvZnRhZ3MiO3M6MjoiODAiO3M6MTI6InNob3dzdGFuZGFyZCI7czoxOiIwIjtzOjM6ImN0eCI7czozOiIyODkiO3M6MzoicmVjIjtzOjE6IjEiO30=',
+                'Tzo4OiJzdGRDbGFzcyI6NTp7czo1OiJ0aXRsZSI7czo0OiJUYWdzIjtzOjEyOiJudW1iZXJvZnRhZ3MiO3M6MjoiODAiO3M6MTI6InNob3dzdGFuZGFyZCI7czoxOiIwIjtzOjM6ImN0eCI7czozOiIyODkiO3M6MzoicmVjIjtzOjE6IjEiO30='
+            ],
+            'No data at all' => [
+                '',
+                ''
+            ],
+            'Old data using object' => [
+                'Tzo2OiJvYmplY3QiOjM6e3M6NDoidGV4dCI7czozMjoiTm90aGluZyB0aGF0IGFueW9uZSBjYXJlcyBhYm91dC4iO3M6NToidGl0bGUiO3M6MTY6IlJlYWxseSBvbGQgYmxvY2siO3M6NjoiZm9ybWF0IjtzOjE6IjEiO30=',
+                'Tzo4OiJzdGRDbGFzcyI6Mzp7czo0OiJ0ZXh0IjtzOjMyOiJOb3RoaW5nIHRoYXQgYW55b25lIGNhcmVzIGFib3V0LiI7czo1OiJ0aXRsZSI7czoxNjoiUmVhbGx5IG9sZCBibG9jayI7czo2OiJmb3JtYXQiO3M6MToiMSI7fQ=='
+            ]
+        ];
+    }
+
+    /**
+     * Check that orphaned files are deleted.
+     */
+    public function test_upgrade_delete_orphaned_file_records(): void {
+        global $DB, $CFG;
+        require_once($CFG->dirroot . '/repository/lib.php');
+
+        $this->resetAfterTest();
+        // Create user.
+        $generator = $this->getDataGenerator();
+        $user = $generator->create_user();
+        $this->setUser($user);
+        $usercontext = context_user::instance($user->id);
+        $syscontext = context_system::instance();
+
+        $fs = get_file_storage();
+
+        $userrepository = array();
+        $newstoredfile = array();
+        $repositorypluginname = array('user', 'areafiles');
+
+        // Create two repositories with one file in each.
+        foreach ($repositorypluginname as $key => $value) {
+            // Override repository permission.
+            $capability = 'repository/' . $value . ':view';
+            $guestroleid = $DB->get_field('role', 'id', array('shortname' => 'guest'));
+            assign_capability($capability, CAP_ALLOW, $guestroleid, $syscontext->id, true);
+
+            $args = array();
+            $args['type'] = $value;
+            $repos = repository::get_instances($args);
+            $userrepository[$key] = reset($repos);
+
+            $this->assertInstanceOf('repository', $userrepository[$key]);
+
+            $component = 'user';
+            $filearea  = 'private';
+            $itemid    = $key;
+            $filepath  = '/';
+            $filename  = 'userfile.txt';
+
+            $filerecord = array(
+                'contextid' => $usercontext->id,
+                'component' => $component,
+                'filearea'  => $filearea,
+                'itemid'    => $itemid,
+                'filepath'  => $filepath,
+                'filename'  => $filename,
+            );
+
+            $content = 'Test content';
+            $originalfile = $fs->create_file_from_string($filerecord, $content);
+            $this->assertInstanceOf('stored_file', $originalfile);
+
+            $newfilerecord = array(
+                'contextid' => $syscontext->id,
+                'component' => 'core',
+                'filearea'  => 'phpunit',
+                'itemid'    => $key,
+                'filepath'  => $filepath,
+                'filename'  => $filename,
+            );
+            $ref = $fs->pack_reference($filerecord);
+            $newstoredfile[$key] = $fs->create_file_from_reference($newfilerecord, $userrepository[$key]->id, $ref);
+
+            // Look for references by repository ID.
+            $files = $fs->get_external_files($userrepository[$key]->id);
+            $file = reset($files);
+            $this->assertEquals($file, $newstoredfile[$key]);
         }
 
-        // Create two users and make two copies of the system dashboard.
+        // Make one file orphaned by deleting first repository.
+        $DB->delete_records('repository_instances', array('id' => $userrepository[0]->id));
+        $DB->delete_records('repository_instance_config', array('instanceid' => $userrepository[0]->id));
+
+        upgrade_delete_orphaned_file_records();
+
+        $files = $fs->get_external_files($userrepository[0]->id);
+        $file = reset($files);
+        $this->assertFalse($file);
+
+        $files = $fs->get_external_files($userrepository[1]->id);
+        $file = reset($files);
+        $this->assertEquals($file, $newstoredfile[1]);
+    }
+
+    /**
+     * Test the functionality of {@link upgrade_core_licenses} function.
+     */
+    public function test_upgrade_core_licenses(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+
+        // Emulate that upgrade is in process.
+        $CFG->upgraderunning = time();
+
+        $deletedcorelicenseshortname = 'unknown';
+        $DB->delete_records('license', ['shortname' => $deletedcorelicenseshortname]);
+
+        upgrade_core_licenses();
+
+        $expectedshortnames = ['allrightsreserved', 'cc-4.0', 'cc-nc-4.0', 'cc-nc-nd-4.0', 'cc-nc-sa-4.0', 'cc-nd-4.0', 'cc-sa-4.0', 'public'];
+        $licenses = $DB->get_records('license');
+
+        foreach ($licenses as $license) {
+            $this->assertContains($license->shortname, $expectedshortnames);
+            $this->assertObjectHasProperty('custom', $license);
+            $this->assertObjectHasProperty('sortorder', $license);
+        }
+        // A core license which was deleted prior to upgrade should not be reinstalled.
+        $actualshortnames = $DB->get_records_menu('license', null, '', 'id, shortname');
+        $this->assertNotContains($deletedcorelicenseshortname, $actualshortnames);
+    }
+
+    /**
+     * Execute same problematic query from upgrade step.
+     *
+     * @return bool
+     */
+    public function run_upgrade_step_query() {
+        global $DB;
+
+        return $DB->execute("UPDATE {event} SET userid = 0 WHERE eventtype <> 'user' OR priority <> 0");
+    }
+
+    /**
+     * Test the functionality of upgrade_calendar_events_status() function.
+     */
+    public function test_upgrade_calendar_events_status(): void {
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $events = create_standard_events(5);
+        $eventscount = count($events);
+
+        // Run same DB query as the problematic upgrade step.
+        $this->run_upgrade_step_query();
+
+        // Get the events info.
+        $status = upgrade_calendar_events_status(false);
+
+        // Total events.
+        $expected = [
+            'total' => (object)[
+                'count' => $eventscount,
+                'bad' => $eventscount - 5, // Event count excluding user events.
+            ],
+            'standard' => (object)[
+                'count' => $eventscount,
+                'bad' => $eventscount - 5, // Event count excluding user events.
+            ],
+        ];
+
+        $this->assertEquals($expected['standard']->count, $status['standard']->count);
+        $this->assertEquals($expected['standard']->bad, $status['standard']->bad);
+        $this->assertEquals($expected['total']->count, $status['total']->count);
+        $this->assertEquals($expected['total']->bad, $status['total']->bad);
+    }
+
+    /**
+     * Test the functionality of upgrade_calendar_events_get_teacherid() function.
+     */
+    public function test_upgrade_calendar_events_get_teacherid(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        // Create a new course and enrol a user as editing teacher.
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $teacher = $generator->create_and_enrol($course, 'editingteacher');
+
+        // There's a teacher enrolled in the course, return its user id.
+        $userid = upgrade_calendar_events_get_teacherid($course->id);
+
+        // It should return the enrolled teacher by default.
+        $this->assertEquals($teacher->id, $userid);
+
+        // Un-enrol teacher from course.
+        $instance = $DB->get_record('enrol', ['courseid' => $course->id, 'enrol' => 'manual']);
+        enrol_get_plugin('manual')->unenrol_user($instance, $teacher->id);
+
+        // Since there are no teachers enrolled in the course, fallback to admin user id.
+        $admin = get_admin();
+        $userid = upgrade_calendar_events_get_teacherid($course->id);
+        $this->assertEquals($admin->id, $userid);
+    }
+
+    /**
+     * Test the functionality of upgrade_calendar_standard_events_fix() function.
+     */
+    public function test_upgrade_calendar_standard_events_fix(): void {
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $events = create_standard_events(5);
+        $eventscount = count($events);
+
+        // Get the events info.
+        $info = upgrade_calendar_events_status(false);
+
+        // There should be no standard events to be fixed.
+        $this->assertEquals(0, $info['standard']->bad);
+
+        // No events to be fixed, should return false.
+        $this->assertFalse(upgrade_calendar_standard_events_fix($info['standard'], false));
+
+        // Run same problematic DB query.
+        $this->run_upgrade_step_query();
+
+        // Get the events info.
+        $info = upgrade_calendar_events_status(false);
+
+        // There should be 20 events to be fixed (five from each type except user).
+        $this->assertEquals($eventscount - 5, $info['standard']->bad);
+
+        // Test the function runtime, passing -1 as end time.
+        // It should not be able to fix all events so fast, so some events should remain to be fixed in the next run.
+        $result = upgrade_calendar_standard_events_fix($info['standard'], false, -1);
+        $this->assertNotFalse($result);
+
+        // Call the function again, this time it will run until all events have been fixed.
+        $this->assertFalse(upgrade_calendar_standard_events_fix($info['standard'], false));
+
+        // Get the events info again.
+        $info = upgrade_calendar_events_status(false);
+
+        // All standard events should have been recovered.
+        // There should be no standard events flagged to be fixed.
+        $this->assertEquals(0, $info['standard']->bad);
+    }
+
+    /**
+     * Test the functionality of upgrade_calendar_subscription_events_fix() function.
+     */
+    public function test_upgrade_calendar_subscription_events_fix(): void {
+        global $CFG, $DB;
+
+        require_once($CFG->dirroot . '/calendar/lib.php');
+        require_once($CFG->dirroot . '/lib/bennu/bennu.inc.php');
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // Create event subscription.
+        $subscription = new stdClass;
+        $subscription->name = 'Repeated events';
+        $subscription->importfrom = CALENDAR_IMPORT_FROM_FILE;
+        $subscription->eventtype = 'site';
+        $id = calendar_add_subscription($subscription);
+
+        // Get repeated events ICS file.
+        $calendar = file_get_contents($CFG->dirroot . '/lib/tests/fixtures/repeated_events.ics');
+        $ical = new iCalendar();
+        $ical->unserialize($calendar);
+
+        // Import subscription events.
+        calendar_import_events_from_ical($ical, $id);
+
+        // Subscription should have added 18 events.
+        $eventscount = $DB->count_records('event');
+
+        // Get the events info.
+        $info = upgrade_calendar_events_status(false);
+
+        // There should be no subscription events to be fixed at this point.
+        $this->assertEquals(0, $info['subscription']->bad);
+
+        // No events to be fixed, should return false.
+        $this->assertFalse(upgrade_calendar_subscription_events_fix($info['subscription'], false));
+
+        // Run same problematic DB query.
+        $this->run_upgrade_step_query();
+
+        // Get the events info and assert total number of events is correct.
+        $info = upgrade_calendar_events_status(false);
+        $subscriptioninfo = $info['subscription'];
+
+        $this->assertEquals($eventscount, $subscriptioninfo->count);
+
+        // Since we have added our subscription as site, all sub events have been affected.
+        $this->assertEquals($eventscount, $subscriptioninfo->bad);
+
+        // Test the function runtime, passing -1 as end time.
+        // It should not be able to fix all events so fast, so some events should remain to be fixed in the next run.
+        $result = upgrade_calendar_subscription_events_fix($subscriptioninfo, false, -1);
+        $this->assertNotFalse($result);
+
+        // Call the function again, this time it will run until all events have been fixed.
+        $this->assertFalse(upgrade_calendar_subscription_events_fix($subscriptioninfo, false));
+
+        // Get the events info again.
+        $info = upgrade_calendar_events_status(false);
+
+        // All standard events should have been recovered.
+        // There should be no standard events flagged to be fixed.
+        $this->assertEquals(0, $info['subscription']->bad);
+    }
+
+    /**
+     * Test the functionality of upgrade_calendar_action_events_fix() function.
+     */
+    public function test_upgrade_calendar_action_events_fix(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // Create a new course and a choice activity.
+        $course = $this->getDataGenerator()->create_course();
+        $choice = $this->getDataGenerator()->create_module('choice', ['course' => $course->id]);
+
+        // Create some action events.
+        create_action_event(['courseid' => $course->id, 'modulename' => 'choice', 'instance' => $choice->id,
+            'eventtype' => CHOICE_EVENT_TYPE_OPEN]);
+        create_action_event(['courseid' => $course->id, 'modulename' => 'choice', 'instance' => $choice->id,
+            'eventtype' => CHOICE_EVENT_TYPE_CLOSE]);
+
+        $eventscount = $DB->count_records('event');
+
+        // Get the events info.
+        $info = upgrade_calendar_events_status(false);
+        $actioninfo = $info['action'];
+
+        // There should be no standard events to be fixed.
+        $this->assertEquals(0, $actioninfo->bad);
+
+        // No events to be fixed, should return false.
+        $this->assertFalse(upgrade_calendar_action_events_fix($actioninfo, false));
+
+        // Run same problematic DB query.
+        $this->run_upgrade_step_query();
+
+        // Get the events info.
+        $info = upgrade_calendar_events_status(false);
+        $actioninfo = $info['action'];
+
+        // There should be 2 events to be fixed.
+        $this->assertEquals($eventscount, $actioninfo->bad);
+
+        // Test the function runtime, passing -1 as end time.
+        // It should not be able to fix all events so fast, so some events should remain to be fixed in the next run.
+        $this->assertNotFalse(upgrade_calendar_action_events_fix($actioninfo, false, -1));
+
+        // Call the function again, this time it will run until all events have been fixed.
+        $this->assertFalse(upgrade_calendar_action_events_fix($actioninfo, false));
+
+        // Get the events info again.
+        $info = upgrade_calendar_events_status(false);
+
+        // All standard events should have been recovered.
+        // There should be no standard events flagged to be fixed.
+        $this->assertEquals(0, $info['action']->bad);
+    }
+
+    /**
+     * Test the user override part of upgrade_calendar_override_events_fix() function.
+     */
+    public function test_upgrade_calendar_user_override_events_fix(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $generator = $this->getDataGenerator();
+
+        // Create a new course.
+        $course = $generator->create_course();
+
+        // Create few users and enrol as students.
+        $student1 = $generator->create_and_enrol($course, 'student');
+        $student2 = $generator->create_and_enrol($course, 'student');
+        $student3 = $generator->create_and_enrol($course, 'student');
+
+        // Create some activities and some override events.
+        foreach (['assign', 'lesson', 'quiz'] as $modulename) {
+            $instance = $generator->create_module($modulename, ['course' => $course->id]);
+            create_user_override_event($modulename, $instance->id, $student1->id);
+            create_user_override_event($modulename, $instance->id, $student2->id);
+            create_user_override_event($modulename, $instance->id, $student3->id);
+        }
+
+        // There should be 9 override events to be fixed (three from each module).
+        $eventscount = $DB->count_records('event');
+        $this->assertEquals(9, $eventscount);
+
+        // Get the events info.
+        $info = upgrade_calendar_events_status(false);
+        $overrideinfo = $info['override'];
+
+        // There should be no standard events to be fixed.
+        $this->assertEquals(0, $overrideinfo->bad);
+
+        // No events to be fixed, should return false.
+        $this->assertFalse(upgrade_calendar_override_events_fix($overrideinfo, false));
+
+        // Run same problematic DB query.
+        $this->run_upgrade_step_query();
+
+        // Get the events info.
+        $info = upgrade_calendar_events_status(false);
+        $overrideinfo = $info['override'];
+
+        // There should be 9 events to be fixed (three from each module).
+        $this->assertEquals($eventscount, $overrideinfo->bad);
+
+        // Call the function again, this time it will run until all events have been fixed.
+        $this->assertFalse(upgrade_calendar_override_events_fix($overrideinfo, false));
+
+        // Get the events info again.
+        $info = upgrade_calendar_events_status(false);
+
+        // All standard events should have been recovered.
+        // There should be no standard events flagged to be fixed.
+        $this->assertEquals(0, $info['override']->bad);
+    }
+
+    /**
+     * Test the group override part of upgrade_calendar_override_events_fix() function.
+     */
+    public function test_upgrade_calendar_group_override_events_fix(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $generator = $this->getDataGenerator();
+
+        // Create a new course and few groups.
+        $course = $generator->create_course();
+        $group1 = $generator->create_group(['courseid' => $course->id]);
+        $group2 = $generator->create_group(['courseid' => $course->id]);
+        $group3 = $generator->create_group(['courseid' => $course->id]);
+
+        // Create some activities and some override events.
+        foreach (['assign', 'lesson', 'quiz'] as $modulename) {
+            $instance = $generator->create_module($modulename, ['course' => $course->id]);
+            create_group_override_event($modulename, $instance->id, $course->id, $group1->id);
+            create_group_override_event($modulename, $instance->id, $course->id, $group2->id);
+            create_group_override_event($modulename, $instance->id, $course->id, $group3->id);
+        }
+
+        // There should be 9 override events to be fixed (three from each module).
+        $eventscount = $DB->count_records('event');
+        $this->assertEquals(9, $eventscount);
+
+        // Get the events info.
+        $info = upgrade_calendar_events_status(false);
+
+        // We classify group overrides as action events since they do not record the userid.
+        $groupoverrideinfo = $info['action'];
+
+        // There should be no events to be fixed.
+        $this->assertEquals(0, $groupoverrideinfo->bad);
+
+        // No events to be fixed, should return false.
+        $this->assertFalse(upgrade_calendar_action_events_fix($groupoverrideinfo, false));
+
+        // Run same problematic DB query.
+        $this->run_upgrade_step_query();
+
+        // Get the events info.
+        $info = upgrade_calendar_events_status(false);
+        $this->assertEquals(9, $info['action']->bad);
+
+        // Call the function again, this time it will run until all events have been fixed.
+        $this->assertFalse(upgrade_calendar_action_events_fix($info['action'], false));
+
+        // Since group override events do not set userid, these events should not be flagged to be fixed.
+        $this->assertEquals(0, $groupoverrideinfo->bad);
+    }
+
+    /**
+     * Test the admin_dir_usage check with no admin setting specified.
+     */
+    public function test_admin_dir_usage_not_set(): void {
+        $result = new environment_results("custom_checks");
+
+        $this->assertNull(check_admin_dir_usage($result));
+    }
+
+    /**
+     * Test the admin_dir_usage check with the default admin setting specified.
+     */
+    public function test_admin_dir_usage_is_default(): void {
+        global $CFG;
+
+        $CFG->admin = 'admin';
+
+        $result = new environment_results("custom_checks");
+        $this->assertNull(check_admin_dir_usage($result));
+    }
+
+    /**
+     * Test the admin_dir_usage check with a custom admin setting specified.
+     */
+    public function test_admin_dir_usage_non_standard(): void {
+        global $CFG;
+
+        $this->resetAfterTest(true);
+        $CFG->admin = 'notadmin';
+
+        $result = new environment_results("custom_checks");
+        $this->assertInstanceOf(environment_results::class, check_admin_dir_usage($result));
+        $this->assertEquals('admin_dir_usage', $result->getInfo());
+        $this->assertFalse($result->getStatus());
+    }
+
+    /**
+     * Test the check_xmlrpc_usage check when the XML-RPC web service method is not set.
+     *
+     * @return void
+     */
+    public function test_check_xmlrpc_webservice_is_not_set(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $result = new environment_results('custom_checks');
+        $this->assertNull(check_xmlrpc_usage($result));
+
+        $CFG->webserviceprotocols = 'rest';
+        $result = new environment_results('custom_checks');
+        $this->assertNull(check_xmlrpc_usage($result));
+    }
+
+    /**
+     * Test the check_xmlrpc_usage check when the XML-RPC web service method is set.
+     *
+     * @return void
+     */
+    public function test_check_xmlrpc_webservice_is_set(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+        $CFG->webserviceprotocols = 'xmlrpc,rest';
+
+        $result = new environment_results('custom_checks');
+        $this->assertInstanceOf(environment_results::class, check_xmlrpc_usage($result));
+        $this->assertEquals('xmlrpc_webservice_usage', $result->getInfo());
+        $this->assertFalse($result->getStatus());
+    }
+
+    /**
+     * Test the check_mod_assignment check if mod_assignment is still used.
+     *
+     * @covers ::check_mod_assignment
+     * @return void
+     */
+    public function test_check_mod_assignment_is_used(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        $result = new environment_results('custom_checks');
+
+        if (file_exists("{$CFG->dirroot}/mod/assignment/version.php")) {
+            // This is for when the test is run on sites where mod_assignment is most likely reinstalled.
+            $this->assertNull(check_mod_assignment($result));
+        } else {
+            // This is for when the test is run on sites with mod_assignment now gone.
+            $this->assertFalse($DB->get_manager()->table_exists('assignment'));
+            $this->assertNull(check_mod_assignment($result));
+
+            // Then we can simulate a scenario here where the assignment records are still present during the upgrade
+            // by recreating the assignment table and adding a record to it.
+            $dbman = $DB->get_manager();
+            $table = new xmldb_table('assignment');
+            $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+            $table->add_field('name', XMLDB_TYPE_CHAR, '255');
+            $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+            $dbman->create_table($table);
+            $DB->insert_record('assignment', (object)['name' => 'test_assign']);
+
+            $this->assertNotNull(check_mod_assignment($result));
+            $this->assertEquals('Assignment 2.2 is in use', $result->getInfo());
+            $this->assertFalse($result->getStatus());
+        }
+    }
+
+    /**
+     * Test the check_oracle_usage check when the Moodle instance is not using Oracle as a database architecture.
+     *
+     * @covers ::check_oracle_usage
+     */
+    public function test_check_oracle_usage_is_not_used(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+        $CFG->dbtype = 'pgsql';
+
+        $result = new environment_results('custom_checks');
+        $this->assertNull(check_oracle_usage($result));
+    }
+
+    /**
+     * Test the check_oracle_usage check when the Moodle instance is using Oracle as a database architecture.
+     *
+     * @covers ::check_oracle_usage
+     */
+    public function test_check_oracle_usage_is_used(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+        $CFG->dbtype = 'oci';
+
+        $result = new environment_results('custom_checks');
+        $this->assertInstanceOf(environment_results::class, check_oracle_usage($result));
+        $this->assertEquals('oracle_database_usage', $result->getInfo());
+        $this->assertFalse($result->getStatus());
+    }
+
+    /**
+     * Data provider of usermenu items.
+     *
+     * @return array
+     */
+    public static function usermenu_items_dataprovider(): array {
+        return [
+            'Add new item to empty usermenu' => [
+                '',
+                'reports,core_reportbuilder|/reportbuilder/index.php',
+                'reports,core_reportbuilder|/reportbuilder/index.php',
+            ],
+            'Add new item to usermenu' => [
+                'profile,moodle|/user/profile.php
+grades,grades|/grade/report/mygrades.php',
+                'reports,core_reportbuilder|/reportbuilder/index.php',
+                'profile,moodle|/user/profile.php
+grades,grades|/grade/report/mygrades.php
+reports,core_reportbuilder|/reportbuilder/index.php',
+            ],
+            'Add existing item to usermenu' => [
+                'profile,moodle|/user/profile.php
+reports,core_reportbuilder|/reportbuilder/index.php
+calendar,core_calendar|/calendar/view.php?view=month',
+                'reports,core_reportbuilder|/reportbuilder/index.php',
+                'profile,moodle|/user/profile.php
+reports,core_reportbuilder|/reportbuilder/index.php
+calendar,core_calendar|/calendar/view.php?view=month',
+            ],
+        ];
+    }
+
+    /**
+     * Test the functionality of the {@link upgrade_add_item_to_usermenu()} function.
+     *
+     * @covers ::upgrade_add_item_to_usermenu
+     * @dataProvider usermenu_items_dataprovider
+     */
+    public function test_upgrade_add_item_to_usermenu(string $initialmenu, string $newmenuitem, string $expectedmenu): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+        // Set the base user menu.
+        $CFG->customusermenuitems = $initialmenu;
+
+        // Add the new item to the user menu.
+        upgrade_add_item_to_usermenu($newmenuitem);
+        $newcustomusermenu = $CFG->customusermenuitems;
+
+        $this->assertEquals($expectedmenu, $newcustomusermenu);
+    }
+
+    /**
+     * Test that file timestamps are corrected for copied files.
+     */
+    public function test_upgrade_fix_file_timestamps(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        // Add 2 files for testing, one with edited old timestamps.
+        $origtime = time();
+        $new = [
+            'contextid' => 123,
+            'component' => 'mod_label',
+            'filearea' => 'intro',
+            'itemid' => 0,
+            'filepath' => '/',
+            'filename' => 'file.txt',
+        ];
+        $old = [
+            'contextid' => 321,
+            'component' => 'mod_label',
+            'filearea' => 'intro',
+            'itemid' => 0,
+            'filepath' => '/',
+            'filename' => 'file.txt',
+        ];
+
+        // Create the file records. This will create a directory listing with the current time.
+        $fs = get_file_storage();
+        $newfile = $fs->create_file_from_string($new, 'new');
+        $oldfile = $fs->create_file_from_string($old, 'old');
+
+        // Manually set the timestamps to use on files.
+        $DB->set_field('files', 'timecreated', $origtime, [
+            'contextid' => $newfile->get_contextid(),
+            'component' => $newfile->get_component(),
+            'filearea' => $newfile->get_filearea(),
+            'itemid' => $newfile->get_itemid(),
+        ]);
+        $DB->set_field('files', 'timemodified', $origtime, [
+            'contextid' => $newfile->get_contextid(),
+            'component' => $newfile->get_component(),
+            'filearea' => $newfile->get_filearea(),
+            'itemid' => $newfile->get_itemid(),
+        ]);
+
+        $DB->set_field('files', 'timecreated', 1, ['id' => $oldfile->get_id()]);
+        $DB->set_field('files', 'timemodified', 1, ['id' => $oldfile->get_id()]);
+
+        upgrade_fix_file_timestamps();
+
+        // Check nothing changed on the new file.
+        $updatednew = $DB->get_record('files', ['id' => $newfile->get_id()]);
+        $this->assertEquals($origtime, $updatednew->timecreated);
+        $this->assertEquals($origtime, $updatednew->timemodified);
+
+        // Confirm that the file with old timestamps has been fixed.
+        $updatedold = $DB->get_record('files', ['id' => $oldfile->get_id()]);
+        $this->assertNotEquals(1, $updatedold->timecreated);
+        $this->assertNotEquals(1, $updatedold->timemodified);
+        $this->assertTrue($updatedold->timecreated >= $origtime);
+        $this->assertTrue($updatedold->timemodified >= $origtime);
+    }
+
+    /**
+     * Test the upgrade status check alongside the outageless flags.
+     *
+     * @covers ::moodle_needs_upgrading
+     */
+    public function test_moodle_upgrade_check_outageless(): void {
+        global $CFG;
+        $this->resetAfterTest();
+        // Get a baseline.
+        $this->assertFalse(moodle_needs_upgrading());
+
+        // First lets check a plain upgrade ready.
+        $CFG->version = '';
+        $this->assertTrue(moodle_needs_upgrading());
+
+        // Now set the locking config and confirm we shouldn't upgrade.
+        set_config('outagelessupgrade', true);
+        $this->assertFalse(moodle_needs_upgrading());
+
+        // Test the ignorelock flag is functioning.
+        $this->assertTrue(moodle_needs_upgrading(false));
+    }
+
+    /**
+     * Test the upgrade status check alongside the outageless flags.
+     *
+     * @covers ::upgrade_started
+     */
+    public function test_moodle_start_upgrade_outageless(): void {
+        global $CFG;
+        $this->resetAfterTest();
+        $this->assertObjectNotHasProperty('upgraderunning', $CFG);
+
+        // Confirm that starting normally sets the upgraderunning flag.
+        upgrade_started();
+        $upgrade = get_config('core', 'upgraderunning');
+        $this->assertTrue($upgrade > (time() - 5));
+
+        // Confirm that the config flag doesnt affect the internal upgrade processes.
+        unset($CFG->upgraderunning);
+        set_config('upgraderunning', null);
+        set_config('outagelessupgrade', true);
+        upgrade_started();
+        $upgrade = get_config('core', 'upgraderunning');
+        $this->assertTrue($upgrade > (time() - 5));
+    }
+
+    /**
+     * Test the upgrade timeout setter alongside the outageless flags.
+     *
+     * @covers ::upgrade_set_timeout
+     */
+    public function test_moodle_set_upgrade_timeout_outageless(): void {
+        global $CFG;
+        $this->resetAfterTest();
+        $this->assertObjectNotHasProperty('upgraderunning', $CFG);
+
+        // Confirm running normally sets the timeout.
+        upgrade_set_timeout(120);
+        $upgrade = get_config('core', 'upgraderunning');
+        $this->assertTrue($upgrade > (time() - 5));
+
+        // Confirm that the config flag doesnt affect the internal upgrade processes.
+        unset($CFG->upgraderunning);
+        set_config('upgraderunning', null);
+        set_config('outagelessupgrade', true);
+        upgrade_set_timeout(120);
+        $upgrade = get_config('core', 'upgraderunning');
+        $this->assertTrue($upgrade > (time() - 5));
+    }
+
+    /**
+     * Test the components of the upgrade process being run outageless.
+     *
+     * @covers ::moodle_needs_upgrading
+     * @covers ::upgrade_started
+     * @covers ::upgrade_set_timeout
+     */
+    public function test_upgrade_components_with_outageless(): void {
+        global $CFG;
+        $this->resetAfterTest();
+
+        // We can now define the outageless constant for use in upgrade, and test the effects.
+        define('CLI_UPGRADE_RUNNING', true);
+
+        // First test the upgrade check. Even when locked via config this should return true.
+        // This can happen when attempting to fix a broken upgrade, so needs to work.
+        set_config('outagelessupgrade', true);
+        $CFG->version = '';
+        $this->assertTrue(moodle_needs_upgrading());
+
+        // Now confirm that starting upgrade with the constant will not set the upgraderunning flag.
+        set_config('upgraderunning', null);
+        upgrade_started();
+        $upgrade = get_config('core', 'upgraderunning');
+        $this->assertFalse($upgrade);
+
+        // The same for timeouts, it should not be set if the constant is set.
+        set_config('upgraderunning', null);
+        upgrade_set_timeout(120);
+        $upgrade = get_config('core', 'upgraderunning');
+        $this->assertFalse($upgrade);
+    }
+
+    /**
+     * Data provider for {@see test_upgrade_change_binary_column_to_int()}.
+     *
+     * @return array[]
+     */
+    public static function upgrade_change_binary_column_to_int_provider(): array {
+        return [
+            'Binary column' => [
+                XMLDB_TYPE_BINARY,
+                null,
+                true,
+                false,
+            ],
+            'Integer column' => [
+                XMLDB_TYPE_INTEGER,
+                '1',
+                false,
+                false,
+            ],
+            'Non-binary and non-integer column' => [
+                XMLDB_TYPE_TEXT,
+                null,
+                false,
+                true,
+            ],
+        ];
+    }
+
+    /**
+     * Unit test for {@see upgrade_change_binary_column_to_int()}.
+     *
+     * @dataProvider upgrade_change_binary_column_to_int_provider
+     * @covers ::upgrade_change_binary_column_to_int()
+     * @param int $type The field type.
+     * @param string|null $length The field length.
+     * @param bool $expectedresult Whether the conversion succeeded.
+     * @param bool $expecexception Whether to expect an exception.
+     * @return void
+     */
+    public function test_upgrade_change_binary_column_to_int(
+        int $type,
+        ?string $length,
+        bool $expectedresult,
+        bool $expecexception,
+    ): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $dbman = $DB->get_manager();
+        $tmptablename = 'test_convert_table';
+        $fieldname = 'success';
+        $table = new xmldb_table($tmptablename);
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->add_field($fieldname, $type, $length, null, XMLDB_NOTNULL);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $dbman->create_table($table);
+
+        // Insert sample data.
+        $ones = [];
+        $truerecord = (object)[$fieldname => 1];
+        $falserecord = (object)[$fieldname => 0];
+        $ones[] = $DB->insert_record($tmptablename, $truerecord);
+        $DB->insert_record($tmptablename, $falserecord);
+        $ones[] = $DB->insert_record($tmptablename, $truerecord);
+        $DB->insert_record($tmptablename, $falserecord);
+        $ones[] = $DB->insert_record($tmptablename, $truerecord);
+        $ones[] = $DB->insert_record($tmptablename, $truerecord);
+
+        if ($expecexception) {
+            $this->expectException(coding_exception::class);
+        }
+
+        $result = upgrade_change_binary_column_to_int($tmptablename, $fieldname);
+        $this->assertEquals($expectedresult, $result);
+
+        // Verify converted column and data.
+        if ($result) {
+            $columns = $DB->get_columns($tmptablename);
+            // Verify the new field has been created and is no longer a binary field.
+            $this->assertArrayHasKey($fieldname, $columns);
+            $field = $columns[$fieldname];
+            $this->assertFalse($field->binary);
+
+            // Verify that the renamed old field has now been removed.
+            $this->assertArrayNotHasKey("tmp$fieldname", $columns);
+
+            // Confirm that the values for the converted column are the same.
+            $records = $DB->get_fieldset($tmptablename, 'id', [$fieldname => 1]);
+            $this->assertEqualsCanonicalizing($ones, $records);
+        }
+
+        // Cleanup.
+        $dbman->drop_table($table);
+    }
+
+    /**
+     * Test for upgrade script replacing full urls with relative urls in defaulthomepage setting
+     *
+     * @covers ::upgrade_change_binary_column_to_int()
+     */
+    public function test_upgrade_store_relative_url_sitehomepage(): void {
+        global $CFG;
+        $this->resetAfterTest();
+
+        // Check updating the value for the defaulthomepage.
+        $CFG->defaulthomepage = $CFG->wwwroot . '/page1';
+        upgrade_store_relative_url_sitehomepage();
+        $this->assertEquals('/page1', $CFG->defaulthomepage);
+
+        $CFG->defaulthomepage = HOMEPAGE_SITE;
+        upgrade_store_relative_url_sitehomepage();
+        $this->assertEquals(HOMEPAGE_SITE, $CFG->defaulthomepage);
+
+        // Check updating user preferences.
         $user1 = $this->getDataGenerator()->create_user();
         $user2 = $this->getDataGenerator()->create_user();
-        $page1 = my_copy_page($user1->id, MY_PAGE_PRIVATE, 'my-index');
-        $page2 = my_copy_page($user2->id, MY_PAGE_PRIVATE, 'my-index');
-
-        $context1 = context_user::instance($user1->id);
-        $context2 = context_user::instance($user2->id);
-
-        // Delete second page without deleting block positions.
-        $DB->delete_records('my_pages', ['id' => $page2->id]);
-
-        // Blocks are still here.
-        $this->assertEquals(count($blockinstances), $DB->count_records('block_positions', ['subpage' => $page1->id, 'pagetype' => 'my-index', 'contextid' => $context1->id]));
-        $this->assertEquals(count($blockinstances), $DB->count_records('block_positions', ['subpage' => $page2->id, 'pagetype' => 'my-index', 'contextid' => $context2->id]));
-
-        // Run upgrade script that should delete orphaned block_positions.
-        upgrade_block_positions();
-
-        // First user still has all his block_positions, second user does not.
-        $this->assertEquals(count($blockinstances), $DB->count_records('block_positions', ['subpage' => $page1->id, 'pagetype' => 'my-index', 'contextid' => $context1->id]));
-        $this->assertEquals(0, $DB->count_records('block_positions', ['subpage' => $page2->id, 'pagetype' => 'my-index']));
+        set_user_preference('user_home_page_preference', $CFG->wwwroot . '/page2', $user1);
+        set_user_preference('user_home_page_preference', HOMEPAGE_MY, $user2);
+        upgrade_store_relative_url_sitehomepage();
+        $this->assertEquals('/page2', get_user_preferences('user_home_page_preference', null, $user1->id));
+        $this->assertEquals(HOMEPAGE_MY, get_user_preferences('user_home_page_preference', null, $user2->id));
     }
 }

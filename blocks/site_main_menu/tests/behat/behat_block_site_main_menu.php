@@ -114,12 +114,8 @@ class behat_block_site_main_menu extends behat_base {
     protected function get_site_menu_activity_element($element, $selectortype, $activityname) {
         $activitynode = $this->get_site_menu_activity_node($activityname);
 
-        // Transforming to Behat selector/locator.
-        list($selector, $locator) = $this->transform_selector($selectortype, $element);
-        $exception = new ElementNotFoundException($this->getSession(), '"' . $element . '" "' .
-            $selectortype . '" in "' . $activityname . '" ');
-
-        return $this->find($selector, $locator, $exception, $activitynode);
+        $exception = new ElementNotFoundException($this->getSession(), "'{$element}' '{$selectortype}' in '{$activityname}'");
+        return $this->find($selectortype, $element, $exception, $activitynode);
     }
 
     /**
@@ -129,7 +125,9 @@ class behat_block_site_main_menu extends behat_base {
      * @param string $activityname
      */
     public function activity_in_site_main_menu_block_should_be_hidden($activityname) {
-        $this->get_site_menu_activity_element("a.dimmed", "css_element", $activityname);
+        $activitynode = $this->get_site_menu_activity_node($activityname);
+        $exception = new ExpectationException('"' . $activityname . '" is not hidden', $this->getSession());
+        $this->find('named_partial', array('badge', get_string('hiddenfromstudents')), $exception, $activitynode);
     }
 
     /**
@@ -139,7 +137,9 @@ class behat_block_site_main_menu extends behat_base {
      * @param string $activityname
      */
     public function activity_in_site_main_menu_block_should_be_available_but_hidden_from_course_page($activityname) {
-        $this->get_site_menu_activity_element("a.stealth", "css_element", $activityname);
+        $activitynode = $this->get_site_menu_activity_node($activityname);
+        $exception = new ExpectationException('"' . $activityname . '" is not hidden but available', $this->getSession());
+        $this->find('named_partial', array('badge', get_string('hiddenoncoursepage')), $exception, $activitynode);
     }
 
     /**
@@ -153,5 +153,18 @@ class behat_block_site_main_menu extends behat_base {
         $activityname = behat_context_helper::escape($activityname);
         $xpath = "//*[contains(concat(' ',normalize-space(@class),' '),' block_site_main_menu ')]//li[contains(., $activityname)]";
         $this->execute('behat_action_menu::i_open_the_action_menu_in', [$xpath, 'xpath_element']);
+    }
+
+    /**
+     * Return the list of partial named selectors.
+     *
+     * @return array
+     */
+    public static function get_partial_named_selectors(): array {
+        return [
+            new behat_component_named_selector('Activity', [
+                "//*[contains(concat(' ',normalize-space(@class),' '),' block_site_main_menu ')]//li[contains(., %locator%)]"
+            ]),
+        ];
     }
 }

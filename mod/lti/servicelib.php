@@ -26,6 +26,7 @@
 defined('MOODLE_INTERNAL') || die;
 
 require_once($CFG->dirroot.'/mod/lti/OAuthBody.php');
+require_once($CFG->dirroot.'/mod/lti/locallib.php');
 
 // TODO: Switch to core oauthlib once implemented - MDL-30149.
 use moodle\mod\lti as lti;
@@ -70,7 +71,9 @@ function lti_parse_message_id($xml) {
 function lti_parse_grade_replace_message($xml) {
     $node = $xml->imsx_POXBody->replaceResultRequest->resultRecord->sourcedGUID->sourcedId;
     $resultjson = json_decode((string)$node);
-
+    if ( is_null($resultjson) ) {
+        throw new Exception('Invalid sourcedId in result message');
+    }
     $node = $xml->imsx_POXBody->replaceResultRequest->resultRecord->result->resultScore->textString;
 
     $score = (string) $node;
@@ -99,6 +102,9 @@ function lti_parse_grade_replace_message($xml) {
 function lti_parse_grade_read_message($xml) {
     $node = $xml->imsx_POXBody->readResultRequest->resultRecord->sourcedGUID->sourcedId;
     $resultjson = json_decode((string)$node);
+    if ( is_null($resultjson) ) {
+        throw new Exception('Invalid sourcedId in result message');
+    }
 
     $parsed = new stdClass();
     $parsed->instanceid = $resultjson->data->instanceid;
@@ -115,6 +121,9 @@ function lti_parse_grade_read_message($xml) {
 function lti_parse_grade_delete_message($xml) {
     $node = $xml->imsx_POXBody->deleteResultRequest->resultRecord->sourcedGUID->sourcedId;
     $resultjson = json_decode((string)$node);
+    if ( is_null($resultjson) ) {
+        throw new Exception('Invalid sourcedId in result message');
+    }
 
     $parsed = new stdClass();
     $parsed->instanceid = $resultjson->data->instanceid;
@@ -145,7 +154,7 @@ function lti_accepts_grades($ltiinstance) {
         }
     } else {
         $enabledcapabilities = explode("\n", $ltitype->enabledcapability);
-        $acceptsgrades = in_array('Result.autocreate', $enabledcapabilities);
+        $acceptsgrades = in_array('Result.autocreate', $enabledcapabilities) || in_array('BasicOutcome.url', $enabledcapabilities);
     }
 
     return $acceptsgrades;
@@ -249,6 +258,7 @@ function lti_verify_message($key, $sharedsecrets, $body, $headers = null) {
             // TODO: Switch to core oauthlib once implemented - MDL-30149.
             lti\handle_oauth_body_post($key, $secret, $body, $headers);
         } catch (Exception $e) {
+            debugging('LTI message verification failed: '.$e->getMessage());
             $signaturefailed = true;
         }
 

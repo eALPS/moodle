@@ -7,117 +7,99 @@ Feature: We can change what we are viewing on the grader report
   Background:
     Given the following "courses" exist:
       | fullname | shortname | format |
-      | Course 1 | C1 | topics |
+      | Course 1 | C1        | topics |
     And the following "users" exist:
-      | username | firstname | lastname | email |
-      | teacher1 | Teacher | 1 | teacher1@example.com |
-      | student1 | Student | 1 | student1@example.com |
-      | student2 | Student | 1 | student2@example.com |
+      | username | firstname | lastname | email                |
+      | teacher1 | Teacher   | 1        | teacher1@example.com |
+      | student1 | Student   | 1        | student1@example.com |
+      | student2 | Student   | 2        | student2@example.com |
     And the following "course enrolments" exist:
-      | user | course | role |
-      | teacher1 | C1 | editingteacher |
-      | student1 | C1 | student |
+      | user     | course | role           |
+      | teacher1 | C1     | editingteacher |
+      | student1 | C1     | student        |
+      | student2 | C1     | student        |
+    And the following "activities" exist:
+      | activity | course | section | name                   | intro                   | assignsubmission_onlinetext_enabled | submissiondrafts |
+      | assign   | C1     | 1       | Test assignment name 1 | Submit your online text | 1                                   | 0                |
+      | assign   | C1     | 1       | Test assignment name 2 | submit your online text | 1                                   | 0                |
+    And the following "mod_assign > submissions" exist:
+      | assign                 | user     | onlinetext                            |
+      | Test assignment name 1 | student1 | This is a submission for assignment 1 |
+      | Test assignment name 2 | student1 | This is a submission for assignment 2 |
+    And the following "grade items" exist:
+      | itemname     | grademin | grademax | course |
+      | Manual grade | 20       | 40       | C1     |
+    And the following "grade grades" exist:
+      | gradeitem              | user     | grade |
+      | Test assignment name 1 | student1 | 80    |
+      | Test assignment name 2 | student1 | 90    |
+      | Manual grade           | student1 | 30    |
     And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Assignment" to section "1" and I fill the form with:
-      | Assignment name | Test assignment name 1 |
-      | Description | Submit your online text |
-      | assignsubmission_onlinetext_enabled | 1 |
-    And I add a "Assignment" to section "1" and I fill the form with:
-      | Assignment name | Test assignment name 2 |
-      | Description | Submit your online text |
-      | assignsubmission_onlinetext_enabled | 1 |
-    And I log out
-    And I log in as "student1"
-    And I follow "Course 1"
-    And I follow "Test assignment name 1"
-    When I press "Add submission"
-    And I set the following fields to these values:
-      | Online text | This is a submission for assignment 1 |
-    And I press "Save changes"
-    Then I should see "Submitted for grading"
-    And I follow "Course 1"
-    And I follow "Test assignment name 2"
-    When I press "Add submission"
-    And I set the following fields to these values:
-      | Online text | This is a submission for assignment 2 |
-    And I press "Save changes"
-    Then I should see "Submitted for grading"
-    And I log out
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I navigate to "View > Grader report" in the course gradebook
-    And I turn editing mode on
-    And I give the grade "80.00" to the user "Student 1" for the grade item "Test assignment name 1"
-    And I give the grade "90.00" to the user "Student 1" for the grade item "Test assignment name 2"
-    And I press "Save changes"
-    And I turn editing mode off
 
   @javascript
   Scenario: View and minimise the grader report containing hidden activities
-    And I follow "Course 1"
-    And I turn editing mode on
+    When I am on "Course 1" course homepage with editing mode on
     And I open "Test assignment name 2" actions menu
-    And I click on "Hide" "link" in the "Test assignment name 2" activity
-    And I follow "Course 1"
+    And I choose "Hide" in the open action menu
+    And I am on "Course 1" course homepage with editing mode off
     And I navigate to "View > Grader report" in the course gradebook
-    And I should see "Test assignment name 1"
-    And I should see "Test assignment name 2"
+    And I should see "Test assignment name 1" in the "user-grades" "table"
+    And I should see "Test assignment name 2" in the "user-grades" "table"
+    And I should see "Manual grade"
     And I should see "Course total"
     And the following should exist in the "user-grades" table:
-      | -1-                | -4-       | -5-       | -6-       |
-      | Student 1          | 80        | 90        | 170       |
-    And I click on "Change to aggregates only" "link"
-    And I should not see "Test assignment name 1"
-    And I should not see "Test assignment name 2"
+      | -1-                | -2-                  | -3-       | -4-       | -5-       | -6-       |
+      | Student 1          | student1@example.com | 80        | 90        | 30        | 170       |
+    And I click on grade item menu "Course 1" of type "course" on "grader" page
+    And I choose "Show totals only" in the open action menu
+    And I should not see "Test assignment name 1" in the "user-grades" "table"
+    And I should not see "Test assignment name 2" in the "user-grades" "table"
+    And I should not see "Manual grade"
     And I should see "Course total"
     And the following should exist in the "user-grades" table:
-      | -1-                | -4-       |
-      | Student 1          | 170       |
-    And I click on "Change to grades only" "link"
-    And I should see "Test assignment name 1"
-    And I should see "Test assignment name 2"
+      | -1-                | -2-                  | -3-       |
+      | Student 1          | student1@example.com | 170       |
+    And I click on grade item menu "Course 1" of type "course" on "grader" page
+    And I click on "Show grades only" "link"
+    And I should see "Test assignment name 1" in the "user-grades" "table"
+    And I should see "Test assignment name 2" in the "user-grades" "table"
+    And I should see "Manual grade"
     And I should not see "Course total"
     And the following should exist in the "user-grades" table:
-      | -1-                | -4-       | -5-       |
-      | Student 1          | 80        | 90        |
+      | -1-                | -2-                  | -3-       | -4-       | -5-       |
+      | Student 1          | student1@example.com | 80        | 90        | 30        |
 
-  @javascript
-  Scenario: View and minimise the grader report containing hidden activities without the 'moodle/grade:viewhidden' capability
-    And I follow "Course 1"
-    And I turn editing mode on
+  @javascript @skip_chrome_zerosize
+  Scenario: Minimise the grader report containing hidden activities without the 'moodle/grade:viewhidden' capability
+    Given I am on "Course 1" course homepage with editing mode on
     And I open "Test assignment name 2" actions menu
-    And I click on "Hide" "link" in the "Test assignment name 2" activity
-    And I log out
-    And I log in as "admin"
-    And I set the following system permissions of "Teacher" role:
-      | capability | permission |
-      | moodle/grade:viewhidden | Prevent |
-    And I log out
-    And the following "course enrolments" exist:
-      | user | course | role |
-      | student2 | C1 | student |
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I navigate to "View > Grader report" in the course gradebook
-    And I should see "Test assignment name 1"
-    And I should see "Test assignment name 2"
+    And I choose "Hide" in the open action menu
+    And the following "role capability" exists:
+      | role                    | editingteacher |
+      | moodle/grade:viewhidden | prevent        |
+    And I am on the "Course 1" "grades > Grader report > View" page logged in as "teacher1"
+    Then I should see "Test assignment name 1" in the "user-grades" "table"
+    And I should see "Test assignment name 2" in the "user-grades" "table"
+    And I should see "Manual grade"
     And I should see "Course total"
     And the following should exist in the "user-grades" table:
-      | -1-                | -4-       | -5-       | -6-       |
-      | Student 1          | 80        | -         | 80        |
-    And I click on "Change to aggregates only" "link"
-    And I should not see "Test assignment name 1"
-    And I should not see "Test assignment name 2"
+      | -1-                | -2-                  | -3-       | -4-       | -5-       | -6-       |
+      | Student 1          | student1@example.com | 80        | -         | 30        | 105.71    |
+    And I click on grade item menu "Course 1" of type "course" on "grader" page
+    And I choose "Show totals only" in the open action menu
+    And I should not see "Test assignment name 1" in the "user-grades" "table"
+    And I should not see "Test assignment name 2" in the "user-grades" "table"
+    And I should not see "Manual grade"
     And I should see "Course total"
     And the following should exist in the "user-grades" table:
-      | -1-                | -4-       |
-      | Student 1          | 80        |
-    And I click on "Change to grades only" "link"
-    And I should see "Test assignment name 1"
-    And I should see "Test assignment name 2"
+      | -1-                | -2-                  | -3-       |
+      | Student 1          | student1@example.com | 105.71    |
+    And I click on grade item menu "Course 1" of type "course" on "grader" page
+    When I click on "Show grades only" "link"
+    Then I should see "Test assignment name 1" in the "user-grades" "table"
+    And I should see "Test assignment name 2" in the "user-grades" "table"
+    And I should see "Manual grade"
     And I should not see "Course total"
     And the following should exist in the "user-grades" table:
-      | -1-                | -4-       | -5-       |
-      | Student 1          | 80        | -         |
+      | -1-                | -2-                  | -3-       | -4-       | -5-       |
+      | Student 1          | student1@example.com | 80        | -         | 30        |

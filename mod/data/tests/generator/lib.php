@@ -23,13 +23,14 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use mod_data\manager;
+use mod_data\preset;
+
 defined('MOODLE_INTERNAL') || die();
 
 
 /**
  * Data generator class for mod_data.
- *
- * Currently, the field types in the ignoredfieldtypes array aren't supported.
  *
  * @package    mod_data
  * @category   test
@@ -47,12 +48,6 @@ class mod_data_generator extends testing_module_generator {
      * @var int keep track of how many database records have been created.
      */
     protected $databaserecordcount = 0;
-
-    /**
-     * @var The field types which not handled by the generator as of now.
-     */
-    protected $ignoredfieldtypes = array('latlong', 'file', 'picture');
-
 
     /**
      * To be called from data reset code only,
@@ -73,7 +68,7 @@ class mod_data_generator extends testing_module_generator {
      * @param array $options
      * @return StdClass
      */
-    public function create_instance($record = null, array $options = null) {
+    public function create_instance($record = null, ?array $options = null) {
         // Note, the parent class does not type $record to cast to array and then to object.
         $record = (object) (array) $record;
 
@@ -89,20 +84,13 @@ class mod_data_generator extends testing_module_generator {
 
     /**
      * Creates a field for a mod_data instance.
-     * Currently, the field types in the ignoredfieldtypes array aren't supported.
      *
-     * @param StdClass $record
-     * @param mod_data $data
-     * @return data_field_{type}
+     * @param stdClass $record
+     * @param stdClass|null $data
+     * @return data_field_base
      */
-    public function create_field(stdClass $record = null, $data = null) {
+    public function create_field(?stdClass $record = null, $data = null) {
         $record = (array) $record;
-
-        if (in_array($record['type'], $this->ignoredfieldtypes)) {
-            throw new coding_exception('$record\'s type value must not be same as values in ignoredfieldtypes
-                    in phpunit_util::create_field()');
-            return false;
-        }
 
         $this->databasefieldcount++;
 
@@ -132,6 +120,11 @@ class mod_data_generator extends testing_module_generator {
             $record['description'] = " This is testField - " . $this->databasefieldcount;
         }
 
+        if (isset($record['param1']) && !empty($record['param1'])) {
+            // Some fields have multiline entries.
+            $record['param1'] = str_replace('\n', "\n", $record['param1']);
+        }
+
         if (!isset($record['param1'])) {
             if ($record['type'] == 'checkbox') {
                 $record['param1'] = implode("\n", array('opt1', 'opt2', 'opt3', 'opt4'));
@@ -143,6 +136,8 @@ class mod_data_generator extends testing_module_generator {
                 $record['param1'] = implode("\n", array('multimenu1', 'multimenu2', 'multimenu3', 'multimenu4'));
             } else if (($record['type'] === 'text') || ($record['type'] === 'url')) {
                 $record['param1'] = 1;
+            } else if ($record['type'] == 'latlong') {
+                $record['param1'] = 'Google Maps';
             } else {
                 $record['param1'] = '';
             }
@@ -152,6 +147,8 @@ class mod_data_generator extends testing_module_generator {
 
             if ($record['type'] === 'textarea') {
                 $record['param2'] = 60;
+            } else if ($record['type'] == 'latlong') {
+                $record['param2'] = -1;
             } else {
                 $record['param2'] = '';
             }
@@ -161,6 +158,8 @@ class mod_data_generator extends testing_module_generator {
 
             if (($record['type'] === 'textarea')) {
                 $record['param3'] = 35;
+            } else if ($record['type'] == 'picture' || $record['type'] == 'file') {
+                $record['param3'] = 0;
             } else {
                 $record['param3'] = '';
             }
@@ -184,8 +183,6 @@ class mod_data_generator extends testing_module_generator {
         $field = data_get_field($record, $data);
         $field->insert_field();
 
-        data_generate_default_template($data, 'addtemplate', 0, false, true);
-
         return $field;
     }
 
@@ -193,7 +190,6 @@ class mod_data_generator extends testing_module_generator {
      * Creates a field for a mod_data instance.
      * Keep in mind the default data field params created in create_field() function!
      * ...if you haven't provided your own custom data field parameters there.
-     * Currently, the field types in the ignoredfieldtypes array aren't supported.
      * The developers using the generator must adhere to the following format :
      *
      *   Syntax : $contents[ fieldid ] = fieldvalue
@@ -206,27 +202,43 @@ class mod_data_generator extends testing_module_generator {
      *   $contents['text'] = 'text'
      *   $contents['textarea'] = 'text'
      *   $contents['url'] = 'example.url' or array('example.url', 'urlname')
+     *   $contents['latlong'] = array('value for lattitude', 'value for longitude')
+     *   $contents['file'] = 'filename or draftitemid'
+     *   $contents['picture'] = array('filename or draftitemid', 'alternative text')
      *
-     * @param mod_data $data
+     * @param stdClass $data record from table {data}
      * @param array $contents
-     * @return data_field_{type}
+     * @param int $groupid
+     * @param array $tags
+     * @param array $options
+     * @param int $userid if defined, it will be the author of the entry
+     * @return int id of the generated record in table {data_records}
      */
-    public function create_entry($data, array $contents, $groupid = 0) {
-        global $DB;
+    public function create_entry($data, array $contents, $groupid = 0, $tags = [], ?array $options = null, int $userid = 0) {
+        global $DB, $USER, $CFG;
+
+        // Set current user if defined.
+        if (!empty($userid)) {
+            $currentuser = $USER;
+            $user = \core_user::get_user($userid);
+            $this->set_user($user);
+        }
 
         $this->databaserecordcount++;
 
         $recordid = data_add_record($data, $groupid);
+
+        if (isset($options['approved'])) {
+            data_approve_entry($recordid, !empty($options['approved']));
+        } else {
+            $approved = null;
+        }
 
         $fields = $DB->get_records('data_fields', array('dataid' => $data->id));
 
         // Validating whether required field are filled.
         foreach ($fields as $field) {
             $fieldhascontent = true;
-
-            if (in_array($field->type, $this->ignoredfieldtypes)) {
-                continue;
-            }
 
             $field = data_get_field($field, $data);
 
@@ -284,6 +296,52 @@ class mod_data_generator extends testing_module_generator {
                     $fieldhascontent = false;
                 }
 
+            } else if ($field->type === 'latlong') {
+                $values = array();
+
+                foreach ($contents[$fieldid] as $key => $value) {
+                    $values['field_' . $fieldid . '_' . $key] = $value;
+                }
+
+                $contents[$fieldid] = $values;
+                $fieldname = 'field_' . $fieldid . '_0';
+                if (!$field->notemptyfield($values[$fieldname], $fieldname)) {
+                    $fieldhascontent = false;
+                }
+
+            } else if ($field->type === 'file' || $field->type === 'picture') {
+                if (is_array($contents[$fieldid])) {
+                    list($itemid, $alttext) = $contents[$fieldid];
+                } else {
+                    $itemid = $contents[$fieldid];
+                    $alttext = '';
+                }
+
+                if (strlen($itemid) && !is_numeric($itemid)) {
+                    // We expect draftarea item id here but it can also be a filename, in this case provider will generate file.
+                    $filename = $itemid;
+                    $usercontext = context_user::instance($USER->id);
+                    $itemid = file_get_unused_draft_itemid();
+                    get_file_storage()->create_file_from_string(['component' => 'user', 'filearea' => 'draft',
+                        'contextid' => $usercontext->id, 'itemid' => $itemid, 'filepath' => '/',
+                        'filename' => $filename],
+                        file_get_contents($CFG->dirroot.'/mod/data/field/picture/pix/sample.png'));
+                }
+
+                $fieldname = 'field_' . $fieldid . '_file';
+                if ($field->type === 'file') {
+                    $contents[$fieldid] = $itemid;
+                } else {
+                    $contents[$fieldid] = [
+                        $fieldname => $itemid,
+                        'field_' . $fieldid . '_alttext' => $alttext
+                    ];
+                }
+
+                if (!$field->notemptyfield($itemid, $fieldname)) {
+                    $fieldhascontent = false;
+                }
+
             } else {
                 if ($field->notemptyfield($contents[$fieldid], 'field_' . $fieldid . '_0')) {
                     continue;
@@ -298,7 +356,7 @@ class mod_data_generator extends testing_module_generator {
         foreach ($contents as $fieldid => $content) {
             $field = data_get_field_from_id($fieldid, $data);
 
-            if (is_array($content) and in_array($field->type, array('date', 'textarea', 'url'))) {
+            if (is_array($content) and in_array($field->type, array('date', 'textarea', 'url', 'picture', 'latlong'))) {
 
                 foreach ($content as $fieldname => $value) {
                     $field->update_content($recordid, $value, $fieldname);
@@ -309,6 +367,58 @@ class mod_data_generator extends testing_module_generator {
             }
         }
 
+        if (!empty($tags)) {
+            $cm = get_coursemodule_from_instance('data', $data->id);
+            core_tag_tag::set_item_tags('mod_data', 'data_records', $recordid,
+                context_module::instance($cm->id), $tags);
+        }
+
+        if (isset($currentuser)) {
+            $this->set_user($currentuser);
+        }
+
         return $recordid;
+    }
+
+    /**
+     * Creates a preset from a mod_data instance.
+     *
+     * @param stdClass $instance The mod_data instance.
+     * @param stdClass|null $record The preset information, like 'name'.
+     * @return preset The preset that has been created.
+     */
+    public function create_preset(stdClass $instance, ?stdClass $record = null): preset {
+        global $USER;
+
+        if (is_null($record)) {
+            $record = new stdClass();
+        }
+
+        // Set current user if defined.
+        if (isset($record->userid) && $record->userid != $USER->id) {
+            $currentuser = $USER;
+            $user = \core_user::get_user($record->userid);
+            $this->set_user($user);
+        }
+
+        // Fill in optional values if not specified.
+        $presetname = 'New preset ' . microtime();
+        if (isset($record->name)) {
+            $presetname = $record->name;
+        }
+        $presetdescription = null;
+        if (isset($record->description)) {
+            $presetdescription = $record->description;
+        }
+
+        $manager = manager::create_from_instance($instance);
+        $preset = preset::create_from_instance($manager, $presetname, $presetdescription);
+        $preset->save();
+
+        if (isset($currentuser)) {
+            $this->set_user($currentuser);
+        }
+
+        return $preset;
     }
 }

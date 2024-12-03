@@ -14,14 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for grade quering
- *
- * @pacakge   core_grade
- * @category  phpunit
- * @copyright 2011 Petr Skoda {@link http://skodak.org}
- * @license   http://www.gnu.org/copyleft/gpl.html GNU Public License
- */
+namespace core_grades;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -29,10 +22,17 @@ global $CFG;
 require_once($CFG->libdir.'/gradelib.php');
 require_once($CFG->dirroot.'/grade/querylib.php');
 
+/**
+ * Unit tests for grade quering
+ *
+ * @package   core_grades
+ * @category  test
+ * @copyright 2011 Petr Skoda {@link http://skodak.org}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU Public License
+ */
+class querylib_test extends \advanced_testcase {
 
-class core_grade_querylib_testcase extends advanced_testcase {
-
-    public function test_grade_get_gradable_activities() {
+    public function test_grade_get_gradable_activities(): void {
         $this->resetAfterTest(true);
 
         $course = $this->getDataGenerator()->create_course();
@@ -51,7 +51,7 @@ class core_grade_querylib_testcase extends advanced_testcase {
         $this->assertTrue(isset($cms[$forum1->cmid]));
     }
 
-    public function test_grade_get_grade_items_for_activity() {
+    public function test_grade_get_grade_items_for_activity(): void {
         $this->resetAfterTest(true);
 
         $course = $this->getDataGenerator()->create_course();

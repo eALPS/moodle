@@ -38,14 +38,50 @@ class badges_cron_task extends scheduled_task {
     }
 
     /**
-     * Do the job.
-     * Throw exceptions on errors (the job will be retried).
+     * Reviews criteria and awards badges
+     *
+     * First find all badges that can be earned, then reviews each badge.
+     * (Not sure how efficient this is timewise).
      */
     public function execute() {
-        global $CFG;
-        // Run badges review cron.
-        require_once($CFG->dirroot . '/badges/cron.php');
-        badge_cron();
-    }
+        global $DB, $CFG;
+        if (empty($CFG->enablebadges)) {
+            return;
+        }
+        require_once($CFG->libdir . '/badgeslib.php');
 
+        $courseparams = [];
+        if (empty($CFG->badges_allowcoursebadges)) {
+            $coursesql = '';
+        } else {
+            $coursesql = "OR EXISTS (
+                          SELECT c.id
+                            FROM {course} c
+                           WHERE c.visible = :visible
+                             AND c.startdate < :current
+                             AND c.id = b.courseid
+                           ) ";
+            $courseparams = ['visible' => 1, 'current' => time()];
+        }
+
+        $sql = "SELECT b.id
+                  FROM {badge} b
+                 WHERE (b.status = :active OR b.status = :activelocked)
+                   AND (b.type = :site $coursesql )";
+        $badgeparams = [
+            'active' => BADGE_STATUS_ACTIVE,
+            'activelocked' => BADGE_STATUS_ACTIVE_LOCKED,
+            'site' => BADGE_TYPE_SITE,
+        ];
+        $params = array_merge($badgeparams, $courseparams);
+        $badges = $DB->get_fieldset_sql($sql, $params);
+
+        foreach ($badges as $bid) {
+            $task = new badges_adhoc_task();
+            $task->set_custom_data(['badgeid' => $bid]);
+            manager::queue_adhoc_task($task, true);
+        }
+
+        mtrace(count($badges) . " adhoc badge tasks were added");
+    }
 }

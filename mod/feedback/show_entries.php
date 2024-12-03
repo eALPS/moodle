@@ -43,13 +43,14 @@ list($course, $cm) = get_course_and_cm_from_cmid($id, 'feedback');
 $baseurl = new moodle_url('/mod/feedback/show_entries.php', array('id' => $cm->id));
 $PAGE->set_url(new moodle_url($baseurl, array('userid' => $userid, 'showcompleted' => $showcompleted,
         'delete' => $deleteid)));
-
 $context = context_module::instance($cm->id);
 
 require_login($course, true, $cm);
 $feedback = $PAGE->activityrecord;
 
 require_capability('mod/feedback:viewreports', $context);
+
+$actionbar = new \mod_feedback\output\responses_action_bar($cm->id, $baseurl);
 
 if ($deleteid) {
     // This is a request to delete a reponse.
@@ -85,11 +86,17 @@ if ($data = $courseselectform->get_data()) {
 navigation_node::override_active_url($baseurl);
 $PAGE->set_heading($course->fullname);
 $PAGE->set_title($feedback->name);
+$PAGE->activityheader->set_attrs([
+    'hidecompletion' => true,
+    'description' => ''
+]);
+$PAGE->add_body_class('limitedwidth');
 echo $OUTPUT->header();
-echo $OUTPUT->heading(format_string($feedback->name));
 
-$current_tab = 'showentries';
-require('tabs.php');
+/** @var \mod_feedback\output\renderer $renderer */
+$renderer = $PAGE->get_renderer('mod_feedback');
+echo $renderer->main_action_bar($actionbar);
+echo $OUTPUT->heading(get_string('show_entries', 'mod_feedback'), 3);
 
 /// Print the main part of the page
 ///////////////////////////////////////////////////////////////////////////
@@ -119,10 +126,24 @@ if ($userid || $showcompleted) {
             $anonresponsestable->get_reponse_navigation_links($completedrecord);
 
     echo html_writer::start_div('response_navigation');
-    echo $prevresponseurl ? html_writer::link($prevresponseurl, get_string('prev'), ['class' => 'prev_response']) : '';
-    echo html_writer::link($returnurl, get_string('back'), ['class' => 'back_to_list']);
-    echo $nextresponseurl ? html_writer::link($nextresponseurl, get_string('next'), ['class' => 'next_response']) : '';
+
+    $responsenavigation = [
+        'col1content' => '',
+        'col2content' => html_writer::link($returnurl, get_string('back'), ['class' => 'back_to_list']),
+        'col3content' => '',
+    ];
+
+    if ($prevresponseurl) {
+        $responsenavigation['col1content'] = html_writer::link($prevresponseurl, get_string('prev'), ['class' => 'prev_response']);
+    }
+
+    if ($nextresponseurl) {
+        $responsenavigation['col3content'] = html_writer::link($nextresponseurl, get_string('next'), ['class' => 'next_response']);
+    }
+
+    echo $OUTPUT->render_from_template('core/columns-1to1to1', $responsenavigation);
     echo html_writer::end_div();
+
 } else {
     // Print the list of responses.
     $courseselectform->display();
@@ -146,4 +167,3 @@ if ($userid || $showcompleted) {
 
 // Finish the page.
 echo $OUTPUT->footer();
-

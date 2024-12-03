@@ -25,6 +25,23 @@
 class data_field_number extends data_field_base {
     var $type = 'number';
 
+    public function supports_preview(): bool {
+        return true;
+    }
+
+    public function get_data_content_preview(int $recordid): stdClass {
+        return (object)[
+            'id' => 0,
+            'fieldid' => $this->field->id,
+            'recordid' => $recordid,
+            'content' => 1233 + $recordid,
+            'content1' => null,
+            'content2' => null,
+            'content3' => null,
+            'content4' => null,
+        ];
+    }
+
     function update_content($recordid, $value, $name='') {
         global $DB;
 
@@ -46,27 +63,21 @@ class data_field_number extends data_field_base {
     }
 
     function display_browse_field($recordid, $template) {
-        global $DB;
-
-        if ($content = $DB->get_record('data_content', array('fieldid'=>$this->field->id, 'recordid'=>$recordid))) {
-            if (strlen($content->content) < 1) {
-                return false;
-            }
-            $number = $content->content;
-            $decimals = trim($this->field->param1);
-            // only apply number formatting if param1 contains an integer number >= 0:
-            if (preg_match("/^\d+$/", $decimals)) {
-                $decimals = $decimals * 1;
-                // removes leading zeros (eg. '007' -> '7'; '00' -> '0')
-                $str = format_float($number, $decimals, true);
-                // For debugging only:
-#                $str .= " ($decimals)";
-            } else {
-                $str = $number;
-            }
-            return $str;
+        $content = $this->get_data_content($recordid);
+        if (!$content || $content->content === '') {
+            return '';
         }
-        return false;
+        $number = $content->content;
+        $decimals = trim($this->field->param1 ?? '');
+        // Only apply number formatting if param1 contains an integer number >= 0.
+        if (preg_match("/^\d+$/", $decimals)) {
+            $decimals = $decimals * 1;
+            // Removes leading zeros (eg. '007' -> '7'; '00' -> '0').
+            $str = format_float($number, $decimals, true);
+        } else {
+            $str = $number;
+        }
+        return $str;
     }
 
     function display_search_field($value = '') {
@@ -75,8 +86,12 @@ class data_field_number extends data_field_base {
                'value="'.s($value).'" class="form-control d-inline"/>';
     }
 
-    function parse_search_field() {
-        return optional_param('f_'.$this->field->id, '', PARAM_NOTAGS);
+    public function parse_search_field($defaults = null) {
+        $param = 'f_'.$this->field->id;
+        if (empty($defaults[$param])) {
+            $defaults = array($param => '');
+        }
+        return optional_param($param, $defaults[$param], PARAM_NOTAGS);
     }
 
     // need to cast?
@@ -105,6 +120,19 @@ class data_field_number extends data_field_base {
     function notemptyfield($value, $name) {
         return strval($value) !== '';
     }
+
+    /**
+     * Return the plugin configs for external functions.
+     *
+     * @return array the list of config parameters
+     * @since Moodle 3.3
+     */
+    public function get_config_for_external() {
+        // Return all the config parameters.
+        $configs = [];
+        for ($i = 1; $i <= 10; $i++) {
+            $configs["param$i"] = $this->field->{"param$i"};
+        }
+        return $configs;
+    }
 }
-
-

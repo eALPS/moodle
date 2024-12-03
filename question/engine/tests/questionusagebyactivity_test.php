@@ -14,14 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * This file contains tests for the question_usage_by_activity class.
- *
- * @package   core_question
- * @copyright 2009 The Open University
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core_question;
 
+use question_bank;
+use question_engine;
+use question_state;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -29,50 +26,50 @@ global $CFG;
 require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/helpers.php');
 
-
 /**
  * Unit tests for the question_usage_by_activity class.
  *
+ * @package    core_question
  * @copyright  2009 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class question_usage_by_activity_test extends advanced_testcase {
+class questionusagebyactivity_test extends \advanced_testcase {
 
-    public function test_set_get_preferred_model() {
+    public function test_set_get_preferred_model(): void {
         // Set up
         $quba = question_engine::make_questions_usage_by_activity('unit_test',
-                context_system::instance());
+                \context_system::instance());
 
         // Exercise SUT and verify.
         $quba->set_preferred_behaviour('deferredfeedback');
         $this->assertEquals('deferredfeedback', $quba->get_preferred_behaviour());
     }
 
-    public function test_set_get_id() {
+    public function test_set_get_id(): void {
         // Set up
         $quba = question_engine::make_questions_usage_by_activity('unit_test',
-                context_system::instance());
+                \context_system::instance());
 
         // Exercise SUT and verify
         $quba->set_id_from_database(123);
         $this->assertEquals(123, $quba->get_id());
     }
 
-    public function test_fake_id() {
+    public function test_fake_id(): void {
         // Set up
         $quba = question_engine::make_questions_usage_by_activity('unit_test',
-                context_system::instance());
+                \context_system::instance());
 
         // Exercise SUT and verify
         $this->assertNotEmpty($quba->get_id());
     }
 
-    public function test_create_usage_and_add_question() {
+    public function test_create_usage_and_add_question(): void {
         // Exercise SUT
-        $context = context_system::instance();
+        $context = \context_system::instance();
         $quba = question_engine::make_questions_usage_by_activity('unit_test', $context);
         $quba->set_preferred_behaviour('deferredfeedback');
-        $tf = test_question_maker::make_question('truefalse', 'true');
+        $tf = \test_question_maker::make_question('truefalse', 'true');
         $slot = $quba->add_question($tf);
 
         // Verify.
@@ -83,26 +80,26 @@ class question_usage_by_activity_test extends advanced_testcase {
         $this->assertEquals($quba->get_question_state($slot), question_state::$notstarted);
     }
 
-    public function test_get_question() {
+    public function test_get_question(): void {
         // Set up.
         $quba = question_engine::make_questions_usage_by_activity('unit_test',
-                context_system::instance());
+                \context_system::instance());
         $quba->set_preferred_behaviour('deferredfeedback');
-        $tf = test_question_maker::make_question('truefalse', 'true');
+        $tf = \test_question_maker::make_question('truefalse', 'true');
         $slot = $quba->add_question($tf);
 
         // Exercise SUT and verify.
-        $this->assertSame($tf, $quba->get_question($slot));
+        $this->assertSame($tf, $quba->get_question($slot, false));
 
         $this->expectException('moodle_exception');
-        $quba->get_question($slot + 1);
+        $quba->get_question($slot + 1, false);
     }
 
-    public function test_extract_responses() {
+    public function test_extract_responses(): void {
         // Start a deferred feedback attempt with CBM and add the question to it.
-        $tf = test_question_maker::make_question('truefalse', 'true');
+        $tf = \test_question_maker::make_question('truefalse', 'true');
         $quba = question_engine::make_questions_usage_by_activity('unit_test',
-                context_system::instance());
+                \context_system::instance());
         $quba->set_preferred_behaviour('deferredcbm');
         $slot = $quba->add_question($tf);
         $quba->start_all_questions();
@@ -124,11 +121,11 @@ class question_usage_by_activity_test extends advanced_testcase {
         $this->assertEquals(array('answer' => 1, '-certainty' => 3), $submitteddata);
     }
 
-    public function test_access_out_of_sequence_throws_exception() {
+    public function test_access_out_of_sequence_throws_exception(): void {
         // Start a deferred feedback attempt with CBM and add the question to it.
-        $tf = test_question_maker::make_question('truefalse', 'true');
+        $tf = \test_question_maker::make_question('truefalse', 'true');
         $quba = question_engine::make_questions_usage_by_activity('unit_test',
-                context_system::instance());
+                \context_system::instance());
         $quba->set_preferred_behaviour('deferredcbm');
         $slot = $quba->add_question($tf);
         $quba->start_all_questions();
@@ -157,5 +154,37 @@ class question_usage_by_activity_test extends advanced_testcase {
         // Exercise SUT - now it should fail.
         $this->expectException('question_out_of_sequence_exception');
         $quba->process_all_actions($slot, $postdata);
+    }
+
+    /**
+     * Test function preload all step users.
+     */
+    public function test_preload_all_step_users(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        // Set up.
+        $quba = question_engine::make_questions_usage_by_activity('unit_test',
+                \context_system::instance());
+
+        // Create an essay question in the DB.
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $cat = $generator->create_question_category();
+        $essay = $generator->create_question('essay', 'editorfilepicker', ['category' => $cat->id]);
+
+        // Start attempt at the question.
+        $q = question_bank::load_question($essay->id);
+        $quba->set_preferred_behaviour('deferredfeedback');
+        $slot = $quba->add_question($q, 10);
+        $quba->start_question($slot, 1);
+
+        // Finish the attempt.
+        $quba->finish_all_questions();
+        question_engine::save_questions_usage_by_activity($quba);
+
+        // The user information of question attempt step should be loaded.
+        $quba->preload_all_step_users();
+        $qa = $quba->get_attempt_iterator()->current();
+        $steps = $qa->get_full_step_iterator();
+        $this->assertEquals('Admin User', $steps[0]->get_user_fullname());
     }
 }

@@ -72,7 +72,7 @@ abstract class backup_structure_dbops extends backup_dbops {
                     throw new base_element_struct_exception('valueofparamelementnotset', $param->get_name());
                 }
 
-            } else if ($param < 0) { // Possibly one processor variable, let's process it
+            } else if (is_int($param) && $param < 0) { // Possibly one processor variable, let's process it
                 // See @backup class for all the VAR_XXX variables available.
                 // Note1: backup::VAR_PARENTID is handled by nested elements themselves
                 // Note2: trying to use one non-existing var will throw exception
@@ -116,7 +116,7 @@ abstract class backup_structure_dbops extends backup_dbops {
      * @param \core\progress\base $progress
      */
     public static function annotate_files($backupid, $contextid, $component, $filearea, $itemid,
-            \core\progress\base $progress = null) {
+            ?\core\progress\base $progress = null) {
         global $DB;
         $sql = 'SELECT id
                   FROM {files}

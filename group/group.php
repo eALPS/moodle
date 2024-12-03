@@ -43,22 +43,22 @@ if ($delete) {
 
 if ($id) {
     if (!$group = $DB->get_record('groups', array('id'=>$id))) {
-        print_error('invalidgroupid');
+        throw new \moodle_exception('invalidgroupid');
     }
     if (empty($courseid)) {
         $courseid = $group->courseid;
 
     } else if ($courseid != $group->courseid) {
-        print_error('invalidcourseid');
+        throw new \moodle_exception('invalidcourseid');
     }
 
     if (!$course = $DB->get_record('course', array('id'=>$courseid))) {
-        print_error('invalidcourseid');
+        throw new \moodle_exception('invalidcourseid');
     }
 
 } else {
     if (!$course = $DB->get_record('course', array('id'=>$courseid))) {
-        print_error('invalidcourseid');
+        throw new \moodle_exception('invalidcourseid');
     }
     $group = new stdClass();
     $group->courseid = $course->id;
@@ -93,7 +93,7 @@ if (!empty($group->id)) {
 }
 
 /// First create the form
-$editform = new group_form(null, array('editoroptions'=>$editoroptions));
+$editform = new group_form(null, array('editoroptions' => $editoroptions, 'group' => $group));
 $editform->set_data($group);
 
 if ($editform->is_cancelled()) {

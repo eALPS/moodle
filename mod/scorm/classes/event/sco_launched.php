@@ -76,17 +76,7 @@ class sco_launched extends \core\event\base {
      * @return \moodle_url
      */
     public function get_url() {
-        return new \moodle_url('/mod/scorm/player.php', array('id' => $this->contextinstanceid, 'scoid' => $this->objectid));
-    }
-
-    /**
-     * Replace add_to_log() statement.
-     *
-     * @return array of parameters to be passed to legacy add_to_log() function.
-     */
-    protected function get_legacy_logdata() {
-        return array($this->courseid, 'scorm', 'launch', 'view.php?id=' . $this->contextinstanceid,
-                $this->other['loadedcontent'], $this->contextinstanceid);
+        return new \moodle_url('/mod/scorm/player.php', array('cm' => $this->contextinstanceid, 'scoid' => $this->objectid));
     }
 
     /**

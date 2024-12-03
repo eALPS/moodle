@@ -55,20 +55,28 @@ $string['eventchapterupdated'] = 'Chapter updated';
 $string['eventchapterviewed'] = 'Chapter viewed';
 $string['editchapter'] = 'Edit chapter "{$a}"';
 $string['hidechapter'] = 'Hide chapter "{$a}"';
+$string['indicator:cognitivedepth'] = 'Book cognitive';
+$string['indicator:cognitivedepth_help'] = 'This indicator is based on the cognitive depth reached by the student in a Book resource.';
+$string['indicator:cognitivedepthdef'] = 'Book cognitive';
+$string['indicator:cognitivedepthdef_help'] = 'The participant has reached this percentage of the cognitive engagement offered by the Book activities during this analysis interval (Levels = No view, View)';
+$string['indicator:cognitivedepthdef_link'] = 'Learning_analytics_indicators#Cognitive_depth';
+$string['indicator:socialbreadth'] = 'Book social';
+$string['indicator:socialbreadth_help'] = 'This indicator is based on the social breadth reached by the student in a Book resource.';
+$string['indicator:socialbreadthdef'] = 'Book social';
+$string['indicator:socialbreadthdef_help'] = 'The participant has reached this percentage of the social engagement offered by the Book activities during this analysis interval (Levels = No participation, Participant alone)';
+$string['indicator:socialbreadthdef_link'] = 'Learning_analytics_indicators#Social_breadth';
 $string['movechapterup'] = 'Move chapter up "{$a}"';
 $string['movechapterdown'] = 'Move chapter down "{$a}"';
+$string['privacy:metadata'] = 'The book activity module does not store any personal data.';
 $string['search:activity'] = 'Book - resource information';
 $string['search:chapter'] = 'Book - chapters';
 $string['showchapter'] = 'Show chapter "{$a}"';
 $string['subchapter'] = 'Subchapter';
-$string['navimages'] = 'Images';
 $string['navoptions'] = 'Available options for navigational links';
 $string['navoptions_desc'] = 'Options for displaying navigation on the book pages';
 $string['navstyle'] = 'Style of navigation';
 $string['navstyle_help'] = '* Images - Icons are used for navigation
 * Text - Chapter titles are used for navigation';
-$string['navtext'] = 'Text';
-$string['navtoc'] = 'TOC Only';
 $string['nocontent'] = 'No content has been added to this book yet.';
 $string['numbering'] = 'Chapter formatting';
 $string['numbering_help'] = '* None - Chapter and subchapter titles have no formatting
@@ -82,6 +90,8 @@ $string['numbering3'] = 'Indented';
 $string['numberingoptions'] = 'Available options for chapter formatting';
 $string['numberingoptions_desc'] = 'Options for displaying chapters and subchapters in the table of contents';
 $string['addafter'] = 'Add new chapter';
+$string['addafterchapter'] = 'Add new chapter after "{$a->title}"';
+$string['previouschapter'] = 'Previous chapter';
 $string['confchapterdelete'] = 'Do you really want to delete this chapter?';
 $string['confchapterdeleteall'] = 'Do you really want to delete this chapter and all its subchapters?';
 $string['top'] = 'top';
@@ -100,3 +110,14 @@ $string['page-mod-book-x'] = 'Any book module page';
 $string['subchapternotice'] = '(Only available once the first chapter has been created)';
 $string['subplugintype_booktool'] = 'Book tool';
 $string['subplugintype_booktool_plural'] = 'Book tools';
+
+$string['removeallbooktags'] = 'All book tags';
+$string['tagarea_book_chapters'] = 'Book chapters';
+
+// Deprecated since Moodle 4.4.
+$string['navimages'] = 'Images';
+$string['navtext'] = 'Text';
+$string['navtoc'] = 'TOC Only';
+
+// Deprecated since Moodle 4.5.
+$string['tagsdeleted'] = 'Book tags have been deleted';

@@ -26,30 +26,30 @@ $edit = optional_param('edit', -1, PARAM_BOOL);
 
 if ($id) {
     if (! $cm = get_coursemodule_from_id('chat', $id)) {
-        print_error('invalidcoursemodule');
+        throw new \moodle_exception('invalidcoursemodule');
     }
 
     if (! $course = $DB->get_record('course', array('id' => $cm->course))) {
-        print_error('coursemisconf');
+        throw new \moodle_exception('coursemisconf');
     }
 
     chat_update_chat_times($cm->instance);
 
     if (! $chat = $DB->get_record('chat', array('id' => $cm->instance))) {
-        print_error('invalidid', 'chat');
+        throw new \moodle_exception('invalidid', 'chat');
     }
 
 } else {
     chat_update_chat_times($c);
 
     if (! $chat = $DB->get_record('chat', array('id' => $c))) {
-        print_error('coursemisconf');
+        throw new \moodle_exception('coursemisconf');
     }
     if (! $course = $DB->get_record('course', array('id' => $chat->course))) {
-        print_error('coursemisconf');
+        throw new \moodle_exception('coursemisconf');
     }
     if (! $cm = get_coursemodule_from_instance('chat', $chat->id, $course->id)) {
-        print_error('invalidcoursemodule');
+        throw new \moodle_exception('invalidcoursemodule');
     }
 }
 
@@ -58,9 +58,16 @@ require_course_login($course, true, $cm);
 $context = context_module::instance($cm->id);
 $PAGE->set_context($context);
 
+// Initialize $PAGE.
+$courseshortname = format_string($course->shortname, true, array('context' => context_course::instance($course->id)));
+$title = $courseshortname . ': ' . format_string($chat->name);
+$PAGE->set_url('/mod/chat/view.php', ['id' => $cm->id]);
+$PAGE->set_title($title);
+$PAGE->set_heading($course->fullname);
+$PAGE->add_body_class('limitedwidth');
+
 // Show some info for guests.
 if (isguestuser()) {
-    $PAGE->set_title($chat->name);
     echo $OUTPUT->header();
     echo $OUTPUT->confirm('<p>'.get_string('noguests', 'chat').'</p>'.get_string('liketologin'),
             get_login_url(), $CFG->wwwroot.'/course/view.php?id='.$course->id);
@@ -75,18 +82,6 @@ chat_view($chat, $course, $cm, $context);
 $strenterchat    = get_string('enterchat', 'chat');
 $stridle         = get_string('idle', 'chat');
 $strcurrentusers = get_string('currentusers', 'chat');
-$strnextsession  = get_string('nextsession', 'chat');
-
-$courseshortname = format_string($course->shortname, true, array('context' => context_course::instance($course->id)));
-$title = $courseshortname . ': ' . format_string($chat->name);
-
-// Initialize $PAGE.
-$PAGE->set_url('/mod/chat/view.php', array('id' => $cm->id));
-$PAGE->set_title($title);
-$PAGE->set_heading($course->fullname);
-
-// Print the page header.
-echo $OUTPUT->header();
 
 // Check to see if groups are being used here.
 $groupmode = groups_get_activity_groupmode($cm);
@@ -103,59 +98,58 @@ if ($currentgroup) {
     $groupparam = "";
 }
 
-echo $OUTPUT->heading(format_string($chat->name), 2);
-
-if ($chat->intro) {
-    echo $OUTPUT->box(format_module_intro('chat', $chat, $cm->id), 'generalbox', 'intro');
-}
-
-groups_print_activity_menu($cm, $CFG->wwwroot . "/mod/chat/view.php?id=$cm->id");
+// Print the page header.
+echo $OUTPUT->header();
 
 if (has_capability('mod/chat:chat', $context)) {
-    // Print the main part of the page.
-    echo $OUTPUT->box_start('generalbox', 'enterlink');
 
     $now = time();
-    $span = $chat->chattime - $now;
-    if ($chat->chattime and $chat->schedule and ($span > 0)) {  // A chat is scheduled.
-        echo '<p>';
-        $chatinfo = new stdClass();
-        $chatinfo->date = userdate($chat->chattime);
-        $chatinfo->fromnow = format_time($span);
-        echo get_string('sessionstart', 'chat', $chatinfo);
-        echo '</p>';
+    $chattime = $chat->chattime ?? 0;
+    $span = $chattime - $now;
+    if (!empty($chat->schedule) && $span > 0) {
+        $attributes = ['class' => 'border bg-light rounded p-2'];
+        echo html_writer::tag('p', get_string('sessionstartsin', 'chat', format_time($span)), $attributes);
     }
 
     $params['id'] = $chat->id;
     $chattarget = new moodle_url("/mod/chat/gui_$CFG->chat_method/index.php", $params);
-    echo '<p>';
+    echo html_writer::start_div('container-fluid tertiary-navigation');
+    echo html_writer::start_div('row');
+    echo html_writer::start_div('navitem');
     echo $OUTPUT->action_link($chattarget,
                               $strenterchat,
                               new popup_action('click', $chattarget, "chat{$course->id}_{$chat->id}{$groupparam}",
-                                               array('height' => 500, 'width' => 700)));
-    echo '</p>';
+                                               array('height' => 500, 'width' => 700)), ['class' => 'btn btn-primary']);
+    echo html_writer::end_div();
+    echo html_writer::start_div('navitem');
 
     $params['id'] = $chat->id;
     $link = new moodle_url('/mod/chat/gui_basic/index.php', $params);
     $action = new popup_action('click', $link, "chat{$course->id}_{$chat->id}{$groupparam}",
                                array('height' => 500, 'width' => 700));
-    echo '<p>';
     echo $OUTPUT->action_link($link, get_string('noframesjs', 'message'), $action,
-                              array('title' => get_string('modulename', 'chat')));
-    echo '</p>';
+                              array('title' => get_string('modulename', 'chat'), 'class' => 'btn btn-secondary'));
+    echo html_writer::end_div();
+    echo html_writer::end_div();
+    echo html_writer::end_div();
 
-    if ($chat->studentlogs or has_capability('mod/chat:readlog', $context)) {
-        if ($msg = $DB->get_records_select('chat_messages', "chatid = ? $groupselect", array($chat->id))) {
+    // Print the main part of the page.
+    echo $OUTPUT->box_start('generalbox', 'enterlink');
+
+    if (($chat->studentlogs or has_capability('mod/chat:readlog', $context)) && !$PAGE->has_secondary_navigation()) {
+        if ($msg = chat_get_session_messages($chat->id, $currentgroup)) {
             echo '<p>';
             echo html_writer::link(new moodle_url('/mod/chat/report.php', array('id' => $cm->id)),
                                    get_string('viewreport', 'chat'));
             echo '</p>';
         }
     }
+    groups_print_activity_menu($cm, $CFG->wwwroot . "/mod/chat/view.php?id=$cm->id");
 
     echo $OUTPUT->box_end();
 
 } else {
+    groups_print_activity_menu($cm, $CFG->wwwroot . "/mod/chat/view.php?id=$cm->id");
     echo $OUTPUT->box_start('generalbox', 'notallowenter');
     echo '<p>'.get_string('notallowenter', 'chat').'</p>';
     echo $OUTPUT->box_end();

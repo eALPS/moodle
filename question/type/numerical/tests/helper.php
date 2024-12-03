@@ -35,7 +35,7 @@ defined('MOODLE_INTERNAL') || die();
  */
 class qtype_numerical_test_helper extends question_test_helper {
     public function get_test_questions() {
-        return array('pi', 'unit', 'currency');
+        return array('pi', 'unit', 'currency', 'pi3tries');
     }
 
     /**
@@ -71,6 +71,15 @@ class qtype_numerical_test_helper extends question_test_helper {
         return $num;
     }
 
+    /**
+     * Get the form data that corresponds to saving a numerical question.
+     *
+     * This question asks for Pi to two decimal places. It has feedback
+     * for various wrong responses. There is hint data there, but
+     * it is all blank, so no hints are created if this question is saved.
+     *
+     * @return stdClass simulated question form data.
+     */
     public function get_numerical_question_form_data_pi() {
         $form = new stdClass();
         $form->name = 'Pi to two d.p.';
@@ -153,6 +162,24 @@ class qtype_numerical_test_helper extends question_test_helper {
         $form->hint[1]['text'] = '';
 
         $form->qtype = 'numerical';
+        $form->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
+
+        return $form;
+    }
+
+    /**
+     * Get the form data that corresponds to saving a numerical question.
+     *
+     * Like {@link get_numerical_question_form_data_pi()}, but
+     * this time with two hints, making this suitable for use
+     * with the Interactive with multiple tries behaviour.
+     *
+     * @return stdClass simulated question form data.
+     */
+    public function get_numerical_question_form_data_pi3tries() {
+        $form = $this->get_numerical_question_form_data_pi();
+        $form->hint[0]['text'] = 'First hint';
+        $form->hint[1]['text'] = 'Second hint';
         return $form;
     }
 
@@ -167,28 +194,29 @@ class qtype_numerical_test_helper extends question_test_helper {
         $q->penalty = 0.3333333;
         $q->qtype = 'numerical';
         $q->length = '1';
-        $q->hidden = '0';
+        $q->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
+        $q->version = 1;
         $q->createdby = '2';
         $q->modifiedby = '2';
         $q->options = new stdClass();
         $q->options->answers = array();
         $q->options->answers[0] = new stdClass();
         $q->options->answers[0]->answer = '3.14';
-        $q->options->answers[0]->fraction = '1.0000000';
+        $q->options->answers[0]->fraction = 1.0;
         $q->options->answers[0]->feedback = 'Very good.';
         $q->options->answers[0]->feedbackformat = FORMAT_HTML;
         $q->options->answers[0]->tolerance = '0';
 
         $q->options->answers[1] = new stdClass();
         $q->options->answers[1]->answer = '3.142';
-        $q->options->answers[1]->fraction = '0.0000000';
+        $q->options->answers[1]->fraction = 0.0;
         $q->options->answers[1]->feedback = 'Too accurate.';
         $q->options->answers[1]->feedbackformat = FORMAT_HTML;
         $q->options->answers[1]->tolerance = '0';
 
         $q->options->answers[2] = new stdClass();
         $q->options->answers[2]->answer = '3.1';
-        $q->options->answers[2]->fraction = '0.0000000';
+        $q->options->answers[2]->fraction = 0.0;
         $q->options->answers[2]->feedback = 'Not accurate enough.';
         $q->options->answers[2]->feedbackformat = FORMAT_HTML;
         $q->options->answers[2]->tolerance = '0';
@@ -196,7 +224,7 @@ class qtype_numerical_test_helper extends question_test_helper {
         $q->options->answers[3] = new stdClass();
         $q->options->answers[3]->answer = '3';
         $q->options->answers[3]->answerformat = '0';
-        $q->options->answers[3]->fraction = '0.0000000';
+        $q->options->answers[3]->fraction = 0.0;
         $q->options->answers[3]->feedback = 'Not accurate enough.';
         $q->options->answers[3]->feedbackformat = FORMAT_HTML;
         $q->options->answers[3]->tolerance = '0';
@@ -204,7 +232,7 @@ class qtype_numerical_test_helper extends question_test_helper {
         $q->options->answers[4] = new stdClass();
         $q->options->answers[4]->answer = '*';
         $q->options->answers[4]->answerformat = '0';
-        $q->options->answers[4]->fraction = '0.0000000';
+        $q->options->answers[4]->fraction = 0.0;
         $q->options->answers[4]->feedback = 'Completely wrong.';
         $q->options->answers[4]->feedbackformat = FORMAT_HTML;
         $q->options->answers[4]->tolerance = '0';
@@ -212,7 +240,7 @@ class qtype_numerical_test_helper extends question_test_helper {
         $q->options->units = array();
 
         $q->options->unitgradingtype = '0';
-        $q->options->unitpenalty = '0.1000000';
+        $q->options->unitpenalty = 0.1;
         $q->options->showunits = '3';
         $q->options->unitsleft = '0';
 

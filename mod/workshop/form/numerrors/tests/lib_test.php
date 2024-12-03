@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -19,10 +18,14 @@
  * Unit tests for Number of errors grading logic
  *
  * @package    workshopform_numerrors
- * @category   phpunit
+ * @category   test
  * @copyright  2009 David Mudrak <david.mudrak@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+namespace workshopform_numerrors;
+
+use workshop;
+use workshop_numerrors_strategy;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -31,8 +34,10 @@ global $CFG;
 require_once($CFG->dirroot . '/mod/workshop/locallib.php');
 require_once($CFG->dirroot . '/mod/workshop/form/numerrors/lib.php');
 
-
-class workshopform_numerrors_strategy_testcase extends advanced_testcase {
+/**
+ * Unit tests for Number of errors grading lib.php
+ */
+class lib_test extends \advanced_testcase {
 
     /** workshop instance emulation */
     protected $workshop;
@@ -43,7 +48,7 @@ class workshopform_numerrors_strategy_testcase extends advanced_testcase {
     /**
      * Setup testing environment
      */
-    protected function setUp() {
+    protected function setUp(): void {
         parent::setUp();
         $this->resetAfterTest();
         $this->setAdminUser();
@@ -54,13 +59,13 @@ class workshopform_numerrors_strategy_testcase extends advanced_testcase {
         $this->strategy = new testable_workshop_numerrors_strategy($this->workshop);
     }
 
-    protected function tearDown() {
+    protected function tearDown(): void {
         $this->workshop = null;
         $this->strategy = null;
         parent::tearDown();
     }
 
-    public function test_calculate_peer_grade_null_grade() {
+    public function test_calculate_peer_grade_null_grade(): void {
         // fixture set-up
         $this->strategy->dimensions   = array();
         $this->strategy->mappings     = array();
@@ -71,7 +76,7 @@ class workshopform_numerrors_strategy_testcase extends advanced_testcase {
         $this->assertNull($suggested);
     }
 
-    public function test_calculate_peer_grade_no_error() {
+    public function test_calculate_peer_grade_no_error(): void {
         // fixture set-up
         $this->strategy->dimensions      = array();
         $this->strategy->dimensions[108] = (object)array('weight' => '1');
@@ -88,7 +93,7 @@ class workshopform_numerrors_strategy_testcase extends advanced_testcase {
         $this->assertEquals($suggested, 100.00000);
     }
 
-    public function test_calculate_peer_grade_one_error() {
+    public function test_calculate_peer_grade_one_error(): void {
         // fixture set-up
         $this->strategy->dimensions      = array();
         $this->strategy->dimensions[108] = (object)array('weight' => '1');
@@ -111,7 +116,7 @@ class workshopform_numerrors_strategy_testcase extends advanced_testcase {
         $this->assertEquals($suggested, 80.00000);
     }
 
-    public function test_calculate_peer_grade_three_errors_same_weight_a() {
+    public function test_calculate_peer_grade_three_errors_same_weight_a(): void {
         // fixture set-up
         $this->strategy->dimensions      = array();
         $this->strategy->dimensions[108] = (object)array('weight' => '1.00000');
@@ -135,7 +140,7 @@ class workshopform_numerrors_strategy_testcase extends advanced_testcase {
         $this->assertEquals($suggested, 10.00000);
     }
 
-    public function test_calculate_peer_grade_three_errors_same_weight_b() {
+    public function test_calculate_peer_grade_three_errors_same_weight_b(): void {
         // fixture set-up
         $this->strategy->dimensions      = array();
         $this->strategy->dimensions[108] = (object)array('weight' => '1.00000');
@@ -159,7 +164,7 @@ class workshopform_numerrors_strategy_testcase extends advanced_testcase {
         $this->assertEquals($suggested, 0.00000);
     }
 
-    public function test_calculate_peer_grade_one_error_weighted() {
+    public function test_calculate_peer_grade_one_error_weighted(): void {
         // fixture set-up
         $this->strategy->dimensions      = array();
         $this->strategy->dimensions[108] = (object)array('weight' => '1');
@@ -183,7 +188,7 @@ class workshopform_numerrors_strategy_testcase extends advanced_testcase {
         $this->assertEquals($suggested, 33.00000);
     }
 
-    public function test_calculate_peer_grade_zero_weight() {
+    public function test_calculate_peer_grade_zero_weight(): void {
         // fixture set-up
         $this->strategy->dimensions      = array();
         $this->strategy->dimensions[108] = (object)array('weight' => '1');
@@ -207,7 +212,7 @@ class workshopform_numerrors_strategy_testcase extends advanced_testcase {
         $this->assertEquals($suggested, 100.00000);
     }
 
-    public function test_calculate_peer_grade_sum_weight() {
+    public function test_calculate_peer_grade_sum_weight(): void {
         // fixture set-up
         $this->strategy->dimensions      = array();
         $this->strategy->dimensions[108] = (object)array('weight' => '1');

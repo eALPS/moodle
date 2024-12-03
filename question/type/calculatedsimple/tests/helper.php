@@ -54,10 +54,10 @@ class qtype_calculatedsimple_test_helper extends question_test_helper {
         $q->generalfeedback = 'Generalfeedback: {={a} + {b}} is the right answer.';
 
         $q->answers = array(
-            13 => new qtype_numerical_answer(13, '{a} + {b}', 1.0, 'Very good.', FORMAT_HTML, 0),
-            14 => new qtype_numerical_answer(14, '{a} - {b}', 0.0, 'Add. not subtract!.',
+            13 => new \qtype_calculated\qtype_calculated_answer(13, '{a} + {b}', 1.0, 'Very good.', FORMAT_HTML, 0),
+            14 => new \qtype_calculated\qtype_calculated_answer(14, '{a} - {b}', 0.0, 'Add. not subtract!.',
                     FORMAT_HTML, 0),
-            17 => new qtype_numerical_answer(17, '*', 0.0, 'Completely wrong.', FORMAT_HTML, 0),
+            17 => new \qtype_calculated\qtype_calculated_answer(17, '*', 0.0, 'Completely wrong.', FORMAT_HTML, 0),
         );
         foreach ($q->answers as $answer) {
             $answer->correctanswerlength = 2;
@@ -205,13 +205,17 @@ class qtype_calculatedsimple_test_helper extends question_test_helper {
         $form->definition[19] = '1-0-b';
         $form->definition[20] = '1-0-a';
 
+        $form->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
+
         return $form;
     }
 
     public function get_calculatedsimple_question_data_sumwithvariants() {
+        global $USER;
         $q = new stdClass();
 
         $q->name = 'Calculated simple';
+        $q->createdby = $USER->id;
         $q->questiontext = '<p>This is a simple sum of two variables.</p>';
         $q->questiontextformat = '1';
         $q->generalfeedback = '<p>The answer is  {a} + {b}</p>';
@@ -220,7 +224,8 @@ class qtype_calculatedsimple_test_helper extends question_test_helper {
         $q->penalty = 0.3333333;
         $q->qtype = 'calculatedsimple';
         $q->length = '1';
-        $q->hidden = '0';
+        $q->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
+        $q->version = 1;
         $q->options = new stdClass();
         $q->options->synchronize = 0;
         $q->options->single = 0;
@@ -238,7 +243,7 @@ class qtype_calculatedsimple_test_helper extends question_test_helper {
         $q->options->answers[0]->question = '3379';
         $q->options->answers[0]->answer = '{a} + {b}';
         $q->options->answers[0]->answerformat = '0';
-        $q->options->answers[0]->fraction = '1.0000000';
+        $q->options->answers[0]->fraction = 1.0;
         $q->options->answers[0]->feedback = '';
         $q->options->answers[0]->feedbackformat = '1';
         $q->options->answers[0]->tolerance = '0.01';
@@ -249,7 +254,7 @@ class qtype_calculatedsimple_test_helper extends question_test_helper {
         $q->options->units = array();
 
         $q->options->unitgradingtype = '0';
-        $q->options->unitpenalty = '0.1000000';
+        $q->options->unitpenalty = 0.1;
         $q->options->showunits = '3';
         $q->options->unitsleft = '0';
 

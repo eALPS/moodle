@@ -56,20 +56,17 @@ Options:
 --agree-license       Indicates agreement with software license.
 --fullname=STRING     Name of the site
 --shortname=STRING    Name of the site
+--summary=STRING      The summary to be displayed on the front page
+--supportemail=STRING Email address for support and help.
 -h, --help            Print out this help
 
 Example:
 \$sudo -u www-data /usr/bin/php admin/cli/install_database.php --lang=cs --adminpass=soMePass123 --agree-license
 ";
 
-// Check that PHP is of a sufficient version
-if (version_compare(phpversion(), "5.6.5") < 0) {
-    $phpversion = phpversion();
-    // do NOT localise - lang strings would not work here and we CAN NOT move it after installib
-    fwrite(STDERR, "Moodle 3.2 or later requires at least PHP 5.6.5 (currently using version $phpversion).\n");
-    fwrite(STDERR, "Please upgrade your server software or install older Moodle version.\n");
-    exit(1);
-}
+// Check that PHP is of a sufficient version as soon as possible.
+require_once(__DIR__.'/../../lib/phpminimumversionlib.php');
+moodle_require_minimum_php_version();
 
 // Nothing to do if config.php does not exist
 $configfile = __DIR__.'/../../config.php';
@@ -87,11 +84,6 @@ require_once($CFG->libdir.'/installlib.php');
 require_once($CFG->libdir.'/adminlib.php');
 require_once($CFG->libdir.'/componentlib.class.php');
 
-// make sure no tables are installed yet
-if ($DB->get_tables() ) {
-    cli_error(get_string('clitablesexist', 'install'));
-}
-
 $CFG->early_install_lang = true;
 get_string_manager(true);
 
@@ -106,6 +98,8 @@ list($options, $unrecognized) = cli_get_params(
         'adminemail'        => '',
         'fullname'          => '',
         'shortname'         => '',
+        'summary'           => '',
+        'supportemail'      => '',
         'agree-license'     => false,
         'help'              => false
     ),
@@ -114,10 +108,20 @@ list($options, $unrecognized) = cli_get_params(
     )
 );
 
+if ($unrecognized) {
+    $unrecognized = implode("\n  ", $unrecognized);
+    cli_error(get_string('cliunknowoption', 'admin', $unrecognized));
+}
 
+// We show help text even if tables are installed.
 if ($options['help']) {
     echo $help;
     die;
+}
+
+// Make sure no tables are installed yet.
+if ($DB->get_tables() ) {
+    cli_error(get_string('clitablesexist', 'install'));
 }
 
 if (!$options['agree-license']) {
@@ -131,6 +135,15 @@ if ($options['adminpass'] === true or $options['adminpass'] === '') {
 // Validate that the address provided was an e-mail address.
 if (!empty($options['adminemail']) && !validate_email($options['adminemail'])) {
     $a = (object) array('option' => 'adminemail', 'value' => $options['adminemail']);
+    cli_error(get_string('cliincorrectvalueerror', 'admin', $a));
+}
+
+// Validate that the supportemail provided was an e-mail address.
+if (!empty($options['supportemail']) && !validate_email($options['supportemail'])) {
+    $a = (object) [
+        'option' => 'supportemail',
+        'value' => $options['supportemail']
+    ];
     cli_error(get_string('cliincorrectvalueerror', 'admin', $a));
 }
 
@@ -182,6 +195,13 @@ if (!core_plugin_manager::instance()->all_plugins_ok($version, $failed)) {
 }
 
 install_cli_database($options, true);
+
+// This needs to happen at the end to ensure it occurs after all caches
+// have been purged for the last time.
+// This will build a cached version of the current theme for the user
+// to immediately start browsing the site.
+require_once($CFG->libdir.'/upgradelib.php');
+upgrade_themes();
 
 echo get_string('cliinstallfinished', 'install')."\n";
 exit(0); // 0 means success

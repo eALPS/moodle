@@ -31,9 +31,6 @@ require_once($CFG->dirroot.'/user/profile/lib.php');
 require_once($CFG->dirroot.'/user/lib.php');
 require_once($CFG->dirroot.'/webservice/lib.php');
 
-// HTTPS is required in this page when $CFG->loginhttps enabled.
-$PAGE->https_required();
-
 $id     = optional_param('id', $USER->id, PARAM_INT);    // User id; -1 if creating new user.
 $course = optional_param('course', SITEID, PARAM_INT);   // Course id (defaults to Site).
 $returnto = optional_param('returnto', null, PARAM_ALPHA);  // Code determining where to return to after save.
@@ -56,6 +53,7 @@ if (!empty($USER->newadminuser)) {
         require_login($course);
     }
     $PAGE->set_pagelayout('admin');
+    $PAGE->add_body_class('limitedwidth');
 }
 
 if ($course->id == SITEID) {
@@ -75,6 +73,8 @@ if ($id == -1) {
     $user->timezone = '99';
     require_capability('moodle/user:create', $systemcontext);
     admin_externalpage_setup('addnewuser', '', array('id' => -1));
+    $PAGE->set_primary_active_tab('siteadminnode');
+    $PAGE->navbar->add(get_string('addnewuser', 'moodle'), $PAGE->url);
 } else {
     // Editing existing user.
     require_capability('moodle/user:update', $systemcontext);
@@ -96,11 +96,11 @@ if ($user->id != -1 and is_mnet_remote_user($user)) {
 }
 
 if ($user->id != $USER->id and is_siteadmin($user) and !is_siteadmin($USER)) {  // Only admins may edit other admins.
-    print_error('useradmineditadmin');
+    throw new \moodle_exception('useradmineditadmin');
 }
 
 if (isguestuser($user->id)) { // The real guest user can not be edited.
-    print_error('guestnoeditprofileother');
+    throw new \moodle_exception('guestnoeditprofileother');
 }
 
 if ($user->deleted) {
@@ -148,7 +148,7 @@ $filemanagercontext = $editoroptions['context'];
 $filemanageroptions = array('maxbytes'       => $CFG->maxbytes,
                              'subdirs'        => 0,
                              'maxfiles'       => 1,
-                             'accepted_types' => 'web_image');
+                             'accepted_types' => 'optimised_image');
 file_prepare_draft_area($draftitemid, $filemanagercontext->id, 'user', 'newicon', 0, $filemanageroptions);
 $user->imagefile = $draftitemid;
 // Create form.
@@ -157,7 +157,23 @@ $userform = new user_editadvanced_form(new moodle_url($PAGE->url, array('returnt
     'filemanageroptions' => $filemanageroptions,
     'user' => $user));
 
-if ($usernew = $userform->get_data()) {
+
+// Deciding where to send the user back in most cases.
+if ($returnto === 'profile') {
+    if ($course->id != SITEID) {
+        $returnurl = new moodle_url('/user/view.php', array('id' => $user->id, 'course' => $course->id));
+    } else {
+        $returnurl = new moodle_url('/user/profile.php', array('id' => $user->id));
+    }
+} else if ($user->id === -1) {
+    $returnurl = new moodle_url("/admin/user.php");
+} else {
+    $returnurl = new moodle_url('/user/preferences.php', array('userid' => $user->id));
+}
+
+if ($userform->is_cancelled()) {
+    redirect($returnurl);
+} else if ($usernew = $userform->get_data()) {
     $usercreated = false;
 
     if (empty($usernew->auth)) {
@@ -193,7 +209,7 @@ if ($usernew = $userform->get_data()) {
         if (!$authplugin->is_internal() and $authplugin->can_change_password() and !empty($usernew->newpassword)) {
             if (!$authplugin->user_update_password($usernew, $usernew->newpassword)) {
                 // Do not stop here, we need to finish user creation.
-                debugging(get_string('cannotupdatepasswordonextauth', '', '', $usernew->auth), DEBUG_NONE);
+                debugging(get_string('cannotupdatepasswordonextauth', 'error', $usernew->auth), DEBUG_NONE);
             }
         }
         $usercreated = true;
@@ -202,7 +218,7 @@ if ($usernew = $userform->get_data()) {
         // Pass a true old $user here.
         if (!$authplugin->user_update($user, $usernew)) {
             // Auth update failed.
-            print_error('cannotupdateuseronexauth', '', '', $user->auth);
+            throw new \moodle_exception('cannotupdateuseronexauth', '', '', $user->auth);
         }
         user_update_user($usernew, false, false);
 
@@ -210,14 +226,14 @@ if ($usernew = $userform->get_data()) {
         if (!empty($usernew->newpassword)) {
             if ($authplugin->can_change_password()) {
                 if (!$authplugin->user_update_password($usernew, $usernew->newpassword)) {
-                    print_error('cannotupdatepasswordonextauth', '', '', $usernew->auth);
+                    throw new \moodle_exception('cannotupdatepasswordonextauth', '', '', $usernew->auth);
                 }
                 unset_user_preference('create_password', $usernew); // Prevent cron from generating the password.
 
                 if (!empty($CFG->passwordchangelogout)) {
                     // We can use SID of other user safely here because they are unique,
                     // the problem here is we do not want to logout admin here when changing own password.
-                    \core\session\manager::kill_user_sessions($usernew->id, session_id());
+                    \core\session\manager::destroy_user_sessions($usernew->id, session_id());
                 }
                 if (!empty($usernew->signoutofotherservices)) {
                     webservice::delete_user_ws_tokens($usernew->id);
@@ -227,7 +243,7 @@ if ($usernew = $userform->get_data()) {
 
         // Force logout if user just suspended.
         if (isset($usernew->suspended) and $usernew->suspended and !$user->suspended) {
-            \core\session\manager::kill_user_sessions($user->id);
+            \core\session\manager::destroy_user_sessions($user->id);
         }
     }
 
@@ -295,26 +311,17 @@ if ($usernew = $userform->get_data()) {
             // Somebody double clicked when editing admin user during install.
             redirect("$CFG->wwwroot/$CFG->admin/");
         } else {
-            if ($returnto === 'profile') {
-                if ($course->id != SITEID) {
-                    $returnurl = new moodle_url('/user/view.php', array('id' => $user->id, 'course' => $course->id));
-                } else {
-                    $returnurl = new moodle_url('/user/profile.php', array('id' => $user->id));
-                }
-            } else {
-                $returnurl = new moodle_url('/user/preferences.php', array('userid' => $user->id));
-            }
-            redirect($returnurl);
+            redirect($returnurl, get_string('changessaved'), null, \core\output\notification::NOTIFY_SUCCESS);
         }
+    } else if ($returnto === 'profile') {
+        \core\session\manager::gc(); // Remove stale sessions.
+        redirect($returnurl, get_string('changessaved'), null, \core\output\notification::NOTIFY_SUCCESS);
     } else {
         \core\session\manager::gc(); // Remove stale sessions.
-        redirect("$CFG->wwwroot/$CFG->admin/user.php");
+        redirect("$CFG->wwwroot/$CFG->admin/user.php", get_string('changessaved'), null, \core\output\notification::NOTIFY_SUCCESS);
     }
     // Never reached..
 }
-
-// Make sure we really are on the https page when https login required.
-$PAGE->verify_https_required();
 
 
 // Display page header.
@@ -325,7 +332,8 @@ if ($user->id == -1 or ($user->id != $USER->id)) {
         $streditmyprofile = get_string('editmyprofile');
         $userfullname = fullname($user, true);
         $PAGE->set_heading($userfullname);
-        $PAGE->set_title("$course->shortname: $streditmyprofile - $userfullname");
+        $coursename = $course->id !== SITEID ? "$course->shortname" : '';
+        $PAGE->set_title("$streditmyprofile: $userfullname" . moodle_page::TITLE_SEPARATOR . $coursename);
         echo $OUTPUT->header();
         echo $OUTPUT->heading($userfullname);
     }
@@ -359,4 +367,3 @@ $userform->display();
 
 // And proper footer.
 echo $OUTPUT->footer();
-

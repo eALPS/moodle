@@ -60,9 +60,9 @@ abstract class backup_factory {
 
         // Create file_logger, observing $CFG->backup_file_logger_level
         // defaulting to $dfltloglevel
-        check_dir_exists($CFG->tempdir . '/backup', true, true); // need to ensure that temp/backup already exists
+        $backuptempdir = make_backup_temp_directory(''); // Need to ensure that $CFG->backuptempdir already exists.
         $fllevel = isset($CFG->backup_file_logger_level) ? $CFG->backup_file_logger_level : $dfltloglevel;
-        $enabledloggers[] = new file_logger($fllevel, true, true, $CFG->tempdir . '/backup/' . $backupid . '.log');
+        $enabledloggers[] = new file_logger($fllevel, true, true, $backuptempdir . '/' . $backupid . '.log');
 
         // Create database_logger, observing $CFG->backup_database_logger_level and defaulting to LOG_WARNING
         // and pointing to the backup_logs table
@@ -159,7 +159,7 @@ abstract class backup_factory {
     /**
      * Dispatches the creation of the @backup_plan to the proper format builder
      */
-    static public function build_plan($controller) {
+    public static function build_plan($controller) {
         backup_plan_builder::build_plan($controller);
     }
 }

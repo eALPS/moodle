@@ -51,7 +51,6 @@ class behat_form_select extends behat_form_field {
 
         // Is the select multiple?
         $multiple = $this->field->hasAttribute('multiple');
-        $singleselect = ($this->field->hasClass('singleselect') || $this->field->hasClass('urlselect'));
 
         // Here we select the option(s).
         if ($multiple) {
@@ -64,35 +63,9 @@ class behat_form_select extends behat_form_field {
                 $afterfirstoption = true;
             }
         } else {
-           // By default, assume the passed value is a non-multiple option.
+            // By default, assume the passed value is a non-multiple option.
             $this->field->selectOption(trim($value));
        }
-
-        // Wait for all the possible AJAX requests that have been
-        // already triggered by selectOption() to be finished.
-        if ($this->running_javascript()) {
-            // Trigger change event and click on first skip link, as some OS/browsers (Phantomjs, Mac-FF),
-            // don't close select option field and trigger event.
-            if (!$singleselect) {
-                $dialoguexpath = "//div[contains(concat(' ', normalize-space(@class), ' '), ' moodle-dialogue-focused ')]";
-                if (!$node = $this->session->getDriver()->find($dialoguexpath)) {
-                    $script = "Syn.trigger('change', {}, {{ELEMENT}})";
-                    try {
-                        $this->session->getDriver()->triggerSynScript($this->field->getXpath(), $script);
-                        $this->session->getDriver()->click('//body//div[@class="skiplinks"]');
-                    } catch (\Exception $e) {
-                        return;
-                    }
-                } else {
-                    try {
-                        $this->session->getDriver()->click($dialoguexpath);
-                    } catch (\Exception $e) {
-                        return;
-                    }
-                }
-            }
-            $this->session->wait(behat_base::TIMEOUT * 1000, behat_base::PAGE_READY_JS);
-        }
     }
 
     /**
@@ -138,15 +111,9 @@ class behat_form_select extends behat_form_field {
         $values = $this->get_selected_options(false);
         $selectedoptionvalues = $this->get_unescaped_options($values);
 
-        // Precheck to speed things up.
-        if (count($expectedoptions) !== count($selectedoptiontexts) ||
-                count($expectedoptions) !== count($selectedoptionvalues)) {
-            return false;
-        }
-
         // We check against string-ordered lists of options.
-        if ($expectedoptions != $selectedoptiontexts &&
-                $expectedoptions != $selectedoptionvalues) {
+        if ($expectedoptions !== $selectedoptiontexts &&
+                $expectedoptions !== $selectedoptionvalues) {
             return false;
         }
 

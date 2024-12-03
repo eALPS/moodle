@@ -1,5 +1,3 @@
-/* global DragDrop, Category, Course */
-
 /**
  * Provides drop down menus for list of action links.
  *
@@ -16,9 +14,9 @@
  * @constructor
  * @extends Base
  */
-function Console() {
+Console = function() {
     Console.superclass.constructor.apply(this, arguments);
-}
+};
 Console.NAME = 'moodle-course-management';
 Console.CSS_PREFIX = 'management';
 Console.ATTRS = {
@@ -277,7 +275,7 @@ Console.prototype = {
         if (!this.categoriesinit) {
             this.get('categorylisting').delegate('click', this.handleCategoryDelegation, 'a[data-action]', this);
             this.get('categorylisting').delegate('click', this.handleCategoryDelegation, 'input[name="bcat[]"]', this);
-            this.get('categorylisting').delegate('click', this.handleBulkSortByaction, '#menuselectsortby', this);
+            this.get('categorylisting').delegate('change', this.handleBulkSortByaction, '#menuselectsortby', this);
             this.categoriesinit = true;
             Y.log(count + ' categories being managed', 'info', 'moodle-course-management');
         } else {

@@ -14,19 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-
-/**
- * external API for core library
- *
- * @package    core_webservice
- * @category   external
- * @copyright  2012 Jerome Mouneyrac <jerome@moodle.com>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die;
-
-require_once("$CFG->libdir/externallib.php");
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
 
 /**
  * Web service related functions
@@ -60,7 +52,7 @@ class core_external extends external_api {
                     // It is a not named string parameter.
                     $strparams = $stringparam['value'];
                 }
-            }  else {
+            } else {
                 // There are more than one parameter.
                 foreach ($stringparams as $stringparam) {
 
@@ -120,7 +112,7 @@ class core_external extends external_api {
     /**
      * Returns description of get_string() result value
      *
-     * @return string
+     * @return \core_external\external_description
      * @since Moodle 2.4
      */
     public static function get_string_returns() {
@@ -189,7 +181,7 @@ class core_external extends external_api {
     /**
      * Returns description of get_string() result value
      *
-     * @return array
+     * @return \core_external\external_description
      * @since Moodle 2.4
      */
     public static function get_strings_returns() {
@@ -200,6 +192,97 @@ class core_external extends external_api {
                 'lang' => new external_value(PARAM_LANG, 'lang'),
                 'string' => new external_value(PARAM_RAW, 'translated string'))
             ));
+    }
+
+    /**
+     * Returns description of get_user_dates parameters
+     *
+     * @return external_function_parameters
+     */
+    public static function get_user_dates_parameters() {
+        return new external_function_parameters(
+            [
+                'contextid' => new external_value(
+                    PARAM_INT,
+                    'Context ID. Either use this value, or level and instanceid.',
+                    VALUE_DEFAULT,
+                    0
+                ),
+                'contextlevel' => new external_value(
+                    PARAM_ALPHA,
+                    'Context level. To be used with instanceid.',
+                    VALUE_DEFAULT,
+                    ''
+                ),
+                'instanceid' => new external_value(
+                    PARAM_INT,
+                    'Context instance ID. To be used with level',
+                    VALUE_DEFAULT,
+                    0
+                ),
+                'timestamps' => new external_multiple_structure (
+                    new external_single_structure (
+                        [
+                            'timestamp' => new external_value(PARAM_INT, 'unix timestamp'),
+                            'format' => new external_value(PARAM_TEXT, 'format string'),
+                            'type' => new external_value(PARAM_PLUGIN, 'The calendar type', VALUE_DEFAULT),
+                            'fixday' => new external_value(PARAM_INT, 'Remove leading zero for day', VALUE_DEFAULT, 1),
+                            'fixhour' => new external_value(PARAM_INT, 'Remove leading zero for hour', VALUE_DEFAULT, 1),
+                        ]
+                    )
+                )
+            ]
+        );
+    }
+
+    /**
+     * Format an array of timestamps.
+     *
+     * @param int|null $contextid The contenxt id
+     * @param string|null $contextlevel The context level
+     * @param int|null $instanceid The instnace id for the context level
+     * @param array $timestamps Timestamps to format
+     * @return array
+     */
+    public static function get_user_dates($contextid, $contextlevel, $instanceid, $timestamps) {
+        $params = self::validate_parameters(
+            self::get_user_dates_parameters(),
+            [
+                'contextid' => $contextid,
+                'contextlevel' => $contextlevel,
+                'instanceid' => $instanceid,
+                'timestamps' => $timestamps,
+            ]
+        );
+
+        $context = self::get_context_from_params($params);
+        self::validate_context($context);
+
+        $formatteddates = array_map(function($timestamp) {
+
+            $calendartype = $timestamp['type'];
+            $fixday = !empty($timestamp['fixday']);
+            $fixhour = !empty($timestamp['fixhour']);
+            $calendar  = \core_calendar\type_factory::get_calendar_instance($calendartype);
+            return $calendar->timestamp_to_date_string($timestamp['timestamp'], $timestamp['format'], 99, $fixday, $fixhour);
+        }, $params['timestamps']);
+
+        return ['dates' => $formatteddates];
+    }
+
+    /**
+     * Returns description of get_user_dates() result value
+     *
+     * @return \core_external\external_description
+     */
+    public static function get_user_dates_returns() {
+        return new external_single_structure(
+            [
+                'dates' => new external_multiple_structure (
+                    new external_value(PARAM_TEXT, 'formatted dates strings')
+                )
+            ]
+        );
     }
 
      /**
@@ -250,7 +333,7 @@ class core_external extends external_api {
     /**
      * Returns description of get_component_strings() result value
      *
-     * @return array
+     * @return \core_external\external_description
      * @since Moodle 2.4
      */
     public static function get_component_strings_returns() {
@@ -321,6 +404,8 @@ class core_external extends external_api {
         self::validate_context($context);
         $arguments['context'] = $context;
 
+        // Hack alert: Set a default URL to stop the annoying debug.
+        $PAGE->set_url('/');
         // Hack alert: Forcing bootstrap_renderer to initiate moodle page.
         $OUTPUT->header();
 
@@ -336,7 +421,7 @@ class core_external extends external_api {
     /**
      * Returns description of get_fragment() result value
      *
-     * @return array
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function get_fragment_returns() {
@@ -359,7 +444,7 @@ class core_external extends external_api {
             array(
                 'component' => new external_value(PARAM_COMPONENT, 'component responsible for the update', VALUE_REQUIRED),
                 'itemtype' => new external_value(PARAM_NOTAGS, 'type of the updated item inside the component', VALUE_REQUIRED),
-                'itemid' => new external_value(PARAM_INT, 'identifier of the updated item', VALUE_REQUIRED),
+                'itemid' => new external_value(PARAM_RAW, 'identifier of the updated item', VALUE_REQUIRED),
                 'value' => new external_value(PARAM_RAW, 'new value', VALUE_REQUIRED),
             ));
     }
@@ -393,7 +478,7 @@ class core_external extends external_api {
      * Return structure for update_inplace_editable()
      *
      * @since Moodle 3.1
-     * @return external_description
+     * @return \core_external\external_description
      */
     public static function update_inplace_editable_returns() {
         return new external_single_structure(
@@ -404,7 +489,12 @@ class core_external extends external_api {
                 'value' => new external_value(PARAM_RAW, 'value of the item as it is stored', VALUE_OPTIONAL),
                 'itemid' => new external_value(PARAM_RAW, 'identifier of the updated item', VALUE_OPTIONAL),
                 'edithint' => new external_value(PARAM_NOTAGS, 'hint for editing element', VALUE_OPTIONAL),
-                'editlabel' => new external_value(PARAM_NOTAGS, 'label for editing element', VALUE_OPTIONAL),
+                'editlabel' => new external_value(PARAM_RAW, 'label for editing element', VALUE_OPTIONAL),
+                'editicon' => new external_single_structure([
+                    'key' => new external_value(PARAM_RAW, 'Edit icon key', VALUE_OPTIONAL),
+                    'component' => new external_value(PARAM_COMPONENT, 'Edit icon component', VALUE_OPTIONAL),
+                    'title' => new external_value(PARAM_NOTAGS, 'Edit icon title', VALUE_OPTIONAL),
+                ], 'Edit icon', VALUE_OPTIONAL),
                 'type' => new external_value(PARAM_ALPHA, 'type of the element (text, toggle, select)', VALUE_OPTIONAL),
                 'options' => new external_value(PARAM_RAW, 'options of the element, format depends on type', VALUE_OPTIONAL),
                 'linkeverything' => new external_value(PARAM_INT, 'Should everything be wrapped in the edit link or link displayed separately', VALUE_OPTIONAL),
@@ -428,7 +518,7 @@ class core_external extends external_api {
     /**
      * Returns description of fetch_notifications() result value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function fetch_notifications_returns() {

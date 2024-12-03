@@ -47,35 +47,9 @@ if ($ADMIN->fulltree) {
     $settings->add(new admin_setting_configcheckbox('glossary_fullmatch', get_string('fullmatch', 'glossary'),
                        get_string('cnffullmatch', 'glossary'), 0));
 
+    // This is unfortunately necessary to ensure that the glossary_formats table is populated and up to date.
+    // Ensure the table is in sync with what display formats are available in code.
+    glossary_get_available_formats();
 
-    //Update and get available formats
-    $recformats = glossary_get_available_formats();
-    $formats = array();
-    //Take names
-    foreach ($recformats as $format) {
-        $formats[$format->id] = get_string("displayformat$format->name", "glossary");
-    }
-    asort($formats);
-
-    $str = '<table>';
-    foreach ($formats as $formatid=>$formatname) {
-        $recformat = $DB->get_record('glossary_formats', array('id'=>$formatid));
-        $str .= '<tr>';
-        $str .= '<td>' . $formatname . '</td>';
-        $eicon = "<a title=\"".get_string("edit")."\" href=\"$CFG->wwwroot/mod/glossary/formats.php?id=$formatid&amp;mode=edit\"><img class=\"iconsmall\" src=\"".$OUTPUT->pix_url('t/edit')."\" alt=\"".get_string("edit")."\" /></a>";
-        if ( $recformat->visible ) {
-            $vtitle = get_string("hide");
-            $vicon  = "t/hide";
-        } else {
-            $vtitle = get_string("show");
-            $vicon  = "t/show";
-        }
-        $vicon = "<a title=\"".$vtitle."\" href=\"$CFG->wwwroot/mod/glossary/formats.php?id=$formatid&amp;mode=visible&amp;sesskey=".sesskey()."\"><img class=\"iconsmall\" src=\"".$OUTPUT->pix_url($vicon)."\" alt=\"$vtitle\" /></a>";
-
-        $str .= '<td align="center">'.$eicon.'&nbsp;&nbsp;'.$vicon.'</td>';
-        $str .= '</tr>';
-    }
-    $str .= '</table>';
-
-    $settings->add(new admin_setting_heading('glossary_formats_header', get_string('displayformatssetup', 'glossary'), $str));
+    $settings->add(new mod_glossary_admin_setting_display_formats());
 }

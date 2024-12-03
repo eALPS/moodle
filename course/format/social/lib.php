@@ -33,7 +33,7 @@ require_once($CFG->dirroot. '/course/format/lib.php');
  * @copyright  2012 Marina Glancy
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class format_social extends format_base {
+class format_social extends core_courseformat\base {
 
     /**
      * The URL to use for the specified course
@@ -41,15 +41,12 @@ class format_social extends format_base {
      * @param int|stdClass $section Section object from database or just field course_sections.section
      *     if null the course view page is returned
      * @param array $options options for view URL. At the moment core uses:
-     *     'navigation' (bool) if true and section has no separate page, the function returns null
-     *     'sr' (int) used by multipage formats to specify to which section to return
+     *     'navigation' (bool) ignored by this format
+     *     'sr' (int) ignored by this format
      * @return null|moodle_url
      */
     public function get_view_url($section, $options = array()) {
-        if (!empty($options['navigation']) && $section !== null) {
-            return null;
-        }
-        return new moodle_url('/course/view.php', array('id' => $this->courseid));
+        return new moodle_url('/course/view.php', ['id' => $this->courseid]);
     }
 
     /**
@@ -120,4 +117,30 @@ class format_social extends format_base {
     public function allow_stealth_module_visibility($cm, $section) {
         return true;
     }
+
+    /**
+     * Return the plugin configs for external functions.
+     *
+     * @return array the list of configuration settings
+     * @since Moodle 3.5
+     */
+    public function get_config_for_external() {
+        // Return everything (nothing to hide).
+        return $this->get_format_options();
+    }
+
+    /**
+     * Returns the information about the ajax support in the given source format.
+     *
+     * The returned object's property (boolean)capable indicates that
+     * the course format supports Moodle course ajax features.
+     *
+     * @return stdClass
+     */
+    public function supports_ajax() {
+        $ajaxsupport = new stdClass();
+        $ajaxsupport->capable = true;
+        return $ajaxsupport;
+    }
+
 }

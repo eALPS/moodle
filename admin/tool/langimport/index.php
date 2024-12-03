@@ -40,8 +40,15 @@ if (empty($CFG->langotherroot)) {
 $mode               = optional_param('mode', 0, PARAM_INT);              // action
 $pack               = optional_param_array('pack', array(), PARAM_SAFEDIR);    // pack to install
 $uninstalllang      = optional_param_array('uninstalllang', array(), PARAM_LANG);// installed pack to uninstall
-$confirmtounistall  = optional_param('confirmtouninstall', '', PARAM_ALPHAEXT);  // uninstallation confirmation
+$confirmtounistall  = optional_param('confirmtouninstall', '', PARAM_SAFEPATH);  // uninstallation confirmation
 $purgecaches        = optional_param('purgecaches', false, PARAM_BOOL);  // explicit caches reset
+
+// Filter the uninstall language list.
+// If the list contains a language which is not installed, it is replaced with an empty string.
+// When we try to uninstall an empty string, we uninstall every language.
+$uninstalllang = array_filter($uninstalllang, function($lang) {
+    return !empty($lang);
+});
 
 if ($purgecaches) {
     require_sesskey();
@@ -66,15 +73,23 @@ get_string_manager()->reset_caches();
 $controller = new tool_langimport\controller();
 
 if (($mode == INSTALLATION_OF_SELECTED_LANG) and confirm_sesskey() and !empty($pack)) {
-    core_php_time_limit::raise();
-    $controller->install_languagepacks($pack);
+    if (is_array($pack) && count($pack) > 1) {
+        // Installing multiple languages can take a while - perform it asynchronously in the background.
+        $controller->schedule_languagepacks_installation($pack);
+        $controller->redirect($PAGE->url);
+    } else {
+        // Single language pack to be installed synchronously. It should be reasonably quick and can be used for debugging, too.
+        core_php_time_limit::raise();
+        $controller->install_languagepacks($pack);
+        $controller->redirect($PAGE->url);
+    }
 }
 
 if ($mode == DELETION_OF_SELECTED_LANG and (!empty($uninstalllang) or !empty($confirmtounistall))) {
     // Actually deleting languages, languages to delete are passed as GET parameter as string
     // ...need to populate them to array.
     if (empty($uninstalllang)) {
-        $uninstalllang = explode('-', $confirmtounistall);
+        $uninstalllang = explode('/', $confirmtounistall);
     }
 
     if (in_array('en', $uninstalllang)) {
@@ -84,8 +99,10 @@ if ($mode == DELETION_OF_SELECTED_LANG and (!empty($uninstalllang) or !empty($co
     } else if (empty($confirmtounistall) and confirm_sesskey()) { // User chose langs to be deleted, show confirmation.
         echo $OUTPUT->header();
         echo $OUTPUT->confirm(get_string('uninstallconfirm', 'tool_langimport', implode(', ', $uninstalllang)),
-                     'index.php?mode='.DELETION_OF_SELECTED_LANG.'&confirmtouninstall='.implode('-', $uninstalllang),
-                     'index.php');
+            new moodle_url($PAGE->url, array(
+                'mode' => DELETION_OF_SELECTED_LANG,
+                'confirmtouninstall' => implode('/', $uninstalllang),
+            )), $PAGE->url);
         echo $OUTPUT->footer();
         die;
 
@@ -93,31 +110,24 @@ if ($mode == DELETION_OF_SELECTED_LANG and (!empty($uninstalllang) or !empty($co
         foreach ($uninstalllang as $ulang) {
             $controller->uninstall_language($ulang);
         }
-
+        $controller->redirect($PAGE->url);
     }
 }
 
-if ($mode == UPDATE_ALL_LANG) {
+if ($mode == UPDATE_ALL_LANG && confirm_sesskey()) {
     core_php_time_limit::raise();
     $controller->update_all_installed_languages();
 }
 get_string_manager()->reset_caches();
 
+$PAGE->set_primary_active_tab('siteadminnode');
+
 echo $OUTPUT->header();
 echo $OUTPUT->heading(get_string('langimport', 'tool_langimport'));
 
 $installedlangs = get_string_manager()->get_list_of_translations(true);
+$locale = new \tool_langimport\locale();
 
-$missingparents = array();
-foreach ($installedlangs as $installedlang => $unused) {
-    $parent = get_parent_language($installedlang);
-    if (empty($parent)) {
-        continue;
-    }
-    if (!isset($installedlangs[$parent])) {
-        $missingparents[$installedlang] = $parent;
-    }
-}
 
 if ($availablelangs = $controller->availablelangs) {
     $remote = true;
@@ -132,6 +142,41 @@ if ($availablelangs = $controller->availablelangs) {
     \core\notification::error($errormessage);
 }
 
+$missinglocales = '';
+$missingparents = array();
+foreach ($installedlangs as $installedlang => $langpackname) {
+    // Check locale availability.
+    if (!$locale->check_locale_availability($installedlang)) {
+        $missinglocales .= '<li>'.$langpackname.'</li>';
+    }
+
+    // This aligns the name of the language to match the available languages using
+    // both the name for the language and the localized name for the language.
+    $alang = array_filter($availablelangs, function($k) use ($installedlang) {
+        return $k[0] == $installedlang;
+    });
+    $alang = array_pop($alang);
+    if (!empty($alang[0]) and trim($alang[0]) !== 'en') {
+        $installedlangs[$installedlang] = $alang[2] . ' &lrm;(' . $alang[0] . ')&lrm;';
+    }
+
+    $parent = get_parent_language($installedlang);
+    if (empty($parent)) {
+        continue;
+    }
+    if (!isset($installedlangs[$parent])) {
+        $missingparents[$installedlang] = $parent;
+    }
+}
+
+if (!empty($missinglocales)) {
+    // There is at least one missing locale.
+    $a = new stdClass();
+    $a->globallocale = moodle_getlocale();
+    $a->missinglocales = $missinglocales;
+    $controller->errors[] = get_string('langunsupported', 'tool_langimport', $a);
+}
+
 if ($controller->info) {
     $info = implode('<br />', $controller->info);
     \core\notification::success($info);
@@ -140,6 +185,15 @@ if ($controller->info) {
 if ($controller->errors) {
     $info = implode('<br />', $controller->errors);
     \core\notification::error($info);
+}
+
+// Inform about pending language packs installations.
+foreach (\core\task\manager::get_adhoc_tasks('\tool_langimport\task\install_langpacks') as $installtask) {
+    $installtaskdata = $installtask->get_custom_data();
+
+    if (!empty($installtaskdata->langs)) {
+        \core\notification::info(get_string('installpending', 'tool_langimport', implode(', ', $installtaskdata->langs)));
+    }
 }
 
 if ($missingparents) {
@@ -176,11 +230,4 @@ foreach ($availablelangs as $alang) {
 $renderable = new \tool_langimport\output\langimport_page($installedlangs, $options, $uninstallurl, $updateurl, $installurl);
 $output = $PAGE->get_renderer('tool_langimport');
 echo $output->render($renderable);
-
-$PAGE->requires->strings_for_js(array('uninstallconfirm', 'uninstall', 'selectlangs', 'noenglishuninstall'),
-                                'tool_langimport');
-$PAGE->requires->yui_module('moodle-core-languninstallconfirm',
-                            'Y.M.core.languninstallconfirm.init',
-                             array(array('uninstallUrl' => $uninstallurl->out()))
-                            );
 echo $OUTPUT->footer();

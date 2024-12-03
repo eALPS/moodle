@@ -1,6 +1,5 @@
 <?php
-
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Automatically generated strings for Moodle installer
@@ -30,6 +29,9 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['cannotcreatedboninstall'] = '<p>Tietokantaa ei voi luoda.</p>
+<p>Määritettyä tietokantaa ei ole olemassa, eikä kyseisellä käyttäjällä ole oikeutta luoda tietokantaa.</p>
+<p>Sivuston järjestelmänvalvojan tulee tarkistaa tietokannan määritykset.</p>';
 $string['cannotcreatelangdir'] = 'Kielihakemistoa ei voida luoda';
 $string['cannotcreatetempdir'] = 'Temp-hakemistoa ei voitu luoda';
 $string['cannotdownloadcomponents'] = 'Komponentteja ei voitu ladata';
@@ -39,10 +41,12 @@ $string['cannotsavemd5file'] = 'MD5-tiedostoa ei voitu tallentaa';
 $string['cannotsavezipfile'] = 'Zip-tiedostoa ei voitu tallentaa';
 $string['cannotunzipfile'] = 'Zip-tiedostoa ei voitu purkaa';
 $string['componentisuptodate'] = 'Komponentti on ajan tasalla';
+$string['dmlexceptiononinstall'] = '<p>Tapahtui tietokantavirhe [{$a->errorcode}].<br />{$a->debuginfo}</p>';
 $string['downloadedfilecheckfailed'] = 'Ladatun tiedoston tarkistus epäonnistui';
 $string['invalidmd5'] = 'Tarkistusmuuttuja oli väärin - yritä uudelleen';
 $string['missingrequiredfield'] = 'Joitakin vaadituista kentistä puuttuu';
-$string['remotedownloaderror'] = 'Komponentin lataaminen palvelimelle epäonnistui, ole hyvä ja varmista välityspalvelimen asetukset, PHP cURL -laajennus on suositeltu.<br /><br />Sinun täytyy ladata <a href="{$a->url}">{$a->url}</a> -tiedosto manuaalisesti, kopioi se kohteeseen "{$a->dest}" serverilläsi ja pura se sinne.';
+$string['remotedownloaderror'] = '<p>Komponentin lataaminen palvelimellesi epäonnistui. Tarkista välityspalvelimen asetukset: PHP cURL -laajennus on erittäin suositeltavaa.</p>
+<p>Sinun on ladattava <a href="{$a->url}">{$a->url}</a>-tiedosto manuaalisesti, kopioitava se palvelimellesi kohteeseen "{$a->dest}" ja purettava se sinne.</p>';
 $string['wrongdestpath'] = 'Virheellinen kohdekansio';
 $string['wrongsourcebase'] = 'Väärä lähteen web-osoitteen kanta';
 $string['wrongzipfilename'] = 'Virheellinen zip-tiedoston nimi';

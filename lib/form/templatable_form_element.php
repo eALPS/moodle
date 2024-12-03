@@ -21,18 +21,6 @@
  * @copyright 2016 Damyon Wiese
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-defined('MOODLE_INTERNAL') || die();
-
-// Some form elements are used before $CFG is created - do not rely on it here.
-require_once(__DIR__ . '/../outputcomponents.php');
-
-/**
- * templatable_form_element trait.
- *
- * @package   core_form
- * @copyright 2016 Damyon Wiese
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
 trait templatable_form_element {
 
     /**
@@ -51,7 +39,7 @@ trait templatable_form_element {
         $context = [];
 
         // Not all elements have all of these attributes - but they are common enough to be valid for a few.
-        $standardattributes = ['id', 'name', 'label', 'multiple', 'checked', 'error', 'size', 'value'];
+        $standardattributes = ['id', 'name', 'label', 'multiple', 'checked', 'error', 'size', 'value', 'type'];
         $standardproperties = ['helpbutton', 'hiddenLabel'];
 
         // Standard attributes.
@@ -66,6 +54,7 @@ trait templatable_form_element {
             $context[strtolower($propname)] = isset($this->$classpropname) ? $this->$classpropname : false;
         }
         $extraclasses = $this->getAttribute('class');
+        $parentonlyclasses = $this->getAttribute('parentclass');
 
         // Special wierd named property.
         $context['frozen'] = !empty($this->_flagFrozen);
@@ -74,13 +63,17 @@ trait templatable_form_element {
         // Other attributes.
         $otherattributes = [];
         foreach ($this->getAttributes() as $attr => $value) {
-            if (!in_array($attr, $standardattributes) && $attr != 'class' && !is_object($value)) {
+            if (!in_array($attr, $standardattributes) && $attr != 'class' && $attr != 'parentclass' && !is_object($value)) {
                 $otherattributes[] = $attr . '="' . s($value) . '"';
             }
         }
         $context['extraclasses'] = $extraclasses;
+        $context['parentclasses'] = $parentonlyclasses;
         $context['type'] = $this->getType();
         $context['attributes'] = implode(' ', $otherattributes);
+        $context['emptylabel'] = ($this->getLabel() === '');
+        $context['iderror'] = preg_replace('/_id_/', '_id_error_', $context['id']);
+        $context['iderror'] = preg_replace('/^id_/', 'id_error_', $context['iderror']);
 
         // Elements with multiple values need array syntax.
         if ($this->getAttribute('multiple')) {

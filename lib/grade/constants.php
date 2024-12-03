@@ -68,7 +68,7 @@ define('GRADE_AGGREGATE_WEIGHTED_MEAN2', 11);
 define('GRADE_AGGREGATE_EXTRACREDIT_MEAN', 12);
 
 /**
- * GRADE_AGGREGATE_WEIGHTED_MEAN2 - Use Natural in the category for grade aggregation.
+ * GRADE_AGGREGATE_SUM - Use Natural in the category for grade aggregation.
  */
 define('GRADE_AGGREGATE_SUM', 13);
 
@@ -240,21 +240,6 @@ define('GRADE_REPORT_MEAN_ALL', 0);
 define('GRADE_REPORT_MEAN_GRADED', 1);
 
 /**
- * GRADE_NAVMETHOD_DROPDOWN - Display a drop down box to allow navigation within the gradebook
- */
-define('GRADE_NAVMETHOD_DROPDOWN', 0);
-
-/**
- * GRADE_NAVMETHOD_TABS - Display tabs to allow navigation within the gradebook
- */
-define('GRADE_NAVMETHOD_TABS', 1);
-
-/**
- * GRADE_NAVMETHOD_TABS - Display both a drop down and tabs to allow navigation within the gradebook
- */
-define('GRADE_NAVMETHOD_COMBO', 2);
-
-/**
  * GRADE_MIN_MAX_FROM_GRADE_ITEM - Get the grade min/max from the grade item.
  */
 define('GRADE_MIN_MAX_FROM_GRADE_ITEM', 1);
@@ -263,3 +248,18 @@ define('GRADE_MIN_MAX_FROM_GRADE_ITEM', 1);
  * GRADE_MIN_MAX_FROM_GRADE_GRADE - Get the grade min/max from the grade grade.
  */
 define('GRADE_MIN_MAX_FROM_GRADE_GRADE', 2);
+
+/**
+ * The component to store grade files.
+ */
+define('GRADE_FILE_COMPONENT', 'grade');
+
+/**
+ * The file area to store the associated grade_grades feedback files.
+ */
+define('GRADE_FEEDBACK_FILEAREA', 'feedback');
+
+/**
+ * The file area to store the associated grade_grades_history feedback files.
+ */
+define('GRADE_HISTORY_FEEDBACK_FILEAREA', 'historyfeedback');

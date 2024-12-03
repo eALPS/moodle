@@ -14,32 +14,34 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace core;
+
+use test_output_factory;
+
 /**
  * Unit tests for lib/outputfactories.php.
  *
  * @package   core
- * @category  phpunit
+ * @category  test
  * @copyright 2014 Damyon Wiese
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+final class outputfactories_test extends \advanced_testcase {
+    #[\Override]
+    public static function setUpBeforeClass(): void {
+        global $CFG;
 
-defined('MOODLE_INTERNAL') || die();
+        require_once($CFG->libdir . '/tests/fixtures/test_renderer_factory.php');
 
-global $CFG;
-require_once($CFG->libdir . '/outputfactories.php');
-require_once($CFG->libdir . '/tests/fixtures/test_renderer_factory.php');
+        parent::setUpBeforeClass();
+    }
 
-/**
- * Unit tests for the user_picture class.
- */
-class core_outputfactories_testcase extends advanced_testcase {
-
-    public function test_nonautoloaded_classnames() {
+    public function test_nonautoloaded_classnames(): void {
         global $PAGE;
         $renderer = $PAGE->get_renderer('mod_assign');
     }
 
-    public function test_autoloaded_classnames() {
+    public function test_autoloaded_classnames(): void {
         $testfactory = new test_output_factory();
         $component = 'mod_assign';
         $subtype = 'custom';

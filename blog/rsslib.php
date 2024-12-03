@@ -82,8 +82,8 @@ function blog_rss_print_link($context, $filtertype, $filterselect = 0, $tagid = 
     }
 
     $url = blog_rss_get_url($context->id, $userid, $filtertype, $filterselect, $tagid);
-    $rsspix = $OUTPUT->pix_url('i/rss');
-    print '<div class="pull-xs-right"><a href="'. $url .'"><img src="'. $rsspix .'" title="'. strip_tags($tooltiptext) .'" alt="'.get_string('rss').'" /></a></div>';
+    $rsspix = $OUTPUT->pix_icon('i/rss', get_string('rss'), 'core', array('title' => $tooltiptext));
+    print '<div class="float-sm-end"><a href="'. $url .'">' . $rsspix . '</a></div>';
 }
 
 /**
@@ -234,7 +234,9 @@ function blog_rss_get_feed($context, $args) {
 
     switch ($type) {
         case 'user':
-            $info = fullname($DB->get_record('user', array('id' => $id), get_all_user_name_fields(true)));
+            $userfieldsapi = \core_user\fields::for_name();
+            $info = fullname($DB->get_record('user', array('id' => $id),
+                    $userfieldsapi->get_sql('', false, '', '', false)->selects));
             break;
         case 'course':
             $info = $DB->get_field('course', 'fullname', array('id' => $id));

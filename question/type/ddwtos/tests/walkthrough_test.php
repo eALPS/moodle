@@ -14,14 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for the drag-and-drop words into sentences question type.
- *
- * @package   qtype_ddwtos
- * @copyright 2012 The Open University
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace qtype_ddwtos;
 
+use question_display_options;
+use question_hint_with_parts;
+use question_state;
 
 defined('MOODLE_INTERNAL') || die();
 global $CFG;
@@ -33,10 +30,11 @@ require_once($CFG->dirroot . '/question/type/ddwtos/tests/helper.php');
 /**
  * Unit tests for the drag-and-drop words into sentences question type.
  *
+ * @package   qtype_ddwtos
  * @copyright 2012 The Open University
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class qtype_ddwtos_walkthrough_test extends qbehaviour_walkthrough_test_base {
+class walkthrough_test extends \qbehaviour_walkthrough_test_base {
 
     protected function get_contains_drop_box_expectation($place, $group, $readonly,
             $stateclass = '0') {
@@ -50,13 +48,13 @@ class qtype_ddwtos_walkthrough_test extends qbehaviour_walkthrough_test_base {
         }
         $expectedattrs['class'] = $class;
 
-        return new question_contains_tag_with_attributes('span', $expectedattrs);
+        return new \question_contains_tag_with_attributes('span', $expectedattrs);
     }
 
-    public function test_interactive_behaviour() {
+    public function test_interactive_behaviour(): void {
 
         // Create a drag-and-drop question.
-        $dd = test_question_maker::make_question('ddwtos');
+        $dd = \test_question_maker::make_question('ddwtos');
         $dd->hints = array(
             new question_hint_with_parts(13, 'This is the first hint.', FORMAT_HTML, false, false),
             new question_hint_with_parts(14, 'This is the second hint.', FORMAT_HTML, true, true),
@@ -163,10 +161,10 @@ class qtype_ddwtos_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_mark(2);
     }
 
-    public function test_deferred_feedback() {
+    public function test_deferred_feedback(): void {
 
         // Create a drag-and-drop question.
-        $dd = test_question_maker::make_question('ddwtos');
+        $dd = \test_question_maker::make_question('ddwtos');
         $dd->shufflechoices = false;
         $this->start_attempt_at_question($dd, 'deferredfeedback', 3);
 
@@ -246,10 +244,10 @@ class qtype_ddwtos_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_mark(2);
     }
 
-    public function test_deferred_feedback_unanswered() {
+    public function test_deferred_feedback_unanswered(): void {
 
         // Create a drag-and-drop question.
-        $dd = test_question_maker::make_question('ddwtos');
+        $dd = \test_question_maker::make_question('ddwtos');
         $dd->shufflechoices = false;
         $this->start_attempt_at_question($dd, 'deferredfeedback', 3);
 
@@ -302,10 +300,10 @@ class qtype_ddwtos_walkthrough_test extends qbehaviour_walkthrough_test_base {
                 $this->get_contains_drop_box_expectation('3', 3, true));
     }
 
-    public function test_deferred_feedback_partial_answer() {
+    public function test_deferred_feedback_partial_answer(): void {
 
         // Create a drag-and-drop question.
-        $dd = test_question_maker::make_question('ddwtos');
+        $dd = \test_question_maker::make_question('ddwtos');
         $dd->shufflechoices = false;
         $this->start_attempt_at_question($dd, 'deferredfeedback', 3);
 
@@ -357,10 +355,10 @@ class qtype_ddwtos_walkthrough_test extends qbehaviour_walkthrough_test_base {
                 $this->get_contains_partcorrect_expectation());
     }
 
-    public function test_interactive_grading() {
+    public function test_interactive_grading(): void {
 
         // Create a drag-and-drop question.
-        $dd = test_question_maker::make_question('ddwtos');
+        $dd = \test_question_maker::make_question('ddwtos');
         $dd->hints = array(
             new question_hint_with_parts(1, 'This is the first hint.',
                     FORMAT_MOODLE, true, true),
@@ -513,10 +511,10 @@ class qtype_ddwtos_walkthrough_test extends qbehaviour_walkthrough_test_base {
                         $this->quba->get_field_prefix($this->slot) . 'p3', '1'));
     }
 
-    public function test_interactive_correct_no_submit() {
+    public function test_interactive_correct_no_submit(): void {
 
         // Create a drag-and-drop question.
-        $dd = test_question_maker::make_question('ddwtos');
+        $dd = \test_question_maker::make_question('ddwtos');
         $dd->hints = array(
             new question_hint_with_parts(23, 'This is the first hint.',
                     FORMAT_MOODLE, false, false),
@@ -569,10 +567,10 @@ class qtype_ddwtos_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_mark(3);
     }
 
-    public function test_interactive_partial_no_submit() {
+    public function test_interactive_partial_no_submit(): void {
 
         // Create a drag-and-drop question.
-        $dd = test_question_maker::make_question('ddwtos');
+        $dd = \test_question_maker::make_question('ddwtos');
         $dd->hints = array(
             new question_hint_with_parts(23, 'This is the first hint.',
                     FORMAT_MOODLE, false, false),
@@ -625,10 +623,10 @@ class qtype_ddwtos_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_mark(1);
     }
 
-    public function test_interactive_no_right_clears() {
+    public function test_interactive_no_right_clears(): void {
 
         // Create a drag-and-drop question.
-        $dd = test_question_maker::make_question('ddwtos');
+        $dd = \test_question_maker::make_question('ddwtos');
         $dd->hints = array(
             new question_hint_with_parts(23, 'This is the first hint.', FORMAT_MOODLE, false, true),
             new question_hint_with_parts(24, 'This is the second hint.', FORMAT_MOODLE, true, true),
@@ -692,10 +690,10 @@ class qtype_ddwtos_walkthrough_test extends qbehaviour_walkthrough_test_base {
                 $this->get_no_hint_visible_expectation());
     }
 
-    public function test_display_of_right_answer_when_shuffled() {
+    public function test_display_of_right_answer_when_shuffled(): void {
 
         // Create a drag-and-drop question.
-        $dd = test_question_maker::make_question('ddwtos');
+        $dd = \test_question_maker::make_question('ddwtos');
         $this->start_attempt_at_question($dd, 'deferredfeedback', 3);
 
         // Check the initial state.
@@ -748,7 +746,7 @@ class qtype_ddwtos_walkthrough_test extends qbehaviour_walkthrough_test_base {
                 $this->get_contains_drop_box_expectation('2', 2, true, 'correct'),
                 $this->get_contains_drop_box_expectation('3', 3, true, 'correct'),
                 $this->get_contains_correct_expectation(),
-                new question_pattern_expectation('/' .
+                new \question_pattern_expectation('/' .
                         preg_quote('The [quick] brown [fox] jumped over the [lazy] dog.', '/') . '/'));
     }
 }

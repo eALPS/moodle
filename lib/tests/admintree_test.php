@@ -14,15 +14,19 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for those parts of adminlib.php that implement the admin tree
- * functionality.
- *
- * @package     core
- * @category    phpunit
- * @copyright   2013 David Mudrak <david@moodle.com>
- * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core;
+
+use admin_category;
+use admin_externalpage;
+use admin_root;
+use admin_settingpage;
+use admin_setting_configdirectory;
+use admin_setting_configduration;
+use admin_setting_configexecutable;
+use admin_setting_configfile;
+use admin_setting_configmixedhostiplist;
+use admin_setting_configpasswordunmask;
+use admin_setting_configtext;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -31,13 +35,18 @@ require_once($CFG->libdir.'/adminlib.php');
 
 /**
  * Provides the unit tests for admin tree functionality.
+ *
+ * @package     core
+ * @category    test
+ * @copyright   2013 David Mudrak <david@moodle.com>
+ * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_admintree_testcase extends advanced_testcase {
+class admintree_test extends \advanced_testcase {
 
     /**
      * Adding nodes into the admin tree.
      */
-    public function test_add_nodes() {
+    public function test_add_nodes(): void {
 
         $tree = new admin_root(true);
         $tree->add('root', $one = new admin_category('one', 'One'));
@@ -95,43 +104,76 @@ class core_admintree_testcase extends advanced_testcase {
         $this->assertEquals(array('zero', 'one', 'two', 'three', 'four', 'five', 'six'), $map);
     }
 
-    /**
-     * @expectedException coding_exception
-     */
-    public function test_add_nodes_before_invalid1() {
+    public function test_add_nodes_before_invalid1(): void {
         $tree = new admin_root(true);
+        $this->expectException(\coding_exception::class);
         $tree->add('root', new admin_externalpage('foo', 'Foo', 'http://foo.bar'), array('moodle:site/config'));
     }
 
-    /**
-     * @expectedException coding_exception
-     */
-    public function test_add_nodes_before_invalid2() {
+    public function test_add_nodes_before_invalid2(): void {
         $tree = new admin_root(true);
+        $this->expectException(\coding_exception::class);
         $tree->add('root', new admin_category('bar', 'Bar'), '');
+    }
+
+    /**
+     * Test that changes to config trigger events.
+     */
+    public function test_config_log_created_event(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $adminroot = new admin_root(true);
+        $adminroot->add('root', $one = new admin_category('one', 'One'));
+        $page = new admin_settingpage('page', 'Page');
+        $page->add(new admin_setting_configtext('text1', 'Text 1', '', ''));
+        $page->add(new admin_setting_configpasswordunmask('pass1', 'Password 1', '', ''));
+        $adminroot->add('one', $page);
+
+        $sink = $this->redirectEvents();
+        $data = array('s__text1' => 'sometext', 's__pass1' => '');
+        $this->save_config_data($adminroot, $data);
+
+        $events = $sink->get_events();
+        $sink->close();
+        $event = array_pop($events);
+        $this->assertInstanceOf('\core\event\config_log_created', $event);
+
+        $sink = $this->redirectEvents();
+        $data = array('s__text1'=>'other', 's__pass1'=>'nice password');
+        $count = $this->save_config_data($adminroot, $data);
+
+        $events = $sink->get_events();
+        $sink->close();
+        $event = array_pop($events);
+        $this->assertInstanceOf('\core\event\config_log_created', $event);
+        // Verify password was nuked.
+        $this->assertNotEquals($event->other['value'], 'nice password');
+
     }
 
     /**
      * Testing whether a configexecutable setting is executable.
      */
-    public function test_admin_setting_configexecutable() {
+    public function test_admin_setting_configexecutable(): void {
         global $CFG;
         $this->resetAfterTest();
 
-        $CFG->theme = 'clean';
+        $CFG->theme = 'classic';
         $executable = new admin_setting_configexecutable('test1', 'Text 1', 'Help Path', '');
 
         // Check for an invalid path.
         $result = $executable->output_html($CFG->dirroot . '/lib/tests/other/file_does_not_exist');
-        $this->assertRegexp('/class="patherror"/', $result);
+        $this->assertMatchesRegularExpression('/class="text-danger"/', $result);
 
         // Check for a directory.
         $result = $executable->output_html($CFG->dirroot);
-        $this->assertRegexp('/class="patherror"/', $result);
+        $this->assertMatchesRegularExpression('/class="text-danger"/', $result);
 
         // Check for a file which is not executable.
         $result = $executable->output_html($CFG->dirroot . '/filter/tex/readme_moodle.txt');
-        $this->assertRegexp('/class="patherror"/', $result);
+        $this->assertMatchesRegularExpression('/class="text-danger"/', $result);
 
         // Check for an executable file.
         if ($CFG->ostype == 'WINDOWS') {
@@ -140,20 +182,21 @@ class core_admintree_testcase extends advanced_testcase {
             $filetocheck = 'mimetex.darwin';
         }
         $result = $executable->output_html($CFG->dirroot . '/filter/tex/' . $filetocheck);
-        $this->assertRegexp('/class="pathok"/', $result);
+        $this->assertMatchesRegularExpression('/class="text-success"/', $result);
 
         // Check for no file specified.
         $result = $executable->output_html('');
-        $this->assertRegexp('/name="s__test1"/', $result);
-        $this->assertRegexp('/value=""/', $result);
+        $this->assertMatchesRegularExpression('/name="s__test1"/', $result);
+        $this->assertMatchesRegularExpression('/value=""/', $result);
     }
 
     /**
      * Saving of values.
      */
-    public function test_config_logging() {
+    public function test_config_logging(): void {
         global $DB;
         $this->resetAfterTest();
+        $this->setAdminUser();
 
         $DB->delete_records('config_log', array());
 
@@ -233,7 +276,7 @@ class core_admintree_testcase extends advanced_testcase {
             $original = $setting->get_setting();
             $error = $setting->write_setting($data[$fullname]);
             if ($error !== '') {
-                $adminroot->errors[$fullname] = new stdClass();
+                $adminroot->errors[$fullname] = new \stdClass();
                 $adminroot->errors[$fullname]->data  = $data[$fullname];
                 $adminroot->errors[$fullname]->id    = $setting->get_id();
                 $adminroot->errors[$fullname]->error = $error;
@@ -248,7 +291,7 @@ class core_admintree_testcase extends advanced_testcase {
         return $count;
     }
 
-    public function test_preventexecpath() {
+    public function test_preventexecpath(): void {
         $this->resetAfterTest();
 
         set_config('preventexecpath', 0);
@@ -321,5 +364,94 @@ class core_admintree_testcase extends advanced_testcase {
         set_config('execpath', null, 'abc_cde');
         $setting->write_setting('/mm/nn');
         $this->assertSame('', get_config('abc_cde', 'execpath'));
+    }
+
+    /**
+     * Test setting an empty duration displays the correct validation message.
+     */
+    public function test_emptydurationvalue(): void {
+        $this->resetAfterTest();
+        $adminsetting = new admin_setting_configduration('abc_cde/duration', 'some desc', '', '');
+
+        // A value that isn't a number is treated as a zero, so we expect to see no error message.
+        $this->assertEmpty($adminsetting->write_setting(['u' => '3600', 'v' => 'abc']));
+    }
+
+    /**
+     * Test setting for blocked hosts
+     *
+     * For testing the admin settings element only. Test for blocked hosts functionality can be found
+     * in lib/tests/curl_security_helper_test.php
+     */
+    public function test_mixedhostiplist(): void {
+        $this->resetAfterTest();
+
+        $adminsetting = new admin_setting_configmixedhostiplist('abc_cde/hostiplist', 'some desc', '', '');
+
+        // Test valid settings.
+        $validsimplesettings = [
+            'localhost',
+            "localhost\n127.0.0.1",
+            '192.168.10.1',
+            '0:0:0:0:0:0:0:1',
+            '::1',
+            'fe80::',
+            '231.54.211.0/20',
+            'fe80::/64',
+            '231.3.56.10-20',
+            'fe80::1111-bbbb',
+            '*.example.com',
+            '*.sub.example.com',
+        ];
+
+        foreach ($validsimplesettings as $setting) {
+            $errormessage = $adminsetting->write_setting($setting);
+            $this->assertEmpty($errormessage, $errormessage);
+            $this->assertSame($setting, get_config('abc_cde', 'hostiplist'));
+            $this->assertSame($setting, $adminsetting->get_setting());
+        }
+
+        // Test valid international site names.
+        $valididnsettings = [
+            'правительство.рф' => 'xn--80aealotwbjpid2k.xn--p1ai',
+            'faß.de' => 'xn--fa-hia.de',
+            'ß.ß' => 'xn--zca.xn--zca',
+            '*.tharkûn.com' => '*.xn--tharkn-0ya.com',
+        ];
+
+        foreach ($valididnsettings as $setting => $encodedsetting) {
+            $errormessage = $adminsetting->write_setting($setting);
+            $this->assertEmpty($errormessage, $errormessage);
+            $this->assertSame($encodedsetting, get_config('abc_cde', 'hostiplist'));
+            $this->assertSame($setting, $adminsetting->get_setting());
+        }
+
+        // Invalid settings.
+        $this->assertEquals('These entries are invalid: nonvalid site name', $adminsetting->write_setting('nonvalid site name'));
+        $this->assertEquals('Empty lines are not valid', $adminsetting->write_setting("localhost\n"));
+    }
+
+    /**
+     * Verifies the $ADMIN global (adminroot cache) is properly reset when changing users, which might occur naturally during cron.
+     */
+    public function test_adminroot_cache_reset(): void {
+        $this->resetAfterTest();
+        global $DB;
+        // Current user is a manager at site context, which won't have access to the 'debugging' section of the admin tree.
+        $manageruser = $this->getDataGenerator()->create_user();
+        $context = \context_system::instance();
+        $managerrole = $DB->get_record('role', array('shortname' => 'manager'));
+        role_assign($managerrole->id, $manageruser->id, $context->id);
+        $this->setUser($manageruser);
+        $adminroot = admin_get_root();
+        $section = $adminroot->locate('debugging');
+        $this->assertEmpty($section);
+
+        // Now, change the user to an admin user and confirm we get a new copy of the admin tree when next we ask for it.
+        $adminuser = get_admin();
+        $this->setUser($adminuser);
+        $adminroot = admin_get_root();
+        $section = $adminroot->locate('debugging');
+        $this->assertInstanceOf('\admin_settingpage', $section);
     }
 }

@@ -146,7 +146,7 @@ function forum_rss_feed_discussions_sql($forum, $cm, $newsince=0) {
 
     $modcontext = null;
 
-    $now = round(time(), -2);
+    $now = floor(time() / 60) * 60; // DB Cache Friendly.
     $params = array();
 
     $modcontext = context_module::instance($cm->id);
@@ -182,14 +182,15 @@ function forum_rss_feed_discussions_sql($forum, $cm, $newsince=0) {
 
     $forumsort = "d.timemodified DESC";
     $postdata = "p.id AS postid, p.subject, p.created as postcreated, p.modified, p.discussion, p.userid, p.message as postmessage, p.messageformat AS postformat, p.messagetrust AS posttrust";
-    $userpicturefields = user_picture::fields('u', null, 'userid');
+    $userfieldsapi = \core_user\fields::for_userpic();
+    $userpicturefields = $userfieldsapi->get_sql('u', false, '', 'userid', false)->selects;
 
     $sql = "SELECT $postdata, d.id as discussionid, d.name as discussionname, d.timemodified, d.usermodified, d.groupid,
                    d.timestart, d.timeend, $userpicturefields
               FROM {forum_discussions} d
                    JOIN {forum_posts} p ON p.discussion = d.id
                    JOIN {user} u ON p.userid = u.id
-             WHERE d.forum = {$forum->id} AND p.parent = 0
+             WHERE d.forum = {$forum->id} AND p.parent = 0 AND p.deleted <> 1
                    $timelimit $groupselect $newsince
           ORDER BY $forumsort";
     return array($sql, $params);
@@ -204,6 +205,8 @@ function forum_rss_feed_discussions_sql($forum, $cm, $newsince=0) {
  * @return string the SQL query to be used to get the Post details from the forum table of the database
  */
 function forum_rss_feed_posts_sql($forum, $cm, $newsince=0) {
+    global $USER;
+
     $modcontext = context_module::instance($cm->id);
 
     // Get group enforcement SQL.
@@ -224,7 +227,17 @@ function forum_rss_feed_posts_sql($forum, $cm, $newsince=0) {
         $newsince = '';
     }
 
-    $usernamefields = get_all_user_name_fields(true, 'u');
+    $canseeprivatereplies = has_capability('mod/forum:readprivatereplies', $modcontext);
+    if (!$canseeprivatereplies) {
+        $privatewhere = ' AND (p.privatereplyto = :currentuser1 OR p.userid = :currentuser2 OR p.privatereplyto = 0)';
+        $params['currentuser1'] = $USER->id;
+        $params['currentuser2'] = $USER->id;
+    } else {
+        $privatewhere = '';
+    }
+
+    $userfieldsapi = \core_user\fields::for_name();
+    $usernamefields = $userfieldsapi->get_sql('u', false, '', '', false)->selects;
     $sql = "SELECT p.id AS postid,
                  d.id AS discussionid,
                  d.name AS discussionname,
@@ -243,8 +256,9 @@ function forum_rss_feed_posts_sql($forum, $cm, $newsince=0) {
                {forum_posts} p,
                {user} u
             WHERE d.forum = {$forum->id} AND
-                p.discussion = d.id AND
+                p.discussion = d.id AND p.deleted <> 1 AND
                 u.id = p.userid $newsince
+                $privatewhere
                 $groupselect
             ORDER BY p.created desc";
 
@@ -300,8 +314,6 @@ function forum_rss_get_group_sql($cm, $groupmode, $currentgroup, $modcontext=nul
 function forum_rss_feed_contents($forum, $sql, $params, $context) {
     global $CFG, $DB, $USER;
 
-    $status = true;
-
     $recs = $DB->get_recordset_sql($sql, $params, 0, $forum->rssarticles);
 
     //set a flag. Are we displaying discussions or posts?
@@ -311,10 +323,9 @@ function forum_rss_feed_contents($forum, $sql, $params, $context) {
     }
 
     if (!$cm = get_coursemodule_from_instance('forum', $forum->id, $forum->course)) {
-        print_error('invalidcoursemodule');
+        throw new \moodle_exception('invalidcoursemodule');
     }
 
-    $formatoptions = new stdClass();
     $items = array();
     foreach ($recs as $rec) {
             $item = new stdClass();
@@ -339,10 +350,17 @@ function forum_rss_feed_contents($forum, $sql, $params, $context) {
                 $message = get_string('forumbodyhidden', 'forum');
                 $item->author = get_string('forumauthorhidden', 'forum');
             } else if (!$isdiscussion && !forum_user_can_see_post($forum, $discussion, $post, $USER, $cm)) {
-                // This is a post which the user has no permission to view
-                $item->title = get_string('forumsubjecthidden', 'forum');
-                $message = get_string('forumbodyhidden', 'forum');
-                $item->author = get_string('forumauthorhidden', 'forum');
+                if (forum_user_can_see_post($forum, $discussion, $post, $USER, $cm, false)) {
+                    // This is a post which the user has no permission to view.
+                    $item->title = get_string('forumsubjecthidden', 'forum');
+                    $message = get_string('forumbodyhidden', 'forum');
+                    $item->author = get_string('forumauthorhidden', 'forum');
+                } else {
+                    // This is a post which has been deleted.
+                    $item->title = get_string('forumsubjectdeleted', 'mod_forum');
+                    $message = get_string('forumbodydeleted', 'mod_forum');
+                    $item->author = get_string('forumauthorhidden', 'forum');
+                }
             } else {
                 // The user must have permission to view
                 if ($isdiscussion && !empty($rec->discussionname)) {
@@ -356,7 +374,6 @@ function forum_rss_feed_contents($forum, $sql, $params, $context) {
                 $item->author = fullname($rec);
                 $message = file_rewrite_pluginfile_urls($rec->postmessage, 'pluginfile.php', $context->id,
                         'mod_forum', 'post', $rec->postid);
-                $formatoptions->trusted = $rec->posttrust;
             }
 
             if ($isdiscussion) {
@@ -365,8 +382,10 @@ function forum_rss_feed_contents($forum, $sql, $params, $context) {
                 $item->link = $CFG->wwwroot."/mod/forum/discuss.php?d=".$rec->discussionid."&parent=".$rec->postid;
             }
 
-            $formatoptions->trusted = $rec->posttrust;
-            $item->description = format_text($message, $rec->postformat, $formatoptions, $forum->course);
+            $item->description = format_text($message, $rec->postformat, [
+                'context' => $context,
+                'trusted' => $rec->posttrust,
+            ]);
 
             //TODO: MDL-31129 implement post attachment handling
             /*if (!$isdiscussion) {

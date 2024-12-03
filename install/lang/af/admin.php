@@ -1,6 +1,5 @@
 <?php
-
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Automatically generated strings for Moodle installer
@@ -31,10 +30,15 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['clianswerno'] = 'n';
-$string['cliansweryes'] = 'y';
-$string['cliincorrectvalueerror'] = 'Fout, verkeerde waarde "{$ a-> value}" vir "{$ a-> option}"';
+$string['cliansweryes'] = 'j';
+$string['cliincorrectvalueerror'] = 'Fout, verkeerde waarde "{$a->value}" vir "{$a->option}"';
 $string['cliincorrectvalueretry'] = 'Verkeerde waarde, probeer weer';
-$string['clitypevalue'] = 'Tiepe waarde';
-$string['clitypevaluedefault'] = 'Tiepe waarde, druk Enter om die standaard waarde te gebruik ({$a})';
-$string['cliunknowoption'] = 'Ontkende opsies: {$ a} Gebruik asseblief - help opsie.';
-$string['cliyesnoprompt'] = 'Tik y (beteken ja) of n (beteken nee)';
+$string['clitypevalue'] = 'tipe waarde';
+$string['clitypevaluedefault'] = 'tipe waarde, druk Enter om die verstekwaarde te gebruik ({$a})';
+$string['cliunknowoption'] = 'Onerkende opsies:
+  {$a}
+Gebruik asseblief die --help opsie.';
+$string['cliyesnoprompt'] = 'Tik j (beteken ja) of n (beteken nee)';
+$string['environmentrequireinstall'] = 'moet geïnstalleer en ontsper wees';
+$string['environmentrequireversion'] = 'weergawe {$a->needed} word benodig en jy hardloop tans {$a->current}';
+$string['upgradekeyset'] = 'Opgradering sleutel (los oop om nie in te stel nie)';

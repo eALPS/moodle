@@ -17,7 +17,7 @@
 /**
  * This file is responsible for serving the fonts used in CSS.
  *
- * Note: it is recommended to use only WOFF (Web Open Font Format) fonts.
+ * Note: it is recommended to use only WOFF2 (Web Open Font Format v2) fonts.
  *
  * @package   core
  * @copyright 2013 Petr Skoda (skodak)  {@link http://skodak.org}
@@ -49,8 +49,17 @@ if ($slashargument = min_get_slash_argument()) {
     $font      = min_optional_param('font', '', 'RAW');
 }
 
+if (!min_is_revision_valid_and_current($rev)) {
+    // If the rev is invalid, normalise it to -1 to disable all caching.
+    $rev = -1;
+}
+
 if (!$font) {
     font_not_found();
+}
+
+if ($to = strpos($font, '?')) {
+    $font = substr($font, 0, $to);
 }
 
 if (empty($component) or $component === 'moodle' or $component === 'core') {
@@ -59,20 +68,20 @@ if (empty($component) or $component === 'moodle' or $component === 'core') {
 
 if (preg_match('/^[a-z0-9_-]+\.woff2$/i', $font, $matches)) {
     $font = $matches[0];
-    $mimetype = 'application/font-woff2';
+    $mimetype = 'font/woff2';
 
 } else if (preg_match('/^[a-z0-9_-]+\.woff$/i', $font, $matches)) {
     // This is the real standard!
     $font = $matches[0];
-    $mimetype = 'application/font-woff';
+    $mimetype = 'font/woff';
 
 } else if (preg_match('/^[a-z0-9_-]+\.ttf$/i', $font, $matches)) {
     $font = $matches[0];
-    $mimetype = 'application/x-font-ttf';
+    $mimetype = 'font/ttf';
 
 } else if (preg_match('/^[a-z0-9_-]+\.otf$/i', $font, $matches)) {
     $font = $matches[0];
-    $mimetype = 'application/x-font-opentype';
+    $mimetype = 'font/otf';
 
 } else if (preg_match('/^[a-z0-9_-]+\.eot$/i', $font, $matches)) {
     // IE8 must die!!!

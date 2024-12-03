@@ -24,9 +24,16 @@
  * @since      Moodle 3.2
  */
 
+use core_external\external_api;
+use core_external\external_format_value;
+use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
+use core_external\external_warnings;
+
 defined('MOODLE_INTERNAL') || die;
 
-require_once($CFG->libdir . '/externallib.php');
 require_once($CFG->libdir . '/authlib.php');
 require_once($CFG->dirroot . '/user/editlib.php');
 require_once($CFG->dirroot . '/user/profile/lib.php');
@@ -88,8 +95,12 @@ class auth_email_external extends external_api {
         if (!empty($CFG->passwordpolicy)) {
             $result['passwordpolicy'] = print_password_policy();
         }
-        if (!empty($CFG->sitepolicy)) {
-            $result['sitepolicy'] = $CFG->sitepolicy;
+        $manager = new \core_privacy\local\sitepolicy\manager();
+        if ($sitepolicy = $manager->get_embed_url()) {
+            $result['sitepolicy'] = $sitepolicy->out(false);
+        }
+        if (!empty($CFG->sitepolicyhandler)) {
+            $result['sitepolicyhandler'] = $CFG->sitepolicyhandler;
         }
         if (!empty($CFG->defaultcity)) {
             $result['defaultcity'] = $CFG->defaultcity;
@@ -97,26 +108,24 @@ class auth_email_external extends external_api {
         if (!empty($CFG->country)) {
             $result['country'] = $CFG->country;
         }
+        $result['extendedusernamechars'] = !empty($CFG->extendedusernamechars);
 
         if ($fields = profile_get_signup_fields()) {
             $result['profilefields'] = array();
             foreach ($fields as $field) {
                 $fielddata = $field->object->get_field_config_for_external();
-                $fielddata['categoryname'] = external_format_string($field->categoryname, $context->id);
-                $fielddata['name'] = external_format_string($fielddata['name'], $context->id);
+                $fielddata['categoryname'] = \core_external\util::format_string($field->categoryname, $context->id);
+                $fielddata['name'] = \core_external\util::format_string($fielddata['name'], $context->id);
                 list($fielddata['defaultdata'], $fielddata['defaultdataformat']) =
-                    external_format_text($fielddata['defaultdata'], $fielddata['defaultdataformat'], $context->id);
+                    \core_external\util::format_text($fielddata['defaultdata'], $fielddata['defaultdataformat'], $context->id);
 
                 $result['profilefields'][] = $fielddata;
             }
         }
 
         if (signup_captcha_enabled()) {
-            require_once($CFG->libdir . '/recaptchalib.php');
-            // We return the public key, maybe we want to use the javascript api to get the image.
+            // With reCAPTCHA v2 the captcha will be rendered by the mobile client using just the publickey.
             $result['recaptchapublickey'] = $CFG->recaptchapublickey;
-            list($result['recaptchachallengehash'], $result['recaptchachallengeimage'], $result['recaptchachallengejs']) =
-                recaptcha_get_challenge_hash_and_urls(RECAPTCHA_API_SECURE_SERVER, $CFG->recaptchapublickey);
         }
 
         $result['warnings'] = array();
@@ -132,25 +141,29 @@ class auth_email_external extends external_api {
     public static function get_signup_settings_returns() {
 
         return new external_single_structure(
-            array(
+            [
                 'namefields' => new external_multiple_structure(
                      new external_value(PARAM_NOTAGS, 'The order of the name fields')
                 ),
                 'passwordpolicy' => new external_value(PARAM_RAW, 'Password policy', VALUE_OPTIONAL),
-                'sitepolicy' => new external_value(PARAM_URL, 'Site policy url', VALUE_OPTIONAL),
+                'sitepolicy' => new external_value(PARAM_RAW, 'Site policy', VALUE_OPTIONAL),
+                'sitepolicyhandler' => new external_value(PARAM_PLUGIN, 'Site policy handler', VALUE_OPTIONAL),
                 'defaultcity' => new external_value(PARAM_NOTAGS, 'Default city', VALUE_OPTIONAL),
                 'country' => new external_value(PARAM_ALPHA, 'Default country', VALUE_OPTIONAL),
+                'extendedusernamechars' => new external_value(
+                    PARAM_BOOL, 'Extended characters in usernames or not', VALUE_OPTIONAL
+                ),
                 'profilefields' => new external_multiple_structure(
                     new external_single_structure(
-                        array(
+                        [
                             'id' => new external_value(PARAM_INT, 'Profile field id', VALUE_OPTIONAL),
-                            'shortname' => new external_value(PARAM_ALPHANUM, 'Password policy', VALUE_OPTIONAL),
-                            'name' => new external_value(PARAM_TEXT, 'Profield field name', VALUE_OPTIONAL),
+                            'shortname' => new external_value(PARAM_ALPHANUMEXT, 'Profile field shortname', VALUE_OPTIONAL),
+                            'name' => new external_value(PARAM_RAW, 'Profield field name', VALUE_OPTIONAL),
                             'datatype' => new external_value(PARAM_ALPHANUMEXT, 'Profield field datatype', VALUE_OPTIONAL),
                             'description' => new external_value(PARAM_RAW, 'Profield field description', VALUE_OPTIONAL),
                             'descriptionformat' => new external_format_value('description'),
                             'categoryid' => new external_value(PARAM_INT, 'Profield field category id', VALUE_OPTIONAL),
-                            'categoryname' => new external_value(PARAM_TEXT, 'Profield field category name', VALUE_OPTIONAL),
+                            'categoryname' => new external_value(PARAM_RAW, 'Profield field category name', VALUE_OPTIONAL),
                             'sortorder' => new external_value(PARAM_INT, 'Profield field sort order', VALUE_OPTIONAL),
                             'required' => new external_value(PARAM_INT, 'Profield field required', VALUE_OPTIONAL),
                             'locked' => new external_value(PARAM_INT, 'Profield field locked', VALUE_OPTIONAL),
@@ -164,7 +177,7 @@ class auth_email_external extends external_api {
                             'param3' => new external_value(PARAM_RAW, 'Profield field settings', VALUE_OPTIONAL),
                             'param4' => new external_value(PARAM_RAW, 'Profield field settings', VALUE_OPTIONAL),
                             'param5' => new external_value(PARAM_RAW, 'Profield field settings', VALUE_OPTIONAL),
-                        )
+                        ]
                     ), 'Required profile fields', VALUE_OPTIONAL
                 ),
                 'recaptchapublickey' => new external_value(PARAM_RAW, 'Recaptcha public key', VALUE_OPTIONAL),
@@ -172,7 +185,7 @@ class auth_email_external extends external_api {
                 'recaptchachallengeimage' => new external_value(PARAM_URL, 'Recaptcha challenge noscript image', VALUE_OPTIONAL),
                 'recaptchachallengejs' => new external_value(PARAM_URL, 'Recaptcha challenge js url', VALUE_OPTIONAL),
                 'warnings'  => new external_warnings(),
-            )
+            ]
         );
     }
 
@@ -286,6 +299,11 @@ class auth_email_external extends external_api {
         // Validate the data sent.
         $data = $params;
         $data['email2'] = $data['email'];
+        // Force policy agreed if a site policy is set. The client is responsible of implementing the interface check.
+        $manager = new \core_privacy\local\sitepolicy\manager();
+        if ($manager->is_defined()) {
+            $data['policyagreed'] = 1;
+        }
         unset($data['recaptcharesponse']);
         unset($data['customprofilefields']);
         // Add profile fields data.
@@ -303,11 +321,11 @@ class auth_email_external extends external_api {
 
         // Validate recaptcha.
         if (signup_captcha_enabled()) {
-            require_once($CFG->libdir . '/recaptchalib.php');
-            $response = recaptcha_check_answer($CFG->recaptchaprivatekey, getremoteaddr(), $params['recaptchachallengehash'],
-                                               $params['recaptcharesponse'], true);
-            if (!$response->is_valid) {
-                $errors['recaptcharesponse'] = $response->error;
+            require_once($CFG->libdir . '/recaptchalib_v2.php');
+            $response = recaptcha_check_response(RECAPTCHA_VERIFY_URL, $CFG->recaptchaprivatekey,
+                                                 getremoteaddr(), $params['recaptcharesponse']);
+            if (!$response['isvalid']) {
+                $errors['recaptcharesponse'] = $response['error'];
             }
         }
 

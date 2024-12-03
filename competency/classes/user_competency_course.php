@@ -203,7 +203,7 @@ class user_competency_course extends persistent {
      * @param  array  $competenciesorids Limit search to those competencies, or competency IDs.
      * @return \core_competency\user_competency_course[]
      */
-    public static function get_multiple($userid, $courseid, array $competenciesorids = null) {
+    public static function get_multiple($userid, $courseid, ?array $competenciesorids = null) {
         global $DB;
 
         $params = array();
@@ -243,6 +243,8 @@ class user_competency_course extends persistent {
 
         $sql = 'SELECT COUNT(comp.id)
                   FROM {' . self::TABLE . '} usercoursecomp
+                  JOIN {' . course_competency::TABLE . '} cc
+                    ON usercoursecomp.competencyid = cc.competencyid AND cc.courseid = usercoursecomp.courseid
                   JOIN {' . competency::TABLE . '} comp
                     ON usercoursecomp.competencyid = comp.id
                  WHERE usercoursecomp.courseid = ? AND usercoursecomp.userid = ? AND usercoursecomp.proficiency = ?';
@@ -280,7 +282,6 @@ class user_competency_course extends persistent {
               ORDER BY p.timesproficient ASC, c.id DESC';
 
         $results = $DB->get_records_sql($sql, $params, $skip, $limit);
-        $a = $DB->get_records_sql('SELECT * from {' . self::TABLE . '}');
 
         $comps = array();
         foreach ($results as $r) {

@@ -89,7 +89,8 @@ class moodle1_converter extends base_converter {
     public static function detect_format($tempdir) {
         global $CFG;
 
-        $filepath = $CFG->tempdir . '/backup/' . $tempdir . '/moodle.xml';
+        $tempdirpath = make_backup_temp_directory($tempdir, false);
+        $filepath = $tempdirpath . '/moodle.xml';
         if (file_exists($filepath)) {
             // looks promising, lets load some information
             $handle = fopen($filepath, 'r');
@@ -1379,7 +1380,7 @@ class moodle1_file_manager implements loggable {
     protected function make_file_record(array $fileinfo) {
 
         $defaultrecord = array(
-            'contenthash'   => 'da39a3ee5e6b4b0d3255bfef95601890afd80709',  // sha1 of an empty file
+            'contenthash'   => file_storage::hash_from_string(''),
             'contextid'     => $this->contextid,
             'component'     => $this->component,
             'filearea'      => $this->filearea,
@@ -1422,7 +1423,7 @@ class moodle1_file_manager implements loggable {
             throw new moodle1_convert_exception('file_not_readable');
         }
 
-        $contenthash = sha1_file($pathname);
+        $contenthash = file_storage::hash_from_path($pathname);
         $filesize    = filesize($pathname);
         $hashpath    = $this->converter->get_workdir_path().'/files/'.substr($contenthash, 0, 2);
         $hashfile    = "$hashpath/$contenthash";

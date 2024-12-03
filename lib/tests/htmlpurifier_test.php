@@ -14,37 +14,27 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for the HTMLPurifier integration
- *
- * @package    core
- * @category   phpunit
- * @copyright  2012 Petr Skoda {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
-
+namespace core;
 
 /**
  * HTMLPurifier test case
  *
  * @package    core
- * @category   phpunit
+ * @category   test
  * @copyright  2012 Petr Skoda {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_htmlpurifier_testcase extends basic_testcase {
+class htmlpurifier_test extends \basic_testcase {
 
     /**
      * Verify _blank target is allowed.
      */
-    public function test_allow_blank_target() {
+    public function test_allow_blank_target(): void {
         // See MDL-52651 for an explanation as to why the rel="noreferrer" attribute is expected here.
         // Also note we do not need to test links with an existing rel attribute as the HTML Purifier is configured to remove
         // the rel attribute.
         $text = '<a href="http://moodle.org" target="_blank">Some link</a>';
-        $expected = '<a href="http://moodle.org" target="_blank" rel="noreferrer">Some link</a>';
+        $expected = '<a href="http://moodle.org" target="_blank" rel="noreferrer noopener">Some link</a>';
         $result = format_text($text, FORMAT_HTML);
         $this->assertSame($expected, $result);
 
@@ -55,7 +45,7 @@ class core_htmlpurifier_testcase extends basic_testcase {
     /**
      * Verify our nolink tag accepted.
      */
-    public function test_nolink() {
+    public function test_nolink(): void {
         // We can not use format text because nolink changes result.
         $text = '<nolink><div>no filters</div></nolink>';
         $result = purify_html($text, array());
@@ -64,12 +54,17 @@ class core_htmlpurifier_testcase extends basic_testcase {
         $text = '<nolink>xxx<em>xx</em><div>xxx</div></nolink>';
         $result = purify_html($text, array());
         $this->assertSame($text, $result);
+
+        // Ensure nolink doesn't force open tags to be closed, so can be virtually everywhere.
+        $text = '<p><nolink><div>no filters</div></nolink></p>';
+        $result = purify_html($text, array());
+        $this->assertSame($text, $result);
     }
 
     /**
      * Verify our tex tag accepted.
      */
-    public function test_tex() {
+    public function test_tex(): void {
         $text = '<tex>a+b=c</tex>';
         $result = purify_html($text, array());
         $this->assertSame($text, $result);
@@ -78,7 +73,7 @@ class core_htmlpurifier_testcase extends basic_testcase {
     /**
      * Verify our algebra tag accepted.
      */
-    public function test_algebra() {
+    public function test_algebra(): void {
         $text = '<algebra>a+b=c</algebra>';
         $result = purify_html($text, array());
         $this->assertSame($text, $result);
@@ -87,7 +82,7 @@ class core_htmlpurifier_testcase extends basic_testcase {
     /**
      * Verify our hacky multilang works.
      */
-    public function test_multilang() {
+    public function test_multilang(): void {
         $text = '<lang lang="en">hmmm</lang><lang lang="anything">hm</lang>';
         $result = purify_html($text, array());
         $this->assertSame($text, $result);
@@ -114,11 +109,11 @@ class core_htmlpurifier_testcase extends basic_testcase {
     /**
      * Tests the 'allowid' option for format_text.
      */
-    public function test_format_text_allowid() {
+    public function test_format_text_allowid(): void {
         // Start off by not allowing ids (default).
-        $options = array(
-            'nocache' => true
-        );
+        $options = [
+            'allowid' => false,
+        ];
         $result = format_text('<div id="example">Frog</div>', FORMAT_HTML, $options);
         $this->assertSame('<div>Frog</div>', $result);
 
@@ -128,7 +123,7 @@ class core_htmlpurifier_testcase extends basic_testcase {
         $this->assertSame('<div id="example">Frog</div>', $result);
     }
 
-    public function test_allowobjectembed() {
+    public function test_allowobjectembed(): void {
         global $CFG;
 
         $this->assertSame('0', $CFG->allowobjectembed);
@@ -162,7 +157,7 @@ class core_htmlpurifier_testcase extends basic_testcase {
     /**
      * Test if linebreaks kept unchanged.
      */
-    public function test_line_breaking() {
+    public function test_line_breaking(): void {
         $text = "\n\raa\rsss\nsss\r";
         $this->assertSame($text, purify_html($text));
     }
@@ -170,7 +165,7 @@ class core_htmlpurifier_testcase extends basic_testcase {
     /**
      * Test fixing of strict problems.
      */
-    public function test_tidy() {
+    public function test_tidy(): void {
         $text = "<p>xx";
         $this->assertSame('<p>xx</p>', purify_html($text));
 
@@ -184,7 +179,7 @@ class core_htmlpurifier_testcase extends basic_testcase {
     /**
      * Test nesting - this used to cause problems in earlier versions.
      */
-    public function test_nested_lists() {
+    public function test_nested_lists(): void {
         $text = "<ul><li>One<ul><li>Two</li></ul></li><li>Three</li></ul>";
         $this->assertSame($text, purify_html($text));
     }
@@ -192,7 +187,7 @@ class core_htmlpurifier_testcase extends basic_testcase {
     /**
      * Test that XSS protection works, complete smoke tests are in htmlpurifier itself.
      */
-    public function test_cleaning_nastiness() {
+    public function test_cleaning_nastiness(): void {
         $text = "x<SCRIPT>alert('XSS')</SCRIPT>x";
         $this->assertSame('xx', purify_html($text));
 
@@ -218,7 +213,7 @@ class core_htmlpurifier_testcase extends basic_testcase {
     /**
      * Test internal function used for clean_text() speedup.
      */
-    public function test_is_purify_html_necessary() {
+    public function test_is_purify_html_necessary(): void {
         // First our shortcuts.
         $text = "";
         $this->assertFalse(is_purify_html_necessary($text));
@@ -272,7 +267,7 @@ class core_htmlpurifier_testcase extends basic_testcase {
         $this->assertTrue(is_purify_html_necessary($text));
     }
 
-    public function test_allowed_schemes() {
+    public function test_allowed_schemes(): void {
         // First standard schemas.
         $text = '<a href="http://www.example.com/course/view.php?id=5">link</a>';
         $this->assertSame($text, purify_html($text));
@@ -320,13 +315,37 @@ class core_htmlpurifier_testcase extends basic_testcase {
     }
 
     /**
+     * Test non-ascii domain names
+     */
+    public function test_idn(): void {
+
+        // Example of domain that gives the same result in IDNA2003 and IDNA2008 .
+        $text = '<a href="http://правительство.рф">правительство.рф</a>';
+        $expected = '<a href="http://xn--80aealotwbjpid2k.xn--p1ai">правительство.рф</a>';
+        $this->assertSame($expected, purify_html($text));
+
+        // Examples of deviations from http://www.unicode.org/reports/tr46/#Table_Deviation_Characters .
+        $text = '<a href="http://teßt.de">teßt.de</a>';
+        $expected = '<a href="http://xn--tet-6ka.de">teßt.de</a>';
+        $this->assertSame($expected, purify_html($text));
+
+        $text = '<a href="http://βόλος.com">http://βόλος.com</a>';
+        $expected = '<a href="http://xn--nxasmm1c.com">http://βόλος.com</a>';
+        $this->assertSame($expected, purify_html($text));
+
+        $text = '<a href="http://نامه‌ای.com">http://نامه‌ای.com</a>';
+        $expected = '<a href="http://xn--mgba3gch31f060k.com">http://نامه‌ای.com</a>';
+        $this->assertSame($expected, purify_html($text));
+    }
+
+    /**
      * Tests media tags.
      *
      * @dataProvider media_tags_provider
      * @param string $mediatag HTML media tag
      * @param string $expected expected result
      */
-    public function test_media_tags($mediatag, $expected) {
+    public function test_media_tags($mediatag, $expected): void {
         $actual = format_text($mediatag, FORMAT_MOODLE, ['filter' => false]);
         $this->assertEquals($expected, $actual);
     }
@@ -334,7 +353,7 @@ class core_htmlpurifier_testcase extends basic_testcase {
     /**
      * Test cases for the test_media_tags test.
      */
-    public function media_tags_provider() {
+    public static function media_tags_provider(): array {
         // Takes an array of attributes, then generates a test for each of them.
         $generatetestcases = function($prefix, array $attrs, array $templates) {
             return array_reduce($attrs, function($carry, $attr) use ($prefix, $templates) {
@@ -407,6 +426,12 @@ class core_htmlpurifier_testcase extends basic_testcase {
                 '<video %1$s>Did not work <a href="http://example.com/prettygood.mp4">click here to download</a></video>',
                 '<div class="text_to_html"><video %1$s>Did not work <a href="http://example.com/prettygood.mp4">' .
                 'click here to download</a></video></div>'
+            ]) + $generatetestcases('Video inside an inline tag', $videoattrs + ['src="http://example.com/prettygood.mp4'], [
+                '<em><video %1$s>Oh, that\'s pretty bad 😦</video></em>',
+                '<div class="text_to_html"><em><video %1$s>Oh, that\'s pretty bad 😦</video></em></div>'
+            ]) + $generatetestcases('Video inside a block tag', $videoattrs + ['src="http://example.com/prettygood.mp4'], [
+                '<p><video %1$s>Oh, that\'s pretty bad 😦</video></p>',
+                '<div class="text_to_html"><p><video %1$s>Oh, that\'s pretty bad 😦</video></p></div>'
             ]) + $generatetestcases('Source tag without video or audio', $videoattrs, [
                 'some text <source src="http://example.com/getup.wav" type="audio/wav"> the end',
                 '<div class="text_to_html">some text  the end</div>'

@@ -15,14 +15,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Provides the unit tests class and some helper classes
- *
- * @package     tool_installaddon
- * @category    test
- * @copyright   2013 David Mudrak <david@moodle.com>
- * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace tool_installaddon;
+
+use testable_tool_installaddon_installer;
+use tool_installaddon_installer;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -32,26 +28,28 @@ require_once(__DIR__.'/fixtures/testable_installer.php');
 /**
  * Unit tests for the {@link tool_installaddon_installer} class
  *
+ * @package     tool_installaddon
+ * @category    test
  * @copyright 2013 David Mudrak <david@moodle.com>
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class tool_installaddon_installer_testcase extends advanced_testcase {
+class installer_test extends \advanced_testcase {
 
-    public function test_get_addons_repository_url() {
+    public function test_get_addons_repository_url(): void {
         $installer = testable_tool_installaddon_installer::instance();
         $url = $installer->get_addons_repository_url();
         $query = parse_url($url, PHP_URL_QUERY);
         $this->assertEquals(1, preg_match('~^site=(.+)$~', $query, $matches));
         $site = rawurldecode($matches[1]);
         $site = json_decode(base64_decode($site), true);
-        $this->assertInternalType('array', $site);
+        $this->assertIsArray($site);
         $this->assertEquals(3, count($site));
         $this->assertSame('Nasty site', $site['fullname']);
         $this->assertSame('file:///etc/passwd', $site['url']);
         $this->assertSame("2.5'; DROP TABLE mdl_user; --", $site['majorversion']);
     }
 
-    public function test_decode_remote_request() {
+    public function test_decode_remote_request(): void {
         $installer = testable_tool_installaddon_installer::instance();
 
         $request = base64_encode(json_encode(array(
@@ -109,7 +107,7 @@ class tool_installaddon_installer_testcase extends advanced_testcase {
         $this->assertSame(false, $installer->testable_decode_remote_request($request));
     }
 
-    public function test_detect_plugin_component() {
+    public function test_detect_plugin_component(): void {
         global $CFG;
 
         $installer = tool_installaddon_installer::instance();
@@ -121,7 +119,7 @@ class tool_installaddon_installer_testcase extends advanced_testcase {
         $this->assertFalse($installer->detect_plugin_component($zipfile));
     }
 
-    public function test_detect_plugin_component_from_versionphp() {
+    public function test_detect_plugin_component_from_versionphp(): void {
         global $CFG;
 
         $installer = testable_tool_installaddon_installer::instance();
@@ -138,7 +136,7 @@ $plugin->version  = 2014121300;
         $this->assertFalse($installer->testable_detect_plugin_component_from_versionphp($versionphp));
     }
 
-    public function test_make_installfromzip_storage() {
+    public function test_make_installfromzip_storage(): void {
         $installer = testable_tool_installaddon_installer::instance();
 
         // Check we get writable directory.

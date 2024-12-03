@@ -20,21 +20,23 @@ Feature: Browse course list and return back from enrolment page
   Scenario: A user can return to the category page from enrolment page
     When I log in as "user2"
     And I am on course index
-    And I follow "Miscellaneous"
+    And I follow "Category 1"
     And I follow "Sample course"
     And I press "Continue"
-    Then I should see "Courses" in the ".breadcrumb-nav" "css_element"
-    And I click on "Courses" "link" in the ".breadcrumb-nav" "css_element"
+    Then I should see "Courses" in the ".breadcrumb" "css_element"
+    And I click on "Courses" "link" in the ".breadcrumb" "css_element"
     And I follow "Sample category"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I press "Continue"
-    And I should see "Sample category" in the ".breadcrumb-nav" "css_element"
+    And I should see "Sample category" in the ".breadcrumb" "css_element"
 
   @javascript
   Scenario: A user can return to the previous page from enrolment page by clicking navigation links
     Given I log in as "admin"
     And I am on site homepage
     And I turn editing mode on
+    And the following config values are set as admin:
+      | unaddableblocks | | theme_boost|
     And I add the "Navigation" block if not present
     And I configure the "Navigation" block
     And I set the following fields to these values:
@@ -42,13 +44,13 @@ Feature: Browse course list and return back from enrolment page
     And I press "Save changes"
     And I log out
     When I log in as "user2"
-    And I follow "Preferences" in the user menu
-    And I click on "Edit profile" "link" in the "region-main" "region"
+    And I change window size to "large"
+    And I open my profile in edit mode
     And I expand "Courses" node
     And I expand "Sample category" node
     And I follow "Course 1"
     And I press "Continue"
-    Then I should see "Edit profile" in the ".breadcrumb-nav" "css_element"
+    Then I should see "Edit profile" in the ".breadcrumb" "css_element"
 
   Scenario: User can return to the choice activity from enrolment page
     Given the following "roles" exist:
@@ -60,17 +62,15 @@ Feature: Browse course list and return back from enrolment page
     And the following "activities" exist:
       | activity   | name        | intro                         | course | idnumber    |
       | choice     | Test choice | Test choice description       | C1     | choice1     |
-    And I log in as "admin"
-    And I set the following system permissions of "Non-enrolled" role:
-      | capability | permission |
-      | moodle/course:view | Allow |
-    And I log out
+    And the following "role capability" exists:
+      | role               | custom1 |
+      | moodle/course:view | allow   |
     When I log in as "user1"
     And I am on course index
-    And I follow "Miscellaneous"
+    And I follow "Category 1"
     And I follow "Sample course"
     And I follow "Test choice"
     And I should see "Sorry, only enrolled users are allowed to make choices."
     And I press "Enrol me in this course"
     And I press "Continue"
-    Then I should see "Test choice" in the ".breadcrumb-nav" "css_element"
+    Then I should see "Test choice" in the ".breadcrumb" "css_element"

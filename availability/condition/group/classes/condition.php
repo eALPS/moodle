@@ -71,7 +71,7 @@ class condition extends \core_availability\condition {
         $allow = true;
         if (!has_capability('moodle/site:accessallgroups', $context, $userid)) {
             // Get all groups the user belongs to.
-            $groups = $info->get_modinfo()->get_groups();
+            $groups = $info->get_groups(0, $userid);
             if ($this->groupid) {
                 $allow = in_array($this->groupid, $groups);
             } else {
@@ -110,9 +110,8 @@ class condition extends \core_availability\condition {
             if (!array_key_exists($this->groupid, self::$groupnames)) {
                 $name = get_string('missing', 'availability_group');
             } else {
-                $context = \context_course::instance($course->id);
-                $name = format_string(self::$groupnames[$this->groupid], true,
-                        array('context' => $context));
+                // Not safe to call format_string here; use the special function to call it later.
+                $name = self::description_format_string(self::$groupnames[$this->groupid]);
             }
         } else {
             return get_string($not ? 'requires_notanygroup' : 'requires_anygroup',

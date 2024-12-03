@@ -58,6 +58,10 @@ if ($USER->id != $user->id and has_capability('moodle/user:viewuseractivitiesrep
 
 list($all, $today) = report_log_can_access_user_report($user, $course);
 
+if (!$today && !$all) {
+    throw new \moodle_exception('nocapability', 'report_log');
+}
+
 if ($mode === 'today') {
     if (!$today) {
         require_capability('report/log:viewtoday', $coursecontext);
@@ -88,7 +92,7 @@ if ($mode === 'today') {
 $PAGE->add_report_nodes($user->id, $navigationnode);
 
 if ($courseid == SITEID) {
-    $PAGE->set_heading(fullname($user));
+    $PAGE->set_heading(fullname($user, has_capability('moodle/site:viewfullnames', $PAGE->context)));
 } else {
     $PAGE->set_heading($course->fullname);
 }
@@ -101,10 +105,16 @@ $event->trigger();
 echo $OUTPUT->header();
 if ($courseid != SITEID) {
     $userheading = array(
+            'heading' => fullname($user, has_capability('moodle/site:viewfullnames', $PAGE->context)),
             'user' => $user,
             'usercontext' => $personalcontext,
         );
     echo $OUTPUT->context_header($userheading, 2);
+    if ($mode === 'today') {
+        echo $OUTPUT->heading(get_string('todaylogs', 'moodle'), 2, 'main mt-4 mb-4');
+    } else {
+        echo $OUTPUT->heading(get_string('alllogs', 'moodle'), 2, 'main mt-4 mb-4');
+    }
 }
 
 // Time to filter records from.
@@ -125,10 +135,6 @@ if (!empty($reportlog->selectedlogreader)) {
 }
 
 echo $output->reader_selector($reportlog);
-
-if ($mode === 'all') {
-    $reportlog->selecteddate = 0;
-}
 
 // Print the graphic chart accordingly to the mode (all, today).
 echo '<div class="graph">';

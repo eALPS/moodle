@@ -16,7 +16,7 @@
 /**
  * Grade dialogue.
  *
- * @package    tool_lp
+ * @module     tool_lp/grade_dialogue
  * @copyright  2016 Frédéric Massart - FMCorz.net
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -31,6 +31,8 @@ define(['jquery',
 
     /**
      * Grade dialogue class.
+     *
+     * @class tool_lp/grade_dialogue
      * @param {Array} ratingOptions
      */
     var Grade = function(ratingOptions) {
@@ -39,9 +41,9 @@ define(['jquery',
     };
     Grade.prototype = Object.create(EventBase.prototype);
 
-    /** @type {Dialogue} The dialogue. */
+    /** @property {Dialogue} The dialogue. */
     Grade.prototype._popup = null;
-    /** @type {Array} Array of objects containing, 'value', 'name' and optionally 'selected'. */
+    /** @property {Array} Array of objects containing, 'value', 'name' and optionally 'selected'. */
     Grade.prototype._ratingOptions = null;
 
     /**
@@ -97,20 +99,28 @@ define(['jquery',
     /**
      * Opens the picker.
      *
-     * @param {Number} competencyId The competency ID of the competency to work on.
      * @method display
      * @return {Promise}
      */
     Grade.prototype.display = function() {
-        return this._render().then(function(html) {
-            return Str.get_string('rate', 'tool_lp').then(function(title) {
-                this._popup = new Dialogue(
-                    title,
-                    html,
-                    this._afterRender.bind(this)
-                );
-            }.bind(this));
-        }.bind(this)).fail(Notification.exception);
+        M.util.js_pending('tool_lp/grade_dialogue:display');
+        return $.when(
+            Str.get_string('rate', 'tool_lp'),
+            this._render()
+        )
+        .then(function(title, templateResult) {
+            this._popup = new Dialogue(
+                title,
+                templateResult[0],
+                function() {
+                    this._afterRender();
+                    M.util.js_complete('tool_lp/grade_dialogue:display');
+                }.bind(this)
+            );
+
+            return this._popup;
+        }.bind(this))
+        .catch(Notification.exception);
     };
 
     /**
@@ -140,6 +150,5 @@ define(['jquery',
         return Templates.render('tool_lp/competency_grader', context);
     };
 
-    return /** @alias module:tool_lp/grade_dialogue */ Grade;
-
+    return Grade;
 });

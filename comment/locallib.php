@@ -16,18 +16,9 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Functions and classes for comments management
- *
- * @package   core
- * @copyright 2010 Dongsheng Cai {@link http://dongsheng.org}
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-defined('MOODLE_INTERNAL') || die();
-
-/**
  * comment_manager is helper class to manage moodle comments in admin page (Reports->Comments)
  *
- * @package   core
+ * @package   core_comment
  * @copyright 2010 Dongsheng Cai {@link http://dongsheng.org}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -35,6 +26,24 @@ class comment_manager {
 
     /** @var int The number of comments to display per page */
     private $perpage;
+
+    /** @var stdClass Course data. */
+    protected $course;
+
+    /** @var context|bool To store the context object or false if not found. */
+    protected $context;
+
+    /** @var stdClass Course module. */
+    protected $cm;
+
+    /** @var course_modinfo Module information for course, or null if resetting. */
+    protected $modinfo;
+
+    /** @var string plugin type. */
+    protected $plugintype;
+
+    /** @var string plugin name. */
+    protected $pluginname;
 
     /**
      * Constructs the comment_manage object
@@ -61,21 +70,22 @@ class comment_manager {
         }
         $comments = array();
 
-        $usernamefields = get_all_user_name_fields(true, 'u');
+        $userfieldsapi = \core_user\fields::for_name();
+        $usernamefields = $userfieldsapi->get_sql('u', false, '', '', false)->selects;
         $sql = "SELECT c.id, c.contextid, c.itemid, c.component, c.commentarea, c.userid, c.content, $usernamefields, c.timecreated
                   FROM {comments} c
                   JOIN {user} u
                        ON u.id=c.userid
               ORDER BY c.timecreated ASC";
         $rs = $DB->get_recordset_sql($sql, null, $start, $this->perpage);
-        $formatoptions = array('overflowdiv' => true);
+        $formatoptions = array('overflowdiv' => true, 'blanktarget' => true);
         foreach ($rs as $item) {
             // Set calculated fields
             $item->fullname = fullname($item);
             $item->time = userdate($item->timecreated);
             $item->content = format_text($item->content, FORMAT_MOODLE, $formatoptions);
             // Unset fields not related to the comment
-            foreach (get_all_user_name_fields() as $namefield) {
+            foreach (\core_user\fields::get_name_fields() as $namefield) {
                 unset($item->$namefield);
             }
             unset($item->timecreated);
@@ -144,9 +154,14 @@ class comment_manager {
      * Print comments
      * @param int $page
      * @return bool return false if no comments available
+     *
+     * @deprecated since Moodle 4.2 - please do not use this function any more
      */
     public function print_comments($page = 0) {
         global $OUTPUT, $CFG, $OUTPUT, $DB;
+
+        debugging('The function ' . __FUNCTION__ . '() is deprecated, please do not use it any more. ' .
+            'See \'comments\' system report class for replacement', DEBUG_DEVELOPER);
 
         $count = $DB->count_records('comments');
         $comments = $this->get_comments($page);
@@ -158,7 +173,7 @@ class comment_manager {
         $table = new html_table();
         $table->head = array (
             html_writer::checkbox('selectall', '', false, get_string('selectall'), array('id' => 'comment_select_all',
-                'class' => 'm-r-1')),
+                'class' => 'me-1')),
             get_string('author', 'search'),
             get_string('content'),
             get_string('action')
@@ -170,6 +185,7 @@ class comment_manager {
 
         $link = new moodle_url('/comment/index.php', array('action' => 'delete', 'sesskey' => sesskey()));
         foreach ($comments as $c) {
+            $userdata = html_writer::link(new moodle_url('/user/profile.php', ['id' => $c->userid]), $c->fullname);
             $this->setup_plugin($c);
             if (!empty($this->plugintype)) {
                 $context_url = plugin_callback($this->plugintype, $this->pluginname, 'comment', 'url', array($c));
@@ -180,7 +196,7 @@ class comment_manager {
                 $action .= html_writer::empty_tag('br');
                 $action .= html_writer::link($context_url, get_string('commentincontext'), array('target'=>'_blank'));
             }
-            $table->data[] = array($checkbox, $c->fullname, $c->content, $action);
+            $table->data[] = array($checkbox, $userdata, $c->content, $action);
         }
         echo html_writer::table($table);
         echo $OUTPUT->paging_bar($count, $page, $this->perpage, $CFG->wwwroot.'/comment/index.php');
@@ -226,7 +242,7 @@ class comment_manager {
      * @param  stdClass $context   context object
      * @param  string $component   component name
      * @param  int $since          the time to check
-     * @param  stdClass $cm        course module object
+     * @param  stdClass|\cm_info|null $cm course module object
      * @return array list of comments db records since the given timelimit
      * @since Moodle 3.2
      */

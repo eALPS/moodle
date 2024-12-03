@@ -112,6 +112,25 @@ abstract class qtype_gapselect_question_base extends question_graded_automatical
         }
     }
 
+    public function validate_can_regrade_with_other_version(question_definition $otherversion): ?string {
+        $basemessage = parent::validate_can_regrade_with_other_version($otherversion);
+        if ($basemessage) {
+            return $basemessage;
+        }
+
+        if (count($this->choices) != count($otherversion->choices)) {
+            return get_string('regradeissuenumgroupsschanged', 'qtype_gapselect');
+        }
+
+        foreach ($this->choices as $group => $choices) {
+            if (count($this->choices[$group]) != count($otherversion->choices[$group])) {
+                return get_string('regradeissuenumchoiceschanged', 'qtype_gapselect', $group);
+            }
+        }
+
+        return null;
+    }
+
     public function get_question_summary() {
         $question = $this->html_to_text($this->questiontext, $this->questiontextformat);
         $groups = array();
@@ -127,7 +146,7 @@ abstract class qtype_gapselect_question_base extends question_graded_automatical
 
     protected function get_selected_choice($group, $shuffledchoicenumber) {
         $choiceno = $this->choiceorder[$group][$shuffledchoicenumber];
-        return $this->choices[$group][$choiceno];
+        return isset($this->choices[$group][$choiceno]) ? $this->choices[$group][$choiceno] : null;
     }
 
     public function summarise_response(array $response) {
@@ -203,7 +222,7 @@ abstract class qtype_gapselect_question_base extends question_graded_automatical
     public function get_expected_data() {
         $vars = array();
         foreach ($this->places as $place => $notused) {
-            $vars[$this->field($place)] = PARAM_INTEGER;
+            $vars[$this->field($place)] = PARAM_INT;
         }
         return $vars;
     }
@@ -330,5 +349,22 @@ abstract class qtype_gapselect_question_base extends question_graded_automatical
             return parent::check_file_access($qa, $options, $component, $filearea,
                     $args, $forcedownload);
         }
+    }
+
+    /**
+     * Return the question settings that define this question as structured data.
+     *
+     * @param question_attempt $qa the current attempt for which we are exporting the settings.
+     * @param question_display_options $options the question display options which say which aspects of the question
+     * should be visible.
+     * @return mixed structure representing the question settings. In web services, this will be JSON-encoded.
+     */
+    public function get_question_definition_for_external_rendering(question_attempt $qa, question_display_options $options) {
+        // This is a partial implementation, returning only the most relevant question settings for now,
+        // ideally, we should return as much as settings as possible (depending on the state and display options).
+
+        return [
+            'shufflechoices' => $this->shufflechoices,
+        ];
     }
 }

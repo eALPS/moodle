@@ -15,11 +15,23 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Logger tests (all).
  * @package    core_backup
- * @category   phpunit
+ * @category   test
  * @copyright  2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+
+namespace core_backup;
+
+use backup;
+use base_logger;
+use base_logger_exception;
+use database_logger;
+use error_log_logger;
+use file_logger;
+use output_indented_logger;
+use output_text_logger;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -36,14 +48,19 @@ require_once($CFG->dirroot . '/backup/util/loggers/file_logger.class.php');
 
 
 /**
- * logger tests (all)
+ * Logger tests (all).
+ *
+ * @package    core_backup
+ * @category   test
+ * @copyright  2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class backup_logger_testcase extends basic_testcase {
+class logger_test extends \basic_testcase {
 
     /**
      * test base_logger class
      */
-    function test_base_logger() {
+    function test_base_logger(): void {
         // Test logger with simple action (message * level)
         $lo = new mock_base_logger1(backup::LOG_ERROR);
         $msg = 13;
@@ -65,10 +82,10 @@ class backup_logger_testcase extends basic_testcase {
         try {
             $lo1->set_next($lo1); //self
             $this->assertTrue(false, 'base_logger_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_logger_exception);
             $this->assertEquals($e->errorcode, 'logger_circular_reference');
-            $this->assertTrue($e->a instanceof stdclass);
+            $this->assertTrue($e->a instanceof \stdClass);
             $this->assertEquals($e->a->main, get_class($lo1));
             $this->assertEquals($e->a->alreadyinchain, get_class($lo1));
         }
@@ -81,10 +98,10 @@ class backup_logger_testcase extends basic_testcase {
         try {
             $lo3->set_next($lo1);
             $this->assertTrue(false, 'base_logger_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_logger_exception);
             $this->assertEquals($e->errorcode, 'logger_circular_reference');
-            $this->assertTrue($e->a instanceof stdclass);
+            $this->assertTrue($e->a instanceof \stdClass);
             $this->assertEquals($e->a->main, get_class($lo1));
             $this->assertEquals($e->a->alreadyinchain, get_class($lo3));
         }
@@ -124,7 +141,7 @@ class backup_logger_testcase extends basic_testcase {
     /**
      * test error_log_logger class
      */
-    function test_error_log_logger() {
+    function test_error_log_logger(): void {
         // Not much really to test, just instantiate and execute, should return true
         $lo = new error_log_logger(backup::LOG_ERROR);
         $this->assertTrue($lo instanceof error_log_logger);
@@ -136,7 +153,7 @@ class backup_logger_testcase extends basic_testcase {
     /**
      * test output_text_logger class
      */
-    function test_output_text_logger() {
+    function test_output_text_logger(): void {
         // Instantiate without date nor level output
         $lo = new output_text_logger(backup::LOG_ERROR);
         $this->assertTrue($lo instanceof output_text_logger);
@@ -166,7 +183,7 @@ class backup_logger_testcase extends basic_testcase {
     /**
      * test output_indented_logger class
      */
-    function test_output_indented_logger() {
+    function test_output_indented_logger(): void {
         // Instantiate without date nor level output
         $options = array('depth' => 2);
         $lo = new output_indented_logger(backup::LOG_ERROR);
@@ -209,7 +226,7 @@ class backup_logger_testcase extends basic_testcase {
     /**
      * test database_logger class
      */
-    function test_database_logger() {
+    function test_database_logger(): void {
         // Instantiate with date and level output (and with specs from the global moodle "log" table so checks will pass
         $now = time();
         $datecol = 'time';
@@ -233,7 +250,7 @@ class backup_logger_testcase extends basic_testcase {
     /**
      * test file_logger class
      */
-    function test_file_logger() {
+    function test_file_logger(): void {
         global $CFG;
 
         $file = $CFG->tempdir . '/test/test_file_logger.txt';
@@ -241,7 +258,7 @@ class backup_logger_testcase extends basic_testcase {
         @remove_dir(dirname($file));
         // Recreate test dir
         if (!check_dir_exists(dirname($file), true, true)) {
-            throw new moodle_exception('error_creating_temp_dir', 'error', dirname($file));
+            throw new \moodle_exception('error_creating_temp_dir', 'error', dirname($file));
         }
 
         // Instantiate with date and level output, and also use the depth option
@@ -308,7 +325,7 @@ class backup_logger_testcase extends basic_testcase {
         try {
             $result = @$lo->process($message, backup::LOG_ERROR); // Try to write again
             $this->assertTrue(false, 'base_logger_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_logger_exception);
             $this->assertEquals($e->errorcode, 'error_writing_file');
         }
@@ -317,7 +334,7 @@ class backup_logger_testcase extends basic_testcase {
         try {
             $lo = new file_logger(backup::LOG_WARNING, true, true, '');
             $this->assertTrue(false, 'base_logger_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_logger_exception);
             $this->assertEquals($e->errorcode, 'missing_fullpath_parameter');
         }
@@ -327,7 +344,7 @@ class backup_logger_testcase extends basic_testcase {
         try {
             $lo = new file_logger(backup::LOG_WARNING, true, true, $file);
             $this->assertTrue(false, 'base_logger_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_logger_exception);
             $this->assertEquals($e->errorcode, 'file_not_writable');
             $this->assertEquals($e->a, $file);

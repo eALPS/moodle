@@ -22,11 +22,15 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+namespace core_question;
+
+use question_answer;
+use question_first_matching_answer_grading_strategy;
+
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/question/type/questiontypebase.php');
-
 
 /**
  * Helper used by the testcases in this file.
@@ -34,7 +38,7 @@ require_once($CFG->dirroot . '/question/type/questiontypebase.php');
  * @copyright  2008 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class test_response_answer_comparer implements question_response_answer_comparer {
+class test_response_answer_comparer implements \question_response_answer_comparer {
     protected $answers = array();
 
     public function __construct($answers) {
@@ -50,34 +54,36 @@ class test_response_answer_comparer implements question_response_answer_comparer
     }
 }
 
-
 /**
  * Tests for {@link question_first_matching_answer_grading_strategy}.
  *
+ * @package    core_question
  * @copyright  2008 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class question_first_matching_answer_grading_strategy_testcase extends advanced_testcase {
-    protected function setUp() {
+class question_first_matching_answer_grading_strategy_test extends \advanced_testcase {
+    protected function setUp(): void {
+        parent::setUp();
     }
 
-    protected function tearDown() {
+    protected function tearDown(): void {
+        parent::tearDown();
     }
 
-    public function test_no_answers_gives_null() {
+    public function test_no_answers_gives_null(): void {
         $question = new test_response_answer_comparer(array());
         $strategy = new question_first_matching_answer_grading_strategy($question);
         $this->assertNull($strategy->grade(array()));
     }
 
-    public function test_matching_answer_returned1() {
+    public function test_matching_answer_returned1(): void {
         $answer = new question_answer(0, 'frog', 1, '', FORMAT_HTML);
         $question = new test_response_answer_comparer(array($answer));
         $strategy = new question_first_matching_answer_grading_strategy($question);
         $this->assertSame($answer, $strategy->grade(array('answer' => 'frog')));
     }
 
-    public function test_matching_answer_returned2() {
+    public function test_matching_answer_returned2(): void {
         $answer = new question_answer(0, 'frog', 1, '', FORMAT_HTML);
         $answer2 = new question_answer(0, 'frog', 0.5, '', FORMAT_HTML);
         $question = new test_response_answer_comparer(array($answer, $answer2));
@@ -85,7 +91,7 @@ class question_first_matching_answer_grading_strategy_testcase extends advanced_
         $this->assertSame($answer, $strategy->grade(array('answer' => 'frog')));
     }
 
-    public function test_no_matching_answer_gives_null() {
+    public function test_no_matching_answer_gives_null(): void {
         $answer = new question_answer(0, 'frog', 1, '', FORMAT_HTML);
         $answer2 = new question_answer(0, 'frog', 0.5, '', FORMAT_HTML);
         $question = new test_response_answer_comparer(array($answer, $answer2));

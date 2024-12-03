@@ -32,7 +32,7 @@ $id = required_param('id', PARAM_INT);   // course
 $PAGE->set_url('/mod/lesson/index.php', array('id'=>$id));
 
 if (!$course = $DB->get_record("course", array("id" => $id))) {
-    print_error('invalidcourseid');
+    throw new \moodle_exception('invalidcourseid');
 }
 
 require_login($course);
@@ -72,7 +72,7 @@ $usesections = course_format_uses_sections($course->format);
 
 $timenow = time();
 $strname  = get_string("name");
-$strgrade  = get_string("grade");
+$strgrade  = get_string("gradenoun");
 $strdeadline  = get_string("deadline", "lesson");
 $strnodeadline = get_string("nodeadline", "lesson");
 $table = new html_table();
@@ -85,24 +85,22 @@ if ($usesections) {
     $table->head  = array ($strname, $strgrade, $strdeadline);
     $table->align = array ("left", "center", "center");
 }
-
+// Get all deadlines.
+$deadlines = lesson_get_user_deadline($course->id);
 foreach ($lessons as $lesson) {
-    if (!$lesson->visible) {
-        //Show dimmed if the mod is hidden
-        $link = "<a class=\"dimmed\" href=\"view.php?id=$lesson->coursemodule\">".format_string($lesson->name,true)."</a>";
-    } else {
-        //Show normal if the mod is visible
-        $link = "<a href=\"view.php?id=$lesson->coursemodule\">".format_string($lesson->name,true)."</a>";
-    }
     $cm = get_coursemodule_from_instance('lesson', $lesson->id);
     $context = context_module::instance($cm->id);
 
-    if ($lesson->deadline == 0) {
+    $class = $lesson->visible ? null : array('class' => 'dimmed'); // Hidden modules are dimmed.
+    $link = html_writer::link(new moodle_url('view.php', array('id' => $cm->id)), format_string($lesson->name, true), $class);
+
+    $deadline = $deadlines[$lesson->id]->userdeadline;
+    if ($deadline == 0) {
         $due = $strnodeadline;
-    } else if ($lesson->deadline > $timenow) {
-        $due = userdate($lesson->deadline);
+    } else if ($deadline > $timenow) {
+        $due = userdate($deadline);
     } else {
-        $due = "<font color=\"red\">".userdate($lesson->deadline)."</font>";
+        $due = html_writer::tag('span', userdate($deadline), array('class' => 'text-danger'));
     }
 
     if ($usesections) {

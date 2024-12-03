@@ -1,5 +1,3 @@
-/* global Console */
-
 /**
  * Drag and Drop handler
  *
@@ -8,9 +6,9 @@
  * @constructor
  * @extends Base
  */
-function DragDrop(config) {
+DragDrop = function(config) {
     Console.superclass.constructor.apply(this, [config]);
-}
+};
 DragDrop.NAME = 'moodle-course-management-dd';
 DragDrop.CSS_PREFIX = 'management-dd';
 DragDrop.ATTRS = {
@@ -67,6 +65,10 @@ DragDrop.prototype = {
         if (!courseul) {
             // No course listings found.
             return false;
+        }
+
+        while (contstraint.get('scrollHeight') === 0 && !contstraint.compareTo(window.document.body)) {
+            contstraint = contstraint.get('parentNode');
         }
 
         courseul.all('> li').each(function(li) {

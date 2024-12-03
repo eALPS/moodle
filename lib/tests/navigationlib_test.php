@@ -14,22 +14,32 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for lib/navigationlib.php
- *
- * @package   core
- * @category  phpunit
- * @copyright 2009 Sam Hemelryk
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later (5)
- */
+namespace core;
+
+use action_link;
+use global_navigation;
+use navbar;
+use navigation_cache;
+use navigation_node;
+use navigation_node_collection;
+use pix_icon;
+use popup_action;
+use settings_navigation;
 
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->libdir . '/navigationlib.php');
 
-
-class core_navigationlib_testcase extends advanced_testcase {
+/**
+ * Unit tests for lib/navigationlib.php
+ *
+ * @package   core
+ * @category  test
+ * @copyright 2009 Sam Hemelryk
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later (5)
+ */
+class navigationlib_test extends \advanced_testcase {
     /**
      * @var navigation_node
      */
@@ -42,7 +52,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $PAGE->set_course($SITE);
 
         $activeurl = $PAGE->url;
-        $inactiveurl = new moodle_url('http://www.moodle.com/');
+        $inactiveurl = new \moodle_url('http://www.moodle.com/');
 
         navigation_node::override_active_url($PAGE->url);
 
@@ -56,13 +66,14 @@ class core_navigationlib_testcase extends advanced_testcase {
         $demo4 = $demo3->add('demo4', $inactiveurl, navigation_node::TYPE_COURSE,  null, 'demo4', new pix_icon('i/course', ''));
         $demo5 = $demo3->add('demo5', $activeurl, navigation_node::TYPE_COURSE, null, 'demo5', new pix_icon('i/course', ''));
         $demo5->add('activity1', null, navigation_node::TYPE_ACTIVITY, null, 'activity1')->make_active();
+        $demo6 = $demo3->add('demo6', null, navigation_node::TYPE_CONTAINER, 'container node test', 'demo6');
         $hiddendemo1 = $this->node->add('hiddendemo1', $inactiveurl, navigation_node::TYPE_CATEGORY, null, 'hiddendemo1', new pix_icon('i/course', ''));
         $hiddendemo1->hidden = true;
         $hiddendemo1->add('hiddendemo2', $inactiveurl, navigation_node::TYPE_COURSE, null, 'hiddendemo2', new pix_icon('i/course', ''))->helpbutton = 'Here is a help button';
         $hiddendemo1->add('hiddendemo3', $inactiveurl, navigation_node::TYPE_COURSE, null, 'hiddendemo3', new pix_icon('i/course', ''))->display = false;
     }
 
-    public function test_node__construct() {
+    public function test_node__construct(): void {
         $this->setup_node();
 
         $fakeproperties = array(
@@ -70,7 +81,7 @@ class core_navigationlib_testcase extends advanced_testcase {
             'shorttext' => 'A very silly extra long short text string, more than 25 characters',
             'key' => 'key',
             'type' => 'navigation_node::TYPE_COURSE',
-            'action' => new moodle_url('http://www.moodle.org/'));
+            'action' => new \moodle_url('http://www.moodle.org/'));
 
         $node = new navigation_node($fakeproperties);
         $this->assertSame($fakeproperties['text'], $node->text);
@@ -80,7 +91,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertSame($fakeproperties['action'], $node->action);
     }
 
-    public function test_node_add() {
+    public function test_node_add(): void {
         $this->setup_node();
 
         // Add a node with all args set.
@@ -106,7 +117,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertSame($node3, $ref);
     }
 
-    public function test_node_add_before() {
+    public function test_node_add_before(): void {
         $this->setup_node();
 
         // Create 3 nodes.
@@ -129,7 +140,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertSame('testadd3', $keys[count($keys)-1]);
     }
 
-    public function test_node_add_class() {
+    public function test_node_add_class(): void {
         $this->setup_node();
 
         $node = $this->node->get('demo1');
@@ -141,7 +152,23 @@ class core_navigationlib_testcase extends advanced_testcase {
         }
     }
 
-    public function test_node_check_if_active() {
+    /**
+     * Test the add_attribute method.
+     * @covers \navigation_node::add_attribute
+     */
+    public function test_node_add_attribute(): void {
+        $this->setup_node();
+
+        $node = $this->node->get('demo1');
+        $this->assertInstanceOf('navigation_node', $node);
+        if ($node !== false) {
+            $node->add_attribute('data-foo', 'bar');
+            $attribute = reset($node->attributes);
+            $this->assertEqualsCanonicalizing(['name' => 'data-foo', 'value' => 'bar'], $attribute);
+        }
+    }
+
+    public function test_node_check_if_active(): void {
         $this->setup_node();
 
         // First test the string urls
@@ -158,7 +185,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         }
     }
 
-    public function test_node_contains_active_node() {
+    public function test_node_contains_active_node(): void {
         $this->setup_node();
 
         // Demo5, and activity1 were set to active during setup.
@@ -176,7 +203,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertFalse($this->node->get('demo3')->get('demo4')->contains_active_node());
     }
 
-    public function test_node_find_active_node() {
+    public function test_node_find_active_node(): void {
         $this->setup_node();
 
         $activenode1 = $this->node->find_active_node();
@@ -190,7 +217,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertNotInstanceOf('navigation_node', $activenode2);
     }
 
-    public function test_node_find() {
+    public function test_node_find(): void {
         $this->setup_node();
 
         $node1 = $this->node->find('demo1', navigation_node::TYPE_COURSE);
@@ -203,7 +230,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertNotInstanceOf('navigation_node', $node4);
     }
 
-    public function test_node_find_expandable() {
+    public function test_node_find_expandable(): void {
         $this->setup_node();
 
         $expandable = array();
@@ -219,7 +246,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         }
     }
 
-    public function test_node_get() {
+    public function test_node_get(): void {
         $this->setup_node();
 
         $node1 = $this->node->get('demo1'); // Exists.
@@ -232,31 +259,33 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertFalse($node4);
     }
 
-    public function test_node_get_css_type() {
+    public function test_node_get_css_type(): void {
         $this->setup_node();
 
         $csstype1 = $this->node->get('demo3')->get_css_type();
         $csstype2 = $this->node->get('demo3')->get('demo5')->get_css_type();
         $this->node->get('demo3')->get('demo5')->type = 1000;
         $csstype3 = $this->node->get('demo3')->get('demo5')->get_css_type();
+        $csstype4 = $this->node->get('demo3')->get('demo6')->get_css_type();
         $this->assertSame('type_category', $csstype1);
         $this->assertSame('type_course', $csstype2);
         $this->assertSame('type_unknown', $csstype3);
+        $this->assertSame('type_container', $csstype4);
     }
 
-    public function test_node_make_active() {
+    public function test_node_make_active(): void {
         global $CFG;
         $this->setup_node();
 
         $node1 = $this->node->add('active node 1', null, navigation_node::TYPE_CUSTOM, null, 'anode1');
-        $node2 = $this->node->add('active node 2', new moodle_url($CFG->wwwroot), navigation_node::TYPE_COURSE, null, 'anode2');
+        $node2 = $this->node->add('active node 2', new \moodle_url($CFG->wwwroot), navigation_node::TYPE_COURSE, null, 'anode2');
         $node1->make_active();
         $this->node->get('anode2')->make_active();
         $this->assertTrue($node1->isactive);
         $this->assertTrue($this->node->get('anode2')->isactive);
     }
 
-    public function test_node_remove() {
+    public function test_node_remove(): void {
         $this->setup_node();
 
         $remove1 = $this->node->add('child to remove 1', null, navigation_node::TYPE_CUSTOM, null, 'remove1');
@@ -295,7 +324,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertFalse($this->node->get('remove2'));
     }
 
-    public function test_node_remove_class() {
+    public function test_node_remove_class(): void {
         $this->setup_node();
 
         $this->node->add_class('testclass');
@@ -303,7 +332,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertNotContains('testclass', $this->node->classes);
     }
 
-    public function test_module_extends_navigation() {
+    public function test_module_extends_navigation(): void {
         $node = new exposed_global_navigation();
         // Create an initial tree structure to work with.
         $cat1 = $node->add('category 1', null, navigation_node::TYPE_CATEGORY, null, 'cat1');
@@ -329,7 +358,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertFalse($node->exposed_module_extends_navigation('test1'));
     }
 
-    public function test_navbar_prepend_and_add() {
+    public function test_navbar_prepend_and_add(): \moodle_page {
         global $PAGE;
         // Unfortunate hack needed because people use global $PAGE around the place.
         $PAGE->set_url('/');
@@ -342,9 +371,9 @@ class core_navigationlib_testcase extends advanced_testcase {
         $cat2 = $generator->create_category(array('parent' => $cat1->id));
         $course = $generator->create_course(array('category' => $cat2->id));
 
-        $page = new moodle_page();
+        $page = new \moodle_page();
         $page->set_course($course);
-        $page->set_url(new moodle_url('/course/view.php', array('id' => $course->id)));
+        $page->set_url(new \moodle_url('/course/view.php', array('id' => $course->id)));
         $page->navbar->prepend('test 1');
         $page->navbar->prepend('test 2');
         $page->navbar->add('test 3');
@@ -373,13 +402,13 @@ class core_navigationlib_testcase extends advanced_testcase {
      * @depends test_navbar_prepend_and_add
      * @param $node
      */
-    public function test_navbar_has_items(moodle_page $page) {
+    public function test_navbar_has_items(\moodle_page $page): void {
         $this->resetAfterTest();
 
         $this->assertTrue($page->navbar->has_items());
     }
 
-    public function test_cache__get() {
+    public function test_cache__get(): void {
         $cache = new navigation_cache('unittest_nav');
         $cache->anysetvariable = true;
 
@@ -387,7 +416,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertEquals($cache->notasetvariable, null);
     }
 
-    public function test_cache__set() {
+    public function test_cache__set(): void {
         $cache = new navigation_cache('unittest_nav');
         $cache->anysetvariable = true;
 
@@ -396,7 +425,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertSame('Sam Hemelryk', $cache->myname);
     }
 
-    public function test_cache_cached() {
+    public function test_cache_cached(): void {
         $cache = new navigation_cache('unittest_nav');
         $cache->anysetvariable = true;
 
@@ -404,7 +433,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertFalse($cache->cached('notasetvariable'));
     }
 
-    public function test_cache_clear() {
+    public function test_cache_clear(): void {
         $cache = new navigation_cache('unittest_nav');
         $cache->anysetvariable = true;
 
@@ -414,7 +443,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertFalse($cache->cached('anysetvariable'));
     }
 
-    public function test_cache_set() {
+    public function test_cache_set(): void {
         $cache = new navigation_cache('unittest_nav');
         $cache->anysetvariable = true;
 
@@ -423,7 +452,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertEquals($cache->software, 'Moodle');
     }
 
-    public function test_setting___construct() {
+    public function test_setting___construct(): settings_navigation {
         global $PAGE, $SITE;
 
         $this->resetAfterTest(false);
@@ -441,7 +470,7 @@ class core_navigationlib_testcase extends advanced_testcase {
      * @param mixed $node
      * @return mixed
      */
-    public function test_setting__initialise($node) {
+    public function test_setting__initialise($node): settings_navigation {
         $this->resetAfterTest(false);
 
         $node->initialise();
@@ -453,7 +482,7 @@ class core_navigationlib_testcase extends advanced_testcase {
     /**
      * Test that users with the correct permissions can view the preferences page.
      */
-    public function test_can_view_user_preferences() {
+    public function test_can_view_user_preferences(): void {
         global $PAGE, $DB, $SITE;
         $this->resetAfterTest();
 
@@ -494,14 +523,14 @@ class core_navigationlib_testcase extends advanced_testcase {
      * @param mixed $node
      * @return mixed
      */
-    public function test_setting_in_alternative_role($node) {
+    public function test_setting_in_alternative_role($node): void {
         $this->resetAfterTest();
 
         $this->assertFalse($node->exposed_in_alternative_role());
     }
 
 
-    public function test_navigation_node_collection_remove_with_no_type() {
+    public function test_navigation_node_collection_remove_with_no_type(): void {
         $navigationnodecollection = new navigation_node_collection();
         $this->setup_node();
         $this->node->key = 100;
@@ -522,7 +551,7 @@ class core_navigationlib_testcase extends advanced_testcase {
         $this->assertEquals(0, count($navigationnodecollection->get_key_list()));
     }
 
-    public function test_navigation_node_collection_remove_with_type() {
+    public function test_navigation_node_collection_remove_with_type(): void {
         $navigationnodecollection = new navigation_node_collection();
         $this->setup_node();
         $this->node->key = 100;
@@ -542,6 +571,147 @@ class core_navigationlib_testcase extends advanced_testcase {
         // Test it's empty again!
         $this->assertEquals(0, count($navigationnodecollection->get_key_list()));
     }
+
+    /**
+     * Test the set_force_into_more_menu method.
+     *
+     * @param bool $haschildren       Whether the navigation node has children nodes
+     * @param bool $forceintomoremenu Whether to force the navigation node and its children into the "more" menu
+     * @dataProvider set_force_into_more_menu_provider
+     */
+    public function test_set_force_into_more_menu(bool $haschildren, bool $forceintomoremenu): void {
+        // Create a navigation node.
+        $node = new navigation_node(['text' => 'Navigation node', 'key' => 'navnode']);
+
+        // If required, add some children nodes to the navigation node.
+        if ($haschildren) {
+            for ($i = 1; $i <= 3; $i++) {
+                $node->add("Child navigation node {$i}");
+            }
+        }
+
+        $node->set_force_into_more_menu($forceintomoremenu);
+        // Assert that the expected value has been assigned to the 'forceintomoremenu' property
+        // in the navigation node and its children.
+        $this->assertEquals($forceintomoremenu, $node->forceintomoremenu);
+        foreach ($node->children as $child) {
+            $this->assertEquals($forceintomoremenu, $child->forceintomoremenu);
+        }
+    }
+
+    /**
+     * Data provider for the test_set_force_into_more_menu function.
+     *
+     * @return array
+     */
+    public static function set_force_into_more_menu_provider(): array {
+        return [
+            'Navigation node without any children nodes; Force into "more" menu => true.' =>
+                [
+                    false,
+                    true,
+                ],
+            'Navigation node with children nodes; Force into "more" menu => true.' =>
+                [
+                    true,
+                    true,
+                ],
+            'Navigation node with children nodes; Force into "more" menu => false.' =>
+                [
+                    true,
+                    false,
+                ],
+        ];
+    }
+
+    /**
+     * Test the is_action_link method.
+     *
+     * @param navigation_node $node The sample navigation node
+     * @param bool $expected Whether the navigation node contains an action link
+     * @dataProvider is_action_link_provider
+     * @covers navigation_node::is_action_link
+     */
+    public function test_is_action_link(navigation_node $node, bool $expected): void {
+        $this->assertEquals($node->is_action_link(), $expected);
+    }
+
+    /**
+     * Data provider for the test_is_action_link function.
+     *
+     * @return array
+     */
+    public static function is_action_link_provider(): array {
+        return [
+            'The navigation node has an action link.' =>
+                [
+                    navigation_node::create('Node', new action_link(new \moodle_url('/'), '',
+                        new popup_action('click', new \moodle_url('/'))), navigation_node::TYPE_SETTING),
+                    true
+                ],
+
+            'The navigation node does not have an action link.' =>
+                [
+                    navigation_node::create('Node', new \moodle_url('/'), navigation_node::TYPE_SETTING),
+                    false
+                ],
+        ];
+    }
+
+    /**
+     * Test the action_link_actions method.
+     *
+     * @param navigation_node $node The sample navigation node
+     * @dataProvider action_link_actions_provider
+     * @covers navigation_node::action_link_actions
+     */
+    public function test_action_link_actions(navigation_node $node): void {
+        // Get the formatted array of action link actions.
+        $data = $node->action_link_actions();
+        // The navigation node has an action link.
+        if ($node->action instanceof action_link) {
+            if (!empty($node->action->actions)) { // There are actions added to the action link.
+                $this->assertArrayHasKey('actions', $data);
+                $this->assertCount(1, $data['actions']);
+                $expected = (object)[
+                    'id' => $node->action->attributes['id'],
+                    'event' => $node->action->actions[0]->event,
+                    'jsfunction' => $node->action->actions[0]->jsfunction,
+                    'jsfunctionargs' => json_encode($node->action->actions[0]->jsfunctionargs)
+                ];
+                $this->assertEquals($expected, $data['actions'][0]);
+            } else { // There are no actions added to the action link.
+                $this->assertArrayHasKey('actions', $data);
+                $this->assertEmpty($data['actions']);
+            }
+        } else { // The navigation node does not have an action link.
+            $this->assertEmpty($data);
+        }
+    }
+
+    /**
+     * Data provider for the test_action_link_actions function.
+     *
+     * @return array
+     */
+    public static function action_link_actions_provider(): array {
+        return [
+            'The navigation node has an action link with an action attached.' =>
+                [
+                    navigation_node::create('Node', new action_link(new \moodle_url('/'), '',
+                        new popup_action('click', new \moodle_url('/'))), navigation_node::TYPE_SETTING),
+                ],
+            'The navigation node has an action link without an action.' =>
+                [
+                    navigation_node::create('Node', new action_link(new \moodle_url('/'), '', null),
+                        navigation_node::TYPE_SETTING),
+                ],
+            'The navigation node does not have an action link.' =>
+                [
+                    navigation_node::create('Node', new \moodle_url('/'), navigation_node::TYPE_SETTING),
+                ],
+        ];
+    }
 }
 
 
@@ -551,13 +721,12 @@ class core_navigationlib_testcase extends advanced_testcase {
  */
 class exposed_global_navigation extends global_navigation {
     protected $exposedkey = 'exposed_';
-    public function __construct(moodle_page $page=null) {
+    public function __construct(?\moodle_page $page=null) {
         global $PAGE;
         if ($page === null) {
             $page = $PAGE;
         }
         parent::__construct($page);
-        $this->cache = new navigation_cache('unittest_nav');
     }
     public function __call($method, $arguments) {
         if (strpos($method, $this->exposedkey) !== false) {
@@ -566,7 +735,7 @@ class exposed_global_navigation extends global_navigation {
         if (method_exists($this, $method)) {
             return call_user_func_array(array($this, $method), $arguments);
         }
-        throw new coding_exception('You have attempted to access a method that does not exist for the given object '.$method, DEBUG_DEVELOPER);
+        throw new \coding_exception('You have attempted to access a method that does not exist for the given object '.$method, DEBUG_DEVELOPER);
     }
     public function set_initialised() {
         $this->initialised = true;
@@ -609,9 +778,9 @@ class mock_initialise_global_navigation extends global_navigation {
  */
 class exposed_navbar extends navbar {
     protected $exposedkey = 'exposed_';
-    public function __construct(moodle_page $page) {
+
+    public function __construct(\moodle_page $page) {
         parent::__construct($page);
-        $this->cache = new navigation_cache('unittest_nav');
     }
     public function __call($method, $arguments) {
         if (strpos($method, $this->exposedkey) !== false) {
@@ -620,11 +789,11 @@ class exposed_navbar extends navbar {
         if (method_exists($this, $method)) {
             return call_user_func_array(array($this, $method), $arguments);
         }
-        throw new coding_exception('You have attempted to access a method that does not exist for the given object '.$method, DEBUG_DEVELOPER);
+        throw new \coding_exception('You have attempted to access a method that does not exist for the given object '.$method, DEBUG_DEVELOPER);
     }
 }
 
-class navigation_exposed_moodle_page extends moodle_page {
+class navigation_exposed_moodle_page extends \moodle_page {
     public function set_navigation(navigation_node $node) {
         $this->_navigation = $node;
     }
@@ -639,7 +808,6 @@ class exposed_settings_navigation extends settings_navigation {
     public function __construct() {
         global $PAGE;
         parent::__construct($PAGE);
-        $this->cache = new navigation_cache('unittest_nav');
     }
     public function __call($method, $arguments) {
         if (strpos($method, $this->exposedkey) !== false) {
@@ -648,6 +816,6 @@ class exposed_settings_navigation extends settings_navigation {
         if (method_exists($this, $method)) {
             return call_user_func_array(array($this, $method), $arguments);
         }
-        throw new coding_exception('You have attempted to access a method that does not exist for the given object '.$method, DEBUG_DEVELOPER);
+        throw new \coding_exception('You have attempted to access a method that does not exist for the given object '.$method, DEBUG_DEVELOPER);
     }
 }

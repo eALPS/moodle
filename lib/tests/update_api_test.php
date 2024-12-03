@@ -14,14 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Provides core_update_api_testcase class.
- *
- * @package     core_plugin
- * @category    test
- * @copyright   2015 David Mudrak <david@moodle.com>
- * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -36,16 +29,19 @@ require_once(__DIR__.'/fixtures/testable_update_api.php');
  * testable_api client perfectly matches the actual behaviour of the live
  * services on the given API version.
  *
+ * @package   core
+ * @category  test
  * @copyright 2015 David Mudrak <david@moodle.com>
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_update_api_testcase extends advanced_testcase {
+class update_api_test extends \advanced_testcase {
 
     /**
      * Make sure the $CFG->branch is mapped correctly to the format used by the API.
      */
-    public function test_convert_branch_numbering_format() {
+    public function test_convert_branch_numbering_format(): void {
 
+        /** @var \core\update\testable_api $client */
         $client = \core\update\testable_api::client();
 
         $this->assertSame('2.9', $client->convert_branch_numbering_format(29));
@@ -59,7 +55,7 @@ class core_update_api_testcase extends advanced_testcase {
     /**
      * Getting info about particular plugin version.
      */
-    public function test_get_plugin_info() {
+    public function test_get_plugin_info(): void {
 
         $client = \core\update\testable_api::client();
 
@@ -84,7 +80,7 @@ class core_update_api_testcase extends advanced_testcase {
     /**
      * Getting info about the most suitable plugin version for us.
      */
-    public function test_find_plugin() {
+    public function test_find_plugin(): void {
 
         $client = \core\update\testable_api::client();
 
@@ -116,7 +112,7 @@ class core_update_api_testcase extends advanced_testcase {
     /**
      * Validating the pluginfo.php response data.
      */
-    public function test_validate_pluginfo_format() {
+    public function test_validate_pluginfo_format(): void {
 
         $client = \core\update\testable_api::client();
 

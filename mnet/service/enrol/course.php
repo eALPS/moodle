@@ -49,7 +49,7 @@ if (!$service->is_available()) {
 $hosts = $service->get_remote_publishers();
 
 if (empty($hosts[$hostid])) {
-    print_error('wearenotsubscribedtothishost', 'mnetservice_enrol');
+    throw new \moodle_exception('wearenotsubscribedtothishost', 'mnetservice_enrol');
 }
 $host   = $hosts[$hostid];
 $course = $DB->get_record('mnetservice_enrol_courses', array('id'=>$courseid, 'hostid'=>$host->id), '*', MUST_EXIST);
@@ -57,7 +57,7 @@ $course = $DB->get_record('mnetservice_enrol_courses', array('id'=>$courseid, 'h
 echo $OUTPUT->header();
 
 // course name
-$icon = html_writer::empty_tag('img', array('src' => $OUTPUT->pix_url('i/course'), 'alt' => get_string('category')));
+$icon = $OUTPUT->pix_icon('i/course', get_string('category'));
 echo $OUTPUT->heading($icon . s($course->fullname));
 
 // collapsible course summary

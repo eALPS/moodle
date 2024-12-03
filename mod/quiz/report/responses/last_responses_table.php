@@ -14,19 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * This file defines the quiz responses table for showing last try at question.
- *
- * @package   quiz_responses
- * @copyright 2008 Jean-Michel Vedrine
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-
-defined('MOODLE_INTERNAL') || die();
-
-require_once($CFG->dirroot . '/mod/quiz/report/attemptsreport_table.php');
-
+use mod_quiz\local\reports\attempts_report_table;
+use mod_quiz\quiz_attempt;
 
 /**
  * This is a table subclass for displaying the quiz responses report.
@@ -34,11 +23,11 @@ require_once($CFG->dirroot . '/mod/quiz/report/attemptsreport_table.php');
  * @copyright 2008 Jean-Michel Vedrine
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class quiz_last_responses_table extends quiz_attempts_report_table {
+class quiz_last_responses_table extends attempts_report_table {
 
     /**
      * Constructor
-     * @param object $quiz
+     * @param stdClass $quiz
      * @param context $context
      * @param string $qmsubselect
      * @param quiz_responses_options $options
@@ -90,7 +79,7 @@ class quiz_last_responses_table extends quiz_attempts_report_table {
             $summary = trim($value);
         }
 
-        if ($this->is_downloading() && $this->is_downloading() != 'xhtml') {
+        if ($this->is_downloading() && $this->is_downloading() != 'html') {
             return $summary;
         }
         $summary = s($summary);
@@ -105,7 +94,7 @@ class quiz_last_responses_table extends quiz_attempts_report_table {
     /**
      * Column text from the extra data loaded in load_extra_data(), before html formatting etc.
      *
-     * @param object $attempt
+     * @param stdClass $attempt
      * @param int $slot
      * @param string $field
      * @return string
@@ -114,14 +103,7 @@ class quiz_last_responses_table extends quiz_attempts_report_table {
         if (!isset($this->lateststeps[$attempt->usageid][$slot])) {
             return '-';
         }
-        $stepdata = $this->lateststeps[$attempt->usageid][$slot];
-
-        if (property_exists($stepdata, $field . 'full')) {
-            $value = $stepdata->{$field . 'full'};
-        } else {
-            $value = $stepdata->$field;
-        }
-        return $value;
+        return $this->lateststeps[$attempt->usageid][$slot]->$field;
     }
 
     public function other_cols($colname, $attempt) {
@@ -135,7 +117,7 @@ class quiz_last_responses_table extends quiz_attempts_report_table {
             return $this->data_col($matches[1], 'rightanswer', $attempt);
 
         } else {
-            return null;
+            return parent::other_cols($colname, $attempt);
         }
     }
 
@@ -158,20 +140,8 @@ class quiz_last_responses_table extends quiz_attempts_report_table {
      */
     protected function get_required_latest_state_fields($slot, $alias) {
         global $DB;
-        $sortableresponse = $DB->sql_order_by_text("{$alias}.questionsummary");
-        if ($sortableresponse === "{$alias}.questionsummary") {
-            // Can just order by text columns. No complexity needed.
-            return "{$alias}.questionsummary AS question{$slot},
-                    {$alias}.rightanswer AS right{$slot},
-                    {$alias}.responsesummary AS response{$slot}";
-        } else {
-            // Work-around required.
-            return $DB->sql_order_by_text("{$alias}.questionsummary") . " AS question{$slot},
-                    {$alias}.questionsummary AS question{$slot}full,
-                    " . $DB->sql_order_by_text("{$alias}.rightanswer") . " AS right{$slot},
-                    {$alias}.rightanswer AS right{$slot}full,
-                    " . $DB->sql_order_by_text("{$alias}.responsesummary") . " AS response{$slot},
-                    {$alias}.responsesummary AS response{$slot}full";
-        }
+        return $DB->sql_order_by_text("{$alias}.questionsummary") . " AS question{$slot},
+                " . $DB->sql_order_by_text("{$alias}.rightanswer") . " AS right{$slot},
+                " . $DB->sql_order_by_text("{$alias}.responsesummary") . " AS response{$slot}";
     }
 }

@@ -35,7 +35,7 @@ defined('MOODLE_INTERNAL') || die();
  */
 class mod_scorm_generator extends testing_module_generator {
 
-    public function create_instance($record = null, array $options = null) {
+    public function create_instance($record = null, ?array $options = null) {
         global $CFG, $USER;
         require_once($CFG->dirroot.'/mod/scorm/lib.php');
         require_once($CFG->dirroot.'/mod/scorm/locallib.php');
@@ -45,7 +45,6 @@ class mod_scorm_generator extends testing_module_generator {
         $record = (array)$record + array(
             'scormtype' => SCORM_TYPE_LOCAL,
             'packagefile' => '',
-            'packagefilepath' => $CFG->dirroot.'/mod/scorm/tests/packages/singlescobasic.zip',
             'packageurl' => '',
             'updatefreq' => SCORM_UPDATE_NEVER,
             'popup' => 0,
@@ -69,9 +68,14 @@ class mod_scorm_generator extends testing_module_generator {
             'lastattemptlock' => $cfgscorm->lastattemptlock,
             'forcecompleted' => $cfgscorm->forcecompleted,
             'masteryoverride' => $cfgscorm->masteryoverride,
-            'auto' => $cfgscorm->auto,
-            'displayactivityname' => $cfgscorm->displayactivityname
+            'auto' => $cfgscorm->auto
         );
+        if (empty($record['packagefilepath'])) {
+            $record['packagefilepath'] = $CFG->dirroot.'/mod/scorm/tests/packages/singlescobasic.zip';
+        }
+        if (strpos($record['packagefilepath'], $CFG->dirroot) !== 0) {
+            $record['packagefilepath'] = "{$CFG->dirroot}/{$record['packagefilepath']}";
+        }
 
         // The 'packagefile' value corresponds to the draft file area ID. If not specified, create from packagefilepath.
         if (empty($record['packagefile']) && $record['scormtype'] === SCORM_TYPE_LOCAL) {

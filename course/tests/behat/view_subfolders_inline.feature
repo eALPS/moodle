@@ -14,14 +14,10 @@ Feature: View subfolders in a course in-line
     And the following "course enrolments" exist:
       | user | course | role |
       | teacher1 | C1 | editingteacher |
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Folder" to section "3" and I fill the form with:
-      | Name | Test folder |
-      | Display folder contents | On a separate page |
-    And I should see "Test folder"
-    And I follow "Test folder"
+    And the following "activities" exist:
+      | activity | course | name        | display | showexpanded |
+      | folder   | C1     | Test folder | 0       | 0            |
+    And I am on the "Test folder" "folder activity" page logged in as "teacher1"
     And I press "Edit"
     And I press "Create folder"
     And I set the field "New folder name" to "Test subfolder 1"
@@ -30,18 +26,24 @@ Feature: View subfolders in a course in-line
 
   @javascript
   Scenario: Add a folder with two subfolders - view on separate page
-    Given I follow "Course 1"
+    Given I am on "Course 1" course homepage
     And I should not see "Test subfolder 1"
-    And I follow "Test folder"
+    And I am on the "Test folder" "folder activity" page
     And I should see "Test subfolder 1"
     And I press "Edit"
     And I press "Create folder"
     And I set the field "New folder name" to "Test subfolder 2"
     And I click on "button.fp-dlg-butcreate" "css_element" in the "div.fp-mkdir-dlg" "css_element"
     And I press "Save changes"
-    When I follow "Course 1"
+    When I am on "Course 1" course homepage
     Then I should not see "Test subfolder 2"
-    And I follow "Test folder"
+    And I am on the "Test folder" "folder activity" page
+    And I should see "Test subfolder 2"
+    And I am on the "Test folder" "folder activity editing" page
+    And I set the field "Show subfolders expanded" to "1"
+    When I am on "Course 1" course homepage
+    Then I should not see "Test subfolder 2"
+    And I am on the "Test folder" "folder activity" page
     And I should see "Test subfolder 2"
 
   @javascript
@@ -52,15 +54,12 @@ Feature: View subfolders in a course in-line
     And I set the field "New folder name" to "Test sub subfolder"
     And I click on "button.fp-dlg-butcreate" "css_element" in the "div.fp-mkdir-dlg" "css_element"
     And I press "Save changes"
-    And I should see "Test sub subfolder"
-    And I navigate to "Edit settings" in current page administration
-    And I set the field "Display folder contents" to "Inline on a course page"
-    And I set the field "Show subfolders expanded" to ""
+    And I navigate to "Settings" in current page administration
+    When I set the field "Display folder contents" to "Inline on a course page"
     And I press "Save and return to course"
-    And I should see "Test subfolder 1"
+    Then I should see "Test subfolder 1"
     And I should not see "Test sub subfolder"
-    And I open "Test folder" actions menu
-    When I click on "Edit settings" "link" in the "Test folder" activity
+    And I am on the "Test folder" "folder activity editing" page
     And I set the field "Show subfolders expanded" to "1"
     And I press "Save and return to course"
     Then I should see "Test subfolder 1"

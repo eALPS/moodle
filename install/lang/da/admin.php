@@ -1,6 +1,5 @@
 <?php
-
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Automatically generated strings for Moodle installer
@@ -35,12 +34,10 @@ $string['cliansweryes'] = 'j';
 $string['cliincorrectvalueerror'] = 'Fejl, "{$a->value}" er en forkert værdi for "{$a->option}"';
 $string['cliincorrectvalueretry'] = 'Forkert værdi, prøv igen!';
 $string['clitypevalue'] = 'tast værdi';
-$string['clitypevaluedefault'] = 'tast værdi eller brug standardværdien ({$a}) ved at trykke Enter';
-$string['cliunknowoption'] = 'Ukendte options:
-
+$string['clitypevaluedefault'] = 'tast værdi, tryk på Enter for at bruge standardværdien ({$a})';
+$string['cliunknowoption'] = 'Ukendte optioner:
 {$a}
-
-Brug venligst --help option.';
+Brug optionen --help.';
 $string['cliyesnoprompt'] = 'j (betyder ja) og n (betyder nej)';
 $string['environmentrequireinstall'] = 'skal være installeret og aktiveret';
 $string['environmentrequireversion'] = 'minimumskravet er version {$a->needed} og du kører {$a->current}';

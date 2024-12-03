@@ -57,10 +57,10 @@ require_login($course);
 if (!$course) {
     $PAGE->set_context(context_system::instance()); //TODO: wrong
 }
-
-// Check the user has the required capabilities to edit an event
-if (!calendar_edit_event_allowed($event)) {
-    print_error('nopermissions');
+$title = get_string('deleteevent', 'calendar');
+// Check the user has the required capabilities to delete an event
+if (!calendar_delete_event_allowed($event)) {
+    throw new \moodle_exception('nopermissions', 'error', $PAGE->url, $title);
 }
 
 // Count the repeats, do we need to consider the possibility of deleting repeats
@@ -75,7 +75,7 @@ $viewcalendarurl->param('time', $event->timestart, '%Y');
 if ($confirm) {
     // Confirm the session key to stop CSRF
     if (!confirm_sesskey()) {
-        print_error('confirmsesskeybad');
+        throw new \moodle_exception('confirmsesskeybad');
     }
     // Delete the event and possibly repeats
     $event->delete($repeats);
@@ -88,13 +88,15 @@ if ($confirm) {
 }
 
 // Prepare the page to show the confirmation form
-$title = get_string('deleteevent', 'calendar');
 $strcalendar = get_string('calendar', 'calendar');
 
 $PAGE->navbar->add($strcalendar, $viewcalendarurl);
 $PAGE->navbar->add($title);
-$PAGE->set_title($site->shortname.': '.$strcalendar.': '.$title);
+$PAGE->set_title($strcalendar.': '.$title);
 $PAGE->set_heading($COURSE->fullname);
+if ($course) {
+    $PAGE->set_secondary_navigation(false);
+}
 echo $OUTPUT->header();
 echo $OUTPUT->box_start('eventlist');
 

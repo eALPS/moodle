@@ -14,17 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * lock unit tests
- *
- * @package    core
- * @category   test
- * @copyright  2013 Damyon Wiese
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
-
+namespace core;
 
 /**
  * Unit tests for our locking implementations.
@@ -34,35 +24,72 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright  2013 Damyon Wiese
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class lock_testcase extends advanced_testcase {
+class lock_test extends \advanced_testcase {
 
     /**
      * Some lock types will store data in the database.
      */
-    protected function setUp() {
+    protected function setUp(): void {
+        parent::setUp();
         $this->resetAfterTest(true);
     }
 
     /**
-     * Run a suite of tests on a lock factory.
-     * @param \core\lock\lock_factory $lockfactory - A lock factory to test
+     * Run a suite of tests on a lock factory class.
+     *
+     * @param class $lockfactoryclass - A lock factory class to test
      */
-    protected function run_on_lock_factory(\core\lock\lock_factory $lockfactory) {
+    protected function run_on_lock_factory($lockfactoryclass) {
 
+        $modassignfactory = new $lockfactoryclass('mod_assign');
+        $tooltaskfactory = new $lockfactoryclass('tool_task');
+
+        // Test for lock clashes between lock stores.
+        $assignlock = $modassignfactory->get_lock('abc', 0);
+        $this->assertNotEmpty($assignlock, 'Get a lock "abc" from store "mod_assign"');
+
+        $tasklock = $tooltaskfactory->get_lock('abc', 0);
+        $this->assertNotEmpty($tasklock, 'Get a lock "abc" from store "tool_task"');
+
+        $assignlock->release();
+        $tasklock->release();
+
+        $lockfactory = new $lockfactoryclass('default');
         if ($lockfactory->is_available()) {
             // This should work.
             $lock1 = $lockfactory->get_lock('abc', 2);
             $this->assertNotEmpty($lock1, 'Get a lock');
 
             if ($lockfactory->supports_timeout()) {
-                if ($lockfactory->supports_recursion()) {
-                    $lock2 = $lockfactory->get_lock('abc', 2);
+                // Attempt to obtain a lock within a 2 sec timeout.
+                $durationlock2 = -microtime(true);
+                $lock2 = $lockfactory->get_lock('abc', 2);
+                $durationlock2 += microtime(true);
+
+                if (!$lock2) { // If the lock was not obtained.
+                    $this->assertFalse($lock2, 'Cannot get a stacked lock');
+                    // This should timeout after 2 seconds.
+                    $this->assertTrue($durationlock2 < 2.5, 'Lock should timeout after no more than 2 seconds');
+                } else {
                     $this->assertNotEmpty($lock2, 'Get a stacked lock');
                     $this->assertTrue($lock2->release(), 'Release a stacked lock');
+                }
+
+                // Attempt to obtain a lock within a 0 sec timeout.
+                $durationlock2 = -microtime(true);
+                $lock2 = $lockfactory->get_lock('abc', 0);
+                $durationlock2 += microtime(true);
+
+                if (!$lock2) { // If the lock was not obtained.
+                    // This should timeout almost instantly.
+                    $this->assertTrue($durationlock2 < 0.100, 'Lock should timeout almost instantly < 100ms');
                 } else {
-                    // This should timeout.
-                    $lock2 = $lockfactory->get_lock('abc', 2);
-                    $this->assertFalse($lock2, 'Cannot get a stacked lock');
+                    // This stacked lock should be gained almost instantly.
+                    $this->assertTrue($durationlock2 < 0.100, 'Lock should be gained almost instantly');
+                    $lock2->release();
+
+                    // We should also assert that locks fail instantly if locked
+                    // from another process but this is hard to unit test.
                 }
             }
             // Release the lock.
@@ -90,20 +117,16 @@ class lock_testcase extends advanced_testcase {
     }
 
     /**
-     * Tests the testable lock factories.
+     * Tests the testable lock factories classes.
      * @return void
      */
-    public function test_locks() {
+    public function test_locks(): void {
         // Run the suite on the current configured default (may be non-core).
-        $defaultfactory = \core\lock\lock_config::get_lock_factory('default');
-        $this->run_on_lock_factory($defaultfactory);
+        $this->run_on_lock_factory(\core\lock\lock_config::get_lock_factory_class());
 
         // Manually create the core no-configuration factories.
-        $dblockfactory = new \core\lock\db_record_lock_factory('test');
-        $this->run_on_lock_factory($dblockfactory);
-
-        $filelockfactory = new \core\lock\file_lock_factory('test');
-        $this->run_on_lock_factory($filelockfactory);
+        $this->run_on_lock_factory(\core\lock\db_record_lock_factory::class);
+        $this->run_on_lock_factory(\core\lock\file_lock_factory::class);
 
     }
 

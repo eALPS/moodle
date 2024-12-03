@@ -18,27 +18,38 @@
  * message preference page
  *
  * @module     core_message/preferences_notifications_list_controller
- * @class      preferences_notifications_list_controller
- * @package    message
  * @copyright  2016 Ryan Wyllie <ryan@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-define(['jquery', 'core/ajax', 'core/notification', 'core/custom_interaction_events', 'core_message/notification_preference',
-        'core_message/notification_processor_settings'],
-        function($, Ajax, Notification, CustomEvents, NotificationPreference, NotificationProcessorSettings) {
+define(['jquery',
+        'core/ajax',
+        'core/notification',
+        'core/custom_interaction_events',
+        'core_message/notification_preference',
+        'core_message/notification_processor_settings',
+        ],
+        function(
+          $,
+          Ajax,
+          Notification,
+          CustomEvents,
+          NotificationPreference,
+          NotificationProcessorSettings,
+        ) {
 
     var SELECTORS = {
         DISABLE_NOTIFICATIONS: '[data-region="disable-notification-container"] [data-disable-notifications]',
         DISABLE_NOTIFICATIONS_CONTAINER: '[data-region="disable-notification-container"]',
-        PREFERENCE: '[data-state]',
+        PREFERENCE: '.preference-state',
         PREFERENCE_ROW: '[data-region="preference-row"]',
-        PREFERENCE_INPUT: '[data-state] input',
+        PREFERENCE_INPUT: '.preference-state input',
         PROCESSOR_SETTING: '[data-processor-setting]',
     };
 
     /**
      * Constructor for the PreferencesController.
      *
+     * @class
      * @param {object} element jQuery object root element of the preference
      */
     var PreferencesController = function(element) {
@@ -79,12 +90,12 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/custom_interaction_eve
     };
 
     /**
-      * Update the disable all notifications user property in the DOM and
-      * send a request to update on the server.
-      *
-      * @method toggleDisableAllStatus
-      * @return {Promise}
-      */
+     * Update the disable all notifications user property in the DOM and
+     * send a request to update on the server.
+     *
+     * @method toggleDisableAllStatus
+     * @return {Promise}
+     */
     PreferencesController.prototype.toggleDisableAllStatus = function() {
         var checkbox = $(SELECTORS.DISABLE_NOTIFICATIONS);
         var container = $(SELECTORS.DISABLE_NOTIFICATIONS_CONTAINER);
@@ -119,10 +130,10 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/custom_interaction_eve
     };
 
     /**
-      * Set up all of the event listeners for the PreferencesController.
-      *
-      * @method registerEventListeners
-      */
+     * Set up all of the event listeners for the PreferencesController.
+     *
+     * @method registerEventListeners
+     */
     PreferencesController.prototype.registerEventListeners = function() {
         var disabledNotificationsElement = $(SELECTORS.DISABLE_NOTIFICATIONS);
 
@@ -143,11 +154,24 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/custom_interaction_eve
             }
         }.bind(this));
 
+        var eventFormPromise = NotificationProcessorSettings.create({});
+
         this.root.on(CustomEvents.events.activate, SELECTORS.PROCESSOR_SETTING, function(e, data) {
             var element = $(e.target).closest(SELECTORS.PROCESSOR_SETTING);
-            var processorSettings = new NotificationProcessorSettings(element);
-            processorSettings.show();
+
             data.originalEvent.preventDefault();
+
+            eventFormPromise.then(function(modal) {
+                // Configure modal with element settings.
+                modal.setUserId($(element).attr('data-user-id'));
+                modal.setName($(element).attr('data-name'));
+                modal.setContextId($(element).attr('data-context-id'));
+                modal.setElement(element);
+                modal.show();
+
+                e.stopImmediatePropagation();
+                return;
+            }).catch(Notification.exception);
         });
 
         CustomEvents.define(disabledNotificationsElement, [

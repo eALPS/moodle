@@ -78,19 +78,23 @@ function report_stats_can_access_user_report($user, $course) {
     $coursecontext = context_course::instance($course->id);
     $personalcontext = context_user::instance($user->id);
 
-    if (has_capability('report/stats:view', $coursecontext)) {
-        return true;
-    }
-
-    if (has_capability('moodle/user:viewuseractivitiesreport', $personalcontext)) {
-        if ($course->showreports and (is_viewing($coursecontext, $user) or is_enrolled($coursecontext, $user))) {
-            return true;
-        }
-
-    } else if ($user->id == $USER->id) {
+    if ($user->id == $USER->id) {
         if ($course->showreports and (is_viewing($coursecontext, $USER) or is_enrolled($coursecontext, $USER))) {
             return true;
         }
+    } else if (has_capability('moodle/user:viewuseractivitiesreport', $personalcontext)) {
+        if ($course->showreports and (is_viewing($coursecontext, $user) or is_enrolled($coursecontext, $user))) {
+            return true;
+        }
+    }
+
+    // Check if $USER shares group with $user (in case separated groups are enabled and 'moodle/site:accessallgroups' is disabled).
+    if (!groups_user_groups_visible($course, $user->id)) {
+        return false;
+    }
+
+    if (has_capability('report/stats:view', $coursecontext)) {
+        return true;
     }
 
     return false;
@@ -122,7 +126,7 @@ function report_stats_page_type_list($pagetype, $parentcontext, $currentcontext)
  * @return bool returns true if the store is supported by the report, false otherwise.
  */
 function report_stats_supports_logstore($instance) {
-    if ($instance instanceof \core\log\sql_internal_table_reader || $instance instanceof \logstore_legacy\log\store) {
+    if ($instance instanceof \core\log\sql_internal_table_reader) {
         return true;
     }
     return false;

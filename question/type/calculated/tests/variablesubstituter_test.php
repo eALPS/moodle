@@ -14,15 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for qtype_calculated_variable_substituter.
- *
- * @package    qtype
- * @subpackage calculated
- * @copyright  2011 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace qtype_calculated;
 
+use qtype_calculated_variable_substituter;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -30,89 +24,88 @@ global $CFG;
 require_once($CFG->dirroot . '/question/type/calculated/question.php');
 require_once($CFG->dirroot . '/question/type/calculated/questiontype.php');
 
-
 /**
  * Unit tests for {@link qtype_calculated_variable_substituter}.
  *
+ * @package    qtype_calculated
  * @copyright  2011 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class qtype_calculated_variable_substituter_test extends advanced_testcase {
-    public function test_simple_expression() {
+class variablesubstituter_test extends \advanced_testcase {
+    public function test_simple_expression(): void {
         $vs = new qtype_calculated_variable_substituter(array('a' => 1, 'b' => 2), '.');
         $this->assertEquals(3, $vs->calculate('{a} + {b}'));
     }
 
-    public function test_simple_expression_negatives() {
+    public function test_simple_expression_negatives(): void {
         $vs = new qtype_calculated_variable_substituter(array('a' => -1, 'b' => -2), '.');
         $this->assertEquals(1, $vs->calculate('{a}-{b}'));
     }
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_cannot_use_nonnumbers() {
+    public function test_cannot_use_nonnumbers(): void {
+        $this->expectException(\moodle_exception::class);
         $vs = new qtype_calculated_variable_substituter(array('a' => 'frog', 'b' => -2), '.');
     }
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_invalid_expression() {
+    public function test_invalid_expression(): void {
         $vs = new qtype_calculated_variable_substituter(array('a' => 1, 'b' => 2), '.');
+        $this->expectException(\moodle_exception::class);
         $vs->calculate('{a} + {b}?');
     }
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_tricky_invalid_expression() {
+    public function test_tricky_invalid_expression(): void {
         $vs = new qtype_calculated_variable_substituter(array('a' => 1, 'b' => 2), '.');
+        $this->expectException(\moodle_exception::class);
         $vs->calculate('{a}{b}'); // Have to make sure this does not just evaluate to 12.
     }
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_division_by_zero_expression() {
+    public function test_division_by_zero_expression(): void {
 
         if (intval(PHP_VERSION) < 7) {
             $this->markTestSkipped('Division by zero triggers a PHP warning before PHP 7.');
         }
 
         $vs = new qtype_calculated_variable_substituter(array('a' => 1, 'b' => 0), '.');
+        $this->expectException(\moodle_exception::class);
         $vs->calculate('{a} / {b}');
     }
 
-    public function test_replace_expressions_in_text_simple_var() {
+    public function test_replace_expressions_in_text_simple_var(): void {
         $vs = new qtype_calculated_variable_substituter(array('a' => 1, 'b' => 2), '.');
         $this->assertEquals('1 + 2', $vs->replace_expressions_in_text('{a} + {b}'));
     }
 
-    public function test_replace_expressions_in_confusing_text() {
+    public function test_replace_expressions_in_confusing_text(): void {
         $vs = new qtype_calculated_variable_substituter(array('a' => 1, 'b' => 2), '.');
         $this->assertEquals("(1) 1\n(2) 2", $vs->replace_expressions_in_text("(1) {a}\n(2) {b}"));
     }
 
-    public function test_replace_expressions_in_text_formula() {
+    public function test_replace_expressions_in_text_formula(): void {
         $vs = new qtype_calculated_variable_substituter(array('a' => 1, 'b' => 2), '.');
         $this->assertEquals('= 3', $vs->replace_expressions_in_text('= {={a} + {b}}'));
     }
 
-    public function test_replace_expressions_in_text_negative() {
+    public function test_expression_has_unmapped_placeholder(): void {
+        $this->expectException('moodle_exception');
+        $this->expectExceptionMessage(get_string('illegalformulasyntax', 'qtype_calculated', '{c}'));
+        $vs = new qtype_calculated_variable_substituter(array('a' => 1, 'b' => 2), '.');
+        $vs->calculate('{c} - {a} + {b}');
+    }
+
+    public function test_replace_expressions_in_text_negative(): void {
         $vs = new qtype_calculated_variable_substituter(array('a' => -1, 'b' => 2), '.');
         $this->assertEquals('temperatures -1 and 2',
                 $vs->replace_expressions_in_text('temperatures {a} and {b}'));
     }
 
-    public function test_replace_expressions_in_text_commas_for_decimals() {
+    public function test_replace_expressions_in_text_commas_for_decimals(): void {
         $vs = new qtype_calculated_variable_substituter(
                 array('phi' => 1.61803399, 'pi' => 3.14159265), ',');
         $this->assertEquals('phi (1,61803399) + pi (3,14159265) = 4,75962664',
                 $vs->replace_expressions_in_text('phi ({phi}) + pi ({pi}) = {={phi} + {pi}}'));
     }
 
-    public function test_format_float_dot() {
+    public function test_format_float_dot(): void {
         $vs = new qtype_calculated_variable_substituter(array('a' => -1, 'b' => 2), '.');
         $this->assertSame('0.12345', $vs->format_float(0.12345));
 
@@ -124,7 +117,7 @@ class qtype_calculated_variable_substituter_test extends advanced_testcase {
         $this->assertSame('0.0012', $vs->format_float(0.0012345, 4, 1));
     }
 
-    public function test_format_float_comma() {
+    public function test_format_float_comma(): void {
         $vs = new qtype_calculated_variable_substituter(array('a' => -1, 'b' => 2), ',');
         $this->assertSame('0,12345', $vs->format_float(0.12345));
 
@@ -134,5 +127,13 @@ class qtype_calculated_variable_substituter_test extends advanced_testcase {
 
         $this->assertSame('0,12', $vs->format_float(0.12345, 2, 2));
         $this->assertSame('0,0012', $vs->format_float(0.0012345, 4, 1));
+    }
+
+    public function test_format_float_nan_inf(): void {
+        $vs = new qtype_calculated_variable_substituter([ ], '.');
+
+        $this->assertSame('NAN', $vs->format_float(NAN));
+        $this->assertSame('INF', $vs->format_float(INF));
+        $this->assertSame('-INF', $vs->format_float(-INF));
     }
 }

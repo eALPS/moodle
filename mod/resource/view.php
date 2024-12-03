@@ -31,18 +31,19 @@ require_once($CFG->libdir.'/completionlib.php');
 $id       = optional_param('id', 0, PARAM_INT); // Course Module ID
 $r        = optional_param('r', 0, PARAM_INT);  // Resource instance ID
 $redirect = optional_param('redirect', 0, PARAM_BOOL);
+$forceview = optional_param('forceview', 0, PARAM_BOOL);
 
 if ($r) {
     if (!$resource = $DB->get_record('resource', array('id'=>$r))) {
         resource_redirect_if_migrated($r, 0);
-        print_error('invalidaccessparameter');
+        throw new \moodle_exception('invalidaccessparameter');
     }
     $cm = get_coursemodule_from_instance('resource', $resource->id, $resource->course, false, MUST_EXIST);
 
 } else {
     if (!$cm = get_coursemodule_from_id('resource', $id)) {
         resource_redirect_if_migrated(0, $id);
-        print_error('invalidcoursemodule');
+        throw new \moodle_exception('invalidcoursemodule');
     }
     $resource = $DB->get_record('resource', array('id'=>$cm->instance), '*', MUST_EXIST);
 }
@@ -76,12 +77,7 @@ if (count($files) < 1) {
 $resource->mainfile = $file->get_filename();
 $displaytype = resource_get_final_display_type($resource);
 if ($displaytype == RESOURCELIB_DISPLAY_OPEN || $displaytype == RESOURCELIB_DISPLAY_DOWNLOAD) {
-    // For 'open' and 'download' links, we always redirect to the content - except
-    // if the user just chose 'save and display' from the form then that would be
-    // confusing
-    if (strpos(get_local_referer(false), 'modedit.php') === false) {
-        $redirect = true;
-    }
+    $redirect = true;
 }
 
 // Don't redirect teachers, otherwise they can not access course or module settings.
@@ -91,7 +87,7 @@ if ($redirect && !course_get_format($course)->has_view_page() &&
     $redirect = false;
 }
 
-if ($redirect) {
+if ($redirect && !$forceview) {
     // coming from course page or url index page
     // this redirect trick solves caching problems when tracking views ;-)
     $path = '/'.$context->id.'/mod_resource/content/'.$resource->revision.$file->get_filepath().$file->get_filename();
@@ -110,4 +106,3 @@ switch ($displaytype) {
         resource_print_workaround($resource, $cm, $course, $file);
         break;
 }
-

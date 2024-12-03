@@ -20,33 +20,33 @@ Feature: tool_monitor_subscriptions
       | teacher2 | C1 | teacher |
       | teacher2 | C2 | editingteacher |
     And I log in as "admin"
-    And I navigate to "Event monitoring rules" node in "Site administration > Reports"
+    And I navigate to "Reports > Event monitoring rules" in site administration
     And I click on "Enable" "link"
-    And I am on site homepage
-    And I follow "Course 1"
-    And I navigate to "Event monitoring rules" node in "Course administration > Reports"
+    And I am on "Course 1" course homepage
+    And I navigate to "Reports" in current page administration
+    And I click on "Event monitoring rules" "link"
     And I press "Add a new rule"
     And I set the following fields to these values:
       | name                 | New rule course level                             |
-      | plugin               | Core                                              |
+      | plugin               | Subsystem (core)                                  |
       | eventname            | Course viewed                                     |
       | id_description       | I want a rule to monitor when a course is viewed. |
       | frequency            | 1                                                 |
       | minutes              | 1                                                 |
       | Notification message | The course was viewed. {modulelink}               |
     And I press "Save changes"
-    And I navigate to "Event monitoring rules" node in "Site administration > Reports"
+    And I navigate to "Reports > Event monitoring rules" in site administration
     And I press "Add a new rule"
     And I set the following fields to these values:
       | name                 | New rule site level                               |
-      | plugin               | Core                                              |
+      | plugin               | Subsystem (core)                                  |
       | eventname            | Course viewed                                     |
       | id_description       | I want a rule to monitor when a course is viewed. |
       | frequency            | 1                                                 |
       | minutes              | 1                                                 |
       | Notification message | The course was viewed. {modulelink}               |
     And I press "Save changes"
-    And I navigate to "Define roles" node in "Site administration > Users > Permissions"
+    And I navigate to "Users > Permissions > Define roles" in site administration
     And I follow "Non-editing teacher"
     And I press "Edit"
     And I click on "tool/monitor:managerules" "checkbox"
@@ -102,10 +102,6 @@ Feature: tool_monitor_subscriptions
   Scenario: Receiving notification on site level
     Given I log in as "admin"
     And I follow "Preferences" in the user menu
-    And I click on "Notification preferences" "link" in the "#page-content" "css_element"
-    And I click on "//td[@data-processor-name='popup']//label[@class='preference-state']" "xpath_element" in the "Notifications of rule subscriptions" "table_row"
-    And I wait until the page is ready
-    And I follow "Preferences" in the user menu
     And I follow "Event monitoring"
     And I set the field "Select a course" to "Acceptance test site"
     And I follow "Subscribe to rule \"New rule site level\""
@@ -123,17 +119,12 @@ Feature: tool_monitor_subscriptions
   Scenario: Receiving notification on course level
     Given I log in as "teacher1"
     And I follow "Preferences" in the user menu
-    And I click on "Notification preferences" "link" in the "#page-content" "css_element"
-    And I click on "//td[@data-processor-name='popup']//label[@class='preference-state']" "xpath_element" in the "Notifications of rule subscriptions" "table_row"
-    And I wait until the page is ready
-    And I follow "Preferences" in the user menu
     And I follow "Event monitoring"
     And I set the field "Select a course" to "Course 1"
     And I follow "Subscribe to rule \"New rule course level\""
     And I should see "Subscription successfully created"
     And "#toolmonitorsubs_r0" "css_element" should exist
-    And I am on site homepage
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I trigger cron
     And I am on site homepage
     When I click on ".popover-region-notifications" "css_element"
@@ -170,10 +161,9 @@ Feature: tool_monitor_subscriptions
     And I should not see "You can manage rules the from the Event monitoring rules page."
 
   Scenario: No manage rules link when user does not have permission
-    Given I log in as "admin"
-    And I set the following system permissions of "Non-editing teacher" role:
-      | tool/monitor:managerules | Prohibit |
-    And I log out
+    Given the following "role capability" exists:
+      | role                     | teacher  |
+      | tool/monitor:managerules | prohibit |
     And I log in as "teacher1"
     And I follow "Preferences" in the user menu
     And I follow "Event monitoring"

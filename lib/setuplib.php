@@ -51,314 +51,89 @@ define('MEMORY_EXTRA', -3);
 /** Extremely large memory limit - not recommended for standard scripts */
 define('MEMORY_HUGE', -4);
 
-
 /**
- * Simple class. It is usually used instead of stdClass because it looks
- * more familiar to Java developers ;-) Do not use for type checking of
- * function parameters. Please use stdClass instead.
+ * Get the Whoops! handler.
  *
- * @package    core
- * @subpackage lib
- * @copyright  2009 Petr Skoda  {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @deprecated since 2.0
+ * @return \Whoops\Run|null
  */
-class object extends stdClass {
-    /**
-     * Constructor.
-     */
-    public function __construct() {
-        debugging("'object' class has been deprecated, please use stdClass instead.", DEBUG_DEVELOPER);
+function get_whoops(): ?\Whoops\Run {
+    global $CFG;
+
+    if (CLI_SCRIPT || AJAX_SCRIPT) {
+        return null;
     }
-};
 
-/**
- * Base Moodle Exception class
- *
- * Although this class is defined here, you cannot throw a moodle_exception until
- * after moodlelib.php has been included (which will happen very soon).
- *
- * @package    core
- * @subpackage lib
- * @copyright  2008 Petr Skoda  {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class moodle_exception extends Exception {
+    if (defined('PHPUNIT_TEST') && PHPUNIT_TEST) {
+        return null;
+    }
 
-    /**
-     * @var string The name of the string from error.php to print
-     */
-    public $errorcode;
+    if (defined('BEHAT_SITE_RUNNING') && BEHAT_SITE_RUNNING) {
+        return null;
+    }
 
-    /**
-     * @var string The name of module
-     */
-    public $module;
+    if (empty($CFG->debugdisplay)) {
+        return null;
+    }
 
-    /**
-     * @var mixed Extra words and phrases that might be required in the error string
-     */
-    public $a;
+    if (!$CFG->debug_developer_use_pretty_exceptions) {
+        return null;
+    }
 
-    /**
-     * @var string The url where the user will be prompted to continue. If no url is provided the user will be directed to the site index page.
-     */
-    public $link;
+    $composerautoload = "{$CFG->dirroot}/vendor/autoload.php";
+    if (file_exists($composerautoload)) {
+        require_once($composerautoload);
+    }
 
-    /**
-     * @var string Optional information to aid the debugging process
-     */
-    public $debuginfo;
+    if (!class_exists(\Whoops\Run::class)) {
+        return null;
+    }
 
-    /**
-     * Constructor
-     * @param string $errorcode The name of the string from error.php to print
-     * @param string $module name of module
-     * @param string $link The url where the user will be prompted to continue. If no url is provided the user will be directed to the site index page.
-     * @param mixed $a Extra words and phrases that might be required in the error string
-     * @param string $debuginfo optional debugging information
-     */
-    function __construct($errorcode, $module='', $link='', $a=NULL, $debuginfo=null) {
-        if (empty($module) || $module == 'moodle' || $module == 'core') {
-            $module = 'error';
-        }
+    // We have Whoops available, use it.
+    $whoops = new \Whoops\Run();
 
-        $this->errorcode = $errorcode;
-        $this->module    = $module;
-        $this->link      = $link;
-        $this->a         = $a;
-        $this->debuginfo = is_null($debuginfo) ? null : (string)$debuginfo;
+    // Append a custom handler to add some more information to the frames.
+    $whoops->appendHandler(function ($exception, $inspector, $run) {
+        $collection = $inspector->getFrames();
 
-        if (get_string_manager()->string_exists($errorcode, $module)) {
-            $message = get_string($errorcode, $module, $a);
-            $haserrorstring = true;
+        // Detect if the Whoops handler was immediately invoked by a call to `debugging()`.
+        // If so, we remove the top frames in the collection to avoid showing the inner
+        // workings of debugging, and the point that we trigger the error that is picked up by Whoops.
+        $isdebugging = count($collection) > 2;
+        $isdebugging = $isdebugging && str_ends_with($collection[1]->getFile(), '/lib/weblib.php');
+        $isdebugging = $isdebugging && $collection[2]->getFunction() === 'debugging';
+
+        if ($isdebugging) {
+            $remove = array_slice($collection->getArray(), 0, 2);
+            $collection->filter(function ($frame) use ($remove): bool {
+                return array_search($frame, $remove) === false;
+            });
         } else {
-            $message = $module . '/' . $errorcode;
-            $haserrorstring = false;
+            // Moodle exceptions often have a link to the Moodle docs pages for them.
+            // Add that to the first frame in the stack.
+            $info = get_exception_info($exception);
+            if ($info->moreinfourl) {
+                $collection[0]->addComment("{$info->moreinfourl}", 'More info');
+            }
         }
+    });
 
-        if (defined('PHPUNIT_TEST') and PHPUNIT_TEST and $debuginfo) {
-            $message = "$message ($debuginfo)";
-        }
-
-        if (!$haserrorstring and defined('PHPUNIT_TEST') and PHPUNIT_TEST) {
-            // Append the contents of $a to $debuginfo so helpful information isn't lost.
-            // This emulates what {@link get_exception_info()} does. Unfortunately that
-            // function is not used by phpunit.
-            $message .= PHP_EOL.'$a contents: '.print_r($a, true);
-        }
-
-        parent::__construct($message, 0);
+    // Add the Pretty page handler. It's the bee's knees.
+    $handler = new \Whoops\Handler\PrettyPageHandler();
+    if (isset($CFG->debug_developer_editor)) {
+        $handler->setEditor($CFG->debug_developer_editor ?: null);
     }
-}
+    $whoops->appendHandler($handler);
 
-/**
- * Course/activity access exception.
- *
- * This exception is thrown from require_login()
- *
- * @package    core_access
- * @copyright  2010 Petr Skoda  {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class require_login_exception extends moodle_exception {
-    /**
-     * Constructor
-     * @param string $debuginfo Information to aid the debugging process
-     */
-    function __construct($debuginfo) {
-        parent::__construct('requireloginerror', 'error', '', NULL, $debuginfo);
-    }
-}
-
-/**
- * Session timeout exception.
- *
- * This exception is thrown from require_login()
- *
- * @package    core_access
- * @copyright  2015 Andrew Nicols <andrew@nicols.co.uk>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class require_login_session_timeout_exception extends require_login_exception {
-    /**
-     * Constructor
-     */
-    public function __construct() {
-        moodle_exception::__construct('sessionerroruser', 'error');
-    }
-}
-
-/**
- * Web service parameter exception class
- * @deprecated since Moodle 2.2 - use moodle exception instead
- * This exception must be thrown to the web service client when a web service parameter is invalid
- * The error string is gotten from webservice.php
- */
-class webservice_parameter_exception extends moodle_exception {
-    /**
-     * Constructor
-     * @param string $errorcode The name of the string from webservice.php to print
-     * @param string $a The name of the parameter
-     * @param string $debuginfo Optional information to aid debugging
-     */
-    function __construct($errorcode=null, $a = '', $debuginfo = null) {
-        parent::__construct($errorcode, 'webservice', '', $a, $debuginfo);
-    }
-}
-
-/**
- * Exceptions indicating user does not have permissions to do something
- * and the execution can not continue.
- *
- * @package    core_access
- * @copyright  2009 Petr Skoda  {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class required_capability_exception extends moodle_exception {
-    /**
-     * Constructor
-     * @param context $context The context used for the capability check
-     * @param string $capability The required capability
-     * @param string $errormessage The error message to show the user
-     * @param string $stringfile
-     */
-    function __construct($context, $capability, $errormessage, $stringfile) {
-        $capabilityname = get_capability_string($capability);
-        if ($context->contextlevel == CONTEXT_MODULE and preg_match('/:view$/', $capability)) {
-            // we can not go to mod/xx/view.php because we most probably do not have cap to view it, let's go to course instead
-            $parentcontext = $context->get_parent_context();
-            $link = $parentcontext->get_url();
-        } else {
-            $link = $context->get_url();
-        }
-        parent::__construct($errormessage, $stringfile, $link, $capabilityname);
-    }
-}
-
-/**
- * Exception indicating programming error, must be fixed by a programer. For example
- * a core API might throw this type of exception if a plugin calls it incorrectly.
- *
- * @package    core
- * @subpackage lib
- * @copyright  2008 Petr Skoda  {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class coding_exception extends moodle_exception {
-    /**
-     * Constructor
-     * @param string $hint short description of problem
-     * @param string $debuginfo detailed information how to fix problem
-     */
-    function __construct($hint, $debuginfo=null) {
-        parent::__construct('codingerror', 'debug', '', $hint, $debuginfo);
-    }
-}
-
-/**
- * Exception indicating malformed parameter problem.
- * This exception is not supposed to be thrown when processing
- * user submitted data in forms. It is more suitable
- * for WS and other low level stuff.
- *
- * @package    core
- * @subpackage lib
- * @copyright  2009 Petr Skoda  {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class invalid_parameter_exception extends moodle_exception {
-    /**
-     * Constructor
-     * @param string $debuginfo some detailed information
-     */
-    function __construct($debuginfo=null) {
-        parent::__construct('invalidparameter', 'debug', '', null, $debuginfo);
-    }
-}
-
-/**
- * Exception indicating malformed response problem.
- * This exception is not supposed to be thrown when processing
- * user submitted data in forms. It is more suitable
- * for WS and other low level stuff.
- */
-class invalid_response_exception extends moodle_exception {
-    /**
-     * Constructor
-     * @param string $debuginfo some detailed information
-     */
-    function __construct($debuginfo=null) {
-        parent::__construct('invalidresponse', 'debug', '', null, $debuginfo);
-    }
-}
-
-/**
- * An exception that indicates something really weird happened. For example,
- * if you do switch ($context->contextlevel), and have one case for each
- * CONTEXT_... constant. You might throw an invalid_state_exception in the
- * default case, to just in case something really weird is going on, and
- * $context->contextlevel is invalid - rather than ignoring this possibility.
- *
- * @package    core
- * @subpackage lib
- * @copyright  2009 onwards Martin Dougiamas  {@link http://moodle.com}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class invalid_state_exception extends moodle_exception {
-    /**
-     * Constructor
-     * @param string $hint short description of problem
-     * @param string $debuginfo optional more detailed information
-     */
-    function __construct($hint, $debuginfo=null) {
-        parent::__construct('invalidstatedetected', 'debug', '', $hint, $debuginfo);
-    }
-}
-
-/**
- * An exception that indicates incorrect permissions in $CFG->dataroot
- *
- * @package    core
- * @subpackage lib
- * @copyright  2010 Petr Skoda {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class invalid_dataroot_permissions extends moodle_exception {
-    /**
-     * Constructor
-     * @param string $debuginfo optional more detailed information
-     */
-    function __construct($debuginfo = NULL) {
-        parent::__construct('invaliddatarootpermissions', 'error', '', NULL, $debuginfo);
-    }
-}
-
-/**
- * An exception that indicates that file can not be served
- *
- * @package    core
- * @subpackage lib
- * @copyright  2010 Petr Skoda {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class file_serving_exception extends moodle_exception {
-    /**
-     * Constructor
-     * @param string $debuginfo optional more detailed information
-     */
-    function __construct($debuginfo = NULL) {
-        parent::__construct('cannotservefile', 'error', '', NULL, $debuginfo);
-    }
+    return $whoops;
 }
 
 /**
  * Default exception handler.
  *
- * @param Exception $ex
+ * @param Throwable $ex
  * @return void -does not return. Terminates execution!
  */
-function default_exception_handler($ex) {
+function default_exception_handler(Throwable $ex): void {
     global $CFG, $DB, $OUTPUT, $USER, $FULLME, $SESSION, $PAGE;
 
     // detect active db transactions, rollback and log as error
@@ -371,20 +146,36 @@ function default_exception_handler($ex) {
 
     $info = get_exception_info($ex);
 
-    if (debugging('', DEBUG_MINIMAL)) {
-        $logerrmsg = "Default exception handler: ".$info->message.' Debug: '.$info->debuginfo."\n".format_backtrace($info->backtrace, true);
-        error_log($logerrmsg);
+    // If we already tried to send the header remove it, the content length
+    // should be either empty or the length of the error page.
+    @header_remove('Content-Length');
+
+    if ($whoops = get_whoops()) {
+        // If whoops is available we will use it. The get_whoops() function checks whether all conditions are met.
+        $whoops->handleException($ex);
     }
 
     if (is_early_init($info->backtrace)) {
         echo bootstrap_renderer::early_error($info->message, $info->moreinfourl, $info->link, $info->backtrace, $info->debuginfo, $info->errorcode);
     } else {
+        if (debugging('', DEBUG_MINIMAL)) {
+            $logerrmsg = "Default exception handler: ".$info->message.' Debug: '.$info->debuginfo."\n".format_backtrace($info->backtrace, true);
+            error_log($logerrmsg);
+        }
+
         try {
             if ($DB) {
                 // If you enable db debugging and exception is thrown, the print footer prints a lot of rubbish
                 $DB->set_debug(0);
             }
-            echo $OUTPUT->fatal_error($info->message, $info->moreinfourl, $info->link, $info->backtrace, $info->debuginfo,
+            if (AJAX_SCRIPT) {
+                // If we are in an AJAX script we don't want to use PREFERRED_RENDERER_TARGET.
+                // Because we know we will want to use ajax format.
+                $renderer = new core_renderer_ajax($PAGE, 'ajax');
+            } else {
+                $renderer = $OUTPUT;
+            }
+            echo $renderer->fatal_error($info->message, $info->moreinfourl, $info->link, $info->backtrace, $info->debuginfo,
                 $info->errorcode);
         } catch (Exception $e) {
             $out_ex = $e;
@@ -417,10 +208,13 @@ function default_exception_handler($ex) {
  * @param string $errstr
  * @param string $errfile
  * @param int $errline
- * @param array $errcontext
  * @return bool false means use default error handler
  */
-function default_error_handler($errno, $errstr, $errfile, $errline, $errcontext) {
+function default_error_handler($errno, $errstr, $errfile, $errline) {
+    if ($whoops = get_whoops()) {
+        // If whoops is available we will use it. The get_whoops() function checks whether all conditions are met.
+        $whoops->handleError($errno, $errstr, $errfile, $errline);
+    }
     if ($errno == 4096) {
         //fatal catchable error
         throw new coding_exception('PHP catchable fatal error', $errstr);
@@ -480,29 +274,13 @@ function is_early_init($backtrace) {
 }
 
 /**
- * Abort execution by throwing of a general exception,
- * default exception handler displays the error message in most cases.
- *
- * @param string $errorcode The name of the language string containing the error message.
- *      Normally this should be in the error.php lang file.
- * @param string $module The language file to get the error message from.
- * @param string $link The url where the user will be prompted to continue.
- *      If no url is provided the user will be directed to the site index page.
- * @param object $a Extra words and phrases that might be required in the error string
- * @param string $debuginfo optional debugging information
- * @return void, always throws exception!
- */
-function print_error($errorcode, $module = 'error', $link = '', $a = null, $debuginfo = null) {
-    throw new moodle_exception($errorcode, $module, $link, $a, $debuginfo);
-}
-
-/**
  * Returns detailed information about specified exception.
- * @param exception $ex
- * @return object
+ *
+ * @param Throwable $ex any sort of exception or throwable.
+ * @return stdClass standardised info to display. Fields are clear if you look at the end of this function.
  */
-function get_exception_info($ex) {
-    global $CFG, $DB, $SESSION;
+function get_exception_info($ex): stdClass {
+    global $CFG;
 
     if ($ex instanceof moodle_exception) {
         $errorcode = $ex->errorcode;
@@ -549,7 +327,7 @@ function get_exception_info($ex) {
     // Remove some absolute paths from message and debugging info.
     $searches = array();
     $replaces = array();
-    $cfgnames = array('tempdir', 'cachedir', 'localcachedir', 'themedir', 'dataroot', 'dirroot');
+    $cfgnames = array('backuptempdir', 'tempdir', 'cachedir', 'localcachedir', 'themedir', 'dataroot', 'dirroot');
     foreach ($cfgnames as $cfgname) {
         if (property_exists($CFG, $cfgname)) {
             $searches[] = $CFG->$cfgname;
@@ -565,13 +343,18 @@ function get_exception_info($ex) {
     if (function_exists('clean_text')) {
         $message = clean_text($message);
     } else {
-        $message = htmlspecialchars($message);
+        $message = htmlspecialchars($message, ENT_COMPAT);
     }
 
     if (!empty($CFG->errordocroot)) {
         $errordoclink = $CFG->errordocroot . '/en/';
     } else {
-        $errordoclink = get_docs_url();
+        // Only if the function is available. May be not for early errors.
+        if (function_exists('current_language')) {
+            $errordoclink = get_docs_url();
+        } else {
+            $errordoclink = 'https://docs.moodle.org/en/';
+        }
     }
 
     if ($module === 'error') {
@@ -582,21 +365,13 @@ function get_exception_info($ex) {
     $moreinfourl = $errordoclink . 'error/' . $modulelink . '/' . $errorcode;
 
     if (empty($link)) {
-        if (!empty($SESSION->fromurl)) {
-            $link = $SESSION->fromurl;
-            unset($SESSION->fromurl);
-        } else {
-            $link = $CFG->wwwroot .'/';
-        }
+        $link = get_local_referer(false) ?: ($CFG->wwwroot . '/');
     }
 
     // When printing an error the continue button should never link offsite.
     // We cannot use clean_param() here as it is not guaranteed that it has been loaded yet.
-    $httpswwwroot = str_replace('http:', 'https:', $CFG->wwwroot);
     if (stripos($link, $CFG->wwwroot) === 0) {
         // Internal HTTP, all good.
-    } else if (!empty($CFG->loginhttps) && stripos($link, $httpswwwroot) === 0) {
-        // Internal HTTPS, all good.
     } else {
         // External link spotted!
         $link = $CFG->wwwroot . '/';
@@ -615,49 +390,12 @@ function get_exception_info($ex) {
 }
 
 /**
- * Generate a uuid.
- *
- * Unique is hard. Very hard. Attempt to use the PECL UUID functions if available, and if not then revert to
- * constructing the uuid using mt_rand.
- *
- * It is important that this token is not solely based on time as this could lead
- * to duplicates in a clustered environment (especially on VMs due to poor time precision).
- *
- * @return string The uuid.
+ * @deprecated since Moodle 3.8 MDL-61038 - please do not use this function any more.
+ * @see \core\uuid::generate()
  */
 function generate_uuid() {
-    $uuid = '';
-
-    if (function_exists("uuid_create")) {
-        $context = null;
-        uuid_create($context);
-
-        uuid_make($context, UUID_MAKE_V4);
-        uuid_export($context, UUID_FMT_STR, $uuid);
-    } else {
-        // Fallback uuid generation based on:
-        // "http://www.php.net/manual/en/function.uniqid.php#94959".
-        $uuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-
-            // 32 bits for "time_low".
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-
-            // 16 bits for "time_mid".
-            mt_rand(0, 0xffff),
-
-            // 16 bits for "time_hi_and_version",
-            // four most significant bits holds version number 4.
-            mt_rand(0, 0x0fff) | 0x4000,
-
-            // 16 bits, 8 bits for "clk_seq_hi_res",
-            // 8 bits for "clk_seq_low",
-            // two most significant bits holds zero and one for variant DCE1.1.
-            mt_rand(0, 0x3fff) | 0x8000,
-
-            // 48 bits for "node".
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff));
-    }
-    return trim($uuid);
+    throw new coding_exception('generate_uuid() cannot be used anymore. Please use ' .
+        '\core\uuid::generate() instead.');
 }
 
 /**
@@ -685,7 +423,11 @@ function generate_uuid() {
  */
 function get_docs_url($path = null) {
     global $CFG;
+    if ($path === null) {
+        $path = '';
+    }
 
+    $path = $path ?? '';
     // Absolute URLs are used unmodified.
     if (substr($path, 0, 7) === 'http://' || substr($path, 0, 8) === 'https://') {
         return $path;
@@ -753,18 +495,23 @@ function format_backtrace($callers, $plaintext = false) {
         if (!isset($caller['file'])) {
             $caller['file'] = 'unknownfile'; // probably call_user_func()
         }
-        $from .= $plaintext ? '* ' : '<li>';
-        $from .= 'line ' . $caller['line'] . ' of ' . str_replace($dirroot, '', $caller['file']);
+        $line = $plaintext ? '* ' : '<li>';
+        $line .= 'line ' . $caller['line'] . ' of ' . str_replace($dirroot, '', $caller['file']);
         if (isset($caller['function'])) {
-            $from .= ': call to ';
+            $line .= ': call to ';
             if (isset($caller['class'])) {
-                $from .= $caller['class'] . $caller['type'];
+                $line .= $caller['class'] . $caller['type'];
             }
-            $from .= $caller['function'] . '()';
+            $line .= $caller['function'] . '()';
         } else if (isset($caller['exception'])) {
-            $from .= ': '.$caller['exception'].' thrown';
+            $line .= ': '.$caller['exception'].' thrown';
         }
-        $from .= $plaintext ? "\n" : '</li>';
+
+        // Remove any non printable chars.
+        $line = preg_replace('/[[:^print:]]/', '', $line);
+
+        $line .= $plaintext ? "\n" : '</li>';
+        $from .= $line;
     }
     $from .= $plaintext ? '' : '</ul>';
 
@@ -799,7 +546,7 @@ function setup_validate_php_configuration() {
    // this must be very fast - no slow checks here!!!
 
    if (ini_get_bool('session.auto_start')) {
-       print_error('sessionautostartwarning', 'admin');
+        throw new \moodle_exception('sessionautostartwarning', 'admin');
    }
 }
 
@@ -830,6 +577,66 @@ function initialise_cfg() {
 }
 
 /**
+ * Cache any immutable config locally to avoid constant DB lookups.
+ *
+ * Only to be used only from lib/setup.php
+ */
+function initialise_local_config_cache() {
+    global $CFG;
+
+    $bootstraplocalfile = $CFG->localcachedir . '/bootstrap.php';
+    $bootstrapsharedfile = $CFG->cachedir . '/bootstrap.php';
+
+    if (!is_readable($bootstraplocalfile) && is_readable($bootstrapsharedfile)) {
+        // If we don't have a local cache but do have a shared cache then clone it,
+        // for example when scaling up new front ends.
+        make_localcache_directory('', true);
+        copy($bootstrapsharedfile, $bootstraplocalfile);
+    }
+
+    if (!empty($CFG->siteidentifier) && !file_exists($bootstrapsharedfile) && defined('SYSCONTEXTID')) {
+        $contents = "<?php
+// ********** This file is generated DO NOT EDIT **********
+\$CFG->siteidentifier = " . var_export($CFG->siteidentifier, true) . ";
+\$CFG->bootstraphash = " . var_export(hash_local_config_cache(), true) . ";
+// Only if the file is not stale and has not been defined.
+if (\$CFG->bootstraphash === hash_local_config_cache() && !defined('SYSCONTEXTID')) {
+    define('SYSCONTEXTID', ".SYSCONTEXTID.");
+}
+";
+
+        // Create the central bootstrap first.
+        $temp = $bootstrapsharedfile . '.tmp' . uniqid();
+        file_put_contents($temp, $contents);
+        @chmod($temp, $CFG->filepermissions);
+        rename($temp, $bootstrapsharedfile);
+
+        // Then prewarm the local cache as well.
+        make_localcache_directory('', true);
+        copy($bootstrapsharedfile, $bootstraplocalfile);
+    }
+}
+
+/**
+ * Calculate a proper hash to be able to invalidate stale cached configs.
+ *
+ * Only to be used to verify bootstrap.php status.
+ *
+ * @return string md5 hash of all the sensible bits deciding if cached config is stale or no.
+ */
+function hash_local_config_cache() {
+    global $CFG;
+
+    // This is pretty much {@see moodle_database::get_settings_hash()} that is used
+    // as identifier for the database meta information MUC cache. Should be enough to
+    // react against any of the normal changes (new prefix, change of DB type) while
+    // *incorrectly* keeping the old dataroot directory unmodified with stale data.
+    // This may need more stuff to be considered if it's discovered that there are
+    // more variables making the file stale.
+    return md5($CFG->dbtype . $CFG->dbhost . $CFG->dbuser . $CFG->dbname . $CFG->prefix);
+}
+
+/**
  * Initialises $FULLME and friends. Private function. Should only be called from
  * setup.php.
  */
@@ -838,12 +645,19 @@ function initialise_fullme() {
 
     // Detect common config error.
     if (substr($CFG->wwwroot, -1) == '/') {
-        print_error('wwwrootslash', 'error');
+        throw new \moodle_exception('wwwrootslash', 'error');
     }
 
     if (CLI_SCRIPT) {
         initialise_fullme_cli();
         return;
+    }
+    if (!empty($CFG->overridetossl)) {
+        if (strpos($CFG->wwwroot, 'http://') === 0) {
+            $CFG->wwwroot = str_replace('http:', 'https:', $CFG->wwwroot);
+        } else {
+            unset_config('overridetossl');
+        }
     }
 
     $rurl = setup_get_remote_url();
@@ -880,7 +694,13 @@ function initialise_fullme() {
                 throw new moodle_exception('requirecorrectaccess', 'error', '', null,
                     'You called ' . $calledurl .', you should have called ' . $correcturl);
             }
-            redirect($CFG->wwwroot, get_string('wwwrootmismatch', 'error', $CFG->wwwroot), 3);
+            $rfullpath = $rurl['fullpath'];
+            // Check that URL is under $CFG->wwwroot.
+            if (strpos($rfullpath, $wwwroot['path']) === 0) {
+                $rfullpath = substr($rurl['fullpath'], strlen($wwwroot['path']) - 1);
+                $rfullpath = (new moodle_url($rfullpath))->out(false);
+            }
+            redirect($rfullpath, get_string('wwwrootmismatch', 'error', $CFG->wwwroot), 3);
         }
     }
 
@@ -897,7 +717,11 @@ function initialise_fullme() {
     // (That is, the Moodle server uses http, with an external box translating everything to https).
     if (empty($CFG->sslproxy)) {
         if ($rurl['scheme'] === 'http' and $wwwroot['scheme'] === 'https') {
-            print_error('sslonlyaccess', 'error');
+            if (defined('REQUIRE_CORRECT_ACCESS') && REQUIRE_CORRECT_ACCESS) {
+                throw new \moodle_exception('sslonlyaccess', 'error');
+            } else {
+                redirect($CFG->wwwroot, get_string('wwwrootmismatch', 'error', $CFG->wwwroot), 3);
+            }
         }
     } else {
         if ($wwwroot['scheme'] !== 'https') {
@@ -908,10 +732,18 @@ function initialise_fullme() {
         $_SERVER['SERVER_PORT'] = 443; // Assume default ssl port for the proxy.
     }
 
-    // hopefully this will stop all those "clever" admins trying to set up moodle
-    // with two different addresses in intranet and Internet
-    if (!empty($CFG->reverseproxy) && $rurl['host'] === $wwwroot['host']) {
-        print_error('reverseproxyabused', 'error');
+    // Using Moodle in "reverse proxy" mode, it's expected that the HTTP Host Moodle receives is different
+    // from the wwwroot configured host. Those URLs being identical could be the consequence of various
+    // issues, including:
+    // - Intentionally trying to set up moodle with 2 distinct addresses for intranet and Internet: this
+    //   configuration is unsupported and will lead to bigger problems down the road (the proper solution
+    //   for this is adjusting the network routes, and avoid relying on the application for network concerns).
+    // - Misconfiguration of the reverse proxy that would be forwarding the Host header: while it is
+    //   standard in many cases that the reverse proxy would do that, in our case, the reverse proxy
+    //   must leave the Host header pointing to the internal name of the server.
+    // Port forwarding is allowed, though.
+    if (!empty($CFG->reverseproxy) && $rurl['host'] === $wwwroot['host'] && (empty($wwwroot['port']) || $rurl['port'] === $wwwroot['port'])) {
+        throw new \moodle_exception('reverseproxyabused', 'error');
     }
 
     $hostandport = $rurl['scheme'] . '://' . $wwwroot['host'];
@@ -961,7 +793,7 @@ function setup_get_remote_url() {
     } else {
         $rurl['host'] = null;
     }
-    $rurl['port'] = $_SERVER['SERVER_PORT'];
+    $rurl['port'] = (int)$_SERVER['SERVER_PORT'];
     $rurl['path'] = $_SERVER['SCRIPT_NAME']; // Script path without slash arguments
     $rurl['scheme'] = (empty($_SERVER['HTTPS']) or $_SERVER['HTTPS'] === 'off' or $_SERVER['HTTPS'] === 'Off' or $_SERVER['HTTPS'] === 'OFF') ? 'http' : 'https';
 
@@ -1111,7 +943,9 @@ function workaround_max_input_vars() {
     }
 
     $delim = '&';
-    $fun = create_function('$p', 'return implode("'.$delim.'", $p);');
+    $fun = function($p) use ($delim) {
+        return implode($delim, $p);
+    };
     $chunks = array_map($fun, array_chunk(explode($delim, $str), $max));
 
     // Clear everything from existing $_POST array, otherwise it might be included
@@ -1180,7 +1014,6 @@ function init_performance_info() {
     global $PERF, $CFG, $USER;
 
     $PERF = new stdClass();
-    $PERF->logwrites = 0;
     if (function_exists('microtime')) {
         $PERF->starttime = microtime();
     }
@@ -1333,17 +1166,19 @@ function get_real_size($size = 0) {
     }
 
     static $binaryprefixes = array(
-        'K' => 1024,
-        'k' => 1024,
-        'M' => 1048576,
-        'm' => 1048576,
-        'G' => 1073741824,
-        'g' => 1073741824,
-        'T' => 1099511627776,
-        't' => 1099511627776,
+        'K' => 1024 ** 1,
+        'k' => 1024 ** 1,
+        'M' => 1024 ** 2,
+        'm' => 1024 ** 2,
+        'G' => 1024 ** 3,
+        'g' => 1024 ** 3,
+        'T' => 1024 ** 4,
+        't' => 1024 ** 4,
+        'P' => 1024 ** 5,
+        'p' => 1024 ** 5,
     );
 
-    if (preg_match('/^([0-9]+)([KMGT])/i', $size, $matches)) {
+    if (preg_match('/^([0-9]+)([KMGTP])/i', $size, $matches)) {
         return $matches[1] * $binaryprefixes[$matches[2]];
     }
 
@@ -1351,53 +1186,34 @@ function get_real_size($size = 0) {
 }
 
 /**
- * Try to disable all output buffering and purge
- * all headers.
+ * Check whether a major upgrade is needed.
  *
- * @access private to be called only from lib/setup.php !
- * @return void
+ * That is defined as an upgrade that changes something really fundamental
+ * in the database, so nothing can possibly work until the database has
+ * been updated, and that is defined by the hard-coded version number in
+ * this function.
+ *
+ * @return bool
  */
-function disable_output_buffering() {
-    $olddebug = error_reporting(0);
+function is_major_upgrade_required() {
+    global $CFG;
+    $lastmajordbchanges = 2024010400.00; // This should be the version where the breaking changes happen.
 
-    // disable compression, it would prevent closing of buffers
-    if (ini_get_bool('zlib.output_compression')) {
-        ini_set('zlib.output_compression', 'Off');
-    }
+    $required = empty($CFG->version);
+    $required = $required || (float)$CFG->version < $lastmajordbchanges;
+    $required = $required || during_initial_install();
+    $required = $required || !empty($CFG->adminsetuppending);
 
-    // try to flush everything all the time
-    ob_implicit_flush(true);
-
-    // close all buffers if possible and discard any existing output
-    // this can actually work around some whitespace problems in config.php
-    while(ob_get_level()) {
-        if (!ob_end_clean()) {
-            // prevent infinite loop when buffer can not be closed
-            break;
-        }
-    }
-
-    // disable any other output handlers
-    ini_set('output_handler', '');
-
-    error_reporting($olddebug);
-
-    // Disable buffering in nginx.
-    header('X-Accel-Buffering: no');
-
+    return $required;
 }
 
 /**
- * Check whether a major upgrade is needed. That is defined as an upgrade that
- * changes something really fundamental in the database, so nothing can possibly
- * work until the database has been updated, and that is defined by the hard-coded
- * version number in this function.
+ * Redirect to the Notifications page if a major upgrade is required, and
+ * terminate the current user session.
  */
 function redirect_if_major_upgrade_required() {
     global $CFG;
-    $lastmajordbchanges = 2017021400.00;
-    if (empty($CFG->version) or (float)$CFG->version < $lastmajordbchanges or
-            during_initial_install() or !empty($CFG->adminsetuppending)) {
+    if (is_major_upgrade_required()) {
         try {
             @\core\session\manager::terminate_current();
         } catch (Exception $e) {
@@ -1406,7 +1222,7 @@ function redirect_if_major_upgrade_required() {
         $url = $CFG->wwwroot . '/' . $CFG->admin . '/index.php';
         @header($_SERVER['SERVER_PROTOCOL'] . ' 303 See Other');
         @header('Location: ' . $url);
-        echo bootstrap_renderer::plain_redirect_message(htmlspecialchars($url));
+        echo bootstrap_renderer::plain_redirect_message(htmlspecialchars($url, ENT_COMPAT));
         exit;
     }
 }
@@ -1416,7 +1232,7 @@ function redirect_if_major_upgrade_required() {
  *
  * To be inserted in the core functions that can not be called by pluigns during upgrade.
  * Core upgrade should not use any API functions at all.
- * See {@link http://docs.moodle.org/dev/Upgrade_API#Upgrade_code_restrictions}
+ * See {@link https://moodledev.io/docs/guides/upgrade#upgrade-code-restrictions}
  *
  * @throws moodle_exception if executed from inside of upgrade script and $warningonly is false
  * @param bool $warningonly if true displays a warning instead of throwing an exception
@@ -1486,8 +1302,9 @@ function make_unique_writable_directory($basedir, $exceptiononerror = true) {
     }
 
     do {
-        // Generate a new (hopefully unique) directory name.
-        $uniquedir = $basedir . DIRECTORY_SEPARATOR . generate_uuid();
+        // Let's use uniqid() because it's "unique enough" (microtime based). The loop does handle repetitions.
+        // Windows and old PHP don't like very long paths, so try to keep this shorter. See MDL-69975.
+        $uniquedir = $basedir . DIRECTORY_SEPARATOR . uniqid();
     } while (
             // Ensure that basedir is still writable - if we do not check, we could get stuck in a loop here.
             is_writable($basedir) &&
@@ -1607,26 +1424,37 @@ function make_upload_directory($directory, $exceptiononerror = true) {
  *
  * The directory is automatically cleaned up during the shutdown handler.
  *
- * @param bool $exceptiononerror throw exception if error encountered
- * @return string|false Returns full path to directory if successful, false if not; may throw exception
+ * @param   bool    $exceptiononerror throw exception if error encountered
+ * @param   bool    $forcecreate Force creation of a new parent directory
+ * @return  string  Returns full path to directory if successful, false if not; may throw exception
  */
-function get_request_storage_directory($exceptiononerror = true) {
+function get_request_storage_directory($exceptiononerror = true, bool $forcecreate = false) {
     global $CFG;
 
     static $requestdir = null;
 
-    if (!$requestdir || !file_exists($requestdir) || !is_dir($requestdir) || !is_writable($requestdir)) {
-        if ($CFG->localcachedir !== "$CFG->dataroot/localcache") {
-            check_dir_exists($CFG->localcachedir, true, true);
-            protect_directory($CFG->localcachedir);
-        } else {
-            protect_directory($CFG->dataroot);
+    $writabledirectoryexists = (null !== $requestdir);
+    $writabledirectoryexists = $writabledirectoryexists && file_exists($requestdir);
+    $writabledirectoryexists = $writabledirectoryexists && is_dir($requestdir);
+    $writabledirectoryexists = $writabledirectoryexists && is_writable($requestdir);
+    $createnewdirectory = $forcecreate || !$writabledirectoryexists;
+
+    if ($createnewdirectory) {
+
+        // Let's add the first chars of siteidentifier only. This is to help separate
+        // paths on systems which host multiple moodles. We don't use the full id
+        // as Windows and old PHP don't like very long paths. See MDL-69975.
+        $basedir = $CFG->localrequestdir . '/' . substr($CFG->siteidentifier, 0, 4);
+
+        make_writable_directory($basedir);
+        protect_directory($basedir);
+
+        if ($dir = make_unique_writable_directory($basedir, $exceptiononerror)) {
+            // Register a shutdown handler to remove the directory.
+            \core_shutdown_manager::register_function('remove_dir', [$dir]);
         }
 
-        if ($requestdir = make_unique_writable_directory($CFG->localcachedir, $exceptiononerror)) {
-            // Register a shutdown handler to remove the directory.
-            \core_shutdown_manager::register_function('remove_dir', array($requestdir));
-        }
+        $requestdir = $dir;
     }
 
     return $requestdir;
@@ -1637,14 +1465,55 @@ function get_request_storage_directory($exceptiononerror = true) {
  * This can only be used during the current request and will be tidied away
  * automatically afterwards.
  *
- * A new, unique directory is always created within the current request directory.
+ * A new, unique directory is always created within a shared base request directory.
  *
- * @param bool $exceptiononerror throw exception if error encountered
- * @return string full path to directory if successful, false if not; may throw exception
+ * In some exceptional cases an alternative base directory may be required. This can be accomplished using the
+ * $forcecreate parameter. Typically this will only be requried where the file may be required during a shutdown handler
+ * which may or may not be registered after a previous request directory has been created.
+ *
+ * @param   bool    $exceptiononerror throw exception if error encountered
+ * @param   bool    $forcecreate Force creation of a new parent directory
+ * @return  string  The full path to directory if successful, false if not; may throw exception
  */
-function make_request_directory($exceptiononerror = true) {
-    $basedir = get_request_storage_directory($exceptiononerror);
+function make_request_directory(bool $exceptiononerror = true, bool $forcecreate = false) {
+    $basedir = get_request_storage_directory($exceptiononerror, $forcecreate);
     return make_unique_writable_directory($basedir, $exceptiononerror);
+}
+
+/**
+ * Get the full path of a directory under $CFG->backuptempdir.
+ *
+ * @param string $directory  the relative path of the directory under $CFG->backuptempdir
+ * @return string|false Returns full path to directory given a valid string; otherwise, false.
+ */
+function get_backup_temp_directory($directory) {
+    global $CFG;
+    if (($directory === null) || ($directory === false)) {
+        return false;
+    }
+    return "$CFG->backuptempdir/$directory";
+}
+
+/**
+ * Create a directory under $CFG->backuptempdir and make sure it is writable.
+ *
+ * Do not use for storing generic temp files - see make_temp_directory() instead for this purpose.
+ *
+ * Backup temporary files must be on a shared storage.
+ *
+ * @param string $directory  the relative path of the directory to be created under $CFG->backuptempdir
+ * @param bool $exceptiononerror throw exception if error encountered
+ * @return string|false Returns full path to directory if successful, false if not; may throw exception
+ */
+function make_backup_temp_directory($directory, $exceptiononerror = true) {
+    global $CFG;
+    if ($CFG->backuptempdir !== "$CFG->tempdir/backup") {
+        check_dir_exists($CFG->backuptempdir, true, true);
+        protect_directory($CFG->backuptempdir);
+    } else {
+        protect_directory($CFG->tempdir);
+    }
+    return make_writable_directory("$CFG->backuptempdir/$directory", $exceptiononerror);
 }
 
 /**
@@ -1737,6 +1606,9 @@ function make_localcache_directory($directory, $exceptiononerror = true) {
         touch($timestampfile);
         @chmod($timestampfile, $CFG->filepermissions);
         clearstatcache();
+
+        // Then prewarm the local boostrap.php file as well.
+        initialise_local_config_cache();
     }
 
     if ($directory === '') {
@@ -1747,272 +1619,97 @@ function make_localcache_directory($directory, $exceptiononerror = true) {
 }
 
 /**
- * This class solves the problem of how to initialise $OUTPUT.
- *
- * The problem is caused be two factors
- * <ol>
- * <li>On the one hand, we cannot be sure when output will start. In particular,
- * an error, which needs to be displayed, could be thrown at any time.</li>
- * <li>On the other hand, we cannot be sure when we will have all the information
- * necessary to correctly initialise $OUTPUT. $OUTPUT depends on the theme, which
- * (potentially) depends on the current course, course categories, and logged in user.
- * It also depends on whether the current page requires HTTPS.</li>
- * </ol>
- *
- * So, it is hard to find a single natural place during Moodle script execution,
- * which we can guarantee is the right time to initialise $OUTPUT. Instead we
- * adopt the following strategy
- * <ol>
- * <li>We will initialise $OUTPUT the first time it is used.</li>
- * <li>If, after $OUTPUT has been initialised, the script tries to change something
- * that $OUTPUT depends on, we throw an exception making it clear that the script
- * did something wrong.
- * </ol>
- *
- * The only problem with that is, how do we initialise $OUTPUT on first use if,
- * it is going to be used like $OUTPUT->somthing(...)? Well that is where this
- * class comes in. Initially, we set up $OUTPUT = new bootstrap_renderer(). Then,
- * when any method is called on that object, we initialise $OUTPUT, and pass the call on.
- *
- * Note that this class is used before lib/outputlib.php has been loaded, so we
- * must be careful referring to classes/functions from there, they may not be
- * defined yet, and we must avoid fatal errors.
- *
- * @copyright 2009 Tim Hunt
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @since     Moodle 2.0
+ * Webserver access user logging
  */
-class bootstrap_renderer {
-    /**
-     * Handles re-entrancy. Without this, errors or debugging output that occur
-     * during the initialisation of $OUTPUT, cause infinite recursion.
-     * @var boolean
-     */
-    protected $initialising = false;
-
-    /**
-     * Have we started output yet?
-     * @return boolean true if the header has been printed.
-     */
-    public function has_started() {
-        return false;
-    }
-
-    /**
-     * Constructor - to be used by core code only.
-     * @param string $method The method to call
-     * @param array $arguments Arguments to pass to the method being called
-     * @return string
-     */
-    public function __call($method, $arguments) {
-        global $OUTPUT, $PAGE;
-
-        $recursing = false;
-        if ($method == 'notification') {
-            // Catch infinite recursion caused by debugging output during print_header.
-            $backtrace = debug_backtrace();
-            array_shift($backtrace);
-            array_shift($backtrace);
-            $recursing = is_early_init($backtrace);
+function set_access_log_user() {
+    global $USER, $CFG;
+    if ($USER && isset($USER->username)) {
+        $logmethod = '';
+        $logvalue = 0;
+        if (!empty($CFG->apacheloguser) && function_exists('apache_note')) {
+            $logmethod = 'apache';
+            $logvalue = $CFG->apacheloguser;
         }
-
-        $earlymethods = array(
-            'fatal_error' => 'early_error',
-            'notification' => 'early_notification',
-        );
-
-        // If lib/outputlib.php has been loaded, call it.
-        if (!empty($PAGE) && !$recursing) {
-            if (array_key_exists($method, $earlymethods)) {
-                //prevent PAGE->context warnings - exceptions might appear before we set any context
-                $PAGE->set_context(null);
+        if (!empty($CFG->headerloguser)) {
+            $logmethod = 'header';
+            $logvalue = $CFG->headerloguser;
+        }
+        if (!empty($logmethod)) {
+            $loguserid = $USER->id;
+            $logusername = clean_filename($USER->username);
+            $logname = '';
+            if (isset($USER->firstname)) {
+                // We can assume both will be set
+                // - even if to empty.
+                $logname = clean_filename($USER->firstname . " " . $USER->lastname);
             }
-            $PAGE->initialise_theme_and_output();
-            return call_user_func_array(array($OUTPUT, $method), $arguments);
-        }
-
-        $this->initialising = true;
-
-        // Too soon to initialise $OUTPUT, provide a couple of key methods.
-        if (array_key_exists($method, $earlymethods)) {
-            return call_user_func_array(array('bootstrap_renderer', $earlymethods[$method]), $arguments);
-        }
-
-        throw new coding_exception('Attempt to start output before enough information is known to initialise the theme.');
-    }
-
-    /**
-     * Returns nicely formatted error message in a div box.
-     * @static
-     * @param string $message error message
-     * @param string $moreinfourl (ignored in early errors)
-     * @param string $link (ignored in early errors)
-     * @param array $backtrace
-     * @param string $debuginfo
-     * @return string
-     */
-    public static function early_error_content($message, $moreinfourl, $link, $backtrace, $debuginfo = null) {
-        global $CFG;
-
-        $content = '<div style="margin-top: 6em; margin-left:auto; margin-right:auto; color:#990000; text-align:center; font-size:large; border-width:1px;
-border-color:black; background-color:#ffffee; border-style:solid; border-radius: 20px; border-collapse: collapse;
-width: 80%; -moz-border-radius: 20px; padding: 15px">
-' . $message . '
-</div>';
-        // Check whether debug is set.
-        $debug = (!empty($CFG->debug) && $CFG->debug >= DEBUG_DEVELOPER);
-        // Also check we have it set in the config file. This occurs if the method to read the config table from the
-        // database fails, reading from the config table is the first database interaction we have.
-        $debug = $debug || (!empty($CFG->config_php_settings['debug'])  && $CFG->config_php_settings['debug'] >= DEBUG_DEVELOPER );
-        if ($debug) {
-            if (!empty($debuginfo)) {
-                $debuginfo = s($debuginfo); // removes all nasty JS
-                $debuginfo = str_replace("\n", '<br />', $debuginfo); // keep newlines
-                $content .= '<div class="notifytiny">Debug info: ' . $debuginfo . '</div>';
+            if (\core\session\manager::is_loggedinas()) {
+                $realuser = \core\session\manager::get_realuser();
+                $logusername = clean_filename($realuser->username." as ".$logusername);
+                $logname = clean_filename($realuser->firstname." ".$realuser->lastname ." as ".$logname);
+                $loguserid = clean_filename($realuser->id." as ".$loguserid);
             }
-            if (!empty($backtrace)) {
-                $content .= '<div class="notifytiny">Stack trace: ' . format_backtrace($backtrace, false) . '</div>';
+            switch ($logvalue) {
+                case 3:
+                    $logname = $logusername;
+                    break;
+                case 2:
+                    $logname = $logname;
+                    break;
+                case 1:
+                default:
+                    $logname = $loguserid;
+                    break;
+            }
+            if ($logmethod == 'apache') {
+                apache_note('MOODLEUSER', $logname);
+            }
+
+            if ($logmethod == 'header' && !headers_sent()) {
+                header("X-MOODLEUSER: $logname");
             }
         }
+    }
+}
 
-        return $content;
+
+/**
+ * Add http stream instrumentation
+ *
+ * This detects which any reads or writes to a php stream which uses
+ * the 'http' handler. Ideally 100% of traffic uses the Moodle curl
+ * libraries which do not use php streams.
+ *
+ * @param array $code stream callback code
+ */
+function proxy_log_callback($code) {
+    if ($code == STREAM_NOTIFY_CONNECT) {
+        $trace = debug_backtrace();
+        $function = $trace[count($trace) - 1];
+        $error = "Unsafe internet IO detected: {$function['function']} with arguments " . join(', ', $function['args']) . "\n";
+        error_log($error . format_backtrace($trace, true)); // phpcs:ignore
+    }
+}
+
+/**
+ * A helper function for deprecated files to use to ensure that, when they are included for unit tests,
+ * they are run in an isolated process.
+ *
+ * @throws \coding_exception The exception thrown when the process is not isolated.
+ */
+function require_phpunit_isolation(): void {
+    if (!defined('PHPUNIT_TEST') || !PHPUNIT_TEST) {
+        // Not a test.
+        return;
     }
 
-    /**
-     * This function should only be called by this class, or from exception handlers
-     * @static
-     * @param string $message error message
-     * @param string $moreinfourl (ignored in early errors)
-     * @param string $link (ignored in early errors)
-     * @param array $backtrace
-     * @param string $debuginfo extra information for developers
-     * @return string
-     */
-    public static function early_error($message, $moreinfourl, $link, $backtrace, $debuginfo = null, $errorcode = null) {
-        global $CFG;
-
-        if (CLI_SCRIPT) {
-            echo "!!! $message !!!\n";
-            if (!empty($CFG->debug) and $CFG->debug >= DEBUG_DEVELOPER) {
-                if (!empty($debuginfo)) {
-                    echo "\nDebug info: $debuginfo";
-                }
-                if (!empty($backtrace)) {
-                    echo "\nStack trace: " . format_backtrace($backtrace, true);
-                }
-            }
-            return;
-
-        } else if (AJAX_SCRIPT) {
-            $e = new stdClass();
-            $e->error      = $message;
-            $e->stacktrace = NULL;
-            $e->debuginfo  = NULL;
-            if (!empty($CFG->debug) and $CFG->debug >= DEBUG_DEVELOPER) {
-                if (!empty($debuginfo)) {
-                    $e->debuginfo = $debuginfo;
-                }
-                if (!empty($backtrace)) {
-                    $e->stacktrace = format_backtrace($backtrace, true);
-                }
-            }
-            $e->errorcode  = $errorcode;
-            @header('Content-Type: application/json; charset=utf-8');
-            echo json_encode($e);
-            return;
-        }
-
-        // In the name of protocol correctness, monitoring and performance
-        // profiling, set the appropriate error headers for machine consumption.
-        $protocol = (isset($_SERVER['SERVER_PROTOCOL']) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0');
-        @header($protocol . ' 503 Service Unavailable');
-
-        // better disable any caching
-        @header('Content-Type: text/html; charset=utf-8');
-        @header('X-UA-Compatible: IE=edge');
-        @header('Cache-Control: no-store, no-cache, must-revalidate');
-        @header('Cache-Control: post-check=0, pre-check=0', false);
-        @header('Pragma: no-cache');
-        @header('Expires: Mon, 20 Aug 1969 09:23:00 GMT');
-        @header('Last-Modified: ' . gmdate('D, d M Y H:i:s') . ' GMT');
-
-        if (function_exists('get_string')) {
-            $strerror = get_string('error');
-        } else {
-            $strerror = 'Error';
-        }
-
-        $content = self::early_error_content($message, $moreinfourl, $link, $backtrace, $debuginfo);
-
-        return self::plain_page($strerror, $content);
+    if (defined('PHPUNIT_ISOLATED_TEST') && PHPUNIT_ISOLATED_TEST) {
+        // Already isolated.
+        return;
     }
 
-    /**
-     * Early notification message
-     * @static
-     * @param string $message
-     * @param string $classes usually notifyproblem or notifysuccess
-     * @return string
-     */
-    public static function early_notification($message, $classes = 'notifyproblem') {
-        return '<div class="' . $classes . '">' . $message . '</div>';
-    }
-
-    /**
-     * Page should redirect message.
-     * @static
-     * @param string $encodedurl redirect url
-     * @return string
-     */
-    public static function plain_redirect_message($encodedurl) {
-        $message = '<div style="margin-top: 3em; margin-left:auto; margin-right:auto; text-align:center;">' . get_string('pageshouldredirect') . '<br /><a href="'.
-                $encodedurl .'">'. get_string('continue') .'</a></div>';
-        return self::plain_page(get_string('redirect'), $message);
-    }
-
-    /**
-     * Early redirection page, used before full init of $PAGE global
-     * @static
-     * @param string $encodedurl redirect url
-     * @param string $message redirect message
-     * @param int $delay time in seconds
-     * @return string redirect page
-     */
-    public static function early_redirect_message($encodedurl, $message, $delay) {
-        $meta = '<meta http-equiv="refresh" content="'. $delay .'; url='. $encodedurl .'" />';
-        $content = self::early_error_content($message, null, null, null);
-        $content .= self::plain_redirect_message($encodedurl);
-
-        return self::plain_page(get_string('redirect'), $content, $meta);
-    }
-
-    /**
-     * Output basic html page.
-     * @static
-     * @param string $title page title
-     * @param string $content page content
-     * @param string $meta meta tag
-     * @return string html page
-     */
-    public static function plain_page($title, $content, $meta = '') {
-        if (function_exists('get_string') && function_exists('get_html_lang')) {
-            $htmllang = get_html_lang();
-        } else {
-            $htmllang = '';
-        }
-
-        $footer = '';
-        if (MDL_PERF_TEST) {
-            $perfinfo = get_performance_info();
-            $footer = '<footer>' . $perfinfo['html'] . '</footer>';
-        }
-
-        return '<!DOCTYPE html>
-<html ' . $htmllang . '>
-<head>
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-'.$meta.'
-<title>' . $title . '</title>
-</head><body>' . $content . $footer . '</body></html>';
-    }
+    throw new \coding_exception(
+        'When including this file for a unit test, the test must be run in an isolated process. ' .
+            'See the PHPUnit @runInSeparateProcess and @runTestsInSeparateProcesses annotations.'
+    );
 }

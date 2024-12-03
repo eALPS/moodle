@@ -14,24 +14,18 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace mod_book;
+
 /**
- * Genarator tests.
+ * Generator tests class.
  *
  * @package    mod_book
  * @copyright  2013 Frédéric Massart
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+class generator_test extends \advanced_testcase {
 
-/**
- * Genarator tests class.
- *
- * @package    mod_book
- * @copyright  2013 Frédéric Massart
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class mod_book_generator_testcase extends advanced_testcase {
-
-    public function test_create_instance() {
+    public function test_create_instance(): void {
         global $DB;
         $this->resetAfterTest();
         $this->setAdminUser();
@@ -49,7 +43,7 @@ class mod_book_generator_testcase extends advanced_testcase {
         $this->assertEquals('One more book', $DB->get_field_select('book', 'name', 'id = :id', array('id' => $book->id)));
     }
 
-    public function test_create_chapter() {
+    public function test_create_chapter(): void {
         global $DB;
         $this->resetAfterTest();
         $this->setAdminUser();
@@ -62,10 +56,13 @@ class mod_book_generator_testcase extends advanced_testcase {
         $bookgenerator->create_chapter(array('bookid' => $book->id));
         $this->assertTrue($DB->record_exists('book_chapters', array('bookid' => $book->id)));
 
-        $chapter = $bookgenerator->create_chapter(array('bookid' => $book->id, 'content' => 'Yay!', 'title' => 'Oops'));
+        $chapter = $bookgenerator->create_chapter(
+            array('bookid' => $book->id, 'content' => 'Yay!', 'title' => 'Oops', 'tags' => array('Cats', 'mice')));
         $this->assertEquals(2, $DB->count_records('book_chapters', array('bookid' => $book->id)));
         $this->assertEquals('Oops', $DB->get_field_select('book_chapters', 'title', 'id = :id', array('id' => $chapter->id)));
         $this->assertEquals('Yay!', $DB->get_field_select('book_chapters', 'content', 'id = :id', array('id' => $chapter->id)));
+        $this->assertEquals(array('Cats', 'mice'),
+            array_values(\core_tag_tag::get_item_tags_array('mod_book', 'book_chapters', $chapter->id)));
 
         $chapter = $bookgenerator->create_content($book);
         $this->assertEquals(3, $DB->count_records('book_chapters', array('bookid' => $book->id)));

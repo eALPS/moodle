@@ -43,19 +43,13 @@ function assignsubmission_comments_comment_validate(stdClass $options) {
     $context = $options->context;
 
     require_once($CFG->dirroot . '/mod/assign/locallib.php');
-    $assignment = new assign($context, null, null);
+    static $assignment = null;
+    if (is_null($assignment) || $assignment->get_context() != $context) {
+        $assignment = new assign($context, null, null);
+    }
 
     if ($assignment->get_instance()->id != $submission->assignment) {
         throw new comment_exception('invalidcontext');
-    }
-    $canview = false;
-    if ($submission->userid) {
-        $canview = $assignment->can_view_submission($submission->userid);
-    } else {
-        $canview = $assignment->can_view_group_submission($submission->groupid);
-    }
-    if (!$canview) {
-        throw new comment_exception('nopermissiontocomment');
     }
 
     return true;
@@ -80,7 +74,10 @@ function assignsubmission_comments_comment_permissions(stdClass $options) {
     $context = $options->context;
 
     require_once($CFG->dirroot . '/mod/assign/locallib.php');
-    $assignment = new assign($context, null, null);
+    static $assignment = null;
+    if (is_null($assignment) || $assignment->get_context() != $context) {
+        $assignment = new assign($context, null, null);
+    }
 
     if ($assignment->get_instance()->id != $submission->assignment) {
         throw new comment_exception('invalidcontext');
@@ -131,32 +128,55 @@ function assignsubmission_comments_comment_display($comments, $options) {
     if ($assignment->is_blind_marking() && !empty($comments)) {
         // Blind marking is being used, may need to map unique anonymous ids to the comments.
         $usermappings = array();
-        $hiddenuserstr = trim(get_string('hiddenuser', 'assign'));
         $guestuser = guest_user();
 
+        // Check group users first.
+        $userinteam = false;
+        if ($assignment->get_instance()->teamsubmission && has_capability('mod/assign:submit', $context)) {
+            $assignment->set_course(get_course($course));
+            $userinteam = $assignment->can_edit_group_submission($submission->groupid);
+        }
+
         foreach ($comments as $comment) {
-            // Anonymize the comments.
-            if (empty($usermappings[$comment->userid])) {
-                // The blind-marking information for this commenter has not been generated; do so now.
+
+            if (has_capability('mod/assign:viewblinddetails', $context) && $USER->id != $comment->userid) {
                 $anonid = $assignment->get_uniqueid_for_user($comment->userid);
-                $commenter = new stdClass();
-                $commenter->firstname = $hiddenuserstr;
-                $commenter->lastname = $anonid;
-                $commenter->picture = 0;
-                $commenter->id = $guestuser->id;
-                $commenter->email = $guestuser->email;
-                $commenter->imagealt = $guestuser->imagealt;
+                // Show participant information and the user's full name to users with the view blind details capability.
+                $a = new stdClass();
+                $a->participantnumber = $anonid;
+                $a->participantfullname = $comment->fullname;
+                $comment->fullname = get_string('blindmarkingviewfullname', 'assignsubmission_comments', $a);
+            } else if ($USER->id == $comment->userid || $submission->userid == $USER->id || $userinteam) { // phpcs:ignore
+                // Do not anonymize the user details for this comment.
+            } else {
+                // Anonymize the comments.
+                if (empty($usermappings[$comment->userid])) {
+                    $anonid = $assignment->get_uniqueid_for_user($comment->userid);
+                    // The blind-marking information for this commenter has not been generated; do so now.
+                    $commenter = new stdClass();
+                    $commenter->firstname = get_string('blindmarkingname', 'assignsubmission_comments', $anonid);
+                    $commenter->lastname = '';
+                    $commenter->firstnamephonetic = '';
+                    $commenter->lastnamephonetic = '';
+                    $commenter->middlename = '';
+                    $commenter->alternatename = '';
+                    $commenter->picture = 0;
+                    $commenter->id = $guestuser->id;
+                    $commenter->email = $guestuser->email;
+                    $commenter->imagealt = $guestuser->imagealt;
 
-                // Temporarily store blind-marking information for use in later comments if necessary.
-                $usermappings[$comment->userid]->fullname = fullname($commenter);
-                $usermappings[$comment->userid]->avatar = $assignment->get_renderer()->user_picture($commenter,
-                        array('size'=>18, 'link' => false));
+                    // Temporarily store blind-marking information for use in later comments if necessary.
+                    $usermappings[$comment->userid] = new stdClass();
+                    $usermappings[$comment->userid]->fullname = fullname($commenter);
+                    $usermappings[$comment->userid]->avatar = $assignment->get_renderer()->user_picture($commenter,
+                            array('size' => 18, 'link' => false));
+                }
+
+                // Set blind-marking information for this comment.
+                $comment->fullname = $usermappings[$comment->userid]->fullname;
+                $comment->avatar = $usermappings[$comment->userid]->avatar;
+                $comment->profileurl = null;
             }
-
-            // Set blind-marking information for this comment.
-            $comment->fullname = $usermappings[$comment->userid]->fullname;
-            $comment->avatar = $usermappings[$comment->userid]->avatar;
-            $comment->profileurl = null;
         }
     }
 

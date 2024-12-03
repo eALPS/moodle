@@ -14,13 +14,11 @@ Feature: Test importing questions from GIFT format.
     And the following "course enrolments" exist:
       | user    | course | role           |
       | teacher | C1     | editingteacher |
-    And I log in as "teacher"
-    And I follow "Course 1"
+    And I am on the "Course 1" "core_question > course question import" page logged in as "teacher"
 
   @javascript @_file_upload
   Scenario: import some GIFT questions
-    When I navigate to "Import" node in "Course administration > Question bank"
-    And I set the field "id_format_gift" to "1"
+    When I set the field "id_format_gift" to "1"
     And I upload "question/format/gift/tests/fixtures/questions.gift.txt" file to "Import" filemanager
     And I press "id_submitbutton"
     Then I should see "Parsing questions from import file."
@@ -30,7 +28,27 @@ Feature: Test importing questions from GIFT format.
     Then I should see "colours"
 
     # Now export again.
-    And I navigate to "Export" node in "Course administration > Question bank"
+    And I am on the "Course 1" "core_question > course question export" page
     And I set the field "id_format_gift" to "1"
     And I press "Export questions to file"
-    And following "click here" should download between "1550" and "1650" bytes
+    And following "click here" should download a file that:
+      | Has mimetype  | text/plain                                       |
+      | Contains text | What's between orange and green in the spectrum? |
+
+  @javascript @_file_upload
+  Scenario: import a GIFT file which specifies the category
+    When I set the field "id_format_gift" to "1"
+    And I upload "question/format/gift/tests/fixtures/questions_in_category.gift.txt" file to "Import" filemanager
+    And I press "id_submitbutton"
+    Then I should see "Parsing questions from import file."
+    And I should see "Importing 4 questions from file"
+    And I should see "Match the activity to the description."
+    When I press "Continue"
+    Then I should see "Moodle activities"
+
+  @javascript @_file_upload
+  Scenario: import some GIFT questions with unsupported encoding
+    When I set the field "id_format_gift" to "1"
+    And I upload "question/format/gift/tests/fixtures/questions_encoding_windows-1252.gift.txt" file to "Import" filemanager
+    And I press "id_submitbutton"
+    Then I should see "The file you selected does not use UTF-8 character encoding. GIFT format files must use UTF-8."

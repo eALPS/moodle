@@ -55,14 +55,14 @@ class lesson_page_type_cluster extends lesson_page {
     public function get_grayout() {
         return 1;
     }
-    public function callback_on_view($canmanage) {
+    public function callback_on_view($canmanage, $redirect = true) {
         global $USER;
         if (!$canmanage) {
             // Get the next page in the lesson cluster jump
-            return $this->lesson->cluster_jump($this->properties->id);
+            return (int) $this->lesson->cluster_jump($this->properties->id);
         } else {
             // get the next page
-            return $this->properties->nextpageid;
+            return (int) $this->properties->nextpageid;
         }
     }
     public function override_next_page() {
@@ -87,6 +87,29 @@ class lesson_page_type_cluster extends lesson_page {
         }
         return $this->properties->nextpageid;
     }
+
+    /**
+     * Creates answers within the database for this cluster page. Usually only ever
+     * called when creating a new page instance.
+     * @param object $properties
+     * @return array
+     */
+    public function create_answers($properties) {
+        global $DB;
+
+        $newanswer = new stdClass;
+        $newanswer->lessonid = $this->lesson->id;
+        $newanswer->pageid = $this->properties->id;
+        $newanswer->timecreated = $this->properties->timecreated;
+
+        if (isset($properties->jumpto[0])) {
+            $newanswer->jumpto = $properties->jumpto[0];
+        }
+        $newanswer->id = $DB->insert_record('lesson_answers', $newanswer);
+        $answers = [$newanswer->id => new lesson_page_answer($newanswer)];
+        $this->answers = $answers;
+        return $answers;
+    }
 }
 
 class lesson_add_page_form_cluster extends lesson_add_page_form_base {
@@ -96,7 +119,7 @@ class lesson_add_page_form_cluster extends lesson_add_page_form_base {
     protected $standard = false;
 
     public function custom_definition() {
-        global $PAGE;
+        global $PAGE, $CFG;
 
         $mform = $this->_form;
         $lesson = $this->_customdata['lesson'];
@@ -108,8 +131,13 @@ class lesson_add_page_form_cluster extends lesson_add_page_form_base {
         $mform->addElement('hidden', 'qtype');
         $mform->setType('qtype', PARAM_TEXT);
 
-        $mform->addElement('text', 'title', get_string("pagetitle", "lesson"), array('size'=>70));
-        $mform->setType('title', PARAM_TEXT);
+        $mform->addElement('text', 'title', get_string("pagetitle", "lesson"), ['size' => 70, 'maxlength' => 255]);
+        $mform->addRule('title', get_string('maximumchars', '', 255), 'maxlength', 255, 'client');
+        if (!empty($CFG->formatstringstriptags)) {
+            $mform->setType('title', PARAM_TEXT);
+        } else {
+            $mform->setType('title', PARAM_CLEANHTML);
+        }
 
         $this->editoroptions = array('noclean'=>true, 'maxfiles'=>EDITOR_UNLIMITED_FILES, 'maxbytes'=>$PAGE->course->maxbytes);
         $mform->addElement('editor', 'contents_editor', get_string("pagecontents", "lesson"), null, $this->editoroptions);
@@ -128,7 +156,7 @@ class lesson_add_page_form_cluster extends lesson_add_page_form_base {
         if ($pageid == 0) {
             if ($lesson->has_pages()) {
                 if (!$page = $DB->get_record("lesson_pages", array("prevpageid" => 0, "lessonid" => $lesson->id))) {
-                    print_error('cannotfindpagerecord', 'lesson');
+                    throw new \moodle_exception('cannotfindpagerecord', 'lesson');
                 }
             } else {
                 // This is the ONLY page
@@ -137,7 +165,7 @@ class lesson_add_page_form_cluster extends lesson_add_page_form_base {
             }
         } else {
             if (!$page = $DB->get_record("lesson_pages", array("id" => $pageid))) {
-                print_error('cannotfindpagerecord', 'lesson');
+                throw new \moodle_exception('cannotfindpagerecord', 'lesson');
             }
         }
         $newpage = new stdClass;

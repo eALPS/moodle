@@ -64,7 +64,7 @@ class analysis_for_question {
      *                    This is the return value from {@link \question_type::get_possible_responses()}
      *                    see that method for fuller documentation.
      */
-    public function __construct(array $possiblereponses = null) {
+    public function __construct(?array $possiblereponses = null) {
         if ($possiblereponses !== null) {
             $this->possibleresponses = $possiblereponses;
         }
@@ -127,6 +127,11 @@ class analysis_for_question {
     public function get_analysis_for_subpart($variantno, $subpartid) {
         if (!isset($this->subparts[$variantno])) {
             $this->initialise_stats_for_variant($variantno);
+        }
+        if (!isset($this->subparts[$variantno][$subpartid])) {
+            debugging('Unexpected sub-part id ' . $subpartid .
+                    ' encountered.');
+            $this->subparts[$variantno][$subpartid] = new analysis_for_subpart();
         }
         return $this->subparts[$variantno][$subpartid];
     }
@@ -191,17 +196,41 @@ class analysis_for_question {
     }
 
     /**
+     * Save the analysis to the DB, first cleaning up any old ones.
+     *
      * @param \qubaid_condition $qubaids    which question usages have been analysed.
      * @param string            $whichtries which tries have been analysed?
      * @param int               $questionid which question.
+     * @param int|null          $calculationtime time when the analysis was done. (Defaults to time()).
      */
-    public function cache($qubaids, $whichtries, $questionid) {
+    public function cache($qubaids, $whichtries, $questionid, $calculationtime = null) {
+        global $DB;
+
+        $transaction = $DB->start_delegated_transaction();
+
+        $analysisids = $DB->get_fieldset(
+            'question_response_analysis',
+            'id',
+            [
+                'hashcode' => $qubaids->get_hash_code(),
+                'whichtries' => $whichtries,
+                'questionid' => $questionid,
+            ]
+        );
+        if (!empty($analysisids)) {
+            [$insql, $params] = $DB->get_in_or_equal($analysisids);
+            $DB->delete_records_select('question_response_count', 'analysisid ' . $insql, $params);
+            $DB->delete_records_select('question_response_analysis', 'id ' . $insql, $params);
+        }
+
         foreach ($this->get_variant_nos() as $variantno) {
             foreach ($this->get_subpart_ids($variantno) as $subpartid) {
                 $analysisforsubpart = $this->get_analysis_for_subpart($variantno, $subpartid);
-                $analysisforsubpart->cache($qubaids, $whichtries, $questionid, $variantno, $subpartid);
+                $analysisforsubpart->cache($qubaids, $whichtries, $questionid, $variantno, $subpartid, $calculationtime);
             }
         }
+
+        $transaction->allow_commit();
     }
 
     /**

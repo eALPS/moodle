@@ -13,7 +13,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
-defined('MOODLE_INTERNAL') || exit();
+
+namespace tool_monitor;
 
 /**
  * Unit tests for the tool_monitor clean events task.
@@ -24,7 +25,7 @@ defined('MOODLE_INTERNAL') || exit();
  * @copyright  2016 Jake Dallimore <jrhdallimore@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
+class task_check_subscriptions_test extends \advanced_testcase {
 
     private $course;
     private $user;
@@ -36,8 +37,9 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
     /**
      * Test set up.
      */
-    public function setUp() {
+    public function setUp(): void {
         global $DB;
+        parent::setUp();
         set_config('enablemonitor', 1, 'tool_monitor');
         $this->resetAfterTest(true);
 
@@ -45,7 +47,7 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
         $this->user = $this->getDataGenerator()->create_user();
         $this->course = $this->getDataGenerator()->create_course();
 
-        $rule = new stdClass();
+        $rule = new \stdClass();
         $rule->userid = 2; // Rule created by admin.
         $rule->courseid = $this->course->id;
         $rule->plugin = 'mod_book';
@@ -54,7 +56,7 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
         $monitorgenerator = $this->getDataGenerator()->get_plugin_generator('tool_monitor');
         $this->rule = $monitorgenerator->create_rule($rule);
 
-        $sub = new stdClass();
+        $sub = new \stdClass();
         $sub->courseid = $this->course->id;
         $sub->userid = $this->user->id;
         $sub->ruleid = $this->rule->id;
@@ -79,7 +81,7 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
     /**
      * Test to confirm the task is named correctly.
      */
-    public function test_task_name() {
+    public function test_task_name(): void {
         $task = new \tool_monitor\task\check_subscriptions();
         $this->assertEquals(get_string('taskchecksubscriptions', 'tool_monitor'), $task->get_name());
     }
@@ -87,10 +89,10 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
     /**
      * Test to confirm that site level subscriptions are activated and deactivated according to system capabilities.
      */
-    public function test_site_level_subscription() {
+    public function test_site_level_subscription(): void {
         // Create a site level subscription.
         $monitorgenerator = $this->getDataGenerator()->get_plugin_generator('tool_monitor');
-        $sub = new stdClass();
+        $sub = new \stdClass();
         $sub->userid = $this->user->id;
         $sub->ruleid = $this->rule->id;
         $this->subscription = $monitorgenerator->create_subscription($sub);
@@ -104,7 +106,7 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
         $this->assertEquals(false, \tool_monitor\subscription_manager::subscription_is_active($this->subscription));
 
         // Now, assign the user as a teacher role at system context.
-        $this->getDataGenerator()->role_assign($this->teacherrole->id, $this->user->id, context_system::instance());
+        $this->getDataGenerator()->role_assign($this->teacherrole->id, $this->user->id, \context_system::instance());
 
         // Run the task.
         $task = new \tool_monitor\task\check_subscriptions();
@@ -118,7 +120,7 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
     /**
      * Test to confirm that if the module is disabled, no changes are made to active subscriptions.
      */
-    public function test_module_disabled() {
+    public function test_module_disabled(): void {
         set_config('enablemonitor', 0, 'tool_monitor');
 
         // Subscription should be active to start with.
@@ -136,7 +138,7 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
     /**
      * Test to confirm an active, valid subscription stays active once the scheduled task is run.
      */
-    public function test_active_unaffected() {
+    public function test_active_unaffected(): void {
         // Enrol the user as a teacher. This role should have the required capability.
         $this->getDataGenerator()->enrol_user($this->user->id, $this->course->id, $this->teacherrole->id);
 
@@ -155,7 +157,7 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
     /**
      * Test to confirm that a subscription for a user without an enrolment to the course is made inactive.
      */
-    public function test_course_enrolment() {
+    public function test_course_enrolment(): void {
         // Subscription should be active until deactivated by the scheduled task. Remember, by default the test setup
         // doesn't enrol the user, so the first run of the task should deactivate it.
         $this->assertEquals(true, \tool_monitor\subscription_manager::subscription_is_active($this->subscription));
@@ -183,7 +185,7 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
     /**
      * Test to confirm that subscriptions for enrolled users without the required capability are made inactive.
      */
-    public function test_enrolled_user_with_no_capability() {
+    public function test_enrolled_user_with_no_capability(): void {
         // Enrol the user. By default, students won't have the required capability.
         $this->getDataGenerator()->enrol_user($this->user->id, $this->course->id, $this->studentrole->id);
 
@@ -202,7 +204,7 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
     /**
      * Test to confirm that subscriptions for users who fail can_access_course(), are deactivated.
      */
-    public function test_can_access_course() {
+    public function test_can_access_course(): void {
         // Enrol the user as a teacher. This role should have the required capability.
         $this->getDataGenerator()->enrol_user($this->user->id, $this->course->id, $this->teacherrole->id);
 
@@ -228,7 +230,7 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
     /**
      * Test to confirm that subscriptions for enrolled users who don't have CM access, are deactivated.
      */
-    public function test_cm_access() {
+    public function test_cm_access(): void {
         // Enrol the user as a student but grant to ability to subscribe. Students cannot view hidden activities.
         $context = \context_course::instance($this->course->id);
         assign_capability('tool/monitor:subscribe', CAP_ALLOW, $this->studentrole->id, $context);
@@ -238,7 +240,7 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
         $book = $this->getDataGenerator()->create_module('book', array('course' => $this->course->id));
 
         // And add a subscription to it.
-        $sub = new stdClass();
+        $sub = new \stdClass();
         $sub->courseid = $this->course->id;
         $sub->userid = $this->user->id;
         $sub->ruleid = $this->rule->id;
@@ -283,7 +285,7 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
     /**
      * Test to confirm that long term inactive subscriptions are removed entirely.
      */
-    public function test_stale_subscription_removal() {
+    public function test_stale_subscription_removal(): void {
         global $DB;
         // Manually set the inactivedate to 1 day older than the limit allowed.
         $daysold = 1 + \tool_monitor\subscription_manager::INACTIVE_SUBSCRIPTION_LIFESPAN_IN_DAYS;
@@ -306,7 +308,7 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
     /**
      * Test to confirm that subscriptions for a partially set up user are deactivated.
      */
-    public function test_user_not_fully_set_up() {
+    public function test_user_not_fully_set_up(): void {
         global $DB;
 
         // Enrol the user as a teacher.
@@ -330,7 +332,7 @@ class tool_monitor_task_check_subscriptions_testcase extends advanced_testcase {
     /**
      * Test to confirm that a suspended user's subscriptions are deactivated properly.
      */
-    public function test_suspended_user() {
+    public function test_suspended_user(): void {
         global $DB;
 
         // Enrol the user as a teacher. This role should have the required capability.

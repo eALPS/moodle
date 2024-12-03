@@ -36,11 +36,32 @@ Here are the files that we have added.
 
     This should not ever be used directly. The wrapper above uses it automatically.
 
+Local changes (to reapply until upstream upgrades contain them):
+    * MDL-67034 php74 compliance fixes
+    * MDL-67115 php74 implode() compliance fixes. This is fixed in upstream library v2.2.4
+      (verify that https://github.com/googleapis/google-api-php-client/pull/1683 is applied)
+    * MDL-73523 php80 compliance. openssl_xxx_free() methods deprecated. I've been unable to
+      find any issue upstream and the current library versions are way different from the ones
+      we are using here.
+    * MDL-76355 php81 compliance. Class methods require overriding methods to declare a
+      compatible return type.
+    * MDL-77374 PHP 8.2 compliance.
+      To temporarily prevent the PHP 8.2 warning about the deprecation of dynamic properties,
+      the #[AllowDynamicProperties] attribute was added on top of the classes.
+      Below is a handy command to add the attribute above the class line:
+      ```
+      cd lib/google/src
+      for file in `find . -name '*.php' `; do sed -i '/^class /i #[AllowDynamicProperties]' $file; done
+      ```
+    * MDL-46563 - PHP 8.3 compliance
+      - Converted use of `get_class()` to `static::class`
+    * MDL-81634 - PHP 8.4 compliance
+      - Implicitly defined nullables
 
 Information
 -----------
 
-Repository: https://github.com/google/google-api-php-client
+Repository: https://github.com/googleapis/google-api-php-client
 Documentation: https://developers.google.com/api-client-library/php/
 Global documentation: https://developers.google.com
 

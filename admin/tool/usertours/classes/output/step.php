@@ -26,6 +26,9 @@ namespace tool_usertours\output;
 
 defined('MOODLE_INTERNAL') || die();
 
+require_once($CFG->libdir . "/filelib.php");
+
+use tool_usertours\helper;
 use tool_usertours\step as stepsource;
 
 /**
@@ -35,7 +38,6 @@ use tool_usertours\step as stepsource;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class step implements \renderable {
-
     /**
      * @var The step instance.
      */
@@ -60,24 +62,36 @@ class step implements \renderable {
         global $PAGE;
         $step = $this->step;
 
+        $content = $step->get_content();
+        $systemcontext = \context_system::instance();
+        $content = file_rewrite_pluginfile_urls(
+            $content,
+            'pluginfile.php',
+            $systemcontext->id,
+            'tool_usertours',
+            'stepcontent',
+            $step->get_id()
+        );
+
+        $content = helper::get_string_from_input($content);
+        $content = $step::get_step_image_from_input($content);
+
         $result = (object) [
             'stepid'    => $step->get_id(),
-            'title'     => external_format_text(
-                    stepsource::get_string_from_input($step->get_title()),
-                    FORMAT_HTML,
-                    $PAGE->context->id,
-                    'tool_usertours'
-                )[0],
-            'content'   => external_format_text(
-                    stepsource::get_string_from_input($step->get_content()),
-                    FORMAT_HTML,
-                    $PAGE->context->id,
-                    'tool_usertours'
-                )[0],
+            'title'     => \core_external\util::format_text(
+                helper::get_string_from_input($step->get_title()),
+                FORMAT_HTML,
+                $PAGE->context->id,
+                'tool_usertours'
+            )[0],
+            'content'   => \core_external\util::format_text(
+                $content,
+                $step->get_contentformat(),
+                $PAGE->context->id,
+                'tool_usertours'
+            )[0],
             'element'   => $step->get_target()->convert_to_css(),
         ];
-
-        $result->content = str_replace("\n", "<br>\n", $result->content);
 
         foreach ($step->get_config_keys() as $key) {
             $result->$key = $step->get_config($key);

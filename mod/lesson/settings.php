@@ -125,7 +125,7 @@ if ($ADMIN->fulltree) {
         get_string('displayreview', 'lesson'), get_string('displayreview_help', 'lesson'),
         array('value' => 0, 'adv' => false), $yesno));
 
-    $attempts = array();
+    $attempts = ['0' => get_string('unlimited')];
     for ($i = 10; $i > 0; $i--) {
         $attempts[$i] = $i;
     }
@@ -152,7 +152,7 @@ if ($ADMIN->fulltree) {
         array('value' => '1', 'adv' => true), $pages));
 
     // Grade.
-    $settings->add(new admin_setting_heading('lesson/grade', get_string('grade'), ''));
+    $settings->add(new admin_setting_heading('lesson/grade', get_string('gradenoun'), ''));
 
     $settings->add(new admin_setting_configselect_with_advanced('mod_lesson/practice',
         get_string('practice', 'lesson'), get_string('practice_help', 'lesson'),

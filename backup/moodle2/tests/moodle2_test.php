@@ -14,13 +14,13 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Tests for Moodle 2 format backup operation.
- *
- * @package core_backup
- * @copyright 2014 The Open University
- * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core_backup;
+
+use backup;
+use backup_controller;
+use backup_setting;
+use restore_controller;
+use restore_dbops;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -36,13 +36,13 @@ require_once($CFG->libdir . '/completionlib.php');
  * @copyright 2014 The Open University
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_backup_moodle2_testcase extends advanced_testcase {
+final class moodle2_test extends \advanced_testcase {
 
     /**
      * Tests the availability field on modules and sections is correctly
      * backed up and restored.
      */
-    public function test_backup_availability() {
+    public function test_backup_availability(): void {
         global $DB, $CFG;
 
         $this->resetAfterTest(true);
@@ -64,7 +64,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
         // We need a grade, easiest is to add an assignment.
         $assignrow = $generator->create_module('assign', array(
                 'course' => $course->id));
-        $assign = new assign(context_module::instance($assignrow->cmid), false, false);
+        $assign = new \assign(\context_module::instance($assignrow->cmid), false, false);
         $item = $assign->get_grade_item();
 
         // Make a test grouping as well.
@@ -88,7 +88,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
         $modinfo = get_fast_modinfo($newcourseid);
         $forums = array_values($modinfo->get_instances_of('forum'));
         $assigns = array_values($modinfo->get_instances_of('assign'));
-        $newassign = new assign(context_module::instance($assigns[0]->id), false, false);
+        $newassign = new \assign(\context_module::instance($assigns[0]->id), false, false);
         $newitem = $newassign->get_grade_item();
         $newgroupingid = $DB->get_field('groupings', 'id', array('courseid' => $newcourseid));
 
@@ -115,7 +115,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
      * ensures that a Moodle 2.6 backup with this data can still be correctly
      * restored.
      */
-    public function test_restore_legacy_availability() {
+    public function test_restore_legacy_availability(): void {
         global $DB, $USER, $CFG;
         require_once($CFG->dirroot . '/grade/querylib.php');
         require_once($CFG->libdir . '/completionlib.php');
@@ -127,8 +127,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
 
         // Extract backup file.
         $backupid = 'abc';
-        $backuppath = $CFG->tempdir . '/backup/' . $backupid;
-        check_dir_exists($backuppath);
+        $backuppath = make_backup_temp_directory($backupid);
         get_file_packer('application/vnd.moodle.backup')->extract_to_pathname(
                 __DIR__ . '/fixtures/availability_26_format.mbz', $backuppath);
 
@@ -182,7 +181,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
         // Grade >= 75%.
         $grades = array_values(grade_get_grade_items_for_activity($quizzes[0], true));
         $gradeid = $grades[0]->id;
-        $coursegrade = grade_item::fetch_course_item($newcourseid);
+        $coursegrade = \grade_item::fetch_course_item($newcourseid);
         $this->assertEquals(
                 '{"op":"&","showc":[true],"c":[{"type":"grade","id":' . $gradeid . ',"min":75}]}',
                 $pages[4]->availability);
@@ -263,7 +262,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
      * when it contains availability conditions that depend on other items in
      * course.
      */
-    public function test_duplicate_availability() {
+    public function test_duplicate_availability(): void {
         global $DB, $CFG;
 
         $this->resetAfterTest(true);
@@ -283,7 +282,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
         // We need a grade, easiest is to add an assignment.
         $assignrow = $generator->create_module('assign', array(
                 'course' => $course->id));
-        $assign = new assign(context_module::instance($assignrow->cmid), false, false);
+        $assign = new \assign(\context_module::instance($assignrow->cmid), false, false);
         $item = $assign->get_grade_item();
 
         // Make a test group and grouping as well.
@@ -330,7 +329,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
      * When restoring a course, you can change the start date, which shifts other
      * dates. This test checks that certain dates are correctly modified.
      */
-    public function test_restore_dates() {
+    public function test_restore_dates(): void {
         global $DB, $CFG;
 
         $this->resetAfterTest(true);
@@ -388,7 +387,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
      * Test front page backup/restore and duplicate activities
      * @return void
      */
-    public function test_restore_frontpage() {
+    public function test_restore_frontpage(): void {
         global $DB, $CFG, $USER;
 
         $this->resetAfterTest(true);
@@ -462,11 +461,13 @@ class core_backup_moodle2_testcase extends advanced_testcase {
     /**
      * Backs a course up and restores it.
      *
-     * @param stdClass $course Course object to backup
+     * @param \stdClass $course Course object to backup
      * @param int $newdate If non-zero, specifies custom date for new course
+     * @param callable|null $inbetween If specified, function that is called before restore
+     * @param bool $userdata Whether the backup/restory must be with user data or not.
      * @return int ID of newly restored course
      */
-    protected function backup_and_restore($course, $newdate = 0) {
+    protected function backup_and_restore($course, $newdate = 0, $inbetween = null, bool $userdata = false) {
         global $USER, $CFG;
 
         // Turn off file logging, otherwise it can't delete the file (Windows).
@@ -477,9 +478,16 @@ class core_backup_moodle2_testcase extends advanced_testcase {
         $bc = new backup_controller(backup::TYPE_1COURSE, $course->id,
                 backup::FORMAT_MOODLE, backup::INTERACTIVE_NO, backup::MODE_IMPORT,
                 $USER->id);
+        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
+        $bc->get_plan()->get_setting('users')->set_value($userdata);
+
         $backupid = $bc->get_backupid();
         $bc->execute_plan();
         $bc->destroy();
+
+        if ($inbetween) {
+            $inbetween($backupid);
+        }
 
         // Do restore to new course with default settings.
         $newcourseid = restore_dbops::create_new_course(
@@ -490,6 +498,13 @@ class core_backup_moodle2_testcase extends advanced_testcase {
         if ($newdate) {
             $rc->get_plan()->get_setting('course_startdate')->set_value($newdate);
         }
+
+        $rc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
+        $rc->get_plan()->get_setting('users')->set_value($userdata);
+        if ($userdata) {
+            $rc->get_plan()->get_setting('xapistate')->set_value(true);
+        }
+
         $this->assertTrue($rc->execute_precheck());
         $rc->execute_plan();
         $rc->destroy();
@@ -503,7 +518,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
      * This is based on the code from course/modduplicate.php, but reduced for
      * simplicity.
      *
-     * @param stdClass $course Course object
+     * @param \stdClass $course Course object
      * @param int $cmid Activity to duplicate
      * @return int ID of new activity
      */
@@ -525,7 +540,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
 
         // Find cmid.
         $tasks = $rc->get_plan()->get_tasks();
-        $cmcontext = context_module::instance($cmid);
+        $cmcontext = \context_module::instance($cmid);
         $newcmid = 0;
         foreach ($tasks as $task) {
             if (is_subclass_of($task, 'restore_activity_task')) {
@@ -537,7 +552,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
         }
         $rc->destroy();
         if (!$newcmid) {
-            throw new coding_exception('Unexpected: failure to find restored cmid');
+            throw new \coding_exception('Unexpected: failure to find restored cmid');
         }
         return $newcmid;
     }
@@ -574,7 +589,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
         $selfplugin->enrol_user($selfinstance, $user->id, $studentrole->id);
 
         // Give current user capabilities to do backup and restore and assign student role.
-        $categorycontext = context_course::instance($course->id)->get_parent_context();
+        $categorycontext = \context_course::instance($course->id)->get_parent_context();
 
         $caps = array_merge([
             'moodle/course:view',
@@ -591,7 +606,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
             assign_capability($cap, CAP_ALLOW, $roleidcat, $categorycontext);
         }
 
-        allow_assign($roleidcat, $studentrole->id);
+        core_role_set_assign_allowed($roleidcat, $studentrole->id);
         role_assign($roleidcat, $user->id, $categorycontext);
         accesslib_clear_all_caches_for_unit_testing();
 
@@ -633,7 +648,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
     /**
      * Backup a course with enrolment methods and restore it without user data and without enrolment methods
      */
-    public function test_restore_without_users_without_enrolments() {
+    public function test_restore_without_users_without_enrolments(): void {
         global $DB;
 
         list($course, $newcourseid, $rc) = $this->prepare_for_enrolments_test(backup::TARGET_NEW_COURSE);
@@ -658,7 +673,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
     /**
      * Backup a course with enrolment methods and restore it without user data with enrolment methods
      */
-    public function test_restore_without_users_with_enrolments() {
+    public function test_restore_without_users_with_enrolments(): void {
         global $DB;
 
         list($course, $newcourseid, $rc) = $this->prepare_for_enrolments_test(backup::TARGET_NEW_COURSE,
@@ -688,7 +703,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
     /**
      * Backup a course with enrolment methods and restore it with user data and without enrolment methods
      */
-    public function test_restore_with_users_without_enrolments() {
+    public function test_restore_with_users_without_enrolments(): void {
         global $DB;
 
         list($course, $newcourseid, $rc) = $this->prepare_for_enrolments_test(backup::TARGET_NEW_COURSE,
@@ -716,7 +731,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
     /**
      * Backup a course with enrolment methods and restore it with user data with enrolment methods
      */
-    public function test_restore_with_users_with_enrolments() {
+    public function test_restore_with_users_with_enrolments(): void {
         global $DB;
 
         list($course, $newcourseid, $rc) = $this->prepare_for_enrolments_test(backup::TARGET_NEW_COURSE,
@@ -746,7 +761,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
     /**
      * Backup a course with enrolment methods and restore it with user data with enrolment methods merging into another course
      */
-    public function test_restore_with_users_with_enrolments_merging() {
+    public function test_restore_with_users_with_enrolments_merging(): void {
         global $DB;
 
         list($course, $newcourseid, $rc) = $this->prepare_for_enrolments_test(backup::TARGET_EXISTING_ADDING,
@@ -776,7 +791,7 @@ class core_backup_moodle2_testcase extends advanced_testcase {
     /**
      * Backup a course with enrolment methods and restore it with user data with enrolment methods into another course deleting it's contents
      */
-    public function test_restore_with_users_with_enrolments_deleting() {
+    public function test_restore_with_users_with_enrolments_deleting(): void {
         global $DB;
 
         list($course, $newcourseid, $rc) = $this->prepare_for_enrolments_test(backup::TARGET_EXISTING_DELETING,
@@ -801,5 +816,360 @@ class core_backup_moodle2_testcase extends advanced_testcase {
         $this->assertEquals(1, count($enrolments));
         $enrolment = reset($enrolments);
         $this->assertEquals('self', $enrolment->enrol);
+    }
+
+    /**
+     * Test the block instance time fields (timecreated, timemodified) through a backup and restore.
+     */
+    public function test_block_instance_times_backup(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+
+        // Create course and add HTML block.
+        $course = $generator->create_course();
+        $context = \context_course::instance($course->id);
+        $page = new \moodle_page();
+        $page->set_context($context);
+        $page->set_course($course);
+        $page->set_pagelayout('standard');
+        $page->set_pagetype('course-view');
+        $page->blocks->load_blocks();
+        $page->blocks->add_block_at_end_of_default_region('html');
+
+        // Update (hack in database) timemodified and timecreated to specific values for testing.
+        $blockdata = $DB->get_record('block_instances',
+                ['blockname' => 'html', 'parentcontextid' => $context->id]);
+        $originalblockid = $blockdata->id;
+        $blockdata->timecreated = 12345;
+        $blockdata->timemodified = 67890;
+        $DB->update_record('block_instances', $blockdata);
+
+        // Do backup and restore.
+        $newcourseid = $this->backup_and_restore($course);
+
+        // Confirm that values were transferred correctly into HTML block on new course.
+        $newcontext = \context_course::instance($newcourseid);
+        $blockdata = $DB->get_record('block_instances',
+                ['blockname' => 'html', 'parentcontextid' => $newcontext->id]);
+        $this->assertEquals(12345, $blockdata->timecreated);
+        $this->assertEquals(67890, $blockdata->timemodified);
+
+        // Simulate what happens with an older backup that doesn't have those fields, by removing
+        // them from the backup before doing a restore.
+        $before = time();
+        $newcourseid = $this->backup_and_restore($course, 0, function($backupid) use($originalblockid) {
+            global $CFG;
+            $path = $CFG->dataroot . '/temp/backup/' . $backupid . '/course/blocks/html_' .
+                    $originalblockid . '/block.xml';
+            $xml = file_get_contents($path);
+            $xml = preg_replace('~<timecreated>.*?</timemodified>~s', '', $xml);
+            file_put_contents($path, $xml);
+        });
+        $after = time();
+
+        // The fields not specified should default to current time.
+        $newcontext = \context_course::instance($newcourseid);
+        $blockdata = $DB->get_record('block_instances',
+                ['blockname' => 'html', 'parentcontextid' => $newcontext->id]);
+        $this->assertTrue($before <= $blockdata->timecreated && $after >= $blockdata->timecreated);
+        $this->assertTrue($before <= $blockdata->timemodified && $after >= $blockdata->timemodified);
+    }
+
+    /**
+     * When you restore a site with global search (or search indexing) turned on, then it should
+     * add entries to the search index requests table so that the data gets indexed.
+     */
+    public function test_restore_search_index_requests(): void {
+        global $DB, $CFG, $USER;
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $CFG->enableglobalsearch = true;
+
+        // Create a course.
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+
+        // Add a forum.
+        $forum = $generator->create_module('forum', ['course' => $course->id]);
+
+        // Add a block.
+        $context = \context_course::instance($course->id);
+        $page = new \moodle_page();
+        $page->set_context($context);
+        $page->set_course($course);
+        $page->set_pagelayout('standard');
+        $page->set_pagetype('course-view');
+        $page->blocks->load_blocks();
+        $page->blocks->add_block_at_end_of_default_region('html');
+
+        // Initially there should be no search index requests.
+        $this->assertEquals(0, $DB->count_records('search_index_requests'));
+
+        // Do backup and restore.
+        $newcourseid = $this->backup_and_restore($course);
+
+        // Now the course should be requested for index (all search areas).
+        $newcontext = \context_course::instance($newcourseid);
+        $requests = array_values($DB->get_records('search_index_requests'));
+        $this->assertCount(1, $requests);
+        $this->assertEquals($newcontext->id, $requests[0]->contextid);
+        $this->assertEquals('', $requests[0]->searcharea);
+
+        get_fast_modinfo($newcourseid);
+
+        // Backup the new course...
+        $CFG->backup_file_logger_level = backup::LOG_NONE;
+        $bc = new backup_controller(backup::TYPE_1COURSE, $newcourseid,
+                backup::FORMAT_MOODLE, backup::INTERACTIVE_NO, backup::MODE_IMPORT,
+                $USER->id);
+        $backupid = $bc->get_backupid();
+        $bc->execute_plan();
+        $bc->destroy();
+
+        // Restore it on top of old course (should duplicate the forum).
+        $rc = new restore_controller($backupid, $course->id,
+                backup::INTERACTIVE_NO, backup::MODE_GENERAL, $USER->id,
+                backup::TARGET_EXISTING_ADDING);
+        $this->assertTrue($rc->execute_precheck());
+        $rc->execute_plan();
+        $rc->destroy();
+
+        // Get the forums now on the old course.
+        $modinfo = get_fast_modinfo($course->id);
+        $forums = $modinfo->get_instances_of('forum');
+        $this->assertCount(2, $forums);
+
+        // The newer one will be the one with larger ID. (Safe to assume for unit test.)
+        $biggest = null;
+        foreach ($forums as $forum) {
+            if ($biggest === null || $biggest->id < $forum->id) {
+                $biggest = $forum;
+            }
+        }
+        $restoredforumcontext = \context_module::instance($biggest->id);
+
+        // Get the HTML blocks now on the old course.
+        $blockdata = array_values($DB->get_records('block_instances',
+                ['blockname' => 'html', 'parentcontextid' => $context->id], 'id DESC'));
+        $restoredblockcontext = \context_block::instance($blockdata[0]->id);
+
+        // Check that we have requested index update on both the module and the block.
+        $requests = array_values($DB->get_records('search_index_requests', null, 'id'));
+        $this->assertCount(3, $requests);
+        $this->assertEquals($restoredblockcontext->id, $requests[1]->contextid);
+        $this->assertEquals('', $requests[1]->searcharea);
+        $this->assertEquals($restoredforumcontext->id, $requests[2]->contextid);
+        $this->assertEquals('', $requests[2]->searcharea);
+    }
+
+    /**
+     * Test restoring courses based on the backup plan. Primarily used with
+     * the import functionality
+     */
+    public function test_restore_course_using_plan_defaults(): void {
+        global $DB, $CFG, $USER;
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $CFG->enableglobalsearch = true;
+
+        // Set admin config setting so that activities are not restored by default.
+        set_config('restore_general_activities', 0, 'restore');
+
+        // Create a course.
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $course2 = $generator->create_course();
+        $course3 = $generator->create_course();
+
+        // Add a forum.
+        $forum = $generator->create_module('forum', ['course' => $course->id]);
+
+        // Backup course...
+        $CFG->backup_file_logger_level = backup::LOG_NONE;
+        $bc = new backup_controller(backup::TYPE_1COURSE, $course->id,
+            backup::FORMAT_MOODLE, backup::INTERACTIVE_NO, backup::MODE_IMPORT,
+            $USER->id);
+        $backupid = $bc->get_backupid();
+        $bc->execute_plan();
+        $bc->destroy();
+
+        // Restore it on top of course2 (should duplicate the forum).
+        $rc = new restore_controller($backupid, $course2->id,
+            backup::INTERACTIVE_NO, backup::MODE_IMPORT, $USER->id,
+            backup::TARGET_EXISTING_ADDING, null, backup::RELEASESESSION_NO);
+        $this->assertTrue($rc->execute_precheck());
+        $rc->execute_plan();
+        $rc->destroy();
+
+        // Get the forums now on the old course.
+        $modinfo = get_fast_modinfo($course2->id);
+        $forums = $modinfo->get_instances_of('forum');
+        $this->assertCount(0, $forums);
+    }
+
+    /**
+     * The Question category hierarchical structure was changed in Moodle 3.5.
+     * From 3.5, all question categories in each context are a child of a single top level question category for that context.
+     * This test ensures that both Moodle 3.4 and 3.5 backups can still be correctly restored.
+     */
+    public function test_restore_question_category_34_35(): void {
+        global $DB, $USER, $CFG;
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+
+        $backupfiles = array('question_category_34_format', 'question_category_35_format');
+
+        foreach ($backupfiles as $backupfile) {
+            // Extract backup file.
+            $backupid = $backupfile;
+            $backuppath = make_backup_temp_directory($backupid);
+            get_file_packer('application/vnd.moodle.backup')->extract_to_pathname(
+                    __DIR__ . "/fixtures/$backupfile.mbz", $backuppath);
+
+            // Do restore to new course with default settings.
+            $categoryid = $DB->get_field_sql("SELECT MIN(id) FROM {course_categories}");
+            $newcourseid = restore_dbops::create_new_course(
+                    'Test fullname', 'Test shortname', $categoryid);
+            $rc = new restore_controller($backupid, $newcourseid,
+                    backup::INTERACTIVE_NO, backup::MODE_GENERAL, $USER->id,
+                    backup::TARGET_NEW_COURSE);
+
+            $this->assertTrue($rc->execute_precheck());
+            $rc->execute_plan();
+            $rc->destroy();
+
+            // Get information about the resulting course and check that it is set up correctly.
+            $modinfo = get_fast_modinfo($newcourseid);
+            $quizzes = array_values($modinfo->get_instances_of('quiz'));
+            $contexts = $quizzes[0]->context->get_parent_contexts(true);
+
+            $topcategorycount = [];
+            foreach ($contexts as $context) {
+                $cats = $DB->get_records('question_categories', array('contextid' => $context->id), 'parent', 'id, name, parent');
+
+                // Make sure all question categories that were inside the backup file were restored correctly.
+                if ($context->contextlevel == CONTEXT_COURSE) {
+                    $this->assertEquals(['top', 'Default for C101'], array_column($cats, 'name'));
+                } else if ($context->contextlevel == CONTEXT_MODULE) {
+                    $this->assertEquals(['top', 'Default for Q1'], array_column($cats, 'name'));
+                }
+
+                $topcategorycount[$context->id] = 0;
+                foreach ($cats as $cat) {
+                    if (!$cat->parent) {
+                        $topcategorycount[$context->id]++;
+                    }
+                }
+
+                // Make sure there is a single top level category in this context.
+                if ($cats) {
+                    $this->assertEquals(1, $topcategorycount[$context->id]);
+                }
+            }
+        }
+    }
+
+    /**
+     * Test the content bank content through a backup and restore.
+     */
+    public function test_contentbank_content_backup(): void {
+        global $DB, $USER, $CFG;
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $cbgenerator = $this->getDataGenerator()->get_plugin_generator('core_contentbank');
+
+        // Create course and add content bank content.
+        $course = $generator->create_course();
+        $context = \context_course::instance($course->id);
+        $filepath = $CFG->dirroot . '/h5p/tests/fixtures/filltheblanks.h5p';
+        $contents = $cbgenerator->generate_contentbank_data('contenttype_h5p', 2, $USER->id, $context, true, $filepath);
+        $this->assertEquals(2, $DB->count_records('contentbank_content'));
+
+        // Do backup and restore.
+        $newcourseid = $this->backup_and_restore($course);
+
+        // Confirm that values were transferred correctly into content bank on new course.
+        $newcontext = \context_course::instance($newcourseid);
+
+        $this->assertEquals(4, $DB->count_records('contentbank_content'));
+        $this->assertEquals(2, $DB->count_records('contentbank_content', ['contextid' => $newcontext->id]));
+    }
+
+    /**
+     * Test the xAPI state through a backup and restore.
+     *
+     * @covers \backup_xapistate_structure_step
+     * @covers \restore_xapistate_structure_step
+     */
+    public function test_xapistate_backup(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $activity = $this->getDataGenerator()->create_module('h5pactivity', ['course' => $course]);
+        $this->setUser($user);
+
+        /** @var \mod_h5pactivity_generator $generator */
+        $generator = $this->getDataGenerator()->get_plugin_generator('mod_h5pactivity');
+
+        /** @var \core_h5p_generator $h5pgenerator */
+        $h5pgenerator = $this->getDataGenerator()->get_plugin_generator('core_h5p');
+
+        // Add an attempt to the H5P activity.
+        $attemptinfo = [
+            'userid' => $user->id,
+            'h5pactivityid' => $activity->id,
+            'attempt' => 1,
+            'interactiontype' => 'compound',
+            'rawscore' => 2,
+            'maxscore' => 2,
+            'duration' => 1,
+            'completion' => 1,
+            'success' => 0,
+        ];
+        $generator->create_attempt($attemptinfo);
+
+        // Add also a xAPI state to the H5P activity.
+        $filerecord = [
+            'contextid' => \context_module::instance($activity->cmid)->id,
+            'component' => 'mod_h5pactivity',
+            'filearea' => 'package',
+            'itemid' => 0,
+            'filepath' => '/',
+            'filename' => 'dummy.h5p',
+            'addxapistate' => true,
+        ];
+        $h5pgenerator->generate_h5p_data(false, $filerecord);
+
+        // Check the H5P activity exists and the attempt has been created.
+        $this->assertEquals(1, $DB->count_records('h5pactivity'));
+        $this->assertEquals(2, $DB->count_records('grade_items'));
+        $this->assertEquals(2, $DB->count_records('grade_grades'));
+        $this->assertEquals(1, $DB->count_records('xapi_states'));
+
+        // Do backup and restore.
+        $this->setAdminUser();
+        $newcourseid = $this->backup_and_restore($course, 0, null, true);
+
+        // Confirm that values were transferred correctly into H5P activity on new course.
+        $this->assertEquals(2, $DB->count_records('h5pactivity'));
+        $this->assertEquals(4, $DB->count_records('grade_items'));
+        $this->assertEquals(4, $DB->count_records('grade_grades'));
+        $this->assertEquals(2, $DB->count_records('xapi_states'));
+
+        $newactivity = $DB->get_record('h5pactivity', ['course' => $newcourseid]);
+        $cm = get_coursemodule_from_instance('h5pactivity', $newactivity->id);
+        $context = \context_module::instance($cm->id);
+        $this->assertEquals(1, $DB->count_records('xapi_states', ['itemid' => $context->id]));
     }
 }

@@ -14,6 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace core_enrol;
+
+use context_course;
+use course_enrolment_manager;
+use stdClass;
+
 /**
  * Test course_enrolment_manager parts.
  *
@@ -21,23 +27,12 @@
  * @category   test
  * @copyright  2016 Ruslan Kabalin, Lancaster University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers     \course_enrolment_manager
  */
-
-defined('MOODLE_INTERNAL') || die();
-
-
-/**
- * Test course_enrolment_manager parts.
- *
- * @package    core
- * @category   test
- * @copyright  2016 Ruslan Kabalin, Lancaster University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class core_course_enrolment_manager_testcase extends advanced_testcase {
+class course_enrolment_manager_test extends \advanced_testcase {
     /**
-     * The course context used in tests.
-     * @var stdClass
+     * The course used in tests.
+     * @var \stdClass
      */
     private $course = null;
     /**
@@ -54,9 +49,10 @@ class core_course_enrolment_manager_testcase extends advanced_testcase {
     /**
      * Tests set up
      */
-    protected function setUp() {
+    protected function setUp(): void {
         global $CFG;
         require_once($CFG->dirroot . '/enrol/locallib.php');
+        parent::setUp();
         $this->setAdminUser();
 
         $users = array();
@@ -104,12 +100,26 @@ class core_course_enrolment_manager_testcase extends advanced_testcase {
         $this->course = $course;
         $this->users = $users;
         $this->groups = $groups;
+
+        // Make sample users and not enroll to any course.
+        $this->getDataGenerator()->create_user([
+                'username' => 'testapiuser1',
+                'firstname' => 'testapiuser 1'
+        ]);
+        $this->getDataGenerator()->create_user([
+                'username' => 'testapiuser2',
+                'firstname' => 'testapiuser 2'
+        ]);
+        $this->getDataGenerator()->create_user([
+                'username' => 'testapiuser3',
+                'firstname' => 'testapiuser 3'
+        ]);
     }
 
     /**
      * Verify get_total_users() returned number of users expected in every situation.
      */
-    public function test_get_total_users() {
+    public function test_get_total_users(): void {
         global $PAGE;
 
         $this->resetAfterTest();
@@ -163,7 +173,7 @@ class core_course_enrolment_manager_testcase extends advanced_testcase {
     /**
      * Verify get_users() returned number of users expected in every situation.
      */
-    public function test_get_users() {
+    public function test_get_users(): void {
         global $PAGE;
 
         $this->resetAfterTest();
@@ -238,5 +248,401 @@ class core_course_enrolment_manager_testcase extends advanced_testcase {
         $users = $manager->get_users('id');
         $this->assertCount(1, $users, 'Only suspended users must be returned when suspended users filtering is applied.');
         $this->assertArrayHasKey($this->users['user22']->id, $users);
+    }
+
+    /**
+     * Sets up a custom profile field and the showuseridentity option, and creates a test user
+     * with suitable values set.
+     *
+     * @return \stdClass Test user
+     */
+    protected function setup_for_user_identity_tests(): \stdClass {
+        // Configure extra fields to include one normal user field and one profile field, and
+        // set the values for a new test user.
+        $generator = $this->getDataGenerator();
+        $generator->create_custom_profile_field(['datatype' => 'text',
+                'shortname' => 'researchtopic', 'name' => 'Research topic']);
+        set_config('showuseridentity', 'email,department,profile_field_researchtopic');
+        return $generator->create_user(
+                ['username' => 'newuser', 'department' => 'Amphibian studies', 'email' => 'x@x.org',
+                        'profile_field_researchtopic' => 'Frogs', 'imagealt' => 'Smart suit']);
+    }
+
+    /**
+     * Checks that the get_users function returns the correct user fields.
+     */
+    public function test_get_users_fields(): void {
+        global $PAGE;
+
+        $this->resetAfterTest();
+        $newuser = $this->setup_for_user_identity_tests();
+
+        // Enrol the user in test course.
+        $this->getDataGenerator()->enrol_user($newuser->id, $this->course->id, 'student');
+
+        // Get all users and fish out the one we're interested in.
+        $manager = new course_enrolment_manager($PAGE, $this->course);
+        $users = $manager->get_users('id');
+        $user = $users[$newuser->id];
+
+        // Should include core required fields...
+        $this->assertEquals($newuser->id, $user->id);
+
+        // ...And the ones specified in showuseridentity (one of which is also needed for user pics).
+        $this->assertEquals('Amphibian studies', $user->department);
+        $this->assertEquals('Frogs', $user->profile_field_researchtopic);
+        $this->assertEquals('x@x.org', $user->email);
+
+        // And the ones necessary for user pics.
+        $this->assertEquals('Smart suit', $user->imagealt);
+
+        // But not some random other field like city.
+        $this->assertObjectNotHasProperty('city', $user);
+    }
+
+    /**
+     * Checks that the get_other_users function returns the correct user fields.
+     */
+    public function test_get_other_users_fields(): void {
+        global $PAGE, $DB;
+
+        $this->resetAfterTest();
+
+        // Configure extra fields to include one normal user field and one profile field, and
+        // set the values for a new test user.
+        $newuser = $this->setup_for_user_identity_tests();
+        $context = \context_course::instance($this->course->id);
+        role_assign($DB->get_field('role', 'id', ['shortname' => 'manager']), $newuser->id, $context->id);
+
+        // Get the 'other' (role but not enrolled) users and fish out the one we're interested in.
+        $manager = new course_enrolment_manager($PAGE, $this->course);
+        $users = array_values($manager->get_other_users('id'));
+        $user = $users[0];
+
+        // Should include core required fields...
+        $this->assertEquals($newuser->id, $user->id);
+
+        // ...And the ones specified in showuseridentity (one of which is also needed for user pics).
+        $this->assertEquals('Amphibian studies', $user->department);
+        $this->assertEquals('Frogs', $user->profile_field_researchtopic);
+        $this->assertEquals('x@x.org', $user->email);
+
+        // And the ones necessary for user pics.
+        $this->assertEquals('Smart suit', $user->imagealt);
+
+        // But not some random other field like city.
+        $this->assertObjectNotHasProperty('city', $user);
+    }
+
+    /**
+     * Checks that the get_potential_users function returns the correct user fields.
+     */
+    public function test_get_potential_users_fields(): void {
+        global $PAGE;
+
+        $this->resetAfterTest();
+
+        // Configure extra fields to include one normal user field and one profile field, and
+        // set the values for a new test user.
+        $newuser = $this->setup_for_user_identity_tests();
+
+        // Get the 'potential' (not enrolled) users and fish out the one we're interested in.
+        $manager = new course_enrolment_manager($PAGE, $this->course);
+        foreach (enrol_get_instances($this->course->id, true) as $enrolinstance) {
+            if ($enrolinstance->enrol === 'manual') {
+                $enrolid = $enrolinstance->id;
+            }
+        }
+        $users = array_values($manager->get_potential_users($enrolid));
+        $user = $users[0][$newuser->id];
+
+        // Should include core required fields...
+        $this->assertEquals($newuser->id, $user->id);
+
+        // ...And the ones specified in showuseridentity (one of which is also needed for user pics).
+        $this->assertEquals('Amphibian studies', $user->department);
+        $this->assertEquals('Frogs', $user->profile_field_researchtopic);
+        $this->assertEquals('x@x.org', $user->email);
+
+        // And the ones necessary for user pics.
+        $this->assertEquals('Smart suit', $user->imagealt);
+
+        // But not some random other field like city.
+        $this->assertObjectNotHasProperty('city', $user);
+    }
+
+    /**
+     * Test get_potential_users without returnexactcount param.
+     *
+     * @dataProvider search_users_provider
+     *
+     * @param int $perpage Number of users per page.
+     * @param bool $returnexactcount Return the exact count or not.
+     * @param int $expectedusers Expected number of users return.
+     * @param int $expectedtotalusers Expected total of users in database.
+     * @param bool $expectedmoreusers Expected for more users return or not.
+     */
+    public function test_get_potential_users($perpage, $returnexactcount, $expectedusers, $expectedtotalusers, $expectedmoreusers): void {
+        global $DB, $PAGE;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $enrol = $DB->get_record('enrol', array('courseid' => $this->course->id, 'enrol' => 'manual'));
+        $manager = new course_enrolment_manager($PAGE, $this->course);
+        $users = $manager->get_potential_users($enrol->id,
+                'testapiuser',
+                true,
+                0,
+                $perpage,
+                0,
+                $returnexactcount);
+
+        $this->assertCount($expectedusers, $users['users']);
+        $this->assertEquals($expectedmoreusers, $users['moreusers']);
+        if ($returnexactcount) {
+            $this->assertArrayHasKey('totalusers', $users);
+            $this->assertEquals($expectedtotalusers, $users['totalusers']);
+        } else {
+            $this->assertArrayNotHasKey('totalusers', $users);
+        }
+    }
+
+    /**
+     * Tests get_potential_users when the search term includes a custom field.
+     */
+    public function test_get_potential_users_search_fields(): void {
+        global $PAGE;
+
+        $this->resetAfterTest();
+
+        // Configure extra fields to include one normal user field and one profile field, and
+        // set the values for a new test user.
+        $newuser = $this->setup_for_user_identity_tests();
+
+        // Set up the enrolment manager.
+        $manager = new course_enrolment_manager($PAGE, $this->course);
+        foreach (enrol_get_instances($this->course->id, true) as $enrolinstance) {
+            if ($enrolinstance->enrol === 'manual') {
+                $enrolid = $enrolinstance->id;
+            }
+        }
+
+        // Search for text included in a 'standard' (user table) identity field.
+        $users = array_values($manager->get_potential_users($enrolid, 'Amphibian studies'));
+        $this->assertEquals([$newuser->id], array_keys($users[0]));
+
+        // And for text included in a custom field.
+        $users = array_values($manager->get_potential_users($enrolid, 'Frogs'));
+        $this->assertEquals([$newuser->id], array_keys($users[0]));
+
+        // With partial matches.
+        $users = array_values($manager->get_potential_users($enrolid, 'Amphibian'));
+        $this->assertEquals([$newuser->id], array_keys($users[0]));
+        $users = array_values($manager->get_potential_users($enrolid, 'Fro'));
+        $this->assertEquals([$newuser->id], array_keys($users[0]));
+
+        // With partial in-the-middle matches.
+        $users = array_values($manager->get_potential_users($enrolid, 'phibian'));
+        $this->assertEquals([], array_keys($users[0]));
+        $users = array_values($manager->get_potential_users($enrolid, 'rog'));
+        $this->assertEquals([], array_keys($users[0]));
+        $users = array_values($manager->get_potential_users($enrolid, 'phibian', true));
+        $this->assertEquals([$newuser->id], array_keys($users[0]));
+        $users = array_values($manager->get_potential_users($enrolid, 'rog', true));
+        $this->assertEquals([$newuser->id], array_keys($users[0]));
+
+        // If the current user doesn't have access to identity fields then these searches won't work.
+        $this->setUser($this->getDataGenerator()->create_user());
+        $users = array_values($manager->get_potential_users($enrolid, 'Amphibian studies'));
+        $this->assertEquals([], array_keys($users[0]));
+        $users = array_values($manager->get_potential_users($enrolid, 'Frogs'));
+        $this->assertEquals([], array_keys($users[0]));
+
+        // Search for username field (there is special handling for this one field).
+        set_config('showuseridentity', 'username');
+        $this->setAdminUser();
+        $users = array_values($manager->get_potential_users($enrolid, 'newuse'));
+        $this->assertEquals([$newuser->id], array_keys($users[0]));
+    }
+
+    /**
+     * Test search_other_users with returnexactcount param.
+     *
+     * @dataProvider search_users_provider
+     *
+     * @param int $perpage Number of users per page.
+     * @param bool $returnexactcount Return the exact count or not.
+     * @param int $expectedusers Expected number of users return.
+     * @param int $expectedtotalusers Expected total of users in database.
+     * @param bool $expectedmoreusers Expected for more users return or not.
+     */
+    public function test_search_other_users($perpage, $returnexactcount, $expectedusers, $expectedtotalusers, $expectedmoreusers): void {
+        global $PAGE;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $manager = new course_enrolment_manager($PAGE, $this->course);
+        $users = $manager->search_other_users(
+                'testapiuser',
+                true,
+                0,
+                $perpage,
+                $returnexactcount);
+
+        $this->assertCount($expectedusers, $users['users']);
+        $this->assertEquals($expectedmoreusers, $users['moreusers']);
+        if ($returnexactcount) {
+            $this->assertArrayHasKey('totalusers', $users);
+            $this->assertEquals($expectedtotalusers, $users['totalusers']);
+        } else {
+            $this->assertArrayNotHasKey('totalusers', $users);
+        }
+    }
+
+    /**
+     * Test case for test_get_potential_users, test_search_other_users and test_search_users tests.
+     *
+     * @return array Dataset
+     */
+    public static function search_users_provider(): array {
+        return [
+                [2, false, 2, 3, true],
+                [5, false, 3, 3, false],
+                [2, true, 2, 3, true],
+                [5, true, 3, 3, false]
+        ];
+    }
+
+    /**
+     * Test search_users function.
+     *
+     * @dataProvider search_users_provider
+     *
+     * @param int $perpage Number of users per page.
+     * @param bool $returnexactcount Return the exact count or not.
+     * @param int $expectedusers Expected number of users return.
+     * @param int $expectedtotalusers Expected total of users in database.
+     * @param bool $expectedmoreusers Expected for more users return or not.
+     */
+    public function test_search_users($perpage, $returnexactcount, $expectedusers, $expectedtotalusers, $expectedmoreusers): void {
+        global $PAGE;
+        $this->resetAfterTest();
+
+        $this->getDataGenerator()->create_and_enrol($this->course, 'student', ['firstname' => 'sutest 1']);
+        $this->getDataGenerator()->create_and_enrol($this->course, 'student', ['firstname' => 'sutest 2']);
+        $this->getDataGenerator()->create_and_enrol($this->course, 'student', ['firstname' => 'sutest 3']);
+
+        $manager = new course_enrolment_manager($PAGE, $this->course);
+        $users = $manager->search_users(
+            'sutest',
+            true,
+            0,
+            $perpage,
+            $returnexactcount
+        );
+
+        $this->assertCount($expectedusers, $users['users']);
+        $this->assertEquals($expectedmoreusers, $users['moreusers']);
+        if ($returnexactcount) {
+            $this->assertArrayHasKey('totalusers', $users);
+            $this->assertEquals($expectedtotalusers, $users['totalusers']);
+        } else {
+            $this->assertArrayNotHasKey('totalusers', $users);
+        }
+    }
+
+    /**
+     * Test that search_users observes course group mode restrictions correctly
+     */
+    public function test_search_users_course_groupmode(): void {
+        global $DB, $PAGE;
+
+        $this->resetAfterTest();
+
+        // Create the forum.
+        $record = new stdClass();
+        $record->introformat = FORMAT_HTML;
+        $record->course = $this->course->id;
+        $forum = self::getDataGenerator()->create_module('forum', $record, ['groupmode' => SEPARATEGROUPS]);
+        $contextid = $DB->get_field('context', 'id', ['instanceid' => $forum->cmid, 'contextlevel' => CONTEXT_MODULE]);
+
+        $teacher = $this->getDataGenerator()->create_and_enrol($this->course, 'teacher');
+        $this->getDataGenerator()->create_group_member(['groupid' => $this->groups['group1']->id, 'userid' => $teacher->id]);
+        $this->setUser($teacher);
+
+        $courseusers = (new course_enrolment_manager($PAGE, $this->course))->search_users('', false, 0, 25, true);
+        $this->assertEqualsCanonicalizing([
+            $teacher->username,
+            $this->users['user0']->username,
+            $this->users['user1']->username,
+            $this->users['user21']->username,
+            $this->users['user22']->username,
+            $this->users['userall']->username,
+            $this->users['usertch']->username,
+        ], array_column($courseusers['users'], 'username'));
+        $this->assertEquals(7, $courseusers['totalusers']);
+
+        $forumusers = (new course_enrolment_manager($PAGE, $this->course))->search_users('', false, 0, 25, true, $contextid);
+        $this->assertEqualsCanonicalizing([
+            $teacher->username,
+            $this->users['user1']->username,
+            $this->users['userall']->username,
+        ], array_column($forumusers['users'], 'username'));
+        $this->assertEquals(3, $forumusers['totalusers']);
+
+        // Switch course to separate groups and forum to no group.
+        $this->course->groupmode = SEPARATEGROUPS;
+        update_course($this->course);
+        set_coursemodule_groupmode($forum->cmid, NOGROUPS);
+
+        $courseusers = (new course_enrolment_manager($PAGE, $this->course))->search_users('', false, 0, 25, true);
+        $this->assertEqualsCanonicalizing([
+            $teacher->username,
+            $this->users['user1']->username,
+            $this->users['userall']->username,
+        ], array_column($courseusers['users'], 'username'));
+        $this->assertEquals(3, $courseusers['totalusers']);
+
+        $forumusers = (new course_enrolment_manager($PAGE, $this->course))->search_users('', false, 0, 25, true, $contextid);
+        $this->assertEqualsCanonicalizing([
+            $teacher->username,
+            $this->users['user0']->username,
+            $this->users['user1']->username,
+            $this->users['user21']->username,
+            $this->users['user22']->username,
+            $this->users['userall']->username,
+            $this->users['usertch']->username,
+        ], array_column($forumusers['users'], 'username'));
+        $this->assertEquals(7, $forumusers['totalusers']);
+
+        set_coursemodule_groupmode($forum->cmid, SEPARATEGROUPS);
+
+        // Allow teacher to access all groups.
+        $roleid = $DB->get_field('role', 'id', ['shortname' => 'teacher']);
+        assign_capability('moodle/site:accessallgroups', CAP_ALLOW, $roleid, context_course::instance($this->course->id)->id);
+
+        $courseusers = (new course_enrolment_manager($PAGE, $this->course))->search_users('', false, 0, 25, true);
+        $this->assertEqualsCanonicalizing([
+            $teacher->username,
+            $this->users['user0']->username,
+            $this->users['user1']->username,
+            $this->users['user21']->username,
+            $this->users['user22']->username,
+            $this->users['userall']->username,
+            $this->users['usertch']->username,
+        ], array_column($courseusers['users'], 'username'));
+        $this->assertEquals(7, $courseusers['totalusers']);
+
+        $forumusers = (new course_enrolment_manager($PAGE, $this->course))->search_users('', false, 0, 25, true, $contextid);
+        $this->assertEqualsCanonicalizing([
+            $teacher->username,
+            $this->users['user0']->username,
+            $this->users['user1']->username,
+            $this->users['user21']->username,
+            $this->users['user22']->username,
+            $this->users['userall']->username,
+            $this->users['usertch']->username,
+        ], array_column($forumusers['users'], 'username'));
+        $this->assertEquals(7, $forumusers['totalusers']);
     }
 }

@@ -57,6 +57,8 @@ class qformat_blackboard_six extends qformat_blackboard_six_base {
     const FILETYPE_QTI = 1;
     /** @var int Blackboard question pool files were previously handled by the blackboard plugin. */
     const FILETYPE_POOL = 2;
+    /** @var string temporary directory/folder.  */
+    public $temp_dir;
 
     /**
      * Return the content of a file given by its path in the tempdir directory.
@@ -65,7 +67,7 @@ class qformat_blackboard_six extends qformat_blackboard_six_base {
      * @return mixed contents array or false on failure
      */
     public function get_filecontent($path) {
-        $fullpath = $this->tempdir . '/' . $path;
+        $fullpath = $this->tempdir . '/' . clean_param($path, PARAM_PATH);
         if (is_file($fullpath) && is_readable($fullpath)) {
             return file_get_contents($fullpath);
         }
@@ -152,7 +154,7 @@ class qformat_blackboard_six extends qformat_blackboard_six_base {
                     }
                     if ($examfile->getAttribute('type') == 'assessment/x-bb-pool') {
                         if ($examfile->getAttribute('baseurl')) {
-                            $fileobj->filebase = $this->tempdir. '/' . $examfile->getAttribute('baseurl');
+                            $fileobj->filebase = $this->tempdir. '/' . clean_param($examfile->getAttribute('baseurl'), PARAM_PATH);
                         }
                         if ($content = $this->get_filecontent($examfile->getAttribute('file'))) {
                             $fileobj->filetype = self::FILETYPE_POOL;

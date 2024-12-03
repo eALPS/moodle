@@ -18,8 +18,6 @@ require_once(__DIR__ . '/../config.php');
 require_once($CFG->dirroot . '/repository/lib.php');
 require_once($CFG->libdir . '/adminlib.php');
 
-require_sesskey();
-
 // id of repository
 $edit    = optional_param('edit', 0, PARAM_INT);
 $new     = optional_param('new', '', PARAM_PLUGIN);
@@ -42,14 +40,9 @@ if ($edit){
 }
 
 admin_externalpage_setup($pagename, '', null, new moodle_url('/admin/repositoryinstance.php'));
-require_capability('moodle/site:config', $context);
 
-$baseurl = new moodle_url("/$CFG->admin/repositoryinstance.php", array('sesskey'=>sesskey()));
-
-$parenturl = new moodle_url("/$CFG->admin/repository.php", array(
-    'sesskey'=>sesskey(),
-    'action'=>'edit',
-));
+// The URL used for redirection, and that all edit related URLs will be based off.
+$parenturl = new moodle_url('/admin/repository.php', ['action' => 'edit']);
 
 if ($new) {
     $parenturl->param('repos', $new);
@@ -105,7 +98,7 @@ if (!empty($edit) || !empty($new)) {
             core_plugin_manager::reset_caches();
             redirect($parenturl);
         } else {
-            print_error('instancenotsaved', 'repository', $parenturl);
+            throw new \moodle_exception('instancenotsaved', 'repository', $parenturl);
         }
         exit;
     } else {
@@ -117,6 +110,7 @@ if (!empty($edit) || !empty($new)) {
         $return = false;
     }
 } else if (!empty($hide)) {
+    require_sesskey();
     $instance = repository::get_type_by_typename($hide);
     $instance->hide();
     core_plugin_manager::reset_caches();
@@ -130,26 +124,30 @@ if (!empty($edit) || !empty($new)) {
         throw new repository_exception('nopermissiontoaccess', 'repository');
     }
     if ($sure) {
+        require_sesskey();
         if ($instance->delete($downloadcontents)) {
             $deletedstr = get_string('instancedeleted', 'repository');
             core_plugin_manager::reset_caches();
             redirect($parenturl, $deletedstr, 3);
         } else {
-            print_error('instancenotdeleted', 'repository', $parenturl);
+            throw new \moodle_exception('instancenotdeleted', 'repository', $parenturl);
         }
         exit;
     }
 
     echo $OUTPUT->header();
     echo $OUTPUT->box_start('generalbox', 'notice');
-    $continueurl = new moodle_url($baseurl, array(
+
+    $continueurl = new moodle_url($PAGE->url, [
         'type' => $type,
         'delete' => $delete,
         'sure' => 'yes',
-    ));
+    ]);
+
     $continueanddownloadurl = new moodle_url($continueurl, array(
         'downloadcontents' => 1
     ));
+
     $message = get_string('confirmdelete', 'repository', $instance->name);
     echo html_writer::tag('p', $message);
 

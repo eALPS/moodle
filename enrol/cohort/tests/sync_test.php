@@ -14,14 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Cohort enrolment sync functional test.
- *
- * @package    enrol_cohort
- * @category   phpunit
- * @copyright  2012 Petr Skoda {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace enrol_cohort;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -30,7 +23,15 @@ require_once($CFG->dirroot.'/enrol/cohort/locallib.php');
 require_once($CFG->dirroot.'/cohort/lib.php');
 require_once($CFG->dirroot.'/group/lib.php');
 
-class enrol_cohort_testcase extends advanced_testcase {
+/**
+ * Cohort enrolment sync functional test.
+ *
+ * @package    enrol_cohort
+ * @category   test
+ * @copyright  2012 Petr Skoda {@link http://skodak.org}
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class sync_test extends \advanced_testcase {
 
     protected function enable_plugin() {
         $enabled = enrol_get_plugins(true);
@@ -46,11 +47,11 @@ class enrol_cohort_testcase extends advanced_testcase {
         set_config('enrol_plugins_enabled', implode(',', $enabled));
     }
 
-    public function test_handler_sync() {
+    public function test_handler_sync(): void {
         global $DB;
 
         $this->resetAfterTest();
-        $trace = new null_progress_trace();
+        $trace = new \null_progress_trace();
 
         // Setup a few courses and categories.
 
@@ -77,10 +78,12 @@ class enrol_cohort_testcase extends advanced_testcase {
         $user2 = $this->getDataGenerator()->create_user();
         $user3 = $this->getDataGenerator()->create_user();
         $user4 = $this->getDataGenerator()->create_user();
+        $user5 = $this->getDataGenerator()->create_user();
 
-        $cohort1 = $this->getDataGenerator()->create_cohort(array('contextid'=>context_coursecat::instance($cat1->id)->id));
-        $cohort2 = $this->getDataGenerator()->create_cohort(array('contextid'=>context_coursecat::instance($cat2->id)->id));
+        $cohort1 = $this->getDataGenerator()->create_cohort(array('contextid'=>\context_coursecat::instance($cat1->id)->id));
+        $cohort2 = $this->getDataGenerator()->create_cohort(array('contextid'=>\context_coursecat::instance($cat2->id)->id));
         $cohort3 = $this->getDataGenerator()->create_cohort();
+        $cohort4 = $this->getDataGenerator()->create_cohort();
 
         $this->enable_plugin();
 
@@ -102,6 +105,9 @@ class enrol_cohort_testcase extends advanced_testcase {
         $id = $cohortplugin->add_instance($course2, array('customint1' => $cohort2->id, 'roleid' => $studentrole->id, 'status' => ENROL_INSTANCE_DISABLED));
         $cohortinstance4 = $DB->get_record('enrol', array('id' => $id));
 
+        $id = $cohortplugin->add_instance($course3, array('customint1' => $cohort4->id, 'roleid' => $studentrole->id));
+        $cohortinstance5 = $DB->get_record('enrol', array('id' => $id));
+
         // Test cohort member add event.
 
         cohort_add_member($cohort1->id, $user1->id);
@@ -112,9 +118,9 @@ class enrol_cohort_testcase extends advanced_testcase {
         $this->assertTrue($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance1->id, 'userid'=>$user2->id)));
         $this->assertTrue($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance1->id, 'userid'=>$user4->id)));
         $this->assertEquals(5, $DB->count_records('role_assignments', array()));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user1->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user2->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user4->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user1->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user2->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user4->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
 
         cohort_add_member($cohort2->id, $user3->id);
         $this->assertEquals(7, $DB->count_records('user_enrolments', array()));
@@ -122,12 +128,13 @@ class enrol_cohort_testcase extends advanced_testcase {
         $this->assertTrue($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance3->id, 'userid'=>$user3->id)));
         $this->assertFalse($DB->record_exists('user_enrolments', array('enrolid' => $cohortinstance4->id, 'userid' => $user3->id)));
         $this->assertEquals(7, $DB->count_records('role_assignments', array()));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course2->id)->id, 'userid'=>$user3->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance3->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course2->id)->id, 'userid'=>$user3->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance3->id)));
 
         cohort_add_member($cohort3->id, $user3->id);
-        $this->assertEquals(7, $DB->count_records('user_enrolments', array()));
-        $this->assertEquals(7, $DB->count_records('role_assignments', array()));
+        cohort_add_member($cohort4->id, $user5->id);
+        $this->assertEquals(8, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(8, $DB->count_records('role_assignments', array()));
 
         // Test cohort remove action.
 
@@ -136,35 +143,76 @@ class enrol_cohort_testcase extends advanced_testcase {
 
         cohort_remove_member($cohort1->id, $user2->id);
         cohort_remove_member($cohort1->id, $user4->id);
-        $this->assertEquals(7, $DB->count_records('user_enrolments', array()));
-        $this->assertEquals(5, $DB->count_records('role_assignments', array()));
-        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user2->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
-        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user4->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertEquals(8, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(6, $DB->count_records('role_assignments', array()));
+        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user2->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user4->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertEquals(ENROL_USER_SUSPENDED, $DB->get_field('user_enrolments', 'status',
+            array('userid' => $user2->id, 'enrolid' => $cohortinstance1->id)));
+        $this->assertEquals(ENROL_USER_SUSPENDED, $DB->get_field('user_enrolments', 'status',
+            array('userid' => $user4->id, 'enrolid' => $cohortinstance1->id)));
 
         cohort_add_member($cohort1->id, $user2->id);
         cohort_add_member($cohort1->id, $user4->id);
-        $this->assertEquals(7, $DB->count_records('user_enrolments', array()));
-        $this->assertEquals(7, $DB->count_records('role_assignments', array()));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user2->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user4->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertEquals(8, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(8, $DB->count_records('role_assignments', array()));
+        $this->assertTrue($DB->record_exists('role_assignments', array(
+            'contextid' => \context_course::instance($course1->id)->id,
+            'userid' => $user2->id, 'roleid' => $studentrole->id,
+            'component' => 'enrol_cohort', 'itemid' => $cohortinstance1->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array(
+            'contextid' => \context_course::instance($course1->id)->id,
+            'userid' => $user4->id, 'roleid' => $studentrole->id,
+            'component' => 'enrol_cohort', 'itemid' => $cohortinstance1->id)));
+
+        $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_SUSPEND);
+        cohort_remove_member($cohort1->id, $user2->id);
+        cohort_remove_member($cohort1->id, $user4->id);
+        $this->assertEquals(8, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(8, $DB->count_records('role_assignments', array()));
+        $this->assertTrue($DB->record_exists('role_assignments', array(
+            'contextid' => \context_course::instance($course1->id)->id,
+            'userid' => $user2->id, 'roleid' => $studentrole->id,
+            'component' => 'enrol_cohort', 'itemid' => $cohortinstance1->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array(
+            'contextid' => \context_course::instance($course1->id)->id,
+            'userid' => $user4->id, 'roleid' => $studentrole->id,
+            'component' => 'enrol_cohort', 'itemid' => $cohortinstance1->id)));
+        $this->assertEquals(ENROL_USER_SUSPENDED, $DB->get_field('user_enrolments', 'status',
+            array('userid' => $user2->id, 'enrolid' => $cohortinstance1->id)));
+        $this->assertEquals(ENROL_USER_SUSPENDED, $DB->get_field('user_enrolments', 'status',
+            array('userid' => $user4->id, 'enrolid' => $cohortinstance1->id)));
+
+        cohort_add_member($cohort1->id, $user2->id);
+        cohort_add_member($cohort1->id, $user4->id);
+        $this->assertEquals(8, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(8, $DB->count_records('role_assignments', array()));
+        $this->assertTrue($DB->record_exists('role_assignments', array(
+            'contextid' => \context_course::instance($course1->id)->id,
+            'userid' => $user2->id, 'roleid' => $studentrole->id,
+            'component' => 'enrol_cohort', 'itemid' => $cohortinstance1->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array(
+            'contextid' => \context_course::instance($course1->id)->id,
+            'userid' => $user4->id, 'roleid' => $studentrole->id,
+            'component' => 'enrol_cohort', 'itemid' => $cohortinstance1->id)));
 
         $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_UNENROL);
         cohort_remove_member($cohort1->id, $user2->id);
         cohort_remove_member($cohort1->id, $user4->id);
-        $this->assertEquals(5, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(6, $DB->count_records('user_enrolments', array()));
         $this->assertFalse($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance1->id, 'userid'=>$user2->id)));
         $this->assertFalse($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance1->id, 'userid'=>$user4->id)));
-        $this->assertEquals(5, $DB->count_records('role_assignments', array()));
-        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user2->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
-        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user4->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertEquals(6, $DB->count_records('role_assignments', array()));
+        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user2->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user4->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
 
         cohort_remove_member($cohort2->id, $user3->id);
-        $this->assertEquals(3, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(4, $DB->count_records('user_enrolments', array()));
         $this->assertFalse($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance2->id, 'userid'=>$user3->id)));
         $this->assertFalse($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance3->id, 'userid'=>$user3->id)));
-        $this->assertEquals(3, $DB->count_records('role_assignments', array()));
-        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
-        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course2->id)->id, 'userid'=>$user3->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance3->id)));
+        $this->assertEquals(4, $DB->count_records('role_assignments', array()));
+        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
+        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course2->id)->id, 'userid'=>$user3->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance3->id)));
 
 
         // Test cohort deleting.
@@ -172,13 +220,20 @@ class enrol_cohort_testcase extends advanced_testcase {
         cohort_add_member($cohort1->id, $user2->id);
         cohort_add_member($cohort1->id, $user4->id);
         cohort_add_member($cohort2->id, $user3->id);
-        $this->assertEquals(7, $DB->count_records('user_enrolments', array()));
-        $this->assertEquals(7, $DB->count_records('role_assignments', array()));
+        $this->assertEquals(8, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(8, $DB->count_records('role_assignments', array()));
+
+        $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_SUSPEND);
+        cohort_delete_cohort($cohort4);
+        $this->assertEquals(8, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(8, $DB->count_records('role_assignments', array()));
+        $cohortinstance5 = $DB->get_record('enrol', array('id' => $cohortinstance5->id), '*', MUST_EXIST);
+        $this->assertEquals(ENROL_INSTANCE_DISABLED, $cohortinstance5->status);
 
         $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_SUSPENDNOROLES);
         cohort_delete_cohort($cohort2);
-        $this->assertEquals(7, $DB->count_records('user_enrolments', array()));
-        $this->assertEquals(5, $DB->count_records('role_assignments', array()));
+        $this->assertEquals(8, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(6, $DB->count_records('role_assignments', array()));
 
         $cohortinstance2 = $DB->get_record('enrol', array('id'=>$cohortinstance2->id), '*', MUST_EXIST);
         $cohortinstance3 = $DB->get_record('enrol', array('id'=>$cohortinstance3->id), '*', MUST_EXIST);
@@ -190,14 +245,14 @@ class enrol_cohort_testcase extends advanced_testcase {
 
         $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_UNENROL);
         cohort_delete_cohort($cohort1);
-        $this->assertEquals(4, $DB->count_records('user_enrolments', array()));
-        $this->assertEquals(2, $DB->count_records('role_assignments', array()));
+        $this->assertEquals(5, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(3, $DB->count_records('role_assignments', array()));
         $this->assertFalse($DB->record_exists('enrol', array('id'=>$cohortinstance1->id)));
         $this->assertFalse($DB->record_exists('role_assignments', array('component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
 
         // Cleanup after previous test (remove the extra user_enrolment).
         enrol_cohort_sync($trace, $course1->id);
-        $this->assertEquals(3, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(4, $DB->count_records('user_enrolments', array()));
 
         // Test group sync.
 
@@ -206,14 +261,14 @@ class enrol_cohort_testcase extends advanced_testcase {
         $id = groups_create_group((object)array('name'=>'Group 2', 'courseid'=>$course1->id));
         $group2 = $DB->get_record('groups', array('id'=>$id), '*', MUST_EXIST);
 
-        $cohort1 = $this->getDataGenerator()->create_cohort(array('contextid'=>context_coursecat::instance($cat1->id)->id));
+        $cohort1 = $this->getDataGenerator()->create_cohort(array('contextid'=>\context_coursecat::instance($cat1->id)->id));
         $id = $cohortplugin->add_instance($course1, array('customint1'=>$cohort1->id, 'roleid'=>$studentrole->id, 'customint2'=>$group1->id));
         $cohortinstance1 = $DB->get_record('enrol', array('id'=>$id));
 
-        $this->assertEquals(3, $DB->count_records('user_enrolments', array()));
-        $this->assertEquals(2, $DB->count_records('role_assignments', array()));
+        $this->assertEquals(4, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(3, $DB->count_records('role_assignments', array()));
 
-        $this->assertTrue(is_enrolled(context_course::instance($course1->id), $user4));
+        $this->assertTrue(is_enrolled(\context_course::instance($course1->id), $user4));
         $this->assertTrue(groups_add_member($group1, $user4));
         $this->assertTrue(groups_add_member($group2, $user4));
 
@@ -241,6 +296,11 @@ class enrol_cohort_testcase extends advanced_testcase {
         cohort_remove_member($cohort1->id, $user1->id);
         $this->assertTrue(groups_is_member($group1->id, $user1->id));
 
+        $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_SUSPEND);
+        cohort_add_member($cohort1->id, $user1->id);
+
+        cohort_remove_member($cohort1->id, $user1->id);
+        $this->assertTrue(groups_is_member($group1->id, $user1->id));
 
         // Test deleting of instances.
 
@@ -248,26 +308,26 @@ class enrol_cohort_testcase extends advanced_testcase {
         cohort_add_member($cohort1->id, $user2->id);
         cohort_add_member($cohort1->id, $user3->id);
 
-        $this->assertEquals(6, $DB->count_records('user_enrolments', array()));
-        $this->assertEquals(5, $DB->count_records('role_assignments', array()));
+        $this->assertEquals(7, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(6, $DB->count_records('role_assignments', array()));
         $this->assertEquals(3, $DB->count_records('role_assignments', array('component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
         $this->assertEquals(5, $DB->count_records('groups_members', array()));
         $this->assertEquals(3, $DB->count_records('groups_members', array('component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
 
         $cohortplugin->delete_instance($cohortinstance1);
 
-        $this->assertEquals(3, $DB->count_records('user_enrolments', array()));
-        $this->assertEquals(2, $DB->count_records('role_assignments', array()));
+        $this->assertEquals(4, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(3, $DB->count_records('role_assignments', array()));
         $this->assertEquals(0, $DB->count_records('role_assignments', array('component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
         $this->assertEquals(2, $DB->count_records('groups_members', array()));
         $this->assertEquals(0, $DB->count_records('groups_members', array('component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
     }
 
-    public function test_sync_course() {
+    public function test_sync_course(): void {
         global $DB;
         $this->resetAfterTest();
 
-        $trace = new null_progress_trace();
+        $trace = new \null_progress_trace();
 
         // Setup a few courses and categories.
 
@@ -294,10 +354,12 @@ class enrol_cohort_testcase extends advanced_testcase {
         $user2 = $this->getDataGenerator()->create_user();
         $user3 = $this->getDataGenerator()->create_user();
         $user4 = $this->getDataGenerator()->create_user();
+        $user5 = $this->getDataGenerator()->create_user();
 
-        $cohort1 = $this->getDataGenerator()->create_cohort(array('contextid'=>context_coursecat::instance($cat1->id)->id));
-        $cohort2 = $this->getDataGenerator()->create_cohort(array('contextid'=>context_coursecat::instance($cat2->id)->id));
+        $cohort1 = $this->getDataGenerator()->create_cohort(array('contextid'=>\context_coursecat::instance($cat1->id)->id));
+        $cohort2 = $this->getDataGenerator()->create_cohort(array('contextid'=>\context_coursecat::instance($cat2->id)->id));
         $cohort3 = $this->getDataGenerator()->create_cohort();
+        $cohort4 = $this->getDataGenerator()->create_cohort();
 
         $this->disable_plugin(); // Prevents event sync.
 
@@ -319,11 +381,15 @@ class enrol_cohort_testcase extends advanced_testcase {
         $id = $cohortplugin->add_instance($course2, array('customint1' => $cohort2->id, 'roleid' => $studentrole->id, 'status' => ENROL_INSTANCE_DISABLED));
         $cohortinstance4 = $DB->get_record('enrol', array('id' => $id));
 
+        $id = $cohortplugin->add_instance($course3, array('customint1' => $cohort4->id, 'roleid' => $studentrole->id));
+        $cohortinstance5 = $DB->get_record('enrol', array('id' => $id));
+
         cohort_add_member($cohort1->id, $user1->id);
         cohort_add_member($cohort1->id, $user2->id);
         cohort_add_member($cohort1->id, $user4->id);
         cohort_add_member($cohort2->id, $user3->id);
         cohort_add_member($cohort3->id, $user3->id);
+        cohort_add_member($cohort4->id, $user5->id);
 
         $this->assertEquals(2, $DB->count_records('role_assignments', array()));
         $this->assertEquals(2, $DB->count_records('user_enrolments', array()));
@@ -351,17 +417,29 @@ class enrol_cohort_testcase extends advanced_testcase {
         $this->assertTrue($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance2->id, 'userid'=>$user3->id)));
         $this->assertFalse($DB->record_exists('user_enrolments', array('enrolid' => $cohortinstance4->id, 'userid' => $user3->id)));
         $this->assertEquals(7, $DB->count_records('role_assignments', array()));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user1->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user2->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user4->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user1->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user2->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user4->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
 
+        $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_SUSPEND);
+        // Use low level DB api to prevent events!
+        $DB->delete_records('cohort_members', array('cohortid' => $cohort2->id, 'userid' => $user3->id));
+        enrol_cohort_sync($trace, $course1->id);
+        $this->assertEquals(7, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(7, $DB->count_records('role_assignments', array()));
+        $this->assertTrue($DB->record_exists('role_assignments', array(
+            'contextid' => \context_course::instance($course1->id)->id,
+            'userid' => $user3->id, 'roleid' => $teacherrole->id,
+            'component' => 'enrol_cohort', 'itemid' => $cohortinstance2->id)));
+
+        cohort_add_member($cohort2->id, $user3->id);
         $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_SUSPENDNOROLES);
         $DB->delete_records('cohort_members', array('cohortid'=>$cohort2->id, 'userid'=>$user3->id)); // Use low level DB api to prevent events!
         enrol_cohort_sync($trace, $course1->id);
         $this->assertEquals(7, $DB->count_records('user_enrolments', array()));
         $this->assertEquals(6, $DB->count_records('role_assignments', array()));
-        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
+        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
 
         $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_UNENROL);
         $DB->delete_records('cohort_members', array('cohortid'=>$cohort1->id, 'userid'=>$user1->id)); // Use low level DB api to prevent events!
@@ -370,8 +448,15 @@ class enrol_cohort_testcase extends advanced_testcase {
         $this->assertFalse($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance2->id, 'userid'=>$user3->id)));
         $this->assertFalse($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance1->id, 'userid'=>$user1->id)));
         $this->assertEquals(5, $DB->count_records('role_assignments', array()));
-        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
-        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user1->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
+        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user1->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+
+        $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_SUSPEND);
+        $DB->delete_records('cohort_members', array('cohortid' => $cohort4->id));
+        $DB->delete_records('cohort', array('id' => $cohort4->id));
+        enrol_cohort_sync($trace, $course3->id);
+        $this->assertEquals(5, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(5, $DB->count_records('role_assignments', array()));
 
         $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_SUSPENDNOROLES);
         $DB->delete_records('cohort_members', array('cohortid'=>$cohort1->id)); // Use low level DB api to prevent events!
@@ -399,11 +484,11 @@ class enrol_cohort_testcase extends advanced_testcase {
         $id = groups_create_group((object)array('name'=>'Group 2', 'courseid'=>$course1->id));
         $group2 = $DB->get_record('groups', array('id'=>$id), '*', MUST_EXIST);
 
-        $cohort1 = $this->getDataGenerator()->create_cohort(array('contextid'=>context_coursecat::instance($cat1->id)->id));
+        $cohort1 = $this->getDataGenerator()->create_cohort(array('contextid'=>\context_coursecat::instance($cat1->id)->id));
         $id = $cohortplugin->add_instance($course1, array('customint1'=>$cohort1->id, 'roleid'=>$studentrole->id, 'customint2'=>$group1->id));
         $cohortinstance1 = $DB->get_record('enrol', array('id'=>$id));
 
-        $this->assertTrue(is_enrolled(context_course::instance($course1->id), $user4));
+        $this->assertTrue(is_enrolled(\context_course::instance($course1->id), $user4));
         $this->assertTrue(groups_add_member($group1, $user4));
         $this->assertTrue(groups_add_member($group2, $user4));
 
@@ -450,12 +535,12 @@ class enrol_cohort_testcase extends advanced_testcase {
         $this->assertTrue(groups_is_member($group2->id, $user4->id));
     }
 
-    public function test_sync_all_courses() {
+    public function test_sync_all_courses(): void {
         global $DB;
 
         $this->resetAfterTest();
 
-        $trace = new null_progress_trace();
+        $trace = new \null_progress_trace();
 
         // Setup a few courses and categories.
 
@@ -482,10 +567,12 @@ class enrol_cohort_testcase extends advanced_testcase {
         $user2 = $this->getDataGenerator()->create_user();
         $user3 = $this->getDataGenerator()->create_user();
         $user4 = $this->getDataGenerator()->create_user();
+        $user5 = $this->getDataGenerator()->create_user();
 
-        $cohort1 = $this->getDataGenerator()->create_cohort(array('contextid'=>context_coursecat::instance($cat1->id)->id));
-        $cohort2 = $this->getDataGenerator()->create_cohort(array('contextid'=>context_coursecat::instance($cat2->id)->id));
+        $cohort1 = $this->getDataGenerator()->create_cohort(array('contextid'=>\context_coursecat::instance($cat1->id)->id));
+        $cohort2 = $this->getDataGenerator()->create_cohort(array('contextid'=>\context_coursecat::instance($cat2->id)->id));
         $cohort3 = $this->getDataGenerator()->create_cohort();
+        $cohort4 = $this->getDataGenerator()->create_cohort();
 
         $this->disable_plugin(); // Prevents event sync.
 
@@ -504,11 +591,15 @@ class enrol_cohort_testcase extends advanced_testcase {
         $id = $cohortplugin->add_instance($course2, array('customint1'=>$cohort2->id, 'roleid'=>$studentrole->id));
         $cohortinstance3 = $DB->get_record('enrol', array('id'=>$id));
 
+        $id = $cohortplugin->add_instance($course3, array('customint1' => $cohort4->id, 'roleid' => $studentrole->id));
+        $cohortinstance4 = $DB->get_record('enrol', array('id' => $id));
+
         cohort_add_member($cohort1->id, $user1->id);
         cohort_add_member($cohort1->id, $user2->id);
         cohort_add_member($cohort1->id, $user4->id);
         cohort_add_member($cohort2->id, $user3->id);
         cohort_add_member($cohort3->id, $user3->id);
+        cohort_add_member($cohort4->id, $user5->id);
 
         $this->assertEquals(2, $DB->count_records('role_assignments', array()));
         $this->assertEquals(2, $DB->count_records('user_enrolments', array()));
@@ -523,45 +614,64 @@ class enrol_cohort_testcase extends advanced_testcase {
 
         $this->enable_plugin();
         enrol_cohort_sync($trace, null);
-        $this->assertEquals(7, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(8, $DB->count_records('user_enrolments', array()));
         $this->assertTrue($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance1->id, 'userid'=>$user1->id)));
         $this->assertTrue($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance1->id, 'userid'=>$user2->id)));
         $this->assertTrue($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance1->id, 'userid'=>$user4->id)));
         $this->assertTrue($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance2->id, 'userid'=>$user3->id)));
-        $this->assertEquals(7, $DB->count_records('role_assignments', array()));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user1->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user2->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user4->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
-        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
+        $this->assertEquals(8, $DB->count_records('role_assignments', array()));
+        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user1->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user2->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user4->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertTrue($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
+
+        $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_SUSPEND);
+        $DB->delete_records('cohort_members', array('cohortid' => $cohort2->id, 'userid' => $user3->id));
+        enrol_cohort_sync($trace, $course1->id);
+        $this->assertEquals(8, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(8, $DB->count_records('role_assignments', array()));
+        $this->assertTrue($DB->record_exists('role_assignments', array(
+            'contextid' => \context_course::instance($course1->id)->id,
+            'userid' => $user3->id, 'roleid' => $teacherrole->id,
+            'component' => 'enrol_cohort', 'itemid' => $cohortinstance2->id)));
+
+        cohort_add_member($cohort2->id, $user3->id);
 
         $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_SUSPENDNOROLES);
         $DB->delete_records('cohort_members', array('cohortid'=>$cohort2->id, 'userid'=>$user3->id)); // Use low level DB api to prevent events!
         enrol_cohort_sync($trace, $course1->id);
-        $this->assertEquals(7, $DB->count_records('user_enrolments', array()));
-        $this->assertEquals(6, $DB->count_records('role_assignments', array()));
-        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
+        $this->assertEquals(8, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(7, $DB->count_records('role_assignments', array()));
+        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
 
         $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_UNENROL);
         $DB->delete_records('cohort_members', array('cohortid'=>$cohort1->id, 'userid'=>$user1->id)); // Use low level DB api to prevent events!
         enrol_cohort_sync($trace, $course1->id);
-        $this->assertEquals(5, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(6, $DB->count_records('user_enrolments', array()));
         $this->assertFalse($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance2->id, 'userid'=>$user3->id)));
         $this->assertFalse($DB->record_exists('user_enrolments', array('enrolid'=>$cohortinstance1->id, 'userid'=>$user1->id)));
-        $this->assertEquals(5, $DB->count_records('role_assignments', array()));
-        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
-        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>context_course::instance($course1->id)->id, 'userid'=>$user1->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+        $this->assertEquals(6, $DB->count_records('role_assignments', array()));
+        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user3->id, 'roleid'=>$teacherrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance2->id)));
+        $this->assertFalse($DB->record_exists('role_assignments', array('contextid'=>\context_course::instance($course1->id)->id, 'userid'=>$user1->id, 'roleid'=>$studentrole->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
+
+        $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_SUSPEND);
+        $DB->delete_records('cohort_members', array('cohortid' => $cohort4->id)); // Use low level DB api to prevent events!
+        $DB->delete_records('cohort', array('id' => $cohort4->id)); // Use low level DB api to prevent events!
+        enrol_cohort_sync($trace, $course3->id);
+        $this->assertEquals(6, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(6, $DB->count_records('role_assignments', array()));
 
         $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_SUSPENDNOROLES);
-        $DB->delete_records('cohort_members', array('cohortid'=>$cohort1->id)); // Use low level DB api to prevent events!
-        $DB->delete_records('cohort', array('id'=>$cohort1->id)); // Use low level DB api to prevent events!
+        $DB->delete_records('cohort_members', array('cohortid' => $cohort1->id)); // Use low level DB api to prevent events!
+        $DB->delete_records('cohort', array('id' => $cohort1->id)); // Use low level DB api to prevent events!
         enrol_cohort_sync($trace, $course1->id);
-        $this->assertEquals(5, $DB->count_records('user_enrolments', array()));
-        $this->assertEquals(3, $DB->count_records('role_assignments', array()));
+        $this->assertEquals(6, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(4, $DB->count_records('role_assignments', array()));
 
         $cohortplugin->set_config('unenrolaction', ENROL_EXT_REMOVED_UNENROL);
         enrol_cohort_sync($trace, $course1->id);
-        $this->assertEquals(3, $DB->count_records('user_enrolments', array()));
-        $this->assertEquals(3, $DB->count_records('role_assignments', array()));
+        $this->assertEquals(4, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(4, $DB->count_records('role_assignments', array()));
 
 
         // Test group sync.
@@ -578,14 +688,14 @@ class enrol_cohort_testcase extends advanced_testcase {
         $id = groups_create_group((object)array('name'=>'Group 2', 'courseid'=>$course2->id));
         $group3 = $DB->get_record('groups', array('id'=>$id), '*', MUST_EXIST);
 
-        $cohort1 = $this->getDataGenerator()->create_cohort(array('contextid'=>context_coursecat::instance($cat1->id)->id));
+        $cohort1 = $this->getDataGenerator()->create_cohort(array('contextid'=>\context_coursecat::instance($cat1->id)->id));
         $id = $cohortplugin->add_instance($course1, array('customint1'=>$cohort1->id, 'roleid'=>$studentrole->id, 'customint2'=>$group1->id));
         $cohortinstance1 = $DB->get_record('enrol', array('id'=>$id));
 
         $this->assertTrue(groups_add_member($group1, $user4));
         $this->assertTrue(groups_add_member($group2, $user4));
 
-        $this->assertEquals(3, $DB->count_records('user_enrolments', array()));
+        $this->assertEquals(4, $DB->count_records('user_enrolments', array()));
         $this->assertEquals(2, $DB->count_records('role_assignments', array()));
 
         $this->assertFalse(groups_is_member($group1->id, $user1->id));
@@ -604,11 +714,11 @@ class enrol_cohort_testcase extends advanced_testcase {
         $this->assertTrue(groups_is_member($group1->id, $user1->id));
         $this->assertTrue($DB->record_exists('groups_members', array('groupid'=>$group1->id, 'userid'=>$user1->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
 
-        $this->assertTrue(is_enrolled(context_course::instance($course1->id), $user4));
+        $this->assertTrue(is_enrolled(\context_course::instance($course1->id), $user4));
         $this->assertTrue(groups_is_member($group1->id, $user4->id));
         $this->assertFalse($DB->record_exists('groups_members', array('groupid'=>$group1->id, 'userid'=>$user4->id, 'component'=>'enrol_cohort', 'itemid'=>$cohortinstance1->id)));
 
-        $this->assertTrue(is_enrolled(context_course::instance($course2->id), $user3));
+        $this->assertTrue(is_enrolled(\context_course::instance($course2->id), $user3));
         $this->assertFalse(groups_is_member($group3->id, $user3->id));
 
         $cohortinstance1->customint2 = $group2->id;

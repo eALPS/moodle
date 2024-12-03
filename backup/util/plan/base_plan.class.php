@@ -113,6 +113,7 @@ abstract class base_plan implements checksumable, executable {
      * that are, by definition, unique by name.
      *
      * @param string $name name of the setting
+     * @return base_setting
      * @throws base_plan_exception if setting name is not found.
      */
     public function get_setting($name) {
@@ -121,6 +122,19 @@ abstract class base_plan implements checksumable, executable {
             $result = $this->settings[$name];
         } else {
             throw new base_plan_exception('setting_by_name_not_found', $name);
+        }
+        return $result;
+    }
+
+    /**
+     * For debug only. Get a simple test display of all the settings.
+     *
+     * @return string
+     */
+    public function debug_display_all_settings_values(): string {
+        $result = '';
+        foreach ($this->settings as $name => $setting) {
+            $result .= $name . ': ' . $setting->get_value() . "\n";
         }
         return $result;
     }
@@ -144,7 +158,7 @@ abstract class base_plan implements checksumable, executable {
      * with their corresponding settings
      * (must set the $built property to true)
      */
-    public abstract function build();
+    abstract public function build();
 
     public function is_checksum_correct($checksum) {
         return $this->calculate_checksum() === $checksum;
@@ -187,7 +201,7 @@ abstract class base_plan implements checksumable, executable {
      *
      * @return \core\progress\base Progress reporting object
      */
-    public abstract function get_progress();
+    abstract public function get_progress();
 
     /**
      * Destroy all circular references. It helps PHP 5.2 a lot!

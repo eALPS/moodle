@@ -49,6 +49,9 @@ abstract class xml_output {
 
     protected $running; // To know if output is running
 
+    /** @var string|float finish microtime. */
+    protected $finishtime;
+
     public function __construct($usebuffer = true) {
         $this->inittime   = microtime(true);
         $this->finishtime = $this->inittime;
@@ -107,7 +110,7 @@ abstract class xml_output {
         if (!$this->running) {
             throw new xml_output_exception('xml_output_not_started');
         }
-        $lenc = strlen($content); // Get length in bytes
+        $lenc = strlen($content ?? ''); // Get length in bytes.
         if ($lenc == 0) { // 0 length contents, nothing to do
             return;
         }

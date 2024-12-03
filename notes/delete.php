@@ -16,33 +16,34 @@
 
 require_once('../config.php');
 require_once('lib.php');
+require_once($CFG->dirroot . '/course/lib.php');
 
 $noteid = required_param('id', PARAM_INT);
 
 $PAGE->set_url('/notes/delete.php', array('id' => $noteid));
 
 if (!$note = note_load($noteid)) {
-    print_error('invalidid');
+    throw new \moodle_exception('invalidid');
 }
 
 if (!$course = $DB->get_record('course', array('id' => $note->courseid))) {
-    print_error('invalidcourseid');
+    throw new \moodle_exception('invalidcourseid');
 }
 
 require_login($course);
 
 if (empty($CFG->enablenotes)) {
-    print_error('notesdisabled', 'notes');
+    throw new \moodle_exception('notesdisabled', 'notes');
 }
 
 if (!$user = $DB->get_record('user', array('id' => $note->userid))) {
-    print_error('invaliduserid');
+    throw new \moodle_exception('invaliduserid');
 }
 
 $context = context_course::instance($course->id);
 
 if (!has_capability('moodle/notes:manage', $context)) {
-    print_error('nopermissiontodelete', 'notes');
+    throw new \moodle_exception('nopermissiontodelete', 'notes');
 }
 
 if (data_submitted() && confirm_sesskey()) {
@@ -59,9 +60,7 @@ if (data_submitted() && confirm_sesskey()) {
 
     // Output HTML.
     $link = null;
-    if (has_capability('moodle/course:viewparticipants', $context)
-        || has_capability('moodle/site:viewparticipants', context_system::instance())) {
-
+    if (course_can_view_participants($context) || course_can_view_participants(context_system::instance())) {
         $link = new moodle_url('/user/index.php', array('id' => $course->id));
     }
     $PAGE->navbar->add(get_string('participants'), $link);

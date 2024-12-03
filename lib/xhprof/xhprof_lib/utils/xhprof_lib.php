@@ -19,8 +19,10 @@
 // Do not add any display specific code here.
 //
 
-function xhprof_error($message) {
-  error_log($message);
+if (!function_exists('xhprof_error')) {
+  function xhprof_error($message) {
+    error_log($message);
+  }
 }
 
 /*
@@ -98,7 +100,7 @@ function init_metrics($xhprof_data, $rep_symbol, $sort, $diff_report = false) {
 
   $pc_stats = $stats;
 
-  $possible_metrics = xhprof_get_possible_metrics($xhprof_data);
+  $possible_metrics = xhprof_get_possible_metrics();
   foreach ($possible_metrics as $metric => $desc) {
     if (isset($xhprof_data["main()"][$metric])) {
       $metrics[] = $metric;
@@ -905,6 +907,14 @@ function xhprof_param_init($params) {
       exit();
     }
 
+    if ($k === 'run') {
+      $p = implode(',', array_filter(explode(',', $p), 'ctype_xdigit'));
+    }
+
+    if ($k == 'symbol') {
+        $p = strip_tags($p);
+    }
+
     // create a global variable using the parameter name.
     $GLOBALS[$k] = $p;
   }
@@ -939,4 +949,3 @@ function xhprof_get_matching_functions($q, $xhprof_data) {
 
   return ($res);
 }
-

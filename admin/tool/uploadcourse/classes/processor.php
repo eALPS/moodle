@@ -174,7 +174,7 @@ class tool_uploadcourse_processor {
     /**
      * Execute the process.
      *
-     * @param object $tracker the output tracker to use.
+     * @param tool_uploadcourse_tracker $tracker the output tracker to use.
      * @return void
      */
     public function execute($tracker = null) {
@@ -219,6 +219,10 @@ class tool_uploadcourse_processor {
 
                 $data = array_merge($data, $course->get_data(), array('id' => $course->get_id()));
                 $tracker->output($this->linenb, true, $status, $data);
+                if ($course->has_errors()) {
+                    $errors++;
+                    $tracker->output($this->linenb, false, $course->get_errors(), $data);
+                }
             } else {
                 $errors++;
                 $tracker->output($this->linenb, false, $course->get_errors(), $data);
@@ -259,7 +263,7 @@ class tool_uploadcourse_processor {
     /**
      * Get the directory of the object to restore.
      *
-     * @return string subdirectory in $CFG->tempdir/backup/...
+     * @return string subdirectory in $CFG->backuptempdir/...
      */
     protected function get_restore_content_dir() {
         $backupfile = null;
@@ -320,7 +324,7 @@ class tool_uploadcourse_processor {
      * This only returns passed data, along with the errors.
      *
      * @param integer $rows number of rows to preview.
-     * @param object $tracker the output tracker to use.
+     * @param tool_uploadcourse_tracker $tracker the output tracker to use.
      * @return array of preview data.
      */
     public function preview($rows = 10, $tracker = null) {

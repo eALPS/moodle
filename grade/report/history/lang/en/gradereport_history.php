@@ -40,12 +40,13 @@ $string['finishselectingusers'] = 'Finish selecting users';
 $string['gradenew'] = 'Revised grade';
 $string['gradeold'] = 'Original grade';
 $string['grader'] = 'Grader';
-$string['history:view'] = 'View the grade history';
+$string['history:view'] = 'View grade history';
 $string['historyperpage'] = 'History entries per page';
 $string['historyperpage_help'] = 'This setting determines the number of history entries displayed per page in the history report.';
 $string['loadmoreusers'] = 'Load more users...';
 $string['pluginname'] = 'Grade history';
 $string['preferences'] = 'Grade history preferences';
+$string['privacy:metadata'] = 'The Grade history report only shows data stored in other locations.';
 $string['revisedonly'] = 'Revised grades only';
 $string['revisedonly_help'] = 'Only show grades which have been revised.
 

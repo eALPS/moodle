@@ -1,5 +1,3 @@
-/* global TOOLBOX, BODY, SELECTOR */
-
 /**
  * Resource and activity toolbox class.
  *
@@ -64,6 +62,32 @@ Y.extend(RESOURCETOOLBOX, TOOLBOX, {
         M.mod_quiz.quizbase.register_module(this);
         Y.delegate('click', this.handle_data_action, BODY, SELECTOR.ACTIVITYACTION, this);
         Y.delegate('click', this.handle_data_action, BODY, SELECTOR.DEPENDENCY_LINK, this);
+        this.initialise_select_multiple();
+    },
+
+    /**
+     * Initialize the select multiple options
+     *
+     * Add actions to the buttons that enable multiple slots to be selected and managed at once.
+     *
+     * @method initialise_select_multiple
+     * @protected
+     */
+    initialise_select_multiple: function() {
+        // Click select multiple button to show the select all options.
+        Y.one(SELECTOR.SELECTMULTIPLEBUTTON).on('click', function(e) {
+            e.preventDefault();
+            Y.one('body').addClass(CSS.SELECTMULTIPLE);
+        });
+
+        // Click cancel button to show the select all options.
+        Y.one(SELECTOR.SELECTMULTIPLECANCELBUTTON).on('click', function(e) {
+            e.preventDefault();
+            Y.one('body').removeClass(CSS.SELECTMULTIPLE);
+        });
+
+        // Assign the delete method to the delete multiple button.
+        Y.delegate('click', this.delete_multiple_action, BODY, SELECTOR.SELECTMULTIPLEDELETEBUTTON, this);
     },
 
     /**
@@ -144,51 +168,159 @@ Y.extend(RESOURCETOOLBOX, TOOLBOX, {
      * @param {EventFacade} ev The event that was fired.
      * @param {Node} button The button that triggered this action.
      * @param {Node} activity The activity node that this action will be performed on.
-     * @chainable
      */
     delete_with_confirmation: function(ev, button, activity) {
         // Prevent the default button action.
         ev.preventDefault();
 
         // Get the element we're working on.
-        var element = activity,
-            // Create confirm string (different if element has or does not have name)
-            confirmstring = '',
-            qtypename = M.util.get_string('pluginname',
-                        'qtype_' + element.getAttribute('class').match(/qtype_([^\s]*)/)[1]);
-        confirmstring = M.util.get_string('confirmremovequestion', 'quiz', qtypename);
+        var element = activity;
+        // Create confirm string (different if element has or does not have name)
+        var qtypename = M.util.get_string(
+            'pluginname',
+            'qtype_' + element.getAttribute('class').match(/qtype_([^\s]*)/)[1]
+        );
 
         // Create the confirmation dialogue.
-        var confirm = new M.core.confirm({
-            question: confirmstring,
-            modal: true
-        });
-
-        // If it is confirmed.
-        confirm.on('complete-yes', function() {
-
-            var spinner = this.add_spinner(element);
-            var data = {
-                'class': 'resource',
-                'action': 'DELETE',
-                'id': Y.Moodle.mod_quiz.util.slot.getId(element)
-            };
-            this.send_request(data, spinner, function(response) {
-                if (response.deleted) {
-                    // Actually remove the element.
-                    Y.Moodle.mod_quiz.util.slot.remove(element);
-                    this.reorganise_edit_page();
-                    if (M.core.actionmenu && M.core.actionmenu.instance) {
-                        M.core.actionmenu.instance.hideMenu(ev);
+        require(['core/notification'], function(Notification) {
+            Notification.saveCancelPromise(
+                M.util.get_string('confirm', 'moodle'),
+                M.util.get_string('confirmremovequestion', 'quiz', qtypename),
+                M.util.get_string('yes', 'moodle')
+            ).then(function() {
+                var spinner = this.add_spinner(element);
+                var data = {
+                    'class': 'resource',
+                    'action': 'DELETE',
+                    'id': Y.Moodle.mod_quiz.util.slot.getId(element)
+                };
+                this.send_request(data, spinner, function(response) {
+                    if (response.deleted) {
+                        // Actually remove the element.
+                        Y.Moodle.mod_quiz.util.slot.remove(element);
+                        this.reorganise_edit_page();
+                        if (M.core.actionmenu && M.core.actionmenu.instance) {
+                            M.core.actionmenu.instance.hideMenu(ev);
+                        }
                     }
-                }
+                });
+
+                return;
+            }.bind(this)).catch(function() {
+                // User cancelled.
             });
-
-        }, this);
-
-        return this;
+        }.bind(this));
     },
 
+    /**
+     * Finds the section that would become empty if we remove the selected slots.
+     *
+     * @protected
+     * @method find_sections_that_would_become_empty
+     * @returns {String} The name of the first section found
+     */
+    find_sections_that_would_become_empty: function() {
+        var section;
+        var sectionnodes = Y.all(SELECTOR.SECTIONLI);
+
+        if (sectionnodes.size() > 1) {
+            sectionnodes.some(function(node) {
+                var sectionname = node.one(SELECTOR.INSTANCESECTION).getContent();
+                var checked = node.all(SELECTOR.SELECTMULTIPLECHECKBOX + ':checked');
+                var unchecked = node.all(SELECTOR.SELECTMULTIPLECHECKBOX + ':not(:checked)');
+
+                if (!checked.isEmpty() && unchecked.isEmpty()) {
+                    section = sectionname;
+                }
+
+                return section;
+            });
+        }
+
+        return section;
+    },
+
+    /**
+     * Takes care of what needs to happen when the user clicks on the delete multiple button.
+     *
+     * @protected
+     * @method delete_multiple_action
+     * @param {EventFacade} ev The event that was fired.
+     */
+    delete_multiple_action: function(ev) {
+        var problemsection = this.find_sections_that_would_become_empty();
+
+        if (typeof problemsection !== 'undefined') {
+            require(['core/notification'], function(Notification) {
+                Notification.alert(
+                    M.util.get_string('cannotremoveslots', 'quiz'),
+                    M.util.get_string('cannotremoveallsectionslots', 'quiz', problemsection)
+                );
+            });
+        } else {
+            this.delete_multiple_with_confirmation(ev);
+        }
+    },
+
+    /**
+     * Deletes the given activities or resources after confirmation.
+     *
+     * @protected
+     * @method delete_multiple_with_confirmation
+     * @param {EventFacade} ev The event that was fired.
+     */
+    delete_multiple_with_confirmation: function(ev) {
+        ev.preventDefault();
+
+        var ids = '';
+        var slots = [];
+        Y.all(SELECTOR.SELECTMULTIPLECHECKBOX + ':checked').each(function(node) {
+            var slot = Y.Moodle.mod_quiz.util.slot.getSlotFromComponent(node);
+            ids += ids === '' ? '' : ',';
+            ids += Y.Moodle.mod_quiz.util.slot.getId(slot);
+            slots.push(slot);
+        });
+        var element = Y.one('div.mod-quiz-edit-content');
+
+        // Do nothing if no slots are selected.
+        if (!slots || !slots.length) {
+            return;
+        }
+
+        require(['core/notification'], function(Notification) {
+            Notification.saveCancelPromise(
+                M.util.get_string('confirm', 'moodle'),
+                M.util.get_string('areyousureremoveselected', 'quiz'),
+                M.util.get_string('yes', 'moodle')
+            ).then(function() {
+                var spinner = this.add_spinner(element);
+                var data = {
+                    'class': 'resource',
+                    field: 'deletemultiple',
+                    ids: ids
+                };
+                // Delete items on server.
+                this.send_request(data, spinner, function(response) {
+                    // Delete locally if deleted on server.
+                    if (response.deleted) {
+                        // Actually remove the element.
+                        Y.all(SELECTOR.SELECTMULTIPLECHECKBOX + ':checked').each(function(node) {
+                            Y.Moodle.mod_quiz.util.slot.remove(node.ancestor('li.activity'));
+                        });
+                        // Update the page numbers and sections.
+                        this.reorganise_edit_page();
+
+                        // Remove the select multiple options.
+                        Y.one('body').removeClass(CSS.SELECTMULTIPLE);
+                    }
+                });
+
+                return;
+            }.bind(this)).catch(function() {
+                // User cancelled.
+            });
+        }.bind(this));
+    },
 
     /**
      * Edit the maxmark for the resource
@@ -446,6 +578,7 @@ Y.extend(RESOURCETOOLBOX, TOOLBOX, {
             'value': 0
         }
     }
+
 });
 
 M.mod_quiz.resource_toolbox = null;

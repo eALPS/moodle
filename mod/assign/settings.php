@@ -24,13 +24,17 @@
 
 defined('MOODLE_INTERNAL') || die;
 
+global $CFG;
 require_once($CFG->dirroot . '/mod/assign/adminlib.php');
+require_once($CFG->dirroot . '/grade/lib.php');
 
 $ADMIN->add('modsettings', new admin_category('modassignfolder', new lang_string('pluginname', 'mod_assign'), $module->is_enabled() === false));
 
 $settings = new admin_settingpage($section, get_string('settings', 'mod_assign'), 'moodle/site:config', $module->is_enabled() === false);
 
 if ($ADMIN->fulltree) {
+    require_once($CFG->dirroot . '/mod/assign/locallib.php');
+
     $menu = array();
     foreach (core_component::get_plugin_list('assignfeedback') as $type => $notused) {
         $visible = !get_config('assignfeedback_' . $type, 'disabled');
@@ -69,6 +73,26 @@ if ($ADMIN->fulltree) {
                                                     $name,
                                                     $description,
                                                     $default);
+    $setting->set_force_ltr(false);
+    $settings->add($setting);
+
+    $name = new lang_string('submissionstatementteamsubmission', 'mod_assign');
+    $description = new lang_string('submissionstatement_help', 'mod_assign');
+    $default = get_string('submissionstatementteamsubmissiondefault', 'mod_assign');
+    $setting = new admin_setting_configtextarea('assign/submissionstatementteamsubmission',
+        $name,
+        $description,
+        $default);
+    $setting->set_force_ltr(false);
+    $settings->add($setting);
+
+    $name = new lang_string('submissionstatementteamsubmissionallsubmit', 'mod_assign');
+    $description = new lang_string('submissionstatement_help', 'mod_assign');
+    $default = get_string('submissionstatementteamsubmissionallsubmitdefault', 'mod_assign');
+    $setting = new admin_setting_configtextarea('assign/submissionstatementteamsubmissionallsubmit',
+        $name,
+        $description,
+        $default);
     $setting->set_force_ltr(false);
     $settings->add($setting);
 
@@ -131,6 +155,59 @@ if ($ADMIN->fulltree) {
     $setting->set_advanced_flag_options(admin_setting_flag::ENABLED, false);
     $settings->add($setting);
 
+    $name = new lang_string('enabletimelimit', 'mod_assign');
+    $description = new lang_string('enabletimelimit_help', 'mod_assign');
+    $setting = new admin_setting_configcheckbox(
+        'assign/enabletimelimit',
+        $name,
+        $description,
+        0
+    );
+    $settings->add($setting);
+
+    $name = new lang_string('defaultgradetype', 'mod_assign');
+    $description = new lang_string('defaultgradetype_help', 'mod_assign');
+    $setting = new admin_setting_configselect('mod_assign/defaultgradetype',
+                                                    $name,
+                                                    $description,
+                                                    GRADE_TYPE_VALUE, [
+                                                        GRADE_TYPE_NONE => new lang_string('modgradetypenone', 'grades'),
+                                                        GRADE_TYPE_SCALE => new lang_string('modgradetypescale', 'grades'),
+                                                        GRADE_TYPE_VALUE => new lang_string('modgradetypepoint', 'grades'),
+                                                    ]);
+    $settings->add($setting);
+
+    /** @var grade_scale[] $scales */
+    $scales = grade_scale::fetch_all_global();
+    $choices = ['' => new lang_string('choosedots')];
+    foreach ($scales as $scale) {
+        $choices[$scale->id] = $scale->get_name();
+    }
+    $name = new lang_string('defaultgradescale', 'mod_assign');
+    $description = new lang_string('defaultgradescale_help', 'mod_assign');
+    if (count($choices) > 1) {
+        $setting = new admin_setting_configselect('mod_assign/defaultgradescale',
+            $name,
+            $description,
+            '', $choices);
+    } else {
+        $setting = new admin_setting_configempty('mod_assign/defaultgradescale',
+            $name,
+            $description
+        );
+    }
+    $settings->add($setting);
+
+    $name = new lang_string('gradingduedate', 'mod_assign');
+    $description = new lang_string('gradingduedate_help', 'mod_assign');
+    $setting = new admin_setting_configduration('assign/gradingduedate',
+                                                    $name,
+                                                    $description,
+                                                    1209600);
+    $setting->set_enabled_flag_options(admin_setting_flag::ENABLED, true);
+    $setting->set_advanced_flag_options(admin_setting_flag::ENABLED, false);
+    $settings->add($setting);
+
     $name = new lang_string('submissiondrafts', 'mod_assign');
     $description = new lang_string('submissiondrafts_help', 'mod_assign');
     $setting = new admin_setting_configcheckbox('assign/submissiondrafts',
@@ -151,33 +228,22 @@ if ($ADMIN->fulltree) {
     $setting->set_locked_flag_options(admin_setting_flag::ENABLED, false);
     $settings->add($setting);
 
-    // Constants from "locallib.php".
-    $options = array(
-        'none' => get_string('attemptreopenmethod_none', 'mod_assign'),
-        'manual' => get_string('attemptreopenmethod_manual', 'mod_assign'),
-        'untilpass' => get_string('attemptreopenmethod_untilpass', 'mod_assign')
-    );
-    $name = new lang_string('attemptreopenmethod', 'mod_assign');
-    $description = new lang_string('attemptreopenmethod_help', 'mod_assign');
-    $setting = new admin_setting_configselect('assign/attemptreopenmethod',
-                                                    $name,
-                                                    $description,
-                                                    'none',
-                                                    $options);
+    $options = [ASSIGN_UNLIMITED_ATTEMPTS => new lang_string('unlimitedattempts', 'mod_assign')];
+    $options += array_combine(range(1, 30), range(1, 30));
+    $name = new lang_string('maxattempts', 'mod_assign');
+    $description = new lang_string('maxattempts_help', 'mod_assign');
+    $setting = new admin_setting_configselect('assign/maxattempts', $name, $description, 1, $options);
     $setting->set_advanced_flag_options(admin_setting_flag::ENABLED, false);
     $setting->set_locked_flag_options(admin_setting_flag::ENABLED, false);
     $settings->add($setting);
 
-    // Constants from "locallib.php".
-    $options = array(-1 => get_string('unlimitedattempts', 'mod_assign'));
-    $options += array_combine(range(1, 30), range(1, 30));
-    $name = new lang_string('maxattempts', 'mod_assign');
-    $description = new lang_string('maxattempts_help', 'mod_assign');
-    $setting = new admin_setting_configselect('assign/maxattempts',
-                                                    $name,
-                                                    $description,
-                                                    -1,
-                                                    $options);
+    $options = [
+        ASSIGN_ATTEMPT_REOPEN_METHOD_MANUAL => new lang_string('attemptreopenmethod_manual', 'mod_assign'),
+        ASSIGN_ATTEMPT_REOPEN_METHOD_UNTILPASS => new lang_string('attemptreopenmethod_untilpass', 'mod_assign'),
+    ];
+    $name = new lang_string('attemptreopenmethod', 'mod_assign');
+    $description = new lang_string('attemptreopenmethod_help', 'mod_assign');
+    $setting = new admin_setting_configselect('assign/attemptreopenmethod', $name, $description, 'untilpass', $options);
     $setting->set_advanced_flag_options(admin_setting_flag::ENABLED, false);
     $setting->set_locked_flag_options(admin_setting_flag::ENABLED, false);
     $settings->add($setting);
@@ -260,6 +326,16 @@ if ($ADMIN->fulltree) {
     $setting->set_locked_flag_options(admin_setting_flag::ENABLED, false);
     $settings->add($setting);
 
+    $name = new lang_string('hidegrader', 'mod_assign');
+    $description = new lang_string('hidegrader_help', 'mod_assign');
+    $setting = new admin_setting_configcheckbox('assign/hidegrader',
+                                                    $name,
+                                                    $description,
+                                                    0);
+    $setting->set_advanced_flag_options(admin_setting_flag::ENABLED, false);
+    $setting->set_locked_flag_options(admin_setting_flag::ENABLED, false);
+    $settings->add($setting);
+
     $name = new lang_string('markingworkflow', 'mod_assign');
     $description = new lang_string('markingworkflow_help', 'mod_assign');
     $setting = new admin_setting_configcheckbox('assign/markingworkflow',
@@ -273,6 +349,16 @@ if ($ADMIN->fulltree) {
     $name = new lang_string('markingallocation', 'mod_assign');
     $description = new lang_string('markingallocation_help', 'mod_assign');
     $setting = new admin_setting_configcheckbox('assign/markingallocation',
+                                                    $name,
+                                                    $description,
+                                                    0);
+    $setting->set_advanced_flag_options(admin_setting_flag::ENABLED, false);
+    $setting->set_locked_flag_options(admin_setting_flag::ENABLED, false);
+    $settings->add($setting);
+
+    $name = new lang_string('markinganonymous', 'mod_assign');
+    $description = new lang_string('markinganonymous_help', 'mod_assign');
+    $setting = new admin_setting_configcheckbox('assign/markinganonymous',
                                                     $name,
                                                     $description,
                                                     0);

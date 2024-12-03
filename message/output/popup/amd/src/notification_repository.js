@@ -17,8 +17,6 @@
  * Retrieves notifications from the server.
  *
  * @module     message_popup/notification_repository
- * @class      notification_repository
- * @package    message_popup
  * @copyright  2016 Ryan Wyllie <ryan@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -97,7 +95,7 @@ define(['core/ajax', 'core/notification'], function(Ajax, Notification) {
      */
     var markAsRead = function(id, timeread) {
         var args = {
-            messageid: id,
+            notificationid: id,
         };
 
         if (timeread) {
@@ -105,7 +103,7 @@ define(['core/ajax', 'core/notification'], function(Ajax, Notification) {
         }
 
         var request = {
-            methodname: 'core_message_mark_message_read',
+            methodname: 'core_message_mark_notification_read',
             args: args
         };
 

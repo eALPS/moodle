@@ -26,6 +26,14 @@ if ($ADMIN->fulltree) {
     $settings = new theme_boost_admin_settingspage_tabs('themesettingboost', get_string('configtitle', 'theme_boost'));
     $page = new admin_settingpage('theme_boost_general', get_string('generalsettings', 'theme_boost'));
 
+    // Unaddable blocks.
+    // Blocks to be excluded when this theme is enabled in the "Add a block" list: Administration, Navigation, Courses and
+    // Section links.
+    $default = 'navigation,settings,course_list,section_links';
+    $setting = new admin_setting_configtext('theme_boost/unaddableblocks',
+        get_string('unaddableblocks', 'theme_boost'), get_string('unaddableblocks_desc', 'theme_boost'), $default, PARAM_TEXT);
+    $page->add($setting);
+
     // Preset.
     $name = 'theme_boost/preset';
     $title = get_string('preset', 'theme_boost');
@@ -44,7 +52,7 @@ if ($ADMIN->fulltree) {
     $choices['default.scss'] = 'default.scss';
     $choices['plain.scss'] = 'plain.scss';
 
-    $setting = new admin_setting_configselect($name, $title, $description, $default, $choices);
+    $setting = new admin_setting_configthemepreset($name, $title, $description, $default, $choices, 'boost');
     $setting->set_updatedcallback('theme_reset_all_caches');
     $page->add($setting);
 
@@ -57,7 +65,22 @@ if ($ADMIN->fulltree) {
         array('maxfiles' => 20, 'accepted_types' => array('.scss')));
     $page->add($setting);
 
-    // Variable $body-color.
+    // Background image setting.
+    $name = 'theme_boost/backgroundimage';
+    $title = get_string('backgroundimage', 'theme_boost');
+    $description = get_string('backgroundimage_desc', 'theme_boost');
+    $setting = new admin_setting_configstoredfile($name, $title, $description, 'backgroundimage');
+    $setting->set_updatedcallback('theme_reset_all_caches');
+    $page->add($setting);
+
+    // Login Background image setting.
+    $name = 'theme_boost/loginbackgroundimage';
+    $title = get_string('loginbackgroundimage', 'theme_boost');
+    $description = get_string('loginbackgroundimage_desc', 'theme_boost');
+    $setting = new admin_setting_configstoredfile($name, $title, $description, 'loginbackgroundimage');
+    $setting->set_updatedcallback('theme_reset_all_caches');
+    $page->add($setting);
+
     // We use an empty default value because the default colour should come from the preset.
     $name = 'theme_boost/brandcolor';
     $title = get_string('brandcolor', 'theme_boost');

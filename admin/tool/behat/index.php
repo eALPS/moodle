@@ -32,7 +32,7 @@ require_once($CFG->libdir . '/behat/classes/behat_config_manager.php');
 // systems, but let's allow room for expansion.
 core_php_time_limit::raise(300);
 
-$filter = optional_param('filter', '', PARAM_ALPHANUMEXT);
+$filter = optional_param('filter', '', PARAM_NOTAGS);
 $type = optional_param('type', false, PARAM_ALPHAEXT);
 $component = optional_param('component', '', PARAM_ALPHAEXT);
 
@@ -56,6 +56,7 @@ if ($components) {
 $form = new steps_definitions_form(null, array('components' => $componentswithsteps));
 
 // Output contents.
+$PAGE->requires->js_call_amd('tool_behat/steps', 'init');
 $renderer = $PAGE->get_renderer('tool_behat');
 echo $renderer->render_stepsdefinitions($steps, $form);
 

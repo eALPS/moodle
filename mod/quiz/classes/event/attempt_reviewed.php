@@ -47,7 +47,7 @@ class attempt_reviewed extends \core\event\base {
     protected function init() {
         $this->data['objecttable'] = 'quiz_attempts';
         $this->data['crud'] = 'r';
-        $this->data['edulevel'] = self::LEVEL_TEACHING;
+        $this->data['edulevel'] = self::LEVEL_PARTICIPATING;
     }
 
     /**
@@ -65,7 +65,7 @@ class attempt_reviewed extends \core\event\base {
      * @return string
      */
     public function get_description() {
-        return "The user with id '$this->userid' has had their attempt with id '$this->objectid' reviewed by the user " .
+        return "The user with id '$this->userid' has reviewed quiz attempt with id '$this->objectid' by user ".
             "with id '$this->relateduserid' for the quiz with course module id '$this->contextinstanceid'.";
     }
 
@@ -75,17 +75,7 @@ class attempt_reviewed extends \core\event\base {
      * @return \moodle_url
      */
     public function get_url() {
-        return new \moodle_url('/mod/quiz/review.php', array('attempt' => $this->objectid));
-    }
-
-    /**
-     * Return the legacy event log data.
-     *
-     * @return array
-     */
-    protected function get_legacy_logdata() {
-        return array($this->courseid, 'quiz', 'review', 'review.php?attempt=' . $this->objectid,
-            $this->other['quizid'], $this->contextinstanceid);
+        return new \moodle_url('/mod/quiz/review.php', ['attempt' => $this->objectid]);
     }
 
     /**
@@ -107,12 +97,12 @@ class attempt_reviewed extends \core\event\base {
     }
 
     public static function get_objectid_mapping() {
-        return array('db' => 'quiz_attempts', 'restore' => 'quiz_attempt');
+        return ['db' => 'quiz_attempts', 'restore' => 'quiz_attempt'];
     }
 
     public static function get_other_mapping() {
-        $othermapped = array();
-        $othermapped['quizid'] = array('db' => 'quiz', 'restore' => 'quiz');
+        $othermapped = [];
+        $othermapped['quizid'] = ['db' => 'quiz', 'restore' => 'quiz'];
 
         return $othermapped;
     }

@@ -45,7 +45,7 @@ list($options, $unrecognised) = cli_get_params(
     array(
         'stop-on-failure' => 0,
         'verbose'  => false,
-        'replace'  => false,
+        'replace'  => '',
         'help'     => false,
         'tags'     => '',
         'profile'  => '',
@@ -70,7 +70,7 @@ $help = "
 Behat utilities to run behat tests in parallel
 
 Usage:
-  php run.php [--BEHAT_OPTION=\"value\"] [--feature=\"value\"] [--replace] [--fromrun=value --torun=value] [--help]
+  php run.php [--BEHAT_OPTION=\"value\"] [--feature=\"value\"] [--replace=\"{run}\"] [--fromrun=value --torun=value] [--help]
 
 Options:
 --BEHAT_OPTION     Any combination of behat option specified in http://behat.readthedocs.org/en/v2.5/guides/6.cli.html
@@ -87,7 +87,7 @@ Options:
 Example from Moodle root directory:
 \$ php admin/tool/behat/cli/run.php --tags=\"@javascript\"
 
-More info in http://docs.moodle.org/dev/Acceptance_testing#Running_tests
+More info in https://moodledev.io/general/development/tools/behat/running
 ";
 
 if (!empty($options['help'])) {
@@ -144,9 +144,10 @@ $extraopts = $unrecognised;
 if ($options['profile']) {
     $profile = $options['profile'];
 
-    // If profile passed is not set, then exit.
+    // If profile passed is not set, then exit (note we skip if the 'replace' option is found within the 'profile' value).
     if (!isset($CFG->behat_config[$profile]) && !isset($CFG->behat_profiles[$profile]) &&
-        !(isset($options['replace']) && (strpos($options['profile'], $options['replace']) >= 0 ))) {
+            !($options['replace'] && (strpos($profile, (string) $options['replace']) !== false))) {
+
         echo "Invalid profile passed: " . $profile . PHP_EOL;
         exit(1);
     }
@@ -262,8 +263,13 @@ if (empty($parallelrun)) {
     behat_config_manager::set_behat_run_config_value('lasttorun', $options['torun']);
     behat_config_manager::set_behat_run_config_value('lastfromrun', $options['fromrun']);
 
+    // Keep no delay by default, between each parallel, let user decide.
+    if (!defined('BEHAT_PARALLEL_START_DELAY')) {
+        define('BEHAT_PARALLEL_START_DELAY', 0);
+    }
+
     // Execute all commands, relative to moodle root directory.
-    $processes = cli_execute_parallel($cmds, __DIR__ . "/../../../../");
+    $processes = cli_execute_parallel($cmds, __DIR__ . "/../../../../", BEHAT_PARALLEL_START_DELAY);
     $stoponfail = empty($options['stop-on-failure']) ? false : true;
 
     // Print header.
@@ -272,7 +278,7 @@ if (empty($parallelrun)) {
     // Print combined run o/p from processes.
     $exitcodes = print_combined_run_output($processes, $stoponfail);
     // Time to finish run.
-    $time = round(microtime(true) - $time, 1);
+    $time = round(microtime(true) - $time, 0);
     echo "Finished in " . gmdate("G\h i\m s\s", $time) . PHP_EOL . PHP_EOL;
     ksort($exitcodes);
 
@@ -320,6 +326,7 @@ if ($verbose || $status) {
         }
 
         // Update status after auto-rerun finished.
+        $status = 0;
         foreach ($exitcodes as $name => $exitcode) {
             if ($exitcode) {
                 if (!empty($parallelrun)) {
@@ -430,7 +437,7 @@ function print_combined_run_output($processes, $stoponfail = false) {
                         $process->stop(0);
                     }
 
-                    $strlentoprint = strlen($update);
+                    $strlentoprint = strlen($update ?? '');
 
                     // If not enough dots printed on line then just print.
                     if ($strlentoprint < $remainingprintlen) {

@@ -34,7 +34,7 @@ $completelist = report_eventlist_list_generator::get_all_events_list(false);
 
 // Check that $eventname is a valid event.
 if (!array_key_exists($eventname, $completelist)) {
-    print_error('errorinvalidevent', 'report_eventlist');
+    throw new \moodle_exception('errorinvalidevent', 'report_eventlist');
 }
 
 // Break up the full event name to usable parts.
@@ -45,7 +45,7 @@ $directory = core_component::get_component_directory($component[1]);
 $directory = $directory . '/classes/event';
 // Verify that the directory is valid.
 if (!is_dir($directory)) {
-    print_error('errorinvaliddirectory', 'report_eventlist');
+    throw new \moodle_exception('errorinvaliddirectory', 'report_eventlist');
 }
 $filename = end($component);
 $eventfiles = $directory . '/' . $filename . '.php';
@@ -61,7 +61,6 @@ $eventinformation['explanation'] = $eventname::get_explanation($eventname);
 // Get event information nicely if we can.
 if (!$ref->isAbstract()) {
     $eventinformation = array_merge($eventinformation, $eventname::get_static_info());
-    $eventinformation['legacyevent'] = $eventname::get_legacy_eventname();
     $eventinformation['crud'] = report_eventlist_list_generator::get_crud_string($eventinformation['crud']);
     $eventinformation['edulevel'] = report_eventlist_list_generator::get_edulevel_string($eventinformation['edulevel']);
 } else {
@@ -108,7 +107,7 @@ if (!empty($typeparams[2])) {
 }
 
 // Retrieving the 'other' event field information.
-$otherpattern = "/(\*\s{5}-([\w|\s]*\:[\w|\s|\(|\)|.]*))/";
+$otherpattern = "/(\*\s{5,}-([\w|\s]*\:[\w|\s|\(|\)|.]*))/";
 $typeparams = array();
 preg_match_all($otherpattern, $eventcontents, $typeparams);
 if (!empty($typeparams[2])) {
@@ -133,6 +132,9 @@ if (isset($allobserverslist['\\core\\event\\base'])) {
 if (isset($allobserverslist[$eventname])) {
     $observers = array_merge($observers, $allobserverslist[$eventname]);
 }
+
+$PAGE->set_primary_active_tab('siteadminnode');
+$PAGE->set_secondary_active_tab('reports');
 
 // OUTPUT.
 $renderer = $PAGE->get_renderer('report_eventlist');

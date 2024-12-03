@@ -21,6 +21,7 @@
  * @copyright  2014 onwards Ankit agarwal <ankit.agrr@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later.
  */
+namespace report_log;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -33,7 +34,7 @@ global $CFG;
  * @copyright  2014 onwards Ankit agarwal <ankit.agrr@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later.
  */
-class report_log_lib_testcase extends advanced_testcase {
+class lib_test extends \advanced_testcase {
 
     /**
      * @var stdClass The user.
@@ -50,7 +51,8 @@ class report_log_lib_testcase extends advanced_testcase {
      */
     private $tree;
 
-    public function setUp() {
+    public function setUp(): void {
+        parent::setUp();
         $this->user = $this->getDataGenerator()->create_user();
         $this->course = $this->getDataGenerator()->create_course();
         $this->tree = new \core_user\output\myprofile\tree();
@@ -60,13 +62,12 @@ class report_log_lib_testcase extends advanced_testcase {
     /**
      * Test report_log_supports_logstore.
      */
-    public function test_report_log_supports_logstore() {
+    public function test_report_log_supports_logstore(): void {
         $logmanager = get_log_manager();
         $allstores = \core_component::get_plugin_list_with_class('logstore', 'log\store');
 
         $supportedstores = array(
             'logstore_database' => '\logstore_database\log\store',
-            'logstore_legacy' => '\logstore_legacy\log\store',
             'logstore_standard' => '\logstore_standard\log\store'
         );
 
@@ -82,16 +83,15 @@ class report_log_lib_testcase extends advanced_testcase {
     /**
      * Tests the report_log_myprofile_navigation() function as an admin viewing the logs for a user.
      */
-    public function test_report_log_myprofile_navigation() {
+    public function test_report_log_myprofile_navigation(): void {
         // Set as the admin.
         $this->setAdminUser();
         $iscurrentuser = false;
 
         // Check the node tree is correct.
         report_log_myprofile_navigation($this->tree, $this->user, $iscurrentuser, $this->course);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayHasKey('alllogs', $nodes->getValue($this->tree));
         $this->assertArrayHasKey('todayslogs', $nodes->getValue($this->tree));
     }
@@ -99,16 +99,15 @@ class report_log_lib_testcase extends advanced_testcase {
     /**
      * Tests the report_log_myprofile_navigation() function as a user without permission.
      */
-    public function test_report_log_myprofile_navigation_without_permission() {
+    public function test_report_log_myprofile_navigation_without_permission(): void {
         // Set to the other user.
         $this->setUser($this->user);
         $iscurrentuser = true;
 
         // Check the node tree is correct.
         report_log_myprofile_navigation($this->tree, $this->user, $iscurrentuser, $this->course);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayNotHasKey('alllogs', $nodes->getValue($this->tree));
         $this->assertArrayNotHasKey('todayslogs', $nodes->getValue($this->tree));
     }

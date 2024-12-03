@@ -33,8 +33,7 @@ $confirm = optional_param('confirm', 0, PARAM_BOOL);
 $PAGE->set_url('/admin/antiviruses.php', array('action' => $action, 'antivirus' => $antivirus));
 $PAGE->set_context(context_system::instance());
 
-require_login();
-require_capability('moodle/site:config', context_system::instance());
+require_admin();
 
 $returnurl = "$CFG->wwwroot/$CFG->admin/settings.php?section=manageantiviruses";
 
@@ -55,18 +54,19 @@ if (!confirm_sesskey()) {
     redirect($returnurl);
 }
 
+$needsupdate = false;
 switch ($action) {
     case 'disable':
         // Remove from enabled list.
-        $key = array_search($antivirus, $activeantiviruses);
-        unset($activeantiviruses[$key]);
+        $class = \core_plugin_manager::resolve_plugininfo_class('antivirus');
+        $class::enable_plugin($antivirus, false);
         break;
 
     case 'enable':
         // Add to enabled list.
         if (!in_array($antivirus, $activeantiviruses)) {
-            $activeantiviruses[] = $antivirus;
-            $activeantiviruses = array_unique($activeantiviruses);
+            $class = \core_plugin_manager::resolve_plugininfo_class('antivirus');
+            $class::enable_plugin($antivirus, true);
         }
         break;
 
@@ -79,6 +79,7 @@ switch ($action) {
                 $fsave = $activeantiviruses[$key];
                 $activeantiviruses[$key] = $activeantiviruses[$key + 1];
                 $activeantiviruses[$key + 1] = $fsave;
+                $needsupdate = true;
             }
         }
         break;
@@ -92,6 +93,7 @@ switch ($action) {
                 $fsave = $activeantiviruses[$key];
                 $activeantiviruses[$key] = $activeantiviruses[$key - 1];
                 $activeantiviruses[$key - 1] = $fsave;
+                $needsupdate = true;
             }
         }
         break;
@@ -100,7 +102,12 @@ switch ($action) {
         break;
 }
 
-set_config('antiviruses', implode(',', $activeantiviruses));
-core_plugin_manager::reset_caches();
+if ($needsupdate) {
+    $new = implode(',', $activeantiviruses);
+    add_to_config_log('antiviruses', $CFG->antiviruses, $new, 'core');
+    set_config('antiviruses', $new);
+    core_plugin_manager::reset_caches();
+}
+
 
 redirect ($returnurl);

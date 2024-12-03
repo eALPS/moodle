@@ -23,14 +23,18 @@
  */
 namespace core\plugininfo;
 
-use moodle_url, core_plugin_manager;
-
-defined('MOODLE_INTERNAL') || die();
+use core_plugin_manager;
+use moodle_url;
 
 /**
  * Class for question behaviours.
  */
 class qbehaviour extends base {
+
+    public static function plugintype_supports_disabling(): bool {
+        return true;
+    }
+
     /**
      * Finds all enabled plugins, the result may include missing plugins.
      * @return array|null of enabled plugins $pluginname=>$pluginname, null means unknown
@@ -55,6 +59,33 @@ class qbehaviour extends base {
         }
 
         return $enabled;
+    }
+
+    public static function enable_plugin(string $pluginname, int $enabled): bool {
+        $haschanged = false;
+        $plugins = [];
+        $oldvalue = get_config('question', 'disabledbehaviours');
+        if (!empty($oldvalue)) {
+            $plugins = array_flip(explode(',', $oldvalue));
+        }
+        // Only set visibility if it's different from the current value.
+        if ($enabled && array_key_exists($pluginname, $plugins)) {
+            unset($plugins[$pluginname]);
+            $haschanged = true;
+        } else if (!$enabled && !array_key_exists($pluginname, $plugins)) {
+            $plugins[$pluginname] = $pluginname;
+            $haschanged = true;
+        }
+
+        if ($haschanged) {
+            $new = implode(',', array_flip($plugins));
+            add_to_config_log('disabledbehaviours', $oldvalue, $new, 'question');
+            set_config('disabledbehaviours', $new, 'question');
+            // Reset caches.
+            \core_plugin_manager::reset_caches();
+        }
+
+        return $haschanged;
     }
 
     public function is_uninstall_allowed() {
@@ -110,4 +141,3 @@ class qbehaviour extends base {
         return new moodle_url('/admin/qbehaviours.php');
     }
 }
-

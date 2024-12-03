@@ -58,7 +58,7 @@ abstract class question_behaviour {
      */
     public function __construct(question_attempt $qa, $preferredbehaviour) {
         $this->qa = $qa;
-        $this->question = $qa->get_question();
+        $this->question = $qa->get_question(false);
         if (!$this->is_compatible_question($this->question)) {
             throw new coding_exception('This behaviour (' . $this->get_name() .
                     ') cannot work with this question (' . get_class($this->question) . ')');
@@ -74,7 +74,7 @@ abstract class question_behaviour {
      *
      * @param question_definition $question the question.
      */
-    public abstract function is_compatible_question(question_definition $question);
+    abstract public function is_compatible_question(question_definition $question);
 
     /**
      * @return string the name of this behaviour. For example the name of
@@ -100,10 +100,10 @@ abstract class question_behaviour {
      * options using {@link adjust_display_options()} and then calls
      * {@link core_question_renderer::question()} to do the work.
      * @param question_display_options $options controls what should and should not be displayed.
-     * @param unknown_type $number the question number to display.
+     * @param string|null $number the question number to display.
      * @param core_question_renderer $qoutput the question renderer that will coordinate everything.
      * @param qtype_renderer $qtoutput the question type renderer that will be helping.
-     * @return HTML fragment.
+     * @return string HTML fragment.
      */
     public function render(question_display_options $options, $number,
             core_question_renderer $qoutput, qtype_renderer $qtoutput) {
@@ -124,6 +124,17 @@ abstract class question_behaviour {
      */
     public function check_file_access($options, $component, $filearea, $args, $forcedownload) {
         $this->adjust_display_options($options);
+
+        if ($component == 'question' && $filearea == 'response_bf_comment') {
+            foreach ($this->qa->get_step_iterator() as $attemptstep) {
+                if ($attemptstep->get_id() == $args[0]) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         return $this->question->check_file_access($this->qa, $options, $component,
                 $filearea, $args, $forcedownload);
     }
@@ -202,7 +213,7 @@ abstract class question_behaviour {
             return array();
         }
 
-        $vars = array('comment' => PARAM_RAW, 'commentformat' => PARAM_INT);
+        $vars = array('comment' => question_attempt::PARAM_RAW_FILES, 'commentformat' => PARAM_INT);
         if ($this->qa->get_max_mark()) {
             $vars['mark'] = PARAM_RAW_TRIMMED;
             $vars['maxmark'] = PARAM_FLOAT;
@@ -336,7 +347,7 @@ abstract class question_behaviour {
         return $this->qa->get_state()->default_string($showcorrectness);
     }
 
-    public abstract function summarise_action(question_attempt_step $step);
+    abstract public function summarise_action(question_attempt_step $step);
 
     /**
      * Initialise the first step in a question attempt when a new
@@ -381,9 +392,20 @@ abstract class question_behaviour {
         $previouscomment = $this->qa->get_last_behaviour_var('comment');
         $newcomment = $pendingstep->get_behaviour_var('comment');
 
-        if (is_null($previouscomment) && !html_is_blank($newcomment) ||
-                $previouscomment != $newcomment) {
+        // When the teacher leaves the comment empty, $previouscomment is an empty string but $newcomment is null,
+        // therefore they are not equal to each other. That's why checking if $previouscomment != $newcomment is not enough.
+        if (($previouscomment != $newcomment) && !(is_null($previouscomment) && html_is_blank($newcomment))) {
+            // The comment has changed.
             return false;
+        }
+
+        if (!html_is_blank($newcomment)) {
+            // Check comment format.
+            $previouscommentformat = $this->qa->get_last_behaviour_var('commentformat');
+            $newcommentformat = $pendingstep->get_behaviour_var('commentformat');
+            if ($previouscommentformat != $newcommentformat) {
+                return false;
+            }
         }
 
         // So, now we know the comment is the same, so check the mark, if present.
@@ -445,7 +467,7 @@ abstract class question_behaviour {
      *      information can be accessed using {@link question_attempt_step::get_behaviour_var()}.
      * @return bool either {@link question_attempt::KEEP} or {@link question_attempt::DISCARD}
      */
-    public abstract function process_action(question_attempt_pending_step $pendingstep);
+    abstract public function process_action(question_attempt_pending_step $pendingstep);
 
     /**
      * Auto-saved data. By default this does nothing. interesting processing is
@@ -507,15 +529,20 @@ abstract class question_behaviour {
      * @param $comment the comment text to format. If omitted,
      *      $this->qa->get_manual_comment() is used.
      * @param $commentformat the format of the comment, one of the FORMAT_... constants.
+     * @param $context the quiz context.
      * @return string the comment, ready to be output.
      */
-    public function format_comment($comment = null, $commentformat = null) {
+    public function format_comment($comment = null, $commentformat = null, $context = null) {
         $formatoptions = new stdClass();
         $formatoptions->noclean = true;
         $formatoptions->para = false;
 
         if (is_null($comment)) {
-            list($comment, $commentformat) = $this->qa->get_manual_comment();
+            list($comment, $commentformat, $commentstep) = $this->qa->get_manual_comment();
+        }
+
+        if ($context !== null) {
+            $comment = $this->qa->rewrite_response_pluginfile_urls($comment, $context->id, 'bf_comment', $commentstep);
         }
 
         return format_text($comment, $commentformat, $formatoptions);
@@ -523,13 +550,14 @@ abstract class question_behaviour {
 
     /**
      * @return string a summary of a manual comment action.
-     * @param unknown_type $step
+     * @param question_attempt_step $step
      */
     protected function summarise_manual_comment($step) {
         $a = new stdClass();
         if ($step->has_behaviour_var('comment')) {
-            $a->comment = shorten_text(html_to_text($this->format_comment(
-                    $step->get_behaviour_var('comment')), 0, false), 200);
+            $comment = question_utils::to_plain_text($step->get_behaviour_var('comment'),
+                    $step->get_behaviour_var('commentformat'));
+            $a->comment = shorten_text($comment, 200);
         } else {
             $a->comment = '';
         }
@@ -756,7 +784,7 @@ abstract class question_cbm {
             // errors for people who have used TGM's patches.
             return 0;
         }
-        if ($fraction <= 0.00000005) {
+        if ($fraction <= question_utils::MARK_TOLERANCE) {
             return self::$wrongscore[$certainty];
         } else {
             return self::$rightscore[$certainty] * $fraction;

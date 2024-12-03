@@ -37,7 +37,7 @@ class message_output_email extends message_output {
      * @param object $eventdata the event data submitted by the message sender plus $eventdata->savedmessageid
      */
     function send_message($eventdata) {
-        global $CFG;
+        global $CFG, $DB;
 
         // skip any messaging suspended and deleted users
         if ($eventdata->userto->auth === 'nologin' or $eventdata->userto->suspended or $eventdata->userto->deleted) {
@@ -90,8 +90,25 @@ class message_output_email extends message_output {
             }
         }
 
-        $result = email_to_user($recipient, $eventdata->userfrom, $eventdata->subject, $eventdata->fullmessage,
-                                $eventdata->fullmessagehtml, $attachment, $attachname, true, $replyto, $replytoname);
+        // We email messages from private conversations straight away, but for group we add them to a table to be sent later.
+        $emailuser = true;
+        if (!$eventdata->notification) {
+            if ($eventdata->conversationtype == \core_message\api::MESSAGE_CONVERSATION_TYPE_GROUP) {
+                $emailuser = false;
+            }
+        }
+
+        if ($emailuser) {
+            $result = email_to_user($recipient, $eventdata->userfrom, $eventdata->subject, $eventdata->fullmessage,
+                $eventdata->fullmessagehtml, $attachment, $attachname, true, $replyto, $replytoname);
+        } else {
+            $messagetosend = new stdClass();
+            $messagetosend->useridfrom = $eventdata->userfrom->id;
+            $messagetosend->useridto = $recipient->id;
+            $messagetosend->conversationid = $eventdata->convid;
+            $messagetosend->messageid = $eventdata->savedmessageid;
+            $result = $DB->insert_record('message_email_messages', $messagetosend, false);
+        }
 
         // Remove an attachment file if any.
         if (!empty($attachment) && file_exists($attachment)) {
@@ -164,10 +181,13 @@ class message_output_email extends message_output {
         global $CFG;
 
         if (isset($form->email_email)) {
-            $preferences['message_processor_email_email'] = $form->email_email;
+            $preferences['message_processor_email_email'] = clean_param($form->email_email, PARAM_EMAIL);
         }
         if (isset($form->preference_mailcharset)) {
             $preferences['mailcharset'] = $form->preference_mailcharset;
+            if (!array_key_exists($preferences['mailcharset'], get_list_of_charsets())) {
+                $preferences['mailcharset'] = '0';
+            }
         }
         if (isset($form->mailformat) && isset($form->userid)) {
             require_once($CFG->dirroot.'/user/lib.php');
@@ -184,7 +204,7 @@ class message_output_email extends message_output {
      * @return int The default settings
      */
     public function get_default_messaging_settings() {
-        return MESSAGE_PERMITTED + MESSAGE_DEFAULT_LOGGEDIN + MESSAGE_DEFAULT_LOGGEDOFF;
+        return MESSAGE_PERMITTED + MESSAGE_DEFAULT_ENABLED;
     }
 
     /**

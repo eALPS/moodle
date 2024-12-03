@@ -1,49 +1,9 @@
 /* course.less */
+
 /* COURSE CONTENT */
-.section-modchooser-link img {
-    margin-right: 0.5rem;
-    width: 16px;
-    height: 16px;
-}
-
-.section_add_menus {
-    text-align: right;
-    clear: both;
-}
-
-.section-modchooser {
-    clear: both;
-}
 
 .block_tree .tree_item.branch {
     margin-left: 8px;
-}
-
-.section_add_menus .horizontal div,
-.section_add_menus .horizontal form {
-    display: inline;
-}
-
-.section_add_menus optgroup {
-    font-weight: normal;
-    font-style: italic;
-}
-/*rtl:ignore*/
-.section_add_menus .urlselect {
-    text-align: left;
-    margin-left: .4em;
-}
-/*rtl:ignore*/
-.section_add_menus .urlselect select {
-    margin-left: .2em;
-}
-
-.sitetopic ul.section {
-    margin: 0;
-}
-
-.course-content ul.section {
-    margin: $spacer;
 }
 
 .section {
@@ -75,19 +35,16 @@
             position: absolute;
             right: 0;
             top: 0;
+            display: flex;
         }
 
         .contentwithoutlink,
         .activityinstance {
             min-width: 40%;
-            display: table-cell;
-            padding-right: 4px;
-            min-height: 2em;
 
             > a {
-                display: block;
-                text-indent: -31px;
-                padding-left: 31px;
+                display: inline-flex;
+                align-items: center;
             }
 
             .dimmed {
@@ -98,11 +55,17 @@
         }
 
         .stealth {
-            @extend .text-muted;
+            color: $text-muted;
         }
         a.stealth,
         a.stealth:hover {
             color: lighten($link-color, 25%) !important; /* stylelint-disable-line declaration-no-important */
+        }
+
+        &.indented {
+            .activity-item {
+                margin-left: map-get($spacers, 3);
+            }
         }
     }
 
@@ -113,10 +76,11 @@
             display: block;
             height: inherit;
         }
-
-        .mod-indent-outer {
-            padding-left: 24px;
-            display: block;
+        @include media-breakpoint-up(sm) {
+            .mod-indent-outer {
+                padding-left: 24px;
+                display: block;
+            }
         }
     }
 
@@ -125,7 +89,7 @@
         width: 16px;
         height: 16px;
         padding: 0;
-        margin: 0 ($spacer / 2);
+        margin: 0 ($spacer * 0.5);
         display: inline-block;
     }
 
@@ -148,14 +112,10 @@
     }
 }
 
-.activity img.activityicon {
-    margin-right: 6px;
-    vertical-align: text-bottom;
-}
-
-.section .activity .activityinstance,
-.section .activity .activityinstance div {
-    display: inline-block;
+.section .activity .activityinstance {
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 1rem;
 }
 
 .editing {
@@ -165,13 +125,6 @@
             .activityinstance {
                 padding-right: 200px;
             }
-            .editing_move {
-                /* Move the move icon to the start of the line */
-                position: absolute;
-                left: 0;
-                top: 0;
-            }
-
             .mod-indent-outer {
                 /**
                  * Add appropriate padding such that nothing overlaps the
@@ -180,6 +133,60 @@
                 padding-left: 2rem;
             }
         }
+    }
+    // Remove old spinners if the reactive state is ready.
+    .course-content .stateready .section .spinner {
+        display: none;
+    }
+    // New editing in progress spinners.
+    .editinprogress {
+        position: relative;
+
+        & > * {
+            opacity: .4;
+        }
+
+        .corelightbox,
+        .lightbox {
+            display: none;
+        }
+
+        &:after {
+            @extend .fa-solid;
+            position: absolute;
+            font-size: 20px;
+            color: $gray-600;
+            content: fa-content($fa-var-spinner);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 30px;
+            height: 30px;
+            left: calc(50% - 15px);
+            top: calc(50% - 15px);
+            animation: editinprogress-rotation 2s infinite linear;
+        }
+
+        // Prevent inner editingprogress.
+        .editinprogress {
+            &:after {
+                display: none;
+            }
+        }
+    }
+}
+
+@keyframes editinprogress-rotation {
+    0% {
+        opacity: 0;
+        transform: rotate(0deg);
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+        transform: rotate(359deg);
     }
 }
 
@@ -196,20 +203,79 @@
 
 .section .activity.modtype_label.label {
     font-weight: normal;
-    padding: .2em;
+
+    // Remove min-height for labels so top and bottom paddings can be displayed more consistently.
+    .contentwithoutlink {
+        min-height: 0;
+    }
+
+    // When activity information is shown remove the bottom margin for the last p/i elements.
+    &.hasinfo {
+        p:last-child,
+        i:last-child {
+            margin-bottom: 0;
+        }
+    }
 }
 
-.section li.activity {
-    padding: .2em;
+// The activity-wrapper class ensures these styles are not used when the new activity styles
+// from MDL-71691 are not affected. As soons as MDL-72656 is integrated and these styles
+// are removed the core_courseformat/local/content/cm template no longer needs this class.
+.section li.activity:not(.activity-wrapper) {
+    padding: 0.2em;
     clear: both;
+
+    &.hasinfo {
+        border-bottom: $border-width solid $table-border-color;
+        padding-top: map-get($spacers, 3);
+        padding-bottom: map-get($spacers, 3);
+
+        &:last-child {
+            border-bottom: 0;
+            padding-bottom: 0;
+        }
+    }
+}
+
+// Compensate for the border widths when dropzones are displayed.
+.course-content .section.dropready {
+
+    &.main.drop-down {
+        border-bottom: 1px solid $dropzone-border;
+    }
+
+    .course-section-header.dropready.drop-zone {
+        margin-top: -2px;
+    }
+
+    li.activity.dropready.drop-down {
+        border-bottom: 1px solid $dropzone-border;
+        margin-bottom: -1px;
+    }
+
+    li.activity.dropready.drop-up {
+        border-top: 1px solid $dropzone-border;
+        margin-top: -1px;
+    }
+
+    [data-for="sectioninfo"] {
+        // When a section is empty, the activity dropzone indicator is below
+        // the section info. This ensures the dropzone will not displace the content
+        // even if the section has no restrictions or info to display.
+        min-height: 1px;
+    }
+
+    [data-for="sectioninfo"].drop-down {
+        margin-top: -1px;
+    }
 }
 
 .section .activity .activityinstance .groupinglabel {
     padding-left: 30px;
 }
 
-.section .activity .availabilityinfo,
-.section .activity .contentafterlink {
+.section.main:not(.course-section) .activity .availabilityinfo,
+.section.main:not(.course-section) .activity .contentafterlink {
     margin-top: 0.5em;
     margin-left: 30px;
 }
@@ -218,9 +284,12 @@
     margin: .5em 0;
 }
 
-.editing .section .activity:hover,
-.editing .section .activity.action-menu-shown {
-    background-color: $table-bg-accent;
+.editing .section.main:not(.course-section) {
+    .activity:hover,
+    .activity.action-menu-shown,
+    .sectionname:hover {
+        background-color: $table-accent-bg;
+    }
 }
 
 .course-content .current {
@@ -228,42 +297,12 @@
 }
 
 .course-content .current::before {
-    content: "";
-    border-left: $brand-primary 2px solid;
-    position: absolute;
-    left: -15px;
-    top: 0;
+    border-left: $primary 3px solid;
     bottom: 0;
-}
-
-.course-content .section-summary {
-    border: 1px solid $table-border-color;
-    margin-top: 5px;
-    list-style: none;
-}
-
-.course-content .section-summary .section-title {
-    margin: 2px 5px 10px 5px;
-}
-
-.course-content .section-summary .summarytext {
-    margin: 2px 5px 2px 5px;
-}
-
-.course-content .section-summary .section-summary-activities .activity-count {
-    @extend .text-muted;
-    font-size: $font-size-sm;
-    margin: 3px;
-    white-space: nowrap;
-    display: inline-block;
-}
-
-.course-content .section-summary .summary {
-    margin-top: 5px;
-}
-
-.course-content .single-section {
-    margin-top: 1em;
+    content: "";
+    left: -8px;
+    position: absolute;
+    top: 0;
 }
 
 .course-content .single-section .section-navigation {
@@ -302,7 +341,7 @@
     margin-top: 0;
 }
 
-.course-content ul li.section.main {
+.course-content ul li.section.main:not(.course-section) {
     border-bottom: $border-width solid $table-border-color;
     margin-top: 0;
 
@@ -311,30 +350,57 @@
     }
 }
 
-.course-content ul li.section.hidden {
+.course-content ul li.section.hidden:not(.course-section) {
     .sectionname > span,
     .content > div.summary,
     .activity .activityinstance {
-        @extend .text-muted;
+        color: $text-muted;
     }
 }
 
 .course-content ul.topics,
 .course-content ul.weeks {
     padding: 0;
+    margin: 0;
+    list-style: none;
 
     li.section {
-        padding-top: $spacer;
-        padding-bottom: $spacer;
-
         .content {
             margin: 0;
             padding: 0;
         }
 
-        .summary,
-        .content > .availabilityinfo {
-            margin-left: 25px;
+        @include media-breakpoint-up(sm) {
+            .summary,
+            .content > .availabilityinfo {
+                margin-left: 25px;
+            }
+        }
+
+        .left,
+        .right {
+            padding: 0 6px 0;
+            text-align: right;
+            width: auto;
+        }
+    }
+}
+
+.course-content .single-section ul.topics li.section,
+.course-content .single-section ul.weeks li.section {
+    padding-top: 0;
+}
+
+@include media-breakpoint-down(sm) {
+    body:not(.editing) {
+        .course-content ul.topics,
+        .course-content ul.weeks {
+            li.section {
+                .left,
+                .right {
+                    display: none;
+                }
+            }
         }
     }
 }
@@ -348,7 +414,12 @@
 }
 
 .course-content li {
-    &.section {
+    &.section:not(.course-section) {
+        @include media-breakpoint-down(sm) {
+            ul {
+                padding-left: 0;
+            }
+        }
         ul {
             list-style: disc;
 
@@ -436,38 +507,19 @@
     margin-right: 5px;
 }
 
-.path-site li.activity > div,
-.path-course-view li.activity > div {
-    position: relative;
-    padding: 0 16px 0 0; /* to accommodate the floated completion icon with highlighting */
-}
-
 .path-course-view li.activity span.autocompletion img {
     vertical-align: text-bottom;
-    margin-right: 0;
-}
-
-.path-course-view li.activity form.togglecompletion img {
-    max-width: none; /* The width is 0 so ensure we don't end up with a relative max-width */
+    margin-left: 0;
 }
 
 .path-course-view {
     &.editing {
         li.activity span.autocompletion img {
             /* Use the same spacing as the filler. */
-            margin-right: $spacer / 2;
-            margin-left: $spacer / 2;
+            margin-right: $spacer * 0.5;
+            margin-left: $spacer * 0.5;
         }
     }
-}
-
-.path-course-view li.activity form.togglecompletion .ajaxworking {
-    width: 16px;
-    height: 16px;
-    position: absolute;
-    right: 22px;
-    top: 3px;
-    background: url([[pix:i/ajaxloader]]) no-repeat;
 }
 
 li.section.hidden span.commands a.editing_hide,
@@ -475,14 +527,8 @@ li.section.hidden span.commands a.editing_show {
     cursor: default;
 }
 
-.single-section h3.sectionname {
-    text-align: center;
-    clear: both;
-}
-
-.section img.movetarget {
-    height: 16px;
-    width: 80px;
+.single-section-page .header-action {
+    display: inline-block;
 }
 
 input.titleeditor {
@@ -491,62 +537,22 @@ input.titleeditor {
 }
 
 span.editinstructions {
-    /*rtl:remove*/
     position: absolute;
-    /*rtl:raw:
-    position: relative;
-    */
     top: 0;
     margin-top: -22px;
     margin-left: 30px;
     font-size: $font-size-sm;
     padding: .1em .4em;
-    background-color: $state-info-bg;
-    color: $state-info-text;
     text-decoration: none;
     z-index: 9999;
+    border: $alert-border-width solid transparent;
+    width: fit-content;
 
-    @include box-shadow(2px 2px 5px 1px #ccc);
-    border: 1px solid $state-info-border;
-}
-
-/* Course drag and drop upload styles */
-#dndupload-status {
-    position: fixed;
-    left: 0;
-    width: 40%;
-    margin: 0 30%;
-    padding: 6px;
-    border: 1px solid $state-info-border;
-    text-align: center;
-    background: $state-info-bg;
-    color: $state-info-text;
-    z-index: 1; // Required in order to have this above relatively positioned course content@mixin
-
-    @include box-shadow(2px 2px 5px 1px #ccc);
-    @include border-radius(8px);
-}
-
-.dndupload-preview {
-    color: #909090;
-    border: 1px dashed #909090;
-    list-style: none;
-    margin-top: .2em;
-    padding: .3em;
-}
-
-.dndupload-progress-outer {
-    @extend progress;
-}
-
-.dndupload-progress-inner {
-    .progress {
-        @extend .progress-bar;
-    }
-}
-
-.dndupload-hidden {
-    display: none;
+    @include alert-variant(
+        shift-color($info, $alert-bg-scale),
+        shift-color($info, $alert-border-scale),
+        shift-color($info, $alert-color-scale)
+    );
 }
 
 /* COURSES LISTINGS AND COURSE SUMMARY */
@@ -560,11 +566,6 @@ span.editinstructions {
 #page-admin-course-manage #movecourses td img {
     margin: 0 .22em;
     vertical-align: text-bottom;
-}
-
-#coursesearch {
-    margin-top: 1em;
-    text-align: center;
 }
 
 #page-course-pending .pendingcourserequests {
@@ -584,36 +585,42 @@ span.editinstructions {
 }
 
 .coursebox {
-    padding: $spacer / 2;
+    display: flex;
+    flex-direction: column;
+    .info {
+        display: flex;
+        align-items: center;
+    }
 }
 
-.coursebox > .info > .coursename a {
-    display: block;
-    background-image: url([[pix:moodle|i/course]]);
-    background-repeat: no-repeat;
-    padding-left: 21px;
-    background-position: left 0.2em;
+#frontpage-available-course-list,
+#frontpage-course-list,
+.course-search-result {
+    margin-top: $spacer * 0.5;
+    .coursebox {
+        padding: $spacer * 0.5;
+        border: $border-width solid $border-color;
+        margin-bottom: $spacer * 0.5;
+
+        @include border-radius();
+    }
 }
 
-.coursebox > .info > .coursename,
-.coursebox .content .teachers,
-.coursebox .content .courseimage,
-.coursebox .content .coursefile {
-    float: left;
-    clear: left;
-}
-
-.coursebox .content .teachers,
-.coursebox .content .courseimage,
-.coursebox .content .coursefile {
-    width: 40%;
-}
-
-.coursebox > .info > h3.coursename {
-    margin: 5px;
+.subcategories,
+#frontpage-category-names,
+#frontpage-category-combo {
+    .coursebox > .info > .coursename a {
+        display: block;
+        background-image: url([[pix:moodle|i/course]]);
+        background-size: $icon-width $icon-height;
+        background-repeat: no-repeat;
+        padding-left: 21px;
+    }
 }
 
 .coursebox > .info > .coursename {
+    font-size: $font-size-base;
+    font-weight: normal;
     margin: 5px;
     padding: 0;
 }
@@ -624,33 +631,13 @@ span.editinstructions {
     margin: 0;
 }
 
-.coursebox .moreinfo {
-    padding: 3px 0;
-    float: right;
+.coursebox .customfieldname,
+.coursebox .customfieldseparator {
+    font-weight: $font-weight-bold;
 }
 
-.coursebox .moreinfo img {
-    margin: 0 .2em;
-}
-
-.coursebox .content {
-    clear: both;
-}
-
-.coursebox .content .summary,
-.coursebox .content .coursecat {
-    float: right;
-    width: 55%;
-}
-
-.coursebox .content .coursecat {
-    text-align: right;
-    clear: right;
-}
-
-.coursebox.remotecoursebox .remotecourseinfo {
-    float: left;
-    width: 40%;
+.coursebox .content .coursefile {
+    max-width: 100px;
 }
 
 .coursebox .content .courseimage img {
@@ -663,36 +650,26 @@ span.editinstructions {
 .coursebox .content .courseimage,
 .coursebox .content .coursefile,
 .coursebox .content .teachers,
-.coursebox.remotecoursebox .remotecourseinfo {
+.coursebox.remotecoursebox .remotecourseinfo,
+.coursebox .content .customfields-container {
     margin: 15px 5px 5px;
     padding: 0;
 }
 
-.coursebox.remotehost > .info > .categoryname a {
-    background-image: url([[pix:moodle|i/mnethost]]);
-}
-
-.coursebox.collapsed {
-    margin-bottom: 0;
+.category-browse {
+    .coursebox .content .coursecat,
+    .coursebox .content .summary,
+    .coursebox .content .courseimage,
+    .coursebox .content .coursefile,
+    .coursebox .content .teachers,
+    .coursebox.remotecoursebox .remotecourseinfo,
+    .coursebox .content .customfields-container {
+        margin-top: 0;
+    }
 }
 
 .coursebox.collapsed > .content {
     display: none;
-}
-
-.courses .coursebox {
-    &.collapsed {
-        padding-top: $spacer-y / 2;
-        padding-bottom: $spacer-y / 2;
-    }
-
-    &.even {
-        background-color: $table-bg-accent;
-    }
-
-    &:hover {
-        background-color: $table-bg-hover;
-    }
 }
 
 .courses > .paging.paging-morelink {
@@ -704,45 +681,18 @@ span.editinstructions {
     font-size: $font-size-sm;
 }
 
-.course_category_tree .controls {
-    visibility: hidden;
-}
-
-.course_category_tree .controls div {
-    display: inline;
-    cursor: pointer;
-}
-
-.jsenabled .course_category_tree .controls {
-    visibility: visible;
-}
-
-.course_category_tree .controls {
-    margin-bottom: 5px;
-    text-align: right;
-    float: right;
-}
-
-.course_category_tree .controls div {
-    padding-right: 2em;
-    font-size: 75%;
-}
-
 .course_category_tree .category > .info > .categoryname {
-    background-image: url([[pix:moodle|t/collapsed_empty]]);
-    background-repeat: no-repeat;
+    margin: 5px;
+    font-size: $font-size-base;
+    font-weight: normal;
     padding: 2px 18px;
-    margin: 3px;
-    background-position: center left;
 }
-/* rtl:raw:
-.course_category_tree .category > .info > .categoryname {
-    background-image:url([[pix:moodle|t/collapsed_empty_rtl]]);
-}
- */
+
 .course_category_tree .category.with_children > .info > .categoryname {
     background-image: url([[pix:moodle|t/expanded]]);
-    cursor: pointer;
+    background-size: $icon-width $icon-height;
+    background-repeat: no-repeat;
+    background-position: center left;
 }
 
 .course_category_tree .category.with_children.collapsed > .info > .categoryname {
@@ -757,24 +707,11 @@ span.editinstructions {
     display: none;
 }
 
-.course_category_tree .category > .info {
-    clear: both;
-}
-
 .course_category_tree .category > .content {
     padding-left: 16px;
 }
 
-#page-course-index-category .generalbox.info {
-    margin-bottom: 15px;
-    border: 1px dotted #ddd;
-
-    @include border-radius(4px);
-    padding: 5px;
-}
-
 #page-course-index-category .categorypicker {
-    text-align: center;
     margin: 10px 0 20px;
 }
 
@@ -826,7 +763,6 @@ span.editinstructions {
 
     .listing-actions {
         text-align: center;
-        padding: 0.4rem 0.3rem 0.3rem;
 
         > .moodle-actionmenu {
             display: inline-block;
@@ -844,20 +780,12 @@ span.editinstructions {
 
     .listitem {
 
-        > div {
-            &:hover {
-                background-color: $table-bg-hover;
-            }
-        }
-
         &[data-selected='1'] {
-            > div {
-                background-color: $table-bg-accent;
-            }
-
-            > div:hover {
-                background-color: $table-bg-hover;
-            }
+            border-left: calc(#{$list-group-border-width} + 5px) solid map-get($theme-colors, 'primary');
+            padding-left: calc(#{$list-group-item-padding-x} - 5px);
+        }
+        &:hover {
+            z-index: 2;
         }
     }
 
@@ -880,11 +808,11 @@ span.editinstructions {
 
     .listitem {
         > div {
-            > .float-left {
+            > .float-start {
                 float: left;
             }
 
-            > .float-right {
+            > .float-end {
                 float: right;
                 text-align: right;
             }
@@ -900,21 +828,20 @@ span.editinstructions {
             }
 
             .without-actions {
-                color: #333;
+                color: $course-cat-without-actions-color;
             }
 
             .idnumber {
-                color: #a1a1a8;
                 margin-right: 2em;
             }
         }
         // The category or course is hidden.
         &[data-visible="0"] {
-            @extend .text-muted;
+            color: $text-muted;
 
             > div {
                 > a {
-                    @extend .text-muted;
+                    color: $text-muted;
                 }
 
                 .item-actions {
@@ -935,7 +862,7 @@ span.editinstructions {
             > div,
             > div:hover,
             &[data-selected='1'] > div {
-                background-color: $table-bg-hover;
+                background-color: $table-hover-bg;
             }
         }
     }
@@ -945,15 +872,12 @@ span.editinstructions {
             .categoryname {
                 display: inline-block;
                 margin-left: 1em;
-                color: #a1a1a8;
+                color: $course-listing-color;
             }
 
             .coursename {
                 display: inline-block;
-            }
-
-            > div {
-                padding-left: 1rem;
+                flex-basis: 10rem;
             }
         }
 
@@ -973,25 +897,6 @@ span.editinstructions {
         }
 
         .listitem {
-            > div {
-                > .ba-checkbox {
-                    width: 2.2em;
-                    text-align: center;
-                    margin: -1px 0.5em 0 0;
-                    padding-top: 2px;
-                }
-            }
-
-            &.highlight > div > .ba-checkbox {
-                background-color: $table-bg-hover;
-            }
-
-            &[data-selected='1'] > div > .ba-checkbox {
-                margin: 0 0.5em 0 0;
-                padding: 0;
-                background-color: inherit;
-            }
-
             &:first-child > div .item-actions .action-moveup,
             &:last-child > div .item-actions .action-movedown {
                 display: none;
@@ -999,7 +904,7 @@ span.editinstructions {
         }
 
         .course-count {
-            color: #a1a1a8;
+            color: $course-listing-color;
             margin-right: 2rem;
             min-width: 3.5em;
             display: inline-block;
@@ -1020,8 +925,6 @@ span.editinstructions {
     }
 
     .detail-pair {
-        border-bottom: 1px solid $table-border-color;
-        margin: 0 1rem;
 
         > * {
             display: inline-block;
@@ -1053,13 +956,13 @@ span.editinstructions {
         text-align: center;
 
         .yui3-button {
-            background-color: $btn-info-bg;
+            @include button-variant($info, $info);
             border: 0;
             margin: 0.4rem 0.2rem 0.45rem;
             font-size: 10.4px;
 
             &.active-page {
-                background-color: $btn-primary-color;
+                @include button-variant($primary, $primary);
             }
         }
     }
@@ -1068,7 +971,7 @@ span.editinstructions {
         text-align: center;
 
         &.dimmed {
-            @extend .text-muted;
+            color: $text-muted;
             margin: 0.4rem 1rem 0.45rem;
         }
     }
@@ -1090,44 +993,6 @@ span.editinstructions {
 }
 
 /** Management header styling **/
-.coursecat-management-header {
-    vertical-align: middle;
-
-    h2 {
-        display: inline-block;
-        text-align: left;
-    }
-
-    > div {
-        display: inline-block;
-        float: right;
-
-        > div {
-            margin: 10px 0 10px 1em;
-            display: inline-block;
-        }
-    }
-
-    select {
-        max-width: 300px;
-        cursor: pointer;
-        padding: 0.4em 0.5em 0.45em 1em;
-        vertical-align: baseline;
-        white-space: nowrap;
-    }
-
-    .view-mode-selector {
-        .moodle-actionmenu {
-            white-space: nowrap;
-            display: inline-block;
-        }
-
-        .moodle-actionmenu[data-enhanced].show .menu a {
-            padding-left: 1em;
-        }
-    }
-}
-
 .course-being-dragged-proxy {
     border: 0;
     color: $link-color;
@@ -1188,4 +1053,799 @@ span.editinstructions {
 .page-settings-menu .menubar > a > .icon {
     width: auto;
     height: 32px;
+    font-size: 32px;
+}
+
+.activity-navigation {
+    .row {
+        align-items: center;
+    }
+    #prev-activity-link,
+    #next-activity-link {
+        white-space: pre-wrap;
+    }
+}
+
+.automatic-completion-conditions {
+    .badge {
+        font-size: 100%;
+    }
+}
+
+// These are the new styles for the renewed course UI in isssue MDL-71691
+// once the old course renderers are removed in MDL-72656, all css related
+// to activities and sections above this commend needs to be reviewed an
+// possibly removed.
+
+/* Variables definition*/
+
+$activity-item-padding: 0.75rem !default;
+$activity-border-radius: 1rem !default;
+$activity-border-width: 2px !default;
+$activity-hover-border-color: $primary !default;
+$divider-color: $gray-300 !default;
+$divider-width: 2px !default;
+$divider-hover-color: $primary !default;
+
+/* Functions/Mixins definition */
+
+// Activity completion button custom styling mixin.
+@mixin completion-button() {
+    &.btn {
+        @include button-variant($white, $gray-400, $gray-600);
+        min-height: map-get($iconsizes, 5);
+        font-weight: bold;
+        @include border-radius();
+        .icon {
+            font-size: inherit;
+        }
+    }
+    @each $color, $value in $theme-colors {
+        &.btn-#{$color} {
+            $bg-color: shift-color($value, $alert-bg-scale);
+            @include button-variant($bg-color, $bg-color, $value);
+            color: shift-color($value, $alert-color-scale);
+            &:hover {
+                color: color-yiq($value);
+            }
+        }
+    }
+}
+
+/* Section Expand all/Collapse all */
+
+.section-collapsemenu {
+    .collapseall {
+        display: block;
+    }
+
+    .expandall {
+        display: none;
+    }
+
+    &.collapsed {
+        .collapseall {
+            display: none;
+        }
+
+        .expandall {
+            display: block;
+        }
+    }
+}
+
+/* Course section */
+
+.course-section {
+    list-style: none;
+    margin-top: map-get($spacers, 3);
+    // Custom styles for course sections while editing.
+    .editing & {
+        margin-top: map-get($spacers, 2);
+    }
+
+    .section-item {
+        padding: map-get($spacers, 3);
+        border: $border-width solid $border-color;
+        @include border-radius($activity-border-radius);
+    }
+
+    &.hidden,
+    &.orphaned {
+        .section-item {
+            background-color: $gray-100;
+        }
+    }
+
+    .sectionname > a {
+        color: $gray-900;
+        &:hover {
+            text-decoration: none;
+        }
+    }
+
+    .sectionbadges .badge {
+        margin-left: map-get($spacers, 2);
+        font-weight: normal;
+        .icon {
+            font-size: 12px;
+            width: 12px;
+            height: 12px;
+        }
+    }
+
+    .course-section-header.draggable {
+        cursor: move;
+    }
+
+    .section_action_menu {
+        .dropdown-toggle::after {
+            display: none;
+        }
+    }
+
+    .summarytext {
+        // Add rounded borders to images.
+        img {
+            @include border-radius($activity-border-radius);
+        }
+    }
+
+    // Availability styles for both section and activities.
+    .availabilityinfo {
+        margin-top: map-get($spacers, 2);
+        padding: map-get($spacers, 1) map-get($spacers, 3);
+        background-color: $gray-200;
+        @include font-size($small-font-size);
+        @include border-radius($activity-border-radius);
+        .editavailability {
+            a {
+                @include border-radius();
+                font-weight: bold;
+                &:hover {
+                    background-color: $gray-400;
+                }
+                .icon {
+                    font-size: inherit;
+                    margin-right: map-get($spacers, 1);
+                }
+            }
+        }
+    }
+
+    // Override '.btn.btn-icon' styles from buttons.scss to make action menu buttons smaller.
+    .action-menu {
+        .btn.btn-icon {
+            height: map-get($iconsizes, 5);
+            width: map-get($iconsizes, 5);
+            @include border-radius();
+        }
+        &.section-actions .btn.btn-icon {
+            font-size: $font-size-lg;
+        }
+    }
+
+    .section-summary-activities {
+        .icon {
+            width: inherit;
+            color: $primary;
+        }
+    }
+
+    .section-summary-activities + .section {
+        border-top: $border-width solid $border-color;
+        margin-top: map-get($spacers, 3) !important;  // stylelint-disable-line declaration-no-important
+        padding-top: map-get($spacers, 3) !important; // stylelint-disable-line declaration-no-important
+    }
+
+    .section_goto .icon {
+        font-size: $font-size-lg;
+        color: $primary;
+    }
+
+    // Add new z-index context for dnd overlay higher divider buttons and quick edit links.
+    .overlay-preview {
+        z-index: 5;
+    }
+}
+
+// Course 'add section' button.
+.btn.add-section {
+    @include border-radius($activity-border-radius);
+    border: $divider-width dashed $border-color;
+    color: $primary;
+    font-size: $font-size-sm;
+    font-weight: bold;
+    &:hover,
+    &:focus {
+        background-color: $primary-light-background;
+        border: $divider-width solid $primary;
+        color: $primary;
+    }
+}
+
+.max-section-alert {
+    border-top: $divider-width dashed $border-color;
+    font-size: $font-size-sm;
+    font-weight: normal;
+    color: $gray-600;
+}
+
+/* Single section page specific styles */
+
+.single-section {
+    // Revert main section's styles.
+    > ul > .course-section {
+        &.hidden .section-item {
+            background-color: inherit;
+        }
+        .section-item {
+            padding: 0;
+            border: none;
+        }
+    }
+}
+
+/* Re-style ordered list in course content */
+.course-content .activity-altcontent {
+    ul {
+        list-style: disc;
+        ul {
+            list-style: circle;
+            ul {
+                list-style: square;
+            }
+        }
+    }
+}
+
+/* Activity cards */
+
+.activity {
+    list-style: none;
+    padding-top: map-get($spacers, 1);
+    margin-top: map-get($spacers, 1);
+    border-top: $border-width solid $border-color;
+    // Custom styles for activity while editing and for the first activity card in the section.
+    .editing &,
+    .section &:first-child {
+        // Remove activity top border and spacing, while editing a separator is displayed.
+        padding-top: 0;
+        margin-top: 0;
+        border-top: none;
+    }
+}
+
+.activity-item {
+    padding: $activity-item-padding;
+    @include border-radius($activity-border-radius);
+    &.activityinline {
+        padding: $activity-item-padding 0;
+    }
+    &.hiddenactivity {
+        background-color: $gray-100;
+        .activityiconcontainer,
+        .badge {
+            mix-blend-mode: multiply;
+        }
+    }
+    // Custom styles for activity cards while editing.
+    .editing & {
+        cursor: move;
+        .a {
+            cursor: pointer;
+        }
+        // Add a border on hover to the activity card (avoiding hover effect in inner activities).
+        &:hover:not(:has(.activity:hover)),
+        &.selected {
+            // We use outline here to avoid changing the layout everytime we hover.
+            outline: $activity-border-width solid $activity-hover-border-color;
+            box-shadow: $box-shadow-sm;
+            .activityiconcontainer,
+            .badge {
+                mix-blend-mode: multiply;
+            }
+        }
+    }
+    .activity.dragging & {
+        border: $activity-border-width solid $activity-hover-border-color;
+        .editing &:hover {
+            // We cancel the outline when dragging because it is not taken into account
+            // in the element/image representing the drag and drop and it cuts out part of the
+            // border.
+            outline: none;
+        }
+    }
+
+    // Activity card grid layout.
+    .activity-grid {
+        display: grid;
+        align-items: center;
+        grid-template-columns: min-content 1fr min-content min-content min-content;
+        grid-template-rows: 1fr repeat(5, min-content);
+        grid-template-areas:
+            "icon   name          groupmode      completion    actions"
+            "icon   visibility    groupmode      completion    actions"
+            "icon   dates         groupmode      completion    actions"
+            "icon   altcontent    altcontent     altcontent    altcontent"
+            "icon   afterlink     afterlink      afterlink     afterlink"
+            "icon   availability  availability   availability  availability";
+        @include media-breakpoint-down(xs) {
+            grid-template-columns: min-content 1fr min-content min-content min-content;
+            grid-template-rows: 1fr repeat(4, min-content);
+            grid-template-areas:
+                "icon          name          actions"
+                "icon          visibility    actions"
+                "dates         dates         dates"
+                "groupmode     groupmode     groupmode"
+                "completion    completion    completion"
+                "altcontent    altcontent    altcontent"
+                "afterlink     afterlink     afterlink"
+                "availability  availability  availability";
+        }
+    }
+    // Activity card specific grid layout for activities without name.
+    .activity-grid.noname-grid {
+        grid-template-columns: min-content 1fr min-content min-content;
+        grid-template-areas:
+            "visibility    groupmode        completion    actions"
+            "altcontent    altcontent       altcontent    altcontent"
+            "afterlink     afterlink        afterlink     afterlink"
+            "availability  availability     availability  availability";
+        @include media-breakpoint-down(xs) {
+            grid-template-columns: 1fr min-content;
+            grid-template-areas:
+                "visibility    actions"
+                "altcontent    altcontent"
+                "groupmode     groupmode"
+                "afterlink     afterlink"
+                "completion    completion"
+                "availability  availability";
+        }
+    }
+
+    .activity-actions {
+        grid-area: actions;
+        .actions {
+            position: relative;
+        }
+    }
+
+    .activity-icon {
+        grid-area: icon;
+    }
+
+    .activity-dates {
+        grid-area: dates;
+        @include font-size($small-font-size);
+        color: $gray-700;
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: 0.75rem;
+        @include media-breakpoint-down(xs) {
+            margin-top: map-get($spacers, 2);
+        }
+    }
+    .activity-name-area {
+        grid-area: name;
+        // Prevent bootstrap strech-link from covering the inplace editable button using z-index.
+        .activityname {
+            .afterlink {
+                margin-left: map-get($spacers, 2);
+            }
+            .inplaceeditable .quickeditlink {
+                position: relative;
+                z-index: 2;
+                margin-left: map-get($spacers, 2);
+            }
+        }
+        .activitybadge {
+            &.badge-none {
+                font-weight: normal;
+                @include font-size($small-font-size);
+                padding: 0;
+            }
+        }
+    }
+
+    .activity-completion {
+        grid-area: completion;
+        justify-self: end;
+        // Re-style completion buttons (mark as done & dropdown).
+        button,
+        a[role="button"] {
+            @include completion-button();
+        }
+        @include media-breakpoint-down(xs) {
+            width: 100%;
+            margin-top: map-get($spacers, 2);
+            button {
+                width: 100%;
+            }
+        }
+        .completion-dialog {
+            color: $gray-700;
+            font-size: $font-size-sm;
+            min-width: 12rem;
+            .icon {
+                font-size: $font-size-sm;
+                width: $font-size-sm;
+                height: $font-size-sm;
+                margin-right: map-get($spacers, 1);
+            }
+            .editcompletion a {
+                @include border-radius();
+                color: $gray-700;
+                font-weight: bold;
+                text-decoration: none;
+                &:hover {
+                    background-color: $gray-200;
+                }
+            }
+        }
+    }
+
+    .activity-groupmode-info {
+        grid-area: groupmode;
+        justify-self: end;
+        .groupmode-information {
+            height: map-get($iconsizes, 5);
+            width: map-get($iconsizes, 5);
+            @include border-radius();
+        }
+        .groupmode-icon-info {
+            display: none;
+        }
+        @include media-breakpoint-down(xs) {
+            width: 100%;
+            margin-top: map-get($spacers, 2);
+            padding-top: map-get($spacers, 2);
+            border-top: $border-width solid $border-color;
+            .groupmode-information {
+                width: auto;
+                font-size: inherit;
+                padding: 0 map-get($spacers, 2);
+            }
+            .groupmode-icon-info {
+                display: inline;
+            }
+            // Disable v-parent-focus behaviour on small devices to always show the groupmode button.
+            .v-parent-focus {
+                opacity: 1;
+                visibility: visible;
+            }
+        }
+    }
+
+    .activity-badges {
+        grid-area: visibility;
+        .badge {
+            font-weight: normal;
+            .icon {
+                font-size: 12px;
+                width: 12px;
+                height: 12px;
+            }
+        }
+    }
+
+    .activity-altcontent {
+        grid-area: altcontent;
+        margin-top: map-get($spacers, 1);
+        &.activity-description {
+            margin-top: map-get($spacers, 2);
+            padding-top: map-get($spacers, 2);
+            border-top: $border-width solid $border-color;
+            @include font-size($small-font-size);
+        }
+        // Add rounded borders to images.
+        img {
+            @include border-radius($activity-border-radius);
+        }
+    }
+
+    .activity-availability {
+        grid-area: availability;
+    }
+
+    .activity-afterlink {
+        grid-area: afterlink;
+        margin-top: map-get($spacers, 2);
+        padding-top: map-get($spacers, 2);
+        border-top: $border-width solid $border-color;
+    }
+
+    .no-overflow {
+        width: 100%;
+    }
+}
+
+.section .draggable .activity-item .dragicon {
+    display: none;
+}
+
+/* Dividers */
+
+.divider {
+    position: relative;
+    hr {
+        width: 100%;
+        margin: map-get($spacers, 2) map-get($spacers, 1);
+        border-top: $divider-width dashed $divider-color;
+        .changenumsections.disabled & {
+            border-top: $divider-width dashed $divider-color;
+        }
+    }
+    .divider-content {
+        opacity: 0;
+        visibility: hidden;
+        transition: visibility 0.1s;
+        position: absolute;
+        background: linear-gradient(transparent 40%, $white 40%, $white 60%, transparent 60%);
+        .section.hidden & {
+            background: linear-gradient(transparent 40%, $gray-100 40%, $gray-100 60%, transparent 60%);
+        }
+    }
+    &.always-visible {
+        .divider-content {
+            opacity: 1;
+            visibility: visible;
+        }
+    }
+    &.always-hidden {
+        hr {
+            opacity: 0;
+            visibility: hidden;
+        }
+    }
+    &:hover,
+    &:focus,
+    &:focus-within {
+        .divider-content {
+            opacity: 1;
+            visibility: visible;
+        }
+        hr {
+            opacity: 1;
+            visibility: visible;
+        }
+    }
+    // Style the hr divider when the "Add content" button is hovered.
+    &:has(.btn.add-content:hover) {
+        hr {
+            border-color: $divider-hover-color;
+            .changenumsections.disabled & {
+                border-color: $gray-200;
+            }
+        }
+    }
+}
+
+// These styles will make the activity and section dividers buttons visible (but still without opacity) so
+// buttons can be keyboard focusable.
+.activity:focus-within + .activity .divider .divider-content,
+.course-section-header:focus-within + .content .section .activity:first-child .divider .divider-content,
+.content .section .activity:focus-within .divider .divider-content,
+.course-content:focus-within .changenumsections .divider .divider-content {
+    visibility: visible;
+}
+
+// Hide last section "Add section". It will rely on the course format general "Add section" button.
+.course-content ul.topics > li:last-child .changenumsections {
+    display: none;
+}
+
+// Custom buttons for dividers.
+.btn.add-content {
+    position: relative;
+    z-index: 1;
+    @include border-radius();
+    font-size: $font-size-sm;
+    font-weight: bold;
+    color: shift-color($primary, $alert-color-scale);
+    background-color: shift-color($primary, $alert-bg-scale);
+    &:hover,
+    &:focus {
+        color: color-yiq($primary);
+        background-color: $primary;
+    }
+    .icon {
+        width: 14px;
+        height: 14px;
+        font-size: 14px;
+    }
+    .changenumsections.disabled & {
+        color: $gray-500;
+        background-color: $gray-200;
+        outline: none;
+        box-shadow: none;
+        &:hover,
+        &:focus {
+            color: $gray-500;
+            background-color: $gray-200;
+            outline: none;
+            box-shadow: none;
+        }
+        pointer-events: auto; // Restore pointer events for the disabled button so we can see the tooltip.
+    }
+}
+
+/* Bulk editing */
+
+.bulkenabled {
+    .bulk-hidden {
+        display: none !important; // stylelint-disable-line declaration-no-important
+    }
+    .section {
+        margin-left: map-get($spacers, 3);
+        &:not(:first-child) {
+            margin-top: map-get($spacers, 4);
+        }
+    }
+    .activity {
+        margin-top: map-get($spacers, 2);
+        margin-left: 2rem;
+        padding-top: map-get($spacers, 2);
+        border-top: $divider-width dashed $divider-color;
+        &:first-child {
+            margin-top: map-get($spacers, 4);
+        }
+    }
+    .activity-item {
+        .bulkselect {
+            float: left;
+            margin-left: -2rem;
+        }
+        // Delegated sections are not available for bulk editing.
+        &:has(.delegated-section):hover {
+            outline: none !important; // stylelint-disable-line declaration-no-important
+            box-shadow: none !important; // stylelint-disable-line declaration-no-important
+        }
+    }
+    .course-section-header .bulkselect {
+        left: -2.75rem;
+        position: relative;
+        width: 0;
+    }
+    @include media-breakpoint-down(sm) {
+        .course-content {
+            margin-left: 2rem;
+        }
+    }
+}
+
+// Custom styles for bulk actions sticky footer in small devices.
+.sticky-footer-content.bulkactions {
+    @include media-breakpoint-down(sm) {
+        position: relative;
+        .form-check,
+        .bulkaction-name,
+        .bulkcount {
+            display: none;
+        }
+        .actions button {
+            padding: 0 map-get($spacers, 2);
+        }
+        .bulkcancel {
+            position: absolute;
+            top: 0;
+            right: 0;
+        }
+    }
+}
+
+/* Activity completion */
+
+.defaultactivitycompletion-item {
+    a {
+        color: $black;
+        text-decoration: none;
+    }
+    .activityicon {
+        width: 32px;
+        height: 32px;
+    }
+}
+
+/* Home page course specific styles */
+
+.sitetopic {
+    // Hide the first activity top border.
+    .activity:first-of-type hr {
+        display: none;
+    }
+    .section-item {
+        margin-bottom: map-get($spacers, 4);
+        @include border-radius();
+    }
+}
+
+/* Styles for the Move activity and Move section modals */
+
+.move-activity-tree {
+    .collapse-list-item {
+        @include border-radius();
+
+        &:hover,
+        &:focus {
+            background-color: shift-color($primary, $alert-bg-scale);
+
+            a {
+                color: shift-color($primary, $alert-color-scale);
+            }
+        }
+
+        a {
+            color: $list-group-action-active-color;
+
+            &:hover,
+            &:focus {
+                text-decoration: none;
+            }
+        }
+
+        a.disabled {
+            color: $list-group-disabled-color;
+        }
+    }
+
+    .collapse-list-item-content .collapse-list-item {
+        padding: $collapse-list-item-padding-y $collapse-list-item-padding-x;
+    }
+
+    ul {
+        margin-left: map-get($spacers, 4);
+    }
+
+    .collapse-list-link {
+        font-weight: bold;
+    }
+}
+
+/* Subsection specific styles */
+
+.activity.subsection {
+    border-top: none;
+    > .activity-item {
+        border: $border-width solid $border-color;
+        padding: 0;
+        margin: map-get($spacers, 2) 0;
+        > .activity-grid > .activity-altcontent {
+            margin-top: 0;
+        }
+    }
+    .section {
+        margin-top: 0;
+        .section-item {
+            border: none;
+            padding: $activity-item-padding;
+        }
+        .icons-collapse-expand:has(+ h4) {
+            height: map-get($iconsizes, 4);
+            width: map-get($iconsizes, 4);
+            font-size: $font-size-sm;
+        }
+        h4 {
+            font-size: $h5-font-size;
+        }
+        .section-actions .btn.btn-icon {
+            font-size: inherit;
+        }
+    }
+    + .activity {
+        border-top: none;
+    }
+    // Allow v-parent-focus only for closest acvitity (avoiding subsection).
+    .focus-control:not(:has(.focus-control)) {
+        &:focus-within .v-parent-focus,
+        &:hover .v-parent-focus {
+            opacity: 1 !important; // stylelint-disable-line declaration-no-important
+            visibility: visible !important; // stylelint-disable-line declaration-no-important
+        }
+    }
+    .focus-control:focus-within .focus-control .v-parent-focus,
+    .focus-control:hover .focus-control .v-parent-focus {
+        opacity: 0;
+        visibility: hidden;
+    }
 }

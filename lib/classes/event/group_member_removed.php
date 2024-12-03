@@ -41,29 +41,8 @@ class group_member_removed extends base {
      * @return string
      */
     public function get_description() {
-        return "The user with id '$this->userid' removed the user with id '$this->relateduserid' to the group with " .
+        return "The user with id '$this->userid' removed the user with id '$this->relateduserid' from the group with " .
             "id '$this->objectid'.";
-    }
-
-    /**
-     * Legacy event data if get_legacy_eventname() is not empty.
-     *
-     * @return \stdClass
-     */
-    protected function get_legacy_eventdata() {
-        $eventdata = new \stdClass();
-        $eventdata->groupid = $this->objectid;
-        $eventdata->userid  = $this->relateduserid;
-        return $eventdata;
-    }
-
-    /**
-     * Return the legacy event name.
-     *
-     * @return string
-     */
-    public static function get_legacy_eventname() {
-        return 'groups_member_removed';
     }
 
     /**

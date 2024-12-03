@@ -39,6 +39,7 @@ list($user, $course) = useredit_setup_preference_page($userid, $courseid);
 $forumform = new user_edit_forum_form(null, array('userid' => $user->id));
 
 $user->markasreadonnotification = get_user_preferences('forum_markasreadonnotification', 1, $user->id);
+$user->useexperimentalui = get_user_preferences('forum_useexperimentalui', 0, $user->id);
 $forumform->set_data($user);
 
 $redirect = new moodle_url("/user/preferences.php", array('userid' => $user->id));
@@ -48,6 +49,7 @@ if ($forumform->is_cancelled()) {
 
     $user->maildigest = $data->maildigest;
     $user->autosubscribe = $data->autosubscribe;
+    $user->preference_forum_useexperimentalui = $data->useexperimentalui;
     if (!empty($CFG->forum_trackreadposts)) {
         $user->trackforums = $data->trackforums;
         if (property_exists($data, 'markasreadonnotification')) {
@@ -70,7 +72,7 @@ if ($forumform->is_cancelled()) {
         }
     }
 
-    redirect($redirect);
+    redirect($redirect, get_string('changessaved'), null, \core\output\notification::NOTIFY_SUCCESS);
 }
 
 // Display page header.
@@ -79,6 +81,7 @@ $userfullname     = fullname($user, true);
 
 $PAGE->navbar->includesettingsbase = true;
 
+$PAGE->add_body_class('limitedwidth');
 $PAGE->set_title("$course->shortname: $streditmyforum");
 $PAGE->set_heading($userfullname);
 
@@ -90,4 +93,3 @@ $forumform->display();
 
 // And proper footer.
 echo $OUTPUT->footer();
-

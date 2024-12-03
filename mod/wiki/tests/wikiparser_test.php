@@ -8,17 +8,26 @@
 //
 // Moodle is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle. If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+
+namespace mod_wiki;
+
+use wiki_parser_proxy;
+
+defined('MOODLE_INTERNAL') || die;
+
+global $CFG;
+require_once($CFG->dirroot . '/mod/wiki/parser/parser.php');
 
 /**
  * Unit tests for the wiki parser
  *
  * @package   mod_wiki
- * @category  phpunit
+ * @category  test
  * @copyright 2009 Marc Alier, Jordi Piguillem marc.alier@upc.edu
  * @copyright 2009 Universitat Politecnica de Catalunya http://www.upc.edu
  *
@@ -30,14 +39,93 @@
  *
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+class wikiparser_test extends \advanced_testcase {
 
-defined('MOODLE_INTERNAL') || die;
+    /**
+     * URL inside the clickable text of some link should not be turned into a new link via the url_tag_rule.
+     *
+     * @dataProvider urls_inside_link_text_provider
+     * @param string $markup Markup of the Wiki page the text is part of.
+     * @param string $input The input text.
+     * @param string $output The expected output HTML as a result of the parsed input text.
+     */
+    public function test_urls_inside_link_text(string $markup, string $input, string $output): void {
 
-global $CFG;
-require_once($CFG->dirroot . '/mod/wiki/parser/parser.php');
+        $parsingresult = wiki_parser_proxy::parse($input, $markup, [
+            'link_callback' => '/mod/wiki/locallib.php:wiki_parser_link',
+            'link_callback_args' => ['swid' => 1],
+        ]);
 
+        $this->assertStringContainsString($output, $parsingresult['parsed_text']);
+    }
 
-class mod_wiki_wikiparser_test extends basic_testcase {
+    /**
+     * Provides data sets for {@see self::test_urls_inside_link_text()}.
+     *
+     * @return array
+     */
+    public static function urls_inside_link_text_provider(): array {
+        return [
+            'creole implicit link' => [
+                'markup' => 'creole',
+                'input' => 'Visit https://site.url for more information.',
+                'output' => 'Visit <a href="https://site.url">https://site.url</a> for more information.',
+            ],
+            'creole explicit link' => [
+                'markup' => 'creole',
+                'input' => 'Visit [[https://site.url]] for more information.',
+                'output' => 'Visit <a href="https://site.url">https://site.url</a> for more information.',
+            ],
+            'creole explicit link with text' => [
+                'markup' => 'creole',
+                'input' => 'Visit [[https://site.url|http://www.site.url]] for more information.',
+                'output' => 'Visit <a href="https://site.url">http://www.site.url</a> for more information.',
+            ],
+            'nwiki implicit link' => [
+                'markup' => 'nwiki',
+                'input' => 'Visit https://site.url for more information.',
+                'output' => 'Visit <a href="https://site.url">https://site.url</a> for more information.',
+            ],
+            'nwiki explicit link' => [
+                'markup' => 'nwiki',
+                'input' => 'Visit [https://site.url] for more information.',
+                'output' => 'Visit <a href="https://site.url">https://site.url</a> for more information.',
+            ],
+            'nwiki explicit link with space separated text' => [
+                'markup' => 'nwiki',
+                'input' => 'Visit [https://site.url http://www.site.url] for more information.',
+                'output' => 'Visit <a href="https://site.url">http://www.site.url</a> for more information.',
+            ],
+            'nwiki explicit link with pipe separated text' => [
+                'markup' => 'nwiki',
+                'input' => 'Visit [https://site.url|http://www.site.url] for more information.',
+                'output' => 'Visit <a href="https://site.url">http://www.site.url</a> for more information.',
+            ],
+            'html implicit link' => [
+                'markup' => 'html',
+                'input' => 'Visit https://site.url for more information.',
+                'output' => 'Visit <a href="https://site.url">https://site.url</a> for more information.',
+            ],
+            'html explicit link with text' => [
+                'markup' => 'html',
+                'input' => 'Visit <a href="https://site.url">http://www.site.url</a> for more information.',
+                'output' => 'Visit <a href="https://site.url">http://www.site.url</a> for more information.',
+            ],
+            'html wiki link to non-existing page' => [
+                'markup' => 'html',
+                'input' => 'Visit [[Another page]] for more information.',
+                'output' => 'Visit <a class="wiki_newentry" ' .
+                    'href="https://www.example.com/moodle/mod/wiki/create.php?swid=1&amp;title=Another+page&amp;action=new">' .
+                    'Another page</a> for more information.',
+            ],
+            'html wiki link inside an explicit link' => [
+                // The explicit href URL takes precedence here, the [[...]] is not turned into a wiki link.
+                'markup' => 'html',
+                'input' => 'Visit <a href="https://site.url">[[Another page]]</a> for more information.',
+                'output' => 'Visit <a href="https://site.url">[[Another page]]</a> for more information.',
+            ],
+        ];
+    }
 
     function testCreoleMarkup() {
         $this->assertTestFiles('creole');
@@ -83,7 +171,7 @@ class mod_wiki_wikiparser_test extends basic_testcase {
      * - The edit link points to the right page,
      * - The links properly works with get_section.
      */
-    public function test_special_headings() {
+    public function test_special_headings(): void {
 
         // First testing HTML markup.
 
@@ -142,8 +230,8 @@ class mod_wiki_wikiparser_test extends basic_testcase {
             'link_callback' => '/mod/wiki/locallib.php:wiki_parser_link',
             'link_callback_args' => array('swid' => 1)
         ));
-        $this->assertRegExp($regexpoutput, $actual['parsed_text']);
-        $this->assertRegExp($regexptoc, $actual['toc']);
+        $this->assertMatchesRegularExpression($regexpoutput, $actual['parsed_text']);
+        $this->assertMatchesRegularExpression($regexptoc, $actual['toc']);
 
         // Now going to test Creole markup.
         // Note that Creole uses links to the escaped version of the section.
@@ -244,4 +332,52 @@ class mod_wiki_wikiparser_test extends basic_testcase {
         $this->assertNotEquals(false, $section);
     }
 
+    /**
+     * Test that format that are not supported are raising an exception
+     *
+     * @param string $format
+     * @param string $expected
+     * @covers \wiki_parser_proxy::parse
+     * @dataProvider format_parser_provider
+     */
+    public function test_format_parser(string $format, string $expected): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $wiki = $generator->create_module('wiki', array_merge(['course' => $course->id, 'defaultformat' => $format]));
+        $wikigenerator = $this->getDataGenerator()->get_plugin_generator('mod_wiki');
+        if ($expected === 'exception') {
+            $this->expectException(\moodle_exception::class);
+        }
+        $page = $wikigenerator->create_page($wiki);
+        $version = wiki_get_current_version($page->id);
+        $this->assertEquals($expected, $version->contentformat);
+    }
+
+    /**
+     * Data provider for test_format_parser
+     *
+     * @return array[]
+     */
+    public static function format_parser_provider(): array {
+        return [
+            'creole' => [
+                'data' => 'creole',
+                'expected' => 'creole',
+            ],
+            'html' => [
+                'data' => 'html',
+                'expected' => 'html',
+            ],
+            'wikimarkup' => [
+                'data' => 'nwiki',
+                'expected' => 'nwiki',
+            ],
+            'wrong format' => [
+                'data' => '../wrongformat123',
+                'expected' => 'exception',
+            ],
+        ];
+    }
 }

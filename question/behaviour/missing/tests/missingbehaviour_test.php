@@ -14,15 +14,17 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * This file contains tests for the 'missing' behaviour.
- *
- * @package    qbehaviour
- * @subpackage missing
- * @copyright  2009 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace qbehaviour_missing;
 
+use qbehaviour_missing;
+use question_attempt;
+use question_attempt_pending_step;
+use question_attempt_step;
+use question_bank;
+use question_display_options;
+use question_state;
+use question_test_recordset;
+use question_usage_null_observer;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -31,52 +33,44 @@ require_once(__DIR__ . '/../../../engine/lib.php');
 require_once(__DIR__ . '/../../../engine/tests/helpers.php');
 require_once(__DIR__ . '/../behaviour.php');
 
-
 /**
  * Unit tests for the 'missing' behaviour.
  *
+ * @package    qbehaviour_missing
  * @copyright  2009 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class qbehaviour_missing_test extends advanced_testcase {
+class missingbehaviour_test extends \advanced_testcase {
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_missing_cannot_start() {
-        $qa = new question_attempt(test_question_maker::make_question('truefalse', 'true'), 0);
+    public function test_missing_cannot_start(): void {
+        $qa = new question_attempt(\test_question_maker::make_question('truefalse', 'true'), 0);
         $behaviour = new qbehaviour_missing($qa, 'deferredfeedback');
+        $this->expectException(\moodle_exception::class);
         $behaviour->init_first_step(new question_attempt_step(array()), 1);
     }
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_missing_cannot_process() {
-        $qa = new question_attempt(test_question_maker::make_question('truefalse', 'true'), 0);
+    public function test_missing_cannot_process(): void {
+        $qa = new question_attempt(\test_question_maker::make_question('truefalse', 'true'), 0);
         $behaviour = new qbehaviour_missing($qa, 'deferredfeedback');
+        $this->expectException(\moodle_exception::class);
         $behaviour->process_action(new question_attempt_pending_step(array()));
     }
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_missing_cannot_get_min_fraction() {
-        $qa = new question_attempt(test_question_maker::make_question('truefalse', 'true'), 0);
+    public function test_missing_cannot_get_min_fraction(): void {
+        $qa = new question_attempt(\test_question_maker::make_question('truefalse', 'true'), 0);
         $behaviour = new qbehaviour_missing($qa, 'deferredfeedback');
+        $this->expectException(\moodle_exception::class);
         $behaviour->get_min_fraction();
     }
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_missing_cannot_get_max_fraction() {
-        $qa = new question_attempt(test_question_maker::make_question('truefalse', 'true'), 0);
+    public function test_missing_cannot_get_max_fraction(): void {
+        $qa = new question_attempt(\test_question_maker::make_question('truefalse', 'true'), 0);
         $behaviour = new qbehaviour_missing($qa, 'deferredfeedback');
+        $this->expectException(\moodle_exception::class);
         $behaviour->get_max_fraction();
     }
 
-    public function test_render_missing() {
+    public function test_render_missing(): void {
         $records = new question_test_recordset(array(
             array('questionattemptid', 'contextid', 'questionusageid', 'slot',
                                    'behaviour', 'questionid', 'variant', 'maxmark', 'minfraction', 'maxfraction', 'flagged',
@@ -91,7 +85,7 @@ class qbehaviour_missing_test extends advanced_testcase {
                     1256233790, 2, 1, 'complete', 0.50, 1256233705, 1,  'choice0',  '1'),
         ));
 
-        $question = test_question_maker::make_question('truefalse', 'true');
+        $question = \test_question_maker::make_question('truefalse', 'true');
         $question->id = -1;
 
         question_bank::start_unit_test();
@@ -117,8 +111,8 @@ class qbehaviour_missing_test extends advanced_testcase {
         $this->assertEquals(array('-submit' => '1', 'choice0' => '1'), $step->get_all_data());
 
         $output = $qa->render(new question_display_options(), '1');
-        $this->assertRegExp('/' . preg_quote($qa->get_question()->questiontext, '/') . '/', $output);
-        $this->assertRegExp('/' . preg_quote(
+        $this->assertMatchesRegularExpression('/' . preg_quote($qa->get_question(false)->questiontext, '/') . '/', $output);
+        $this->assertMatchesRegularExpression('/' . preg_quote(
                 get_string('questionusedunknownmodel', 'qbehaviour_missing'), '/') . '/', $output);
         $this->assertTag(array('tag'=>'div', 'attributes'=>array('class'=>'warning')), $output);
     }

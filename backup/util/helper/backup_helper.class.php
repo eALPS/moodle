@@ -32,9 +32,9 @@ abstract class backup_helper {
     /**
      * Given one backupid, create all the needed dirs to have one backup temp dir available
      */
-    static public function check_and_create_backup_dir($backupid) {
-        global $CFG;
-        if (!check_dir_exists($CFG->tempdir . '/backup/' . $backupid, true, true)) {
+    public static function check_and_create_backup_dir($backupid) {
+        $backupiddir = make_backup_temp_directory($backupid, false);
+        if (empty($backupiddir)) {
             throw new backup_helper_exception('cannot_create_backup_temp_dir');
         }
     }
@@ -48,9 +48,9 @@ abstract class backup_helper {
      * @param string $backupid Backup id
      * @param \core\progress\base $progress Optional progress reporting object
      */
-    static public function clear_backup_dir($backupid, \core\progress\base $progress = null) {
-        global $CFG;
-        if (!self::delete_dir_contents($CFG->tempdir . '/backup/' . $backupid, '', $progress)) {
+    public static function clear_backup_dir($backupid, ?\core\progress\base $progress = null) {
+        $backupiddir = make_backup_temp_directory($backupid, false);
+        if (!self::delete_dir_contents($backupiddir, '', $progress)) {
             throw new backup_helper_exception('cannot_empty_backup_temp_dir');
         }
         return true;
@@ -65,10 +65,10 @@ abstract class backup_helper {
      * @param string $backupid Backup id
      * @param \core\progress\base $progress Optional progress reporting object
      */
-     static public function delete_backup_dir($backupid, \core\progress\base $progress = null) {
-         global $CFG;
+     public static function delete_backup_dir($backupid, ?\core\progress\base $progress = null) {
+         $backupiddir = make_backup_temp_directory($backupid, false);
          self::clear_backup_dir($backupid, $progress);
-         return rmdir($CFG->tempdir . '/backup/' . $backupid);
+         return rmdir($backupiddir);
      }
 
      /**
@@ -83,7 +83,7 @@ abstract class backup_helper {
      * @param string $excludedir Exclude this directory
      * @param \core\progress\base $progress Optional progress reporting object
      */
-    static public function delete_dir_contents($dir, $excludeddir='', \core\progress\base $progress = null) {
+    public static function delete_dir_contents($dir, $excludeddir='', ?\core\progress\base $progress = null) {
         global $CFG;
 
         if ($progress) {
@@ -153,26 +153,27 @@ abstract class backup_helper {
      * If supplied, progress object should be ready to receive indeterminate
      * progress reports.
      *
-     * @param int $deletefrom Time to delete from
+     * @param int $deletebefore Delete files and directories older than this time
      * @param \core\progress\base $progress Optional progress reporting object
      */
-    static public function delete_old_backup_dirs($deletefrom, \core\progress\base $progress = null) {
-        global $CFG;
-
+    public static function delete_old_backup_dirs($deletebefore, ?\core\progress\base $progress = null) {
         $status = true;
-        // Get files and directories in the temp backup dir witout descend
-        $list = get_directory_list($CFG->tempdir . '/backup', '', false, true, true);
-        foreach ($list as $file) {
-            $file_path = $CFG->tempdir . '/backup/' . $file;
-            $moddate = filemtime($file_path);
-            if ($status && $moddate < $deletefrom) {
-                //If directory, recurse
-                if (is_dir($file_path)) {
-                    // $file is really the backupid
-                    $status = self::delete_backup_dir($file, $progress);
-                //If file
-                } else {
-                    unlink($file_path);
+        // Get files and directories in the backup temp dir.
+        $backuptempdir = make_backup_temp_directory('');
+        $items = new DirectoryIterator($backuptempdir);
+        foreach ($items as $item) {
+            if ($item->isDot()) {
+                continue;
+            }
+            if ($item->getMTime() < $deletebefore) {
+                if ($item->isDir()) {
+                    // The item is a directory for some backup.
+                    if (!self::delete_backup_dir($item->getFilename(), $progress)) {
+                        // Something went wrong. Finish the list of items and then throw an exception.
+                        $status = false;
+                    }
+                } else if ($item->isFile()) {
+                    unlink($item->getPathname());
                 }
             }
         }
@@ -187,7 +188,7 @@ abstract class backup_helper {
      * parameter is true, supporting translation via get_string() and sending to
      * standard output.
      */
-    static public function log($message, $level, $a, $depth, $display, $logger) {
+    public static function log($message, $level, $a, $depth, $display, $logger) {
         // Send to standard loggers
         $logmessage = $message;
         $options = empty($depth) ? array() : array('depth' => $depth);
@@ -218,7 +219,7 @@ abstract class backup_helper {
      *
      * @throws moodle_exception in case of any problems
      */
-    static public function store_backup_file($backupid, $filepath, \core\progress\base $progress = null) {
+    public static function store_backup_file($backupid, $filepath, ?\core\progress\base $progress = null) {
         global $CFG;
 
         // First of all, get some information from the backup_controller to help us decide
@@ -288,7 +289,15 @@ abstract class backup_helper {
             $config = get_config('backup');
             $dir = $config->backup_auto_destination;
             if ($config->backup_auto_storage == 1 and $dir and is_dir($dir) and is_writable($dir)) {
-                $filedest = $dir.'/'.backup_plan_dbops::get_default_backup_filename($format, $backuptype, $courseid, $hasusers, $isannon, !$config->backup_shortname);
+                $filedest = $dir.'/'
+                        .backup_plan_dbops::get_default_backup_filename(
+                                $format,
+                                $backuptype,
+                                $courseid,
+                                $hasusers,
+                                $isannon,
+                                !$config->backup_shortname,
+                                (bool)$config->backup_auto_files);
                 // first try to move the file, if it is not possible copy and delete instead
                 if (@rename($filepath, $filedest)) {
                     return null;
@@ -322,7 +331,7 @@ abstract class backup_helper {
         // enabled are sent to user's "user_backup"
         // file area. Maintenance of such area is responsibility of
         // the user via corresponding file manager frontend
-        if ($backupmode == backup::MODE_GENERAL && (!$hasusers || $isannon)) {
+        if (($backupmode == backup::MODE_GENERAL  || $backupmode == backup::MODE_ASYNC) && (!$hasusers || $isannon)) {
             $ctxid     = context_user::instance($userid)->id;
             $component = 'user';
             $filearea  = 'backup';
@@ -370,6 +379,62 @@ abstract class backup_helper {
      */
     public static function get_inforef_itemnames() {
         return array('user', 'grouping', 'group', 'role', 'file', 'scale', 'outcome', 'grade_item', 'question_category');
+    }
+
+    /**
+     * Print the course reuse dropdown.
+     *
+     * @param string $current The current course reuse option where the header is modified
+     */
+    public static function print_coursereuse_selector(string $current): void {
+        global $OUTPUT, $PAGE;
+
+        if ($coursereusenode = $PAGE->settingsnav->find('coursereuse', \navigation_node::TYPE_CONTAINER)) {
+
+            $menuarray = \core\navigation\views\secondary::create_menu_element([$coursereusenode]);
+            if (empty($menuarray)) {
+                return;
+            }
+
+            $coursereuse = get_string('coursereuse');
+            $activeurl = '';
+            if (isset($menuarray[0])) {
+                // Remove the "Course reuse" entry.
+                $result = array_search($coursereuse, $menuarray[0][$coursereuse]);
+                unset($menuarray[0][$coursereuse][$result]);
+
+                // Find the active node.
+                foreach ($menuarray[0] as $key => $value) {
+                    $check = array_search($current, $value);
+                    if ($check !== false) {
+                        $activeurl = $check;
+                    }
+                }
+            } else {
+                $result = array_search($coursereuse, $menuarray);
+                unset($menuarray[$result]);
+
+                $check = array_search(get_string($current), $menuarray);
+                if ($check !== false) {
+                    $activeurl = $check;
+                }
+
+            }
+
+            $selectmenu = new \core\output\select_menu('coursereusetype', $menuarray, $activeurl);
+            $selectmenu->set_label(get_string('coursereusenavigationmenu'), ['class' => 'sr-only']);
+            $options = \html_writer::tag(
+                'div',
+                $OUTPUT->render_from_template('core/tertiary_navigation_selector', $selectmenu->export_for_template($OUTPUT)),
+                ['class' => 'row pb-3']
+            );
+            echo \html_writer::tag(
+                'div',
+                $options,
+                ['class' => 'container-fluid tertiary-navigation full-width-bottom-border', 'id' => 'tertiary-navigation']);
+        } else {
+            echo $OUTPUT->heading(get_string($current), 2, 'mb-3');
+        }
     }
 }
 

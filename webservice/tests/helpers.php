@@ -14,15 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * This file contains helper classes for testing the web service and external files.
- *
- * @package    core_webservice
- * @copyright  2012 Jerome Mouneyrac
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
+use core_external\external_settings;
 
 /**
  * Helper base class for external tests. Helpfull to test capabilities.
@@ -38,7 +30,7 @@ abstract class externallib_advanced_testcase extends advanced_testcase {
      * The function creates a student $USER if $USER->id is empty
      *
      * @param string $capability capability name
-     * @param int $contextid
+     * @param int|context $contextid
      * @param int $roleid
      * @return int the role id - mainly returned for creation, so calling function can reuse it
      */
@@ -62,6 +54,43 @@ abstract class externallib_advanced_testcase extends advanced_testcase {
         accesslib_clear_all_caches_for_unit_testing();
 
         return $roleid;
+    }
+
+    /**
+     * Configure some filters for external tests.
+     *
+     * @param array $filters Filters to enable. Each filter should contain:
+     *                           - name: name of the filter.
+     *                           - state: the state of the filter.
+     *                           - move: -1 means up, 0 means the same, 1 means down.
+     *                           - applytostrings: true to apply the filter to content and headings, false for just content.
+     */
+    public static function configure_filters($filters) {
+        global $CFG;
+
+        $filterstrings = false;
+
+        // Enable the filters.
+        foreach ($filters as $filter) {
+            $filter = (array) $filter;
+            filter_set_global_state($filter['name'], $filter['state'], $filter['move']);
+            filter_set_applies_to_strings($filter['name'], $filter['applytostrings']);
+
+            $filterstrings = $filterstrings || $filter['applytostrings'];
+        }
+
+        // Set WS filtering.
+        $wssettings = external_settings::get_instance();
+        $wssettings->set_filter(true);
+
+        // Reset filter caches.
+        $filtermanager = filter_manager::instance();
+        $filtermanager->reset_caches();
+
+        if ($filterstrings) {
+            // Don't strip tags in strings.
+            $CFG->formatstringstriptags = false;
+        }
     }
 
     /**
@@ -98,4 +127,3 @@ abstract class externallib_advanced_testcase extends advanced_testcase {
         accesslib_clear_all_caches_for_unit_testing();
     }
 }
-

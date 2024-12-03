@@ -1,5 +1,4 @@
 <?php
-
 /**
  * Graph Class. PHP Class to draw line, point, bar, and area graphs, including numeric x-axis and double y-axis.
  * Version: 1.6.3
@@ -25,6 +24,8 @@
  * @package    core
  * @subpackage lib
  */
+
+declare(strict_types=1);
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -153,6 +154,20 @@ class graph {
   var $y_tick_labels     =   null;         // array of text values for y-axis tick labels
   var $offset_relation   =   null;         // array of offsets for different sets of data
 
+  /** @var array y_order data. */
+  public $y_order = [];
+
+  /** @var array y_format data. */
+  public $y_format = [];
+
+  /** @var array x_data data. */
+  public $x_data = [];
+
+  /** @var array colour. */
+  public $colour = [];
+
+  /** @var array y_data data. */
+  public $y_data = [];
 
     // init all text - title, labels, and axis text.
     function init() {
@@ -307,7 +322,7 @@ class graph {
         //print "$thisX, $thisY <br />";
 
         if (($bar!='none') && (string)$thisY != 'none') {
-            if ($relatedset = $this->offset_relation[$set]) {                               // Moodle
+            if (isset($this->offset_relation[$set]) && $relatedset = $this->offset_relation[$set]) {
                 $yoffset = $this->calculated['y_plot'][$relatedset][$index];                // Moodle
             } else {                                                                        // Moodle
                 $yoffset = 0;                                                               // Moodle
@@ -522,7 +537,10 @@ class graph {
       $colour = $this->parameter['zero_axis'];
       if ($colour == 'none') return;
       // draw zero axis on left hand side
-      $this->calculated['zero_axis'] = round($this->calculated['boundary_box']['top']  + ($this->calculated['y_axis_left']['max'] * $this->calculated['y_axis_left']['factor']));
+      $this->calculated['zero_axis'] = (int) round(
+        $this->calculated['boundary_box']['top'] +
+        ($this->calculated['y_axis_left']['max'] * $this->calculated['y_axis_left']['factor'])
+      );
       ImageLine($this->image, $this->calculated['boundary_box']['left'], $this->calculated['zero_axis'], $this->calculated['boundary_box']['right'], $this->calculated['zero_axis'], $this->colour[$colour]);
     }
 
@@ -530,7 +548,10 @@ class graph {
       $colour = $this->parameter['zero_axis'];
       if ($colour == 'none') return;
       // draw zero axis on right hand side
-      $this->calculated['zero_axis'] = round($this->calculated['boundary_box']['top']  + ($this->calculated['y_axis_right']['max'] * $this->calculated['y_axis_right']['factor']));
+      $this->calculated['zero_axis'] = (int) round(
+        $this->calculated['boundary_box']['top'] +
+        ($this->calculated['y_axis_right']['max'] * $this->calculated['y_axis_right']['factor'])
+      );
       ImageLine($this->image, $this->calculated['boundary_box']['left'], $this->calculated['zero_axis'], $this->calculated['boundary_box']['right'], $this->calculated['zero_axis'], $this->colour[$colour]);
     }
 
@@ -539,8 +560,8 @@ class graph {
       $tickColour  = $this->colour[$this->parameter['x_ticks_colour']];
       $axis_colour  = $this->parameter['axis_colour'];
       $xGrid       = $this->parameter['x_grid'];
-      $gridTop     = $this->calculated['boundary_box']['top'];
-      $gridBottom  = $this->calculated['boundary_box']['bottom'];
+      $gridTop     = (int) round($this->calculated['boundary_box']['top']);
+      $gridBottom  = (int) round($this->calculated['boundary_box']['bottom']);
 
       if ($this->parameter['tick_length'] >= 0) {
         $tickTop     = $this->calculated['boundary_box']['bottom'] - $this->parameter['tick_length'];
@@ -565,14 +586,15 @@ class graph {
       $axisTag = array('points' => $axis_size, 'angle' => $axis_angle, 'font' => $axis_font, 'colour' => $axis_colour);
 
       foreach ($this->calculated['x_axis']['tick_x'] as $set => $tickX) {
+        $tickX = (int) round($tickX);
         // draw x grid if colour specified
         if ($xGrid != 'none') {
           switch ($xGrid) {
             case 'line':
-              ImageLine($this->image, round($tickX), round($gridTop), round($tickX), round($gridBottom), $gridColour);
+              ImageLine($this->image, $tickX, $gridTop, $tickX, $gridBottom, $gridColour);
               break;
              case 'dash':
-              ImageDashedLine($this->image, round($tickX), round($gridTop), round($tickX), round($gridBottom), $gridColour);
+              $this->image_dashed_line($this->image, $tickX, $gridTop, $tickX, $gridBottom, $gridColour); // Moodle
               break;
           }
         }
@@ -580,7 +602,7 @@ class graph {
         if ($this->parameter['x_axis_text'] && !($set % $this->parameter['x_axis_text'])) { // test if tick should be displayed
           // draw tick
           if ($tickColour != 'none')
-            ImageLine($this->image, round($tickX), round($tickTop), round($tickX), round($tickBottom), $tickColour);
+            ImageLine($this->image, $tickX, $tickTop, $tickX, $tickBottom, $tickColour);
 
           // draw axis text
           $coords = array('x' => $tickX, 'y' => $textBottom, 'reference' => $reference);
@@ -597,8 +619,8 @@ class graph {
       $tickColour  = $this->colour[$this->parameter['y_ticks_colour']];
       $axis_colour  = $this->parameter['axis_colour'];
       $yGrid       = $this->parameter['y_grid'];
-      $gridLeft    = $this->calculated['boundary_box']['left'];
-      $gridRight   = $this->calculated['boundary_box']['right'];
+      $gridLeft    = (int) round($this->calculated['boundary_box']['left']);
+      $gridRight   = (int) round($this->calculated['boundary_box']['right']);
 
       // axis font information
       $axis_font    = $this->parameter['axis_font'];
@@ -625,14 +647,15 @@ class graph {
         if ($axis_angle == 90) $reference = 'right-center';
 
         foreach ($this->calculated['y_axis']['tick_y'] as $set => $tickY) {
+          $tickY = (int) round($tickY);
           // draw y grid if colour specified
           if ($yGrid != 'none') {
             switch ($yGrid) {
               case 'line':
-                ImageLine($this->image, round($gridLeft), round($tickY), round($gridRight), round($tickY), $gridColour);
+                ImageLine($this->image, $gridLeft, $tickY, $gridRight, $tickY, $gridColour);
                 break;
                case 'dash':
-                ImageDashedLine($this->image, round($gridLeft), round($tickY), round($gridRight), round($tickY), $gridColour);
+                $this->image_dashed_line($this->image, $gridLeft, $tickY, $gridRight, $tickY, $gridColour); // Moodle
                 break;
             }
           }
@@ -641,7 +664,7 @@ class graph {
           if ($this->parameter['y_axis_text_left'] && !($set % $this->parameter['y_axis_text_left'])) { // test if tick should be displayed
             // draw tick
             if ($tickColour != 'none')
-              ImageLine($this->image, round($tickLeft), round($tickY), round($tickRight), round($tickY), $tickColour);
+              ImageLine($this->image, $tickLeft, $tickY, $tickRight, $tickY, $tickColour);
 
             // draw axis text...
             $coords = array('x' => $textRight, 'y' => $tickY, 'reference' => $reference);
@@ -674,10 +697,10 @@ class graph {
           if (!$this->calculated['y_axis_left']['has_data'] && $yGrid != 'none') { // draw grid if not drawn already (above)
             switch ($yGrid) {
               case 'line':
-                ImageLine($this->image, round($gridLeft), round($tickY), round($gridRight), round($tickY), $gridColour);
+                ImageLine($this->image, (int) round($gridLeft), (int) round($tickY), (int) round($gridRight), (int) round($tickY), $gridColour);
                 break;
                case 'dash':
-                ImageDashedLine($this->image, round($gridLeft), round($tickY), round($gridRight), round($tickY), $gridColour);
+                $this->image_dashed_line($this->image, (int) round($gridLeft), (int) round($tickY), (int) round($gridRight), (int) round($tickY), $gridColour); // Moodle
                 break;
             }
           }
@@ -685,7 +708,7 @@ class graph {
           if ($this->parameter['y_axis_text_right'] && !($set % $this->parameter['y_axis_text_right'])) { // test if tick should be displayed
             // draw tick
             if ($tickColour != 'none')
-              ImageLine($this->image, round($tickLeft), round($tickY), round($tickRight), round($tickY), $tickColour);
+              ImageLine($this->image, (int) round($tickLeft), (int) round($tickY), (int) round($tickRight), (int) round($tickY), $tickColour);
 
             // draw axis text...
             $coords = array('x' => $textLeft, 'y' => $tickY, 'reference' => $reference);
@@ -750,12 +773,12 @@ class graph {
 
             if (isset($this->y_format[$set]['y_axis']) && $this->y_format[$set]['y_axis'] == 'right') {
               $this->calculated['y_plot'][$set][$index] =
-                round(($this->y_data[$set][$index] - $this->calculated['y_axis_right']['min'])
+                (int) round(($this->y_data[$set][$index] - $this->calculated['y_axis_right']['min'])
                   * $this->calculated['y_axis_right']['factor']);
             } else {
               //print "$set $index<br />";
               $this->calculated['y_plot'][$set][$index] =
-                round(($this->y_data[$set][$index] - $this->calculated['y_axis_left']['min'])
+                (int) round(($this->y_data[$set][$index] - $this->calculated['y_axis_left']['min'])
                   * $this->calculated['y_axis_left']['factor']);
             }
 
@@ -795,7 +818,7 @@ class graph {
         // x tick value
         $this->calculated['x_axis']['tick_x'][$set] = $tickX;
         // if num ticks is auto then x plot value is same as x  tick
-        if ($this->parameter['x_axis_gridlines'] == 'auto') $this->calculated['x_plot'][$set] = round($tickX);
+        if ($this->parameter['x_axis_gridlines'] == 'auto') $this->calculated['x_plot'][$set] = (int) round($tickX);
         //print $this->calculated['x_plot'][$set].'<br />';
         $tickX += $xStep;
       }
@@ -1162,7 +1185,7 @@ class graph {
         else $factor = pow(10, (floor(log10(abs($max))) - $resolution) );
       }
       if ($factor > 0.1) { // To avoid some wierd rounding errors (Moodle)
-        $factor = round($factor * 1000.0) / 1000.0; // To avoid some wierd rounding errors (Moodle)
+        $factor = (int) round($factor * 1000.0) / 1000.0; // To avoid some wierd rounding errors (Moodle)
       } // To avoid some wierd rounding errors (Moodle)
 
       $max = $factor * @ceil($max / $factor);
@@ -1275,6 +1298,7 @@ class graph {
       // start of Moodle addition
       $text = core_text::utf8_to_entities($text, true, true); //does not work with hex entities!
       // end of Moodle addition
+      [$x, $y] = [(int) round($x), (int) round($y)];
       ImageTTFText($this->image, $points, $angle, $x, $y, $colour, $font, $text);
     }
 
@@ -1549,7 +1573,7 @@ class graph {
       $u = $x + $offset;
       $v = $this->calculated['inner_border']['bottom'] - $y + $offset;
       $half = $size / 2;
-
+      [$u, $v, $half] = [(int) round($u), (int) round($v), (int) round($half)];
       switch ($type) {
         case 'square':
           ImageFilledRectangle($this->image, $u-$half, $v-$half, $u+$half, $v+$half, $this->colour[$colour]);
@@ -1565,16 +1589,32 @@ class graph {
           ImageArc($this->image, $u, $v, $size, $size, 0, 360, $this->colour[$colour]);
           break;
         case 'diamond':
-          ImageFilledPolygon($this->image, array($u, $v-$half, $u+$half, $v, $u, $v+$half, $u-$half, $v), 4, $this->colour[$colour]);
+          if (version_compare(PHP_VERSION, '8.0.0', '>=')) {
+            ImageFilledPolygon($this->image, array($u, $v - $half, $u + $half, $v, $u, $v + $half, $u - $half, $v), $this->colour[$colour]);
+          } else {
+            ImageFilledPolygon($this->image, array($u, $v - $half, $u + $half, $v, $u, $v + $half, $u - $half, $v), 4, $this->colour[$colour]);
+          }
           break;
         case 'diamond-open':
-          ImagePolygon($this->image, array($u, $v-$half, $u+$half, $v, $u, $v+$half, $u-$half, $v), 4, $this->colour[$colour]);
+          if (version_compare(PHP_VERSION, '8.0.0', '>=')) {
+            ImagePolygon($this->image, array($u, $v - $half, $u + $half, $v, $u, $v + $half, $u - $half, $v), $this->colour[$colour]);
+          } else {
+            ImagePolygon($this->image, array($u, $v - $half, $u + $half, $v, $u, $v + $half, $u - $half, $v), 4, $this->colour[$colour]);
+          }
           break;
         case 'triangle':
-          ImageFilledPolygon($this->image, array($u, $v-$half, $u+$half, $v+$half, $u-$half, $v+$half), 3, $this->colour[$colour]);
+          if (version_compare(PHP_VERSION, '8.0.0', '>=')) {
+            ImageFilledPolygon($this->image, array($u, $v - $half, $u + $half, $v + $half, $u - $half, $v + $half), $this->colour[$colour]);
+          } else {
+            ImageFilledPolygon($this->image, array($u, $v - $half, $u + $half, $v + $half, $u - $half, $v + $half), 3, $this->colour[$colour]);
+          }
           break;
         case 'triangle-open':
-          ImagePolygon($this->image, array($u, $v-$half, $u+$half, $v+$half, $u-$half, $v+$half), 3, $this->colour[$colour]);
+          if (version_compare(PHP_VERSION, '8.0.0', '>=')) {
+            ImagePolygon($this->image, array($u, $v - $half, $u + $half, $v + $half, $u - $half, $v + $half), $this->colour[$colour]);
+          } else {
+            ImagePolygon($this->image, array($u, $v - $half, $u + $half, $v + $half, $u - $half, $v + $half), 3, $this->colour[$colour]);
+          }
           break;
         case 'dot':
           ImageSetPixel($this->image, $u, $v, $this->colour[$colour]);
@@ -1598,8 +1638,8 @@ class graph {
       if ($this->parameter['zero_axis'] != 'none') {
         $zero = $this->calculated['zero_axis'];
         if ($this->parameter['shadow_below_axis'] ) $zero  += $offset;
-        $u_left  = $x_left + $offset;
-        $u_right = $x_right + $offset - 1;
+        $u_left  = (int) round($x_left + $offset);
+        $u_right = (int) round($x_right + $offset - 1);
         $v       = $this->calculated['boundary_box']['bottom'] - $y + $offset;
 
         if ($v > $zero) {
@@ -1610,18 +1650,19 @@ class graph {
           $bottom = $zero - 1;
         }
 
+        [$top, $bottom]  = [(int) round($top), (int) round($bottom)];
+
         switch ($type) {
           case 'open':
-            //ImageRectangle($this->image, round($u_left), $top, round($u_right), $bottom, $this->colour[$colour]);
             if ($v > $zero)
-              ImageRectangle($this->image, round($u_left), $bottom, round($u_right), $bottom, $this->colour[$colour]);
+              ImageRectangle($this->image, $u_left, $bottom, $u_right, $bottom, $this->colour[$colour]);
             else
-              ImageRectangle($this->image, round($u_left), $top, round($u_right), $top, $this->colour[$colour]);
-            ImageRectangle($this->image, round($u_left), $top, round($u_left), $bottom, $this->colour[$colour]);
-            ImageRectangle($this->image, round($u_right), $top, round($u_right), $bottom, $this->colour[$colour]);
+              ImageRectangle($this->image, $u_left, $top, $u_right, $top, $this->colour[$colour]);
+            ImageRectangle($this->image, $u_left, $top, $u_left, $bottom, $this->colour[$colour]);
+            ImageRectangle($this->image, $u_right, $top, $u_right, $bottom, $this->colour[$colour]);
             break;
           case 'fill':
-            ImageFilledRectangle($this->image, round($u_left), $top, round($u_right), $bottom, $this->colour[$colour]);
+            ImageFilledRectangle($this->image, $u_left, $top, $u_right, $bottom, $this->colour[$colour]);
             break;
         }
 
@@ -1630,23 +1671,25 @@ class graph {
         $bottom = $this->calculated['boundary_box']['bottom'];
         if ($this->parameter['shadow_below_axis'] ) $bottom  += $offset;
         if ($this->parameter['inner_border'] != 'none') $bottom -= 1; // 1 pixel above bottom if border is to be drawn.
-        $u_left  = $x_left + $offset;
-        $u_right = $x_right + $offset - 1;
+        $u_left  = (int) round($x_left + $offset);
+        $u_right = (int) round($x_right + $offset - 1);
         $v       = $this->calculated['boundary_box']['bottom'] - $y + $offset;
 
         // Moodle addition, plus the function parameter yoffset
         if ($yoffset) {                                           // Moodle
-            $yoffset = $yoffset - round(($bottom - $v) / 2.0);    // Moodle
+            $yoffset = $yoffset - (int) round(($bottom - $v) / 2.0);    // Moodle
             $bottom -= $yoffset;                                  // Moodle
             $v      -= $yoffset;                                  // Moodle
         }                                                         // Moodle
 
+        [$v, $bottom] = [(int) round($v), (int) round($bottom)];
+
         switch ($type) {
           case 'open':
-            ImageRectangle($this->image, round($u_left), $v, round($u_right), $bottom, $this->colour[$colour]);
+            ImageRectangle($this->image, $u_left, $v, $u_right, $bottom, $this->colour[$colour]);
             break;
           case 'fill':
-            ImageFilledRectangle($this->image, round($u_left), $v, round($u_right), $bottom, $this->colour[$colour]);
+            ImageFilledRectangle($this->image, $u_left, $v, $u_right, $bottom, $this->colour[$colour]);
             break;
         }
       }
@@ -1665,11 +1708,15 @@ class graph {
         switch ($type) {
           case 'fill':
             // draw it this way 'cos the FilledPolygon routine seems a bit buggy.
-            ImageFilledPolygon($this->image, array($u_start, $v_start, $u_end, $v_end, $u_end, $zero, $u_start, $zero), 4, $this->colour[$colour]);
-            ImagePolygon($this->image, array($u_start, $v_start, $u_end, $v_end, $u_end, $zero, $u_start, $zero), 4, $this->colour[$colour]);
-           break;
+            if (version_compare(PHP_VERSION, '8.0.0', '>=')) {
+              ImageFilledPolygon($this->image, array($u_start, $v_start, $u_end, $v_end, $u_end, $zero, $u_start, $zero), $this->colour[$colour]);
+              ImagePolygon($this->image, array($u_start, $v_start, $u_end, $v_end, $u_end, $zero, $u_start, $zero), $this->colour[$colour]);
+            } else {
+              ImageFilledPolygon($this->image, array($u_start, $v_start, $u_end, $v_end, $u_end, $zero, $u_start, $zero), 4, $this->colour[$colour]);
+              ImagePolygon($this->image, array($u_start, $v_start, $u_end, $v_end, $u_end, $zero, $u_start, $zero), 4, $this->colour[$colour]);
+            }
+            break;
           case 'open':
-            //ImagePolygon($this->image, array($u_start, $v_start, $u_end, $v_end, $u_end, $zero, $u_start, $zero), 4, $this->colour[$colour]);
             ImageLine($this->image, $u_start, $v_start, $u_end, $v_end, $this->colour[$colour]);
             ImageLine($this->image, $u_start, $v_start, $u_start, $zero, $this->colour[$colour]);
             ImageLine($this->image, $u_end, $v_end, $u_end, $zero, $this->colour[$colour]);
@@ -1686,21 +1733,29 @@ class graph {
         if ($this->parameter['inner_border'] != 'none') $bottom -= 1; // 1 pixel above bottom if border is to be drawn.
         switch ($type) {
           case 'fill':
-            ImageFilledPolygon($this->image, array($u_start, $v_start, $u_end, $v_end, $u_end, $bottom, $u_start, $bottom), 4, $this->colour[$colour]);
+          if (version_compare(PHP_VERSION, '8.0.0', '>=')) {
+              ImageFilledPolygon($this->image, array($u_start, $v_start, $u_end, $v_end, $u_end, $bottom, $u_start, $bottom), $this->colour[$colour]);
+            } else {
+              ImageFilledPolygon($this->image, array($u_start, $v_start, $u_end, $v_end, $u_end, $bottom, $u_start, $bottom), 4, $this->colour[$colour]);
+            }
            break;
-          case 'open':
-            ImagePolygon($this->image, array($u_start, $v_start, $u_end, $v_end, $u_end, $bottom, $u_start, $bottom), 4, $this->colour[$colour]);
-           break;
+            case 'open':
+            if (version_compare(PHP_VERSION, '8.0.0', '>=')) {
+              ImagePolygon($this->image, array($u_start, $v_start, $u_end, $v_end, $u_end, $bottom, $u_start, $bottom), $this->colour[$colour]);
+            } else {
+              ImagePolygon($this->image, array($u_start, $v_start, $u_end, $v_end, $u_end, $bottom, $u_start, $bottom), 4, $this->colour[$colour]);
+            }
+            break;
         }
       }
     }
 
     function line($x_start, $y_start, $x_end, $y_end, $type, $brush_type, $brush_size, $colour, $offset) {
       //dbug("drawing line of type: $type, at offset: $offset");
-      $u_start = $x_start + $offset;
-      $v_start = $this->calculated['boundary_box']['bottom'] - $y_start + $offset;
-      $u_end   = $x_end + $offset;
-      $v_end   = $this->calculated['boundary_box']['bottom'] - $y_end + $offset;
+      $u_start = (int) round($x_start + $offset);
+      $v_start = (int) round($this->calculated['boundary_box']['bottom'] - $y_start + $offset);
+      $u_end   = (int) round($x_end + $offset);
+      $v_end   = (int) round($this->calculated['boundary_box']['bottom'] - $y_end + $offset);
 
       switch ($type) {
         case 'brush':
@@ -1710,7 +1765,7 @@ class graph {
           ImageLine($this->image, $u_start, $v_start, $u_end, $v_end, $this->colour[$colour]);
           break;
         case 'dash':
-          ImageDashedLine($this->image, $u_start, $v_start, $u_end, $v_end, $this->colour[$colour]);
+          $this->image_dashed_line($this->image, $u_start, $v_start, $u_end, $v_end, $this->colour[$colour]); // Moodle
           break;
       }
     }
@@ -1730,11 +1785,11 @@ class graph {
         $t += $y0;
         $dx = ($dx < 0) ? -1 : 1;
         $m *= $dx;
-        while (round($x0) != round($x1)) {
+        while ((int) round($x0) != (int) round($x1)) {
           if (!$watchdog--) break;
           $x0 += $dx; // step to next x value
           $t += $m;   // add slope to y value
-          $y = round($t);
+          $y = (int) round($t);
           //$this->dbug("x0=$x0, x1=$x1, y=$y watchdog=$watchdog");
           $this->draw_brush($x0, $y, $size, $type, $colour);
 
@@ -1745,11 +1800,11 @@ class graph {
         $t += $x0;
         $dy = ($dy < 0) ? -1 : 1;
         $m *= $dy;
-        while (round($y0) != round($y1)) {
+        while ((int) round($y0) != (int) round($y1)) {
           if (!$watchdog--) break;
           $y0 += $dy; // step to next y value
           $t += $m;   // add slope to x value
-          $x = round($t);
+          $x = (int) round($t);
           //$this->dbug("x=$x, y0=$y0, y1=$y1 watchdog=$watchdog");
           $this->draw_brush($x, $y0, $size, $type, $colour);
 
@@ -1758,9 +1813,9 @@ class graph {
     }
 
     function draw_brush($x, $y, $size, $type, $colour) {
-      $x = round($x);
-      $y = round($y);
-      $half = round($size / 2);
+      $x = (int) round($x);
+      $y = (int) round($y);
+      $half = (int) round($size / 2);
       switch ($type) {
         case 'circle':
           ImageArc($this->image, $x, $y, $size, $size, 0, 360, $this->colour[$colour]);
@@ -1776,22 +1831,73 @@ class graph {
           ImageFilledRectangle($this->image, $x-$half, $y, $x+$half, $y+1, $this->colour[$colour]);
           break;
         case 'slash':
-          ImageFilledPolygon($this->image, array($x+$half, $y-$half,
-                                                 $x+$half+1, $y-$half,
-                                                 $x-$half+1, $y+$half,
-                                                 $x-$half, $y+$half
-                                                 ), 4, $this->colour[$colour]);
+          if (version_compare(PHP_VERSION, '8.0.0', '>=')) {
+            ImageFilledPolygon($this->image, array(
+              $x + $half, $y - $half,
+              $x + $half + 1, $y - $half,
+              $x - $half + 1, $y + $half,
+              $x - $half, $y + $half
+            ), $this->colour[$colour]);
+          } else {
+            ImageFilledPolygon($this->image, array(
+              $x + $half, $y - $half,
+              $x + $half + 1, $y - $half,
+              $x - $half + 1, $y + $half,
+              $x - $half, $y + $half
+            ), 4, $this->colour[$colour]);
+          }
           break;
         case 'backslash':
-          ImageFilledPolygon($this->image, array($x-$half, $y-$half,
-                                                 $x-$half+1, $y-$half,
-                                                 $x+$half+1, $y+$half,
-                                                 $x+$half, $y+$half
-                                                 ), 4, $this->colour[$colour]);
+          if (version_compare(PHP_VERSION, '8.0.0', '>=')) {
+            ImageFilledPolygon($this->image, array(
+              $x - $half, $y - $half,
+              $x - $half + 1, $y - $half,
+              $x + $half + 1, $y + $half,
+              $x + $half, $y + $half
+            ), $this->colour[$colour]);
+          } else {
+            ImageFilledPolygon($this->image, array(
+              $x - $half, $y-$half,
+              $x - $half + 1, $y - $half,
+              $x + $half + 1, $y + $half,
+              $x + $half, $y + $half
+            ), 4, $this->colour[$colour]);
+          }
           break;
         default:
           @eval($type); // user can create own brush script.
       }
+    }
+
+    /**
+     * Moodle.
+     *
+     * A replacement for deprecated ImageDashedLine function.
+     *
+     * @param resource|GdImage $image
+     * @param int $x1 — x-coordinate for first point.
+     * @param int $y1 — y-coordinate for first point.
+     * @param int $x2 — x-coordinate for second point.
+     * @param int $y2 — y-coordinate for second point.
+     * @param int $color
+     * @return void
+     */
+    private function image_dashed_line($image, $x1, $y1, $x2, $y2, $colour): void {
+      // Create a dashed style.
+      $style = array(
+        $colour,
+        $colour,
+        $colour,
+        $colour,
+        IMG_COLOR_TRANSPARENT,
+        IMG_COLOR_TRANSPARENT,
+        IMG_COLOR_TRANSPARENT,
+        IMG_COLOR_TRANSPARENT
+      );
+      imagesetstyle($image, $style);
+
+      // Apply the dashed style.
+      imageline($image, $x1, $y1, $x2, $y2, IMG_COLOR_STYLED);
     }
 
 } // class graph

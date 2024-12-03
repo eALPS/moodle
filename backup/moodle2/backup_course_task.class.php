@@ -125,16 +125,26 @@ class backup_course_task extends backup_task {
             $this->add_step(new backup_course_logs_structure_step('course_logs', 'logs.xml'));
             // New log stores.
             $this->add_step(new backup_course_logstores_structure_step('course_logstores', 'logstores.xml'));
+            // Last access to course logs.
+            $this->add_step(new backup_course_loglastaccess_structure_step('course_loglastaccess', 'loglastaccess.xml'));
         }
 
         // Generate the course competencies.
         $this->add_step(new backup_course_competencies_structure_step('course_competencies', 'competencies.xml'));
+
+        // Annotate activity completion defaults.
+        $this->add_step(new backup_completion_defaults_structure_step('course_completion_defaults', 'completiondefaults.xml'));
 
         // Generate the inforef file (must be after ALL steps gathering annotations of ANY type)
         $this->add_step(new backup_inforef_structure_step('course', 'inforef.xml'));
 
         // Migrate the already exported inforef entries to final ones
         $this->add_step(new move_inforef_annotations_to_final('migrate_inforef'));
+
+        // Generate the content bank file (conditionally).
+        if ($this->get_setting_value('contentbankcontent')) {
+            $this->add_step(new backup_contentbankcontent_structure_step('course_contentbank', 'contentbank.xml'));
+        }
 
         // At the end, mark it as built
         $this->built = true;
@@ -146,7 +156,7 @@ class backup_course_task extends backup_task {
      * @param string $content content in which to encode links.
      * @return string content with links encoded.
      */
-    static public function encode_content_links($content) {
+    public static function encode_content_links($content) {
 
         // Link to the course main page (it also covers "&topic=xx" and "&week=xx"
         // because they don't become transformed (section number) in backup/restore.
@@ -155,8 +165,10 @@ class backup_course_task extends backup_task {
         // A few other key course links.
         $content = self::encode_links_helper($content, 'GRADEINDEXBYID',       '/grade/index.php?id=');
         $content = self::encode_links_helper($content, 'GRADEREPORTINDEXBYID', '/grade/report/index.php?id=');
-        $content = self::encode_links_helper($content, 'BADGESVIEWBYID',       '/badges/view.php?type=2&id=');
+        $content = self::encode_links_helper($content, 'BADGESVIEWBYID',       '/badges/index.php?type=2&id=');
         $content = self::encode_links_helper($content, 'USERINDEXVIEWBYID',    '/user/index.php?id=');
+        $content = self::encode_links_helper($content, 'PLUGINFILEBYCONTEXT',  '/pluginfile.php/');
+        $content = self::encode_links_helper($content, 'PLUGINFILEBYCONTEXTURLENCODED', '/pluginfile.php/', true);
 
         return $content;
     }
@@ -164,15 +176,34 @@ class backup_course_task extends backup_task {
     /**
      * Helper method, used by encode_content_links.
      * @param string $content content in which to encode links.
-     * @param unknown_type $name the name of this type of encoded link.
-     * @param unknown_type $path the path that identifies this type of link, up
+     * @param string $name the name of this type of encoded link.
+     * @param string $path the path that identifies this type of link, up
      *      to the ?paramname= bit.
+     * @param bool $urlencoded whether to use urlencode() before replacing the path.
      * @return string content with one type of link encoded.
      */
-    static private function encode_links_helper($content, $name, $path) {
+    private static function encode_links_helper(string $content, string $name, string $path, bool $urlencoded = false) {
         global $CFG;
-        $base = preg_quote($CFG->wwwroot . $path, '/');
-        return preg_replace('/(' . $base . ')([0-9]+)/', '$@' . $name . '*$2@$', $content);
+        // We want to convert both http and https links.
+        $root = $CFG->wwwroot;
+        $httpsroot = str_replace('http://', 'https://', $root);
+        $httproot = str_replace('https://', 'http://', $root);
+
+        $httpsbase = $httpsroot . $path;
+        $httpbase = $httproot . $path;
+
+        if ($urlencoded) {
+            $httpsbase = urlencode($httpsbase);
+            $httpbase = urlencode($httpbase);
+        }
+
+        $httpsbase = preg_quote($httpsbase, '/');
+        $httpbase = preg_quote($httpbase, '/');
+
+        $return = preg_replace('/(' . $httpsbase . ')([0-9]+)/', '$@' . $name . '*$2@$', $content);
+        $return = preg_replace('/(' . $httpbase . ')([0-9]+)/', '$@' . $name . '*$2@$', $return);
+
+        return $return;
     }
 
 // Protected API starts here

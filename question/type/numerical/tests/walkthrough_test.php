@@ -14,15 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * This file contains overall tests of numerical questions.
- *
- * @package    qtype
- * @subpackage numerical
- * @copyright  2011 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace qtype_numerical;
 
+use question_hint;
+use question_state;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -34,14 +29,15 @@ require_once($CFG->dirroot . '/question/type/numerical/tests/helper.php');
 /**
  * Unit tests for the numerical question type.
  *
+ * @package    qtype_numerical
  * @copyright  2011 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class qtype_numerical_walkthrough_test extends qbehaviour_walkthrough_test_base {
-    public function test_interactive_currency() {
+class walkthrough_test extends \qbehaviour_walkthrough_test_base {
+    public function test_interactive_currency(): void {
 
         // Create a gapselect question.
-        $q = test_question_maker::make_question('numerical', 'currency');
+        $q = \test_question_maker::make_question('numerical', 'currency');
         $q->hints = array(
             new question_hint(1, 'This is the first hint.', FORMAT_HTML),
             new question_hint(2, 'This is the second hint.', FORMAT_HTML),
@@ -84,7 +80,7 @@ class qtype_numerical_walkthrough_test extends qbehaviour_walkthrough_test_base 
                 $this->get_contains_submit_button_expectation(true),
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_contains_validation_error_expectation(),
-                new question_pattern_expectation('/' .
+                new \question_pattern_expectation('/' .
                         preg_quote(get_string('invalidnumber', 'qtype_numerical'), '/') . '/'),
                 $this->get_does_not_contain_try_again_button_expectation(),
                 $this->get_no_hint_visible_expectation());
@@ -105,10 +101,10 @@ class qtype_numerical_walkthrough_test extends qbehaviour_walkthrough_test_base 
                 $this->quba->get_response_summary($this->slot));
     }
 
-    public function test_deferredfeedback_currency() {
+    public function test_deferredfeedback_currency(): void {
 
         // Create a gapselect question.
-        $q = test_question_maker::make_question('numerical', 'currency');
+        $q = \test_question_maker::make_question('numerical', 'currency');
         $this->start_attempt_at_question($q, 'deferredfeedback', 3);
 
         // Check the initial state.
@@ -144,7 +140,7 @@ class qtype_numerical_walkthrough_test extends qbehaviour_walkthrough_test_base 
                 $this->get_contains_marked_out_of_summary(),
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_contains_validation_error_expectation(),
-                new question_pattern_expectation('/' .
+                new \question_pattern_expectation('/' .
                         preg_quote(get_string('invalidnumber', 'qtype_numerical'), '/') . '/'),
                 $this->get_does_not_contain_try_again_button_expectation(),
                 $this->get_no_hint_visible_expectation());
@@ -179,14 +175,13 @@ class qtype_numerical_walkthrough_test extends qbehaviour_walkthrough_test_base 
     // Todo. Test validation if you try to type a unit into a question that does
     // not expect one.
 
-    public function test_deferredfeedback_unit() {
+    public function test_deferredfeedback_unit(): void {
 
         // Create a gapselect question.
-        $q = test_question_maker::make_question('numerical', 'unit');
+        $q = \test_question_maker::make_question('numerical', 'unit');
         $this->start_attempt_at_question($q, 'deferredfeedback', 1);
 
         $unitchoices = array(
-            '' => get_string('choosedots'),
             'm' => 'm',
             'cm' => 'cm',
         );
@@ -198,9 +193,10 @@ class qtype_numerical_walkthrough_test extends qbehaviour_walkthrough_test_base 
                 $this->get_contains_marked_out_of_summary(),
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_does_not_contain_validation_error_expectation(),
-                $this->get_contains_select_expectation('unit', $unitchoices, null, true),
                 $this->get_does_not_contain_try_again_button_expectation(),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('unit', $unitchoices, null, true));
 
         // Submit blank.
         $this->process_submission(array('answer' => ''));
@@ -212,9 +208,10 @@ class qtype_numerical_walkthrough_test extends qbehaviour_walkthrough_test_base 
                 $this->get_contains_marked_out_of_summary(),
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_does_not_contain_validation_error_expectation(),
-                $this->get_contains_select_expectation('unit', $unitchoices, null, true),
                 $this->get_does_not_contain_try_again_button_expectation(),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('unit', $unitchoices, null, true));
 
         // Sumit something that does not look like a number, but with a unit.
         $this->process_submission(array('answer' => 'newt', 'unit' => 'cm'));
@@ -226,11 +223,12 @@ class qtype_numerical_walkthrough_test extends qbehaviour_walkthrough_test_base 
                 $this->get_contains_marked_out_of_summary(),
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_contains_validation_error_expectation(),
-                new question_pattern_expectation('/' .
+                new \question_pattern_expectation('/' .
                         preg_quote(get_string('invalidnumber', 'qtype_numerical'), '/') . '/'),
-                $this->get_contains_select_expectation('unit', $unitchoices, 'cm', true),
                 $this->get_does_not_contain_try_again_button_expectation(),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('unit', $unitchoices, 'cm', true));
 
         // Now put in the right answer but without a unit.
         $this->process_submission(array('answer' => '1.25', 'unit' => ''));
@@ -241,11 +239,12 @@ class qtype_numerical_walkthrough_test extends qbehaviour_walkthrough_test_base 
                 $this->get_contains_marked_out_of_summary(),
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_contains_validation_error_expectation(),
-                new question_pattern_expectation('/' .
+                new \question_pattern_expectation('/' .
                         preg_quote(get_string('unitnotselected', 'qtype_numerical'), '/') . '/'),
-                $this->get_contains_select_expectation('unit', $unitchoices, '', true),
                 $this->get_does_not_contain_try_again_button_expectation(),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('unit', $unitchoices, '', true));
 
         // Now put in the right answer with a unit.
         $this->process_submission(array('answer' => '1.25', 'unit' => 'm'));
@@ -256,9 +255,10 @@ class qtype_numerical_walkthrough_test extends qbehaviour_walkthrough_test_base 
                 $this->get_contains_marked_out_of_summary(),
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_does_not_contain_validation_error_expectation(),
-                $this->get_contains_select_expectation('unit', $unitchoices, 'm', true),
                 $this->get_does_not_contain_try_again_button_expectation(),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('unit', $unitchoices, 'm', true));
 
         // Submit all and finish.
         $this->finish();
@@ -270,8 +270,9 @@ class qtype_numerical_walkthrough_test extends qbehaviour_walkthrough_test_base 
                 $this->get_contains_mark_summary(1),
                 $this->get_contains_correct_expectation(),
                 $this->get_does_not_contain_validation_error_expectation(),
-                $this->get_contains_select_expectation('unit', $unitchoices, 'm', false),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('unit', $unitchoices, 'm', false));
         $this->assertEquals('1.25 m',
                 $this->quba->get_response_summary($this->slot));
     }

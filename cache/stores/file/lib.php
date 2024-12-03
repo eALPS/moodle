@@ -14,17 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * The library file for the file cache store.
- *
- * This file is part of the file cache store, it contains the API for interacting with an instance of the store.
- * This is used as a default cache store within the Cache API. It should never be deleted.
- *
- * @package    cachestore_file
- * @category   cache
- * @copyright  2012 Sam Hemelryk
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+use core_cache\configurable_cache_interface;
+use core_cache\definition;
+use core_cache\key_aware_cache_interface;
+use core_cache\lockable_cache_interface;
+use core_cache\searchable_cache_interface;
+use core_cache\store;
 
 /**
  * The file store class.
@@ -34,11 +29,16 @@
  *      autocreate:     true, false
  *      prescan:        true, false
  *
+ * @package    cachestore_file
  * @copyright  2012 Sam Hemelryk
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class cachestore_file extends cache_store implements cache_is_key_aware, cache_is_configurable, cache_is_searchable  {
-
+class cachestore_file extends store implements
+    key_aware_cache_interface,
+    configurable_cache_interface,
+    searchable_cache_interface,
+    lockable_cache_interface
+{
     /**
      * The name of the store.
      * @var string
@@ -78,6 +78,13 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
     protected $autocreate = false;
 
     /**
+     * Set to true if new cache revision directory needs to be created. Old directory will be purged asynchronously
+     * via Schedule task.
+     * @var bool
+     */
+    protected $asyncpurge = false;
+
+    /**
      * Set to true if a custom path is being used.
      * @var bool
      */
@@ -97,9 +104,16 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
 
     /**
      * The cache definition this instance has been initialised with.
-     * @var cache_definition
+     * @var definition
      */
     protected $definition;
+
+    /**
+     * Bytes read or written by last call to set()/get() or set_many()/get_many().
+     *
+     * @var int
+     */
+    protected $lastiobytes = 0;
 
     /**
      * A reference to the global $CFG object.
@@ -114,11 +128,28 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
      */
     private $cfg = null;
 
+    /** @var int Maximum number of seconds to wait for a lock before giving up. */
+    protected $lockwait = 60;
+
+    /**
+     * Instance of file_lock_factory configured to create locks in the cache directory.
+     *
+     * @var \core\lock\file_lock_factory $lockfactory
+     */
+    protected $lockfactory = null;
+
+    /**
+     * List of current locks.
+     *
+     * @var array $locks
+     */
+    protected $locks = [];
+
     /**
      * Constructs the store instance.
      *
      * Noting that this function is not an initialisation. It is used to prepare the store for use.
-     * The store will be initialised when required and will be provided with a cache_definition at that time.
+     * The store will be initialised when required and will be provided with a definition at that time.
      *
      * @param string $name
      * @param array $configuration
@@ -172,6 +203,27 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
         } else {
             // Default: No, we will use multiple directories.
             $this->singledirectory = false;
+        }
+        // Check if directory needs to be purged asynchronously.
+        if (array_key_exists('asyncpurge', $configuration)) {
+            $this->asyncpurge = (bool)$configuration['asyncpurge'];
+        } else {
+            $this->asyncpurge = false;
+        }
+
+        // Leverage cachelock_file to provide native locking, to avoid duplicating logic.
+        // This will store locks alongside the cache, so local cache uses local locks.
+        $lockdir = $path . '/filelocks';
+        if (!file_exists($lockdir)) {
+            make_writable_directory($lockdir);
+        }
+        if (array_key_exists('lockwait', $configuration)) {
+            $this->lockwait = (int)$configuration['lockwait'];
+        }
+        $this->lockfactory = new \core\lock\file_lock_factory('cachestore_file', $lockdir);
+        if (!$this->lockfactory->is_available()) {
+            // File locking is disabled in config, fall back to default lock factory.
+            $this->lockfactory = \core\lock\lock_config::get_lock_factory('cachestore_file');
         }
     }
 
@@ -249,11 +301,11 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
     /**
      * Returns true if the given mode is supported by this store.
      *
-     * @param int $mode One of cache_store::MODE_*
+     * @param int $mode One of store::MODE_*
      * @return bool
      */
     public static function is_supported_mode($mode) {
-        return ($mode === self::MODE_APPLICATION || $mode === self::MODE_SESSION);
+        return ($mode === static::MODE_APPLICATION || $mode === static::MODE_SESSION);
     }
 
     /**
@@ -261,13 +313,28 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
      *
      * Once this has been done the cache is all set to be used.
      *
-     * @param cache_definition $definition
+     * @param definition $definition
      */
-    public function initialise(cache_definition $definition) {
+    public function initialise(definition $definition) {
+        global $CFG;
+
         $this->definition = $definition;
         $hash = preg_replace('#[^a-zA-Z0-9]+#', '_', $this->definition->get_id());
         $this->path = $this->filestorepath.'/'.$hash;
         make_writable_directory($this->path, false);
+
+        if ($this->asyncpurge) {
+            $timestampfile = $this->path . '/.lastpurged';
+            if (!file_exists($timestampfile)) {
+                touch($timestampfile);
+                @chmod($timestampfile, $CFG->filepermissions);
+            }
+            $cacherev = gmdate("YmdHis", filemtime($timestampfile));
+            // Update file path with new cache revision.
+            $this->path .= '/' . $cacherev;
+            make_writable_directory($this->path, false);
+        }
+
         if ($this->prescan && $definition->get_mode() !== self::MODE_REQUEST) {
             $this->prescan = false;
         }
@@ -334,6 +401,7 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
      * @return mixed The data that was associated with the key, or false if the key did not exist.
      */
     public function get($key) {
+        $this->lastiobytes = 0;
         $filename = $key.'.cache';
         $file = $this->file_path_for_key($key);
         $ttl = $this->definition->get_ttl();
@@ -358,19 +426,31 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
         if (!$handle = fopen($file, 'rb')) {
             return false;
         }
-        // Lock it up!
-        // We don't care if this succeeds or not, on some systems it will, on some it won't, meah either way.
-        flock($handle, LOCK_SH);
+
+        // Note: There is no need to perform any file locking here.
+        // The cache file is only ever written to in the `write_file` function, where it does so by writing to a temp
+        // file and performing an atomic rename of that file. The target file is never locked, so there is no benefit to
+        // obtaining a lock (shared or exclusive) here.
+
         $data = '';
         // Read the data in 1Mb chunks. Small caches will not loop more than once.  We don't use filesize as it may
         // be cached with a different value than what we need to read from the file.
         do {
             $data .= fread($handle, 1048576);
         } while (!feof($handle));
-        // Unlock it.
-        flock($handle, LOCK_UN);
+        $this->lastiobytes = strlen($data);
+
+        if ($this->lastiobytes == 0) {
+            // Potentially statcache is stale. File can be deleted, let's clear cache and recheck.
+            clearstatcache(true, $file);
+            if (!file_exists($file)) {
+                // It's a completely normal condition. Just ignore and keep going.
+                return false;
+            }
+        }
+
         // Return it unserialised.
-        return $this->prep_data_after_read($data);
+        return $this->prep_data_after_read($data, $file);
     }
 
     /**
@@ -384,10 +464,23 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
      */
     public function get_many($keys) {
         $result = array();
+        $total = 0;
         foreach ($keys as $key) {
             $result[$key] = $this->get($key);
+            $total += $this->lastiobytes;
         }
+        $this->lastiobytes = $total;
         return $result;
+    }
+
+    /**
+     * Gets bytes read by last get() or get_many(), or written by set() or set_many().
+     *
+     * @return int Bytes read or written
+     * @since Moodle 4.0
+     */
+    public function get_last_io_bytes(): int {
+        return $this->lastiobytes;
     }
 
     /**
@@ -399,7 +492,7 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
     public function delete($key) {
         $filename = $key.'.cache';
         $file = $this->file_path_for_key($key);
-        if (@unlink($file)) {
+        if (file_exists($file) && @unlink($file)) {
             unset($this->keys[$filename]);
             return true;
         }
@@ -434,7 +527,9 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
         $this->ensure_path_exists();
         $filename = $key.'.cache';
         $file = $this->file_path_for_key($key, true);
-        $result = $this->write_file($file, $this->prep_data_before_save($data));
+        $serialized = $this->prep_data_before_save($data);
+        $this->lastiobytes = strlen($serialized);
+        $result = $this->write_file($file, $serialized);
         if (!$result) {
             // Couldn't write the file.
             return false;
@@ -461,13 +556,14 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
      * Prepares the data it has been read from the cache. Undoing what was done in prep_data_before_save.
      *
      * @param string $data
+     * @param string $path
      * @return mixed
-     * @throws coding_exception
      */
-    protected function prep_data_after_read($data) {
+    protected function prep_data_after_read($data, $path) {
         $result = @unserialize($data);
-        if ($result === false) {
-            throw new coding_exception('Failed to unserialise data from file. Either failed to read, or failed to write.');
+        if ($result === false && $data != serialize(false)) {
+            debugging('Failed to unserialise data from cache file: ' . $path . '. Data: ' . $data, DEBUG_DEVELOPER);
+            return false;
         }
         return $result;
     }
@@ -482,11 +578,14 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
      */
     public function set_many(array $keyvaluearray) {
         $count = 0;
+        $totaliobytes = 0;
         foreach ($keyvaluearray as $pair) {
             if ($this->set($pair['key'], $pair['value'])) {
+                $totaliobytes += $this->lastiobytes;
                 $count++;
             }
         }
+        $this->lastiobytes = $totaliobytes;
         return $count;
     }
 
@@ -542,14 +641,38 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
      * @return boolean True on success. False otherwise.
      */
     public function purge() {
+        global $CFG;
         if ($this->isready) {
-            $files = glob($this->glob_keys_pattern(), GLOB_MARK | GLOB_NOSORT);
-            if (is_array($files)) {
-                foreach ($files as $filename) {
-                    @unlink($filename);
+            // If asyncpurge = true, create a new cache revision directory and adhoc task to delete old directory.
+            if ($this->asyncpurge && isset($this->definition)) {
+                $hash = preg_replace('#[^a-zA-Z0-9]+#', '_', $this->definition->get_id());
+                $filepath = $this->filestorepath . '/' . $hash;
+                $timestampfile = $filepath . '/.lastpurged';
+                if (file_exists($timestampfile)) {
+                    $oldcacherev = gmdate("YmdHis", filemtime($timestampfile));
+                    $oldcacherevpath = $filepath . '/' . $oldcacherev;
+                    // Delete old cache revision file.
+                    @unlink($timestampfile);
+
+                    // Create adhoc task to delete old cache revision folder.
+                    $purgeoldcacherev = new \cachestore_file\task\asyncpurge();
+                    $purgeoldcacherev->set_custom_data(['path' => $oldcacherevpath]);
+                    \core\task\manager::queue_adhoc_task($purgeoldcacherev);
                 }
+                touch($timestampfile, time());
+                @chmod($timestampfile, $CFG->filepermissions);
+                $newcacherev = gmdate("YmdHis", filemtime($timestampfile));
+                $filepath .= '/' . $newcacherev;
+                make_writable_directory($filepath, false);
+            } else {
+                $files = glob($this->glob_keys_pattern(), GLOB_MARK | GLOB_NOSORT);
+                if (is_array($files)) {
+                    foreach ($files as $filename) {
+                        @unlink($filename);
+                    }
+                }
+                $this->keys = [];
             }
-            $this->keys = array();
         }
         return true;
     }
@@ -591,6 +714,12 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
         if (isset($data->prescan)) {
             $config['prescan'] = $data->prescan;
         }
+        if (isset($data->asyncpurge)) {
+            $config['asyncpurge'] = $data->asyncpurge;
+        }
+        if (isset($data->lockwait)) {
+            $config['lockwait'] = $data->lockwait;
+        }
 
         return $config;
     }
@@ -614,6 +743,12 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
         }
         if (isset($config['prescan'])) {
             $data['prescan'] = (bool)$config['prescan'];
+        }
+        if (isset($config['asyncpurge'])) {
+            $data['asyncpurge'] = (bool)$config['asyncpurge'];
+        }
+        if (isset($config['lockwait'])) {
+            $data['lockwait'] = (int)$config['lockwait'];
         }
         $editform->set_data($data);
     }
@@ -666,10 +801,10 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
      *
      * Returns an instance of the cache store, or false if one cannot be created.
      *
-     * @param cache_definition $definition
+     * @param definition $definition
      * @return cachestore_file
      */
-    public static function initialise_test_instance(cache_definition $definition) {
+    public static function initialise_test_instance(definition $definition) {
         $name = 'File test';
         $path = make_cache_directory('cachestore_file_test');
         $cache = new cachestore_file($name, array('path' => $path));
@@ -783,5 +918,123 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
             $return[] = substr(basename($file), 0, -6);
         }
         return $return;
+    }
+
+    /**
+     * Gets total size for the directory used by the cache store.
+     *
+     * @return int Total size in bytes
+     */
+    public function store_total_size(): ?int {
+        return get_directory_size($this->filestorepath);
+    }
+
+    /**
+     * Gets total size for a specific cache.
+     *
+     * With the file cache we can just look at the directory listing without having to
+     * actually load any files, so the $samplekeys parameter is ignored.
+     *
+     * @param int $samplekeys Unused
+     * @return stdClass Cache details
+     */
+    public function cache_size_details(int $samplekeys = 50): stdClass {
+        $result = (object)[
+            'supported' => true,
+            'items' => 0,
+            'mean' => 0,
+            'sd' => 0,
+            'margin' => 0
+        ];
+
+        // Find all the files in this cache.
+        $this->ensure_path_exists();
+        $files = glob($this->glob_keys_pattern(), GLOB_MARK | GLOB_NOSORT);
+        if ($files === false || count($files) === 0) {
+            return $result;
+        }
+
+        // Get the sizes and count of files.
+        $sizes = [];
+        foreach ($files as $file) {
+            $result->items++;
+            $sizes[] = filesize($file);
+        }
+
+        // Work out mean and standard deviation.
+        $total = array_sum($sizes);
+        $result->mean = $total / $result->items;
+        $squarediff = 0;
+        foreach ($sizes as $size) {
+            $squarediff += ($size - $result->mean) ** 2;
+        }
+        $squarediff /= $result->items;
+        $result->sd = sqrt($squarediff);
+        return $result;
+    }
+
+    /**
+     * Use lock factory to determine the lock state.
+     *
+     * @param string $key Lock identifier
+     * @param string $ownerid Cache identifier
+     * @return bool|null
+     */
+    public function check_lock_state($key, $ownerid): ?bool {
+        if (!array_key_exists($key, $this->locks)) {
+            return null; // Lock does not exist.
+        }
+        if (!array_key_exists($ownerid, $this->locks[$key])) {
+            return false; // Lock exists, but belongs to someone else.
+        }
+        if ($this->locks[$key][$ownerid] instanceof \core\lock\lock) {
+            return true; // Lock exists, and we own it.
+        }
+        // Try to get the lock with an immediate timeout. If this succeeds, the lock does not currently exist.
+        $lock = $this->lockfactory->get_lock($key, 0);
+        if ($lock) {
+            // Lock was not already held.
+            $lock->release();
+            return null;
+        } else {
+            // Lock is held by someone else.
+            return false;
+        }
+    }
+
+    /**
+     * Use lock factory to acquire a lock.
+     *
+     * @param string $key Lock identifier
+     * @param string $ownerid Cache identifier
+     * @return bool
+     */
+    public function acquire_lock($key, $ownerid): bool {
+        $lock = $this->lockfactory->get_lock($key, $this->lockwait);
+        if ($lock) {
+            $this->locks[$key][$ownerid] = $lock;
+        }
+        return (bool)$lock;
+    }
+
+    /**
+     * Use lock factory to release a lock.
+     *
+     * @param string $key Lock identifier
+     * @param string $ownerid Cache identifier
+     * @return bool
+     */
+    public function release_lock($key, $ownerid): bool {
+        if (!array_key_exists($key, $this->locks)) {
+            return false; // No lock to release.
+        }
+        if (!array_key_exists($ownerid, $this->locks[$key])) {
+            return false; // Tried to release someone else's lock.
+        }
+        $unlocked = $this->locks[$key][$ownerid]->release();
+        if ($unlocked) {
+            unset($this->locks[$key]);
+        }
+        return $unlocked;
     }
 }

@@ -33,22 +33,29 @@ defined('MOODLE_INTERNAL') || die();
  * @category   phpunit
  * @copyright  2010 Petr Skoda (http://skodak.org)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @coversDefaultClass \core_text
+ *
  */
-class core_text_testcase extends advanced_testcase {
+class text_test extends advanced_testcase {
 
     /**
      * Tests the static parse charset method.
+     *
+     * @covers ::parse_charset()
      */
-    public function test_parse_charset() {
+    public function test_parse_charset(): void {
         $this->assertSame('windows-1250', core_text::parse_charset('Cp1250'));
-        // Does typo3 work? Some encoding moodle does not use.
+        // Some encoding moodle does not use.
         $this->assertSame('windows-1252', core_text::parse_charset('ms-ansi'));
     }
 
     /**
      * Tests the static convert method.
+     *
+     * @covers ::convert()
      */
-    public function test_convert() {
+    public function test_convert(): void {
+        $this->assertSame('', core_text::convert('', 'utf-8', 'utf-8'));
         $utf8 = "Žluťoučký koníček";
         $iso2 = pack("H*", "ae6c75bb6f75e86bfd206b6f6eede8656b");
         $win  = pack("H*", "8e6c759d6f75e86bfd206b6f6eede8656b");
@@ -93,15 +100,23 @@ class core_text_testcase extends advanced_testcase {
         $this->assertSame('Zlutoucky konicek', core_text::convert($utf8, 'utf-8', 'ascii'));
         $this->assertSame($utf8, core_text::convert($utf8.chr(130), 'utf-8', 'utf-8'));
         $utf8 = "Der eine stößt den Speer zum Mann";
-        $this->assertSame('Der eine stoesst den Speer zum Mann', core_text::convert($utf8, 'utf-8', 'ascii'));
+        $this->assertSame('Der eine stosst den Speer zum Mann', core_text::convert($utf8, 'utf-8', 'ascii'));
         $iso1 = core_text::convert($utf8, 'utf-8', 'iso-8859-1');
-        $this->assertSame('Der eine stoesst den Speer zum Mann', core_text::convert($iso1, 'iso-8859-1', 'ascii'));
+        $this->assertSame('Der eine stosst den Speer zum Mann', core_text::convert($iso1, 'iso-8859-1', 'ascii'));
+        $utf8 = "A æ Übérmensch på høyeste nivå! И я люблю PHP! есть. アクセシビリティ. ﬁ";
+        $this->assertSame("A ae Ubermensch pa hoyeste niva! I a lublu PHP! est'. akuseshibiriti. fi",
+            core_text::convert($utf8, 'utf-8', 'ascii'));
+
+        // Check that null argument is allowed.
+        $this->assertSame('', core_text::convert(null, 'utf-8', 'ascii'));
     }
 
     /**
      * Tests the static sub string method.
+     *
+     * @covers ::substr()
      */
-    public function test_substr() {
+    public function test_substr(): void {
         $str = "Žluťoučký koníček";
         $this->assertSame($str, core_text::substr($str, 0));
         $this->assertSame('luťoučký koníček', core_text::substr($str, 1));
@@ -138,12 +153,20 @@ class core_text_testcase extends advanced_testcase {
         $str = pack("H*", "bcf2cce5d6d0cec4"); // GB18030
         $s = pack("H*", "cce5"); // GB18030
         $this->assertSame($s, core_text::substr($str, 1, 1, 'GB18030'));
+
+        // Check that null argument is allowed.
+        $this->assertSame('', core_text::substr(null, 1, 1));
+        $this->assertSame('', core_text::substr(null, 1));
+        $this->assertSame('', core_text::substr(null, 1, 1, 'cp1250'));
+        $this->assertSame('', core_text::substr(null, 1, null, 'cp1250'));
     }
 
     /**
      * Tests the static string length method.
+     *
+     * @covers ::strlen()
      */
-    public function test_strlen() {
+    public function test_strlen(): void {
         $str = "Žluťoučký koníček";
         $this->assertSame(17, core_text::strlen($str));
 
@@ -177,12 +200,18 @@ class core_text_testcase extends advanced_testcase {
         $this->assertSame(1, core_text::strlen($str, 'GB18030'));
         $str = pack("H*", "bcf2cce5d6d0cec4"); // GB18030
         $this->assertSame(4, core_text::strlen($str, 'GB18030'));
+
+        // Check that null argument is allowed.
+        $this->assertSame(0, core_text::strlen(null));
+        $this->assertSame(0, core_text::strlen(null, 'cp1250'));
     }
 
     /**
      * Test unicode safe string truncation.
+     *
+     * @covers ::str_max_bytes()
      */
-    public function test_str_max_bytes() {
+    public function test_str_max_bytes(): void {
         // These are all 3 byte characters, so this is a 12-byte string.
         $str = '言語設定';
 
@@ -227,12 +256,17 @@ class core_text_testcase extends advanced_testcase {
         $conv = core_text::str_max_bytes($str, 0);
         $this->assertEquals(0, strlen($conv));
         $this->assertSame('', $conv);
+
+        // Check that null argument is allowed.
+        $this->assertSame('', core_text::str_max_bytes(null, 1));
     }
 
     /**
      * Tests the static strtolower method.
+     *
+     * @covers ::strtolower()
      */
-    public function test_strtolower() {
+    public function test_strtolower(): void {
         $str = "Žluťoučký koníček";
         $low = 'žluťoučký koníček';
         $this->assertSame($low, core_text::strtolower($str));
@@ -261,15 +295,20 @@ class core_text_testcase extends advanced_testcase {
         $str = pack("H*", "bcf2cce5d6d0cec4"); // GB18030
         $this->assertSame($str, core_text::strtolower($str, 'GB18030'));
 
-        // Typo3 has problems with integers.
         $str = 1309528800;
         $this->assertSame((string)$str, core_text::strtolower($str));
+
+        // Check that null argument is allowed.
+        $this->assertSame('', core_text::strtolower(null));
+        $this->assertSame('', core_text::strtolower(null, 'cp1250'));
     }
 
     /**
      * Tests the static strtoupper.
+     *
+     * @covers ::strtoupper()
      */
-    public function test_strtoupper() {
+    public function test_strtoupper(): void {
         $str = "Žluťoučký koníček";
         $up  = 'ŽLUŤOUČKÝ KONÍČEK';
         $this->assertSame($up, core_text::strtoupper($str));
@@ -297,12 +336,18 @@ class core_text_testcase extends advanced_testcase {
 
         $str = pack("H*", "bcf2cce5d6d0cec4"); // GB18030
         $this->assertSame($str, core_text::strtoupper($str, 'GB18030'));
+
+        // Check that null argument is allowed.
+        $this->assertSame('', core_text::strtoupper(null));
+        $this->assertSame('', core_text::strtoupper(null, 'cp1250'));
     }
 
     /**
      * Test the strrev method.
+     *
+     * @covers ::strrev()
      */
-    public function test_strrev() {
+    public function test_strrev(): void {
         $strings = array(
             "Žluťoučký koníček" => "kečínok ýkčuoťulŽ",
             'ŽLUŤOUČKÝ KONÍČEK' => "KEČÍNOK ÝKČUOŤULŽ",
@@ -317,37 +362,72 @@ class core_text_testcase extends advanced_testcase {
             // Reverse it twice to be doubly sure.
             $this->assertSame($after, core_text::strrev(core_text::strrev($after)));
         }
+
+        // Check that null argument is allowed.
+        $this->assertSame('', core_text::strrev(null));
     }
 
     /**
      * Tests the static strpos method.
+     *
+     * @covers ::strpos()
      */
-    public function test_strpos() {
+    public function test_strpos(): void {
         $str = "Žluťoučký koníček";
         $this->assertSame(10, core_text::strpos($str, 'koníč'));
+
+        // Check that null argument is allowed.
+        $this->assertSame(false, core_text::strpos(null, 'a'));
     }
 
     /**
      * Tests the static strrpos.
+     *
+     * @covers ::strrpos()
      */
-    public function test_strrpos() {
+    public function test_strrpos(): void {
         $str = "Žluťoučký koníček";
         $this->assertSame(11, core_text::strrpos($str, 'o'));
+
+        // Check that null argument is allowed.
+        $this->assertSame(false, core_text::strrpos(null, 'o'));
     }
 
     /**
      * Tests the static specialtoascii method.
+     *
+     * @covers ::specialtoascii()
      */
-    public function test_specialtoascii() {
+    public function test_specialtoascii(): void {
         $str = "Žluťoučký koníček";
         $this->assertSame('Zlutoucky konicek', core_text::specialtoascii($str));
+
+        $utf8 = "Der eine stößt den Speer zum Mann";
+        $iso1 = core_text::convert($utf8, 'utf-8', 'iso-8859-1');
+        $this->assertSame('Der eine stosst den Speer zum Mann', core_text::specialtoascii($utf8));
+        $this->assertSame('Der eine stosst den Speer zum Mann', core_text::specialtoascii($iso1, 'iso-8859-1'));
+
+        $str = 'àáâãäçèéêëìíîïñòóôõöùúûüýÿÀÁÂÃÄÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝ';
+        $this->assertSame('aaaaaceeeeiiiinooooouuuuyyAAAAACEEEEIIIINOOOOOUUUUY', core_text::specialtoascii($str));
+
+        $utf8 = 'A æ Übérmensch på høyeste nivå! И я люблю PHP! есть. ﬁ';
+        $this->assertSame('A ae Ubermensch pa hoyeste niva! I a lublu PHP! est\'. fi', core_text::specialtoascii($utf8, 'utf8'));
+
+        $utf8 = 'キャンパス Αλφαβητικός Κατάλογος Лорем ипсум долор сит амет';
+        $this->assertSame('kyanpasu Alphabetikos Katalogos Lorem ipsum dolor sit amet', core_text::specialtoascii($utf8));
+
+        // Check that null argument is allowed.
+        $this->assertSame('', core_text::specialtoascii(null));
+        $this->assertSame('', core_text::specialtoascii(null, 'ascii'));
     }
 
     /**
      * Tests the static encode_mimeheader method.
-     * This also tests method moodle_phpmailer::encodeHeader that calls core_text::encode_mimeheader
+     *
+     * @covers ::encode_mimeheader()
+     * @covers \moodle_phpmailer::encodeHeader()
      */
-    public function test_encode_mimeheader() {
+    public function test_encode_mimeheader(): void {
         global $CFG;
         require_once($CFG->libdir.'/phpmailer/moodle_phpmailer.php');
         $mailer = new moodle_phpmailer();
@@ -380,20 +460,30 @@ class core_text_testcase extends advanced_testcase {
  =?utf-8?B?0Ywg0LLQuNC90LTQvtGD0Lci?=";
         $this->assertSame($encodedlongstr, $mailer->encodeHeader($longstr));
         $this->assertSame('"' . $encodedlongstr . '"', $mailer->encodeHeader($longstr, 'phrase'));
+
+        // Check that null argument is allowed.
+        $this->assertSame('', core_text::encode_mimeheader(null));
     }
 
     /**
      * Tests the static entities_to_utf8 method.
+     *
+     * @covers ::entities_to_utf8()
      */
-    public function test_entities_to_utf8() {
+    public function test_entities_to_utf8(): void {
         $str = "&#x17d;lu&#x165;ou&#x10d;k&#xfd; kon&iacute;&#269;ek&copy;&quot;&amp;&lt;&gt;&sect;&laquo;";
         $this->assertSame("Žluťoučký koníček©\"&<>§«", core_text::entities_to_utf8($str));
+
+        // Check that null argument is allowed.
+        $this->assertSame('', core_text::entities_to_utf8(null));
     }
 
     /**
      * Tests the static utf8_to_entities method.
+     *
+     * @covers ::utf8_to_entities()
      */
-    public function test_utf8_to_entities() {
+    public function test_utf8_to_entities(): void {
         $str = "&#x17d;luťoučký kon&iacute;ček&copy;&quot;&amp;&lt;&gt;&sect;&laquo;";
         $this->assertSame("&#x17d;lu&#x165;ou&#x10d;k&#xfd; kon&iacute;&#x10d;ek&copy;&quot;&amp;&lt;&gt;&sect;&laquo;", core_text::utf8_to_entities($str));
         $this->assertSame("&#381;lu&#357;ou&#269;k&#253; kon&iacute;&#269;ek&copy;&quot;&amp;&lt;&gt;&sect;&laquo;", core_text::utf8_to_entities($str, true));
@@ -401,21 +491,58 @@ class core_text_testcase extends advanced_testcase {
         $str = "&#381;luťoučký kon&iacute;ček&copy;&quot;&amp;&lt;&gt;&sect;&laquo;";
         $this->assertSame("&#x17d;lu&#x165;ou&#x10d;k&#xfd; kon&#xed;&#x10d;ek&#xa9;\"&<>&#xa7;&#xab;", core_text::utf8_to_entities($str, false, true));
         $this->assertSame("&#381;lu&#357;ou&#269;k&#253; kon&#237;&#269;ek&#169;\"&<>&#167;&#171;", core_text::utf8_to_entities($str, true, true));
+
+        // Check that null argument is allowed.
+        $this->assertSame('', core_text::utf8_to_entities(null));
+        $this->assertSame('', core_text::utf8_to_entities(null, true));
     }
 
     /**
      * Tests the static trim_utf8_bom method.
+     *
+     * @covers ::trim_utf8_bom()
      */
-    public function test_trim_utf8_bom() {
+    public function test_trim_utf8_bom(): void {
         $bom = "\xef\xbb\xbf";
         $str = "Žluťoučký koníček";
         $this->assertSame($str.$bom, core_text::trim_utf8_bom($bom.$str.$bom));
+
+        // Check that null argument is allowed.
+        $this->assertSame(null, core_text::trim_utf8_bom(null));
+    }
+
+    /**
+     * Tests the static remove_unicode_non_characters method.
+     *
+     * @covers ::remove_unicode_non_characters()
+     */
+    public function test_remove_unicode_non_characters(): void {
+        // Confirm that texts which don't contain these characters are unchanged.
+        $this->assertSame('Frogs!', core_text::remove_unicode_non_characters('Frogs!'));
+
+        // Even if they contain some very scary characters.
+        $example = html_entity_decode('A&#xfffd;&#x1d15f;B', ENT_COMPAT);
+        $this->assertSame($example, core_text::remove_unicode_non_characters($example));
+
+        // Non-characters are removed wherever they may be, with other characters left.
+        $example = html_entity_decode('&#xfffe;A&#xffff;B&#x8fffe;C&#xfdd0;D&#xfffd;E&#xfdd5;', ENT_COMPAT);
+        $expected = html_entity_decode('ABCD&#xfffd;E', ENT_COMPAT);
+        $this->assertSame($expected, core_text::remove_unicode_non_characters($example));
+
+        // If you only have a non-character, you get empty string.
+        $example = html_entity_decode('&#xfffe;', ENT_COMPAT);
+        $this->assertSame('', core_text::remove_unicode_non_characters($example));
+
+        // Check that null argument is allowed.
+        $this->assertSame(null, core_text::trim_utf8_bom(null));
     }
 
     /**
      * Tests the static get_encodings method.
+     *
+     * @covers ::get_encodings()
      */
-    public function test_get_encodings() {
+    public function test_get_encodings(): void {
         $encodings = core_text::get_encodings();
         $this->assertTrue(is_array($encodings));
         $this->assertTrue(count($encodings) > 1);
@@ -424,40 +551,84 @@ class core_text_testcase extends advanced_testcase {
 
     /**
      * Tests the static code2utf8 method.
+     *
+     * @covers ::code2utf8()
      */
-    public function test_code2utf8() {
+    public function test_code2utf8(): void {
         $this->assertSame('Ž', core_text::code2utf8(381));
     }
 
     /**
      * Tests the static utf8ord method.
+     *
+     * @covers ::utf8ord()
      */
-    public function test_utf8ord() {
+    public function test_utf8ord(): void {
         $this->assertSame(ord(''), core_text::utf8ord(''));
         $this->assertSame(ord('f'), core_text::utf8ord('f'));
         $this->assertSame(0x03B1, core_text::utf8ord('α'));
         $this->assertSame(0x0439, core_text::utf8ord('й'));
         $this->assertSame(0x2FA1F, core_text::utf8ord('𯨟'));
         $this->assertSame(381, core_text::utf8ord('Ž'));
+
+        // Check that null argument is allowed.
+        $this->assertSame(ord(''), core_text::utf8ord(null));
     }
 
     /**
      * Tests the static strtotitle method.
+     *
+     * @covers ::strtotitle()
      */
-    public function test_strtotitle() {
+    public function test_strtotitle(): void {
         $str = "žluťoučký koníček";
         $this->assertSame("Žluťoučký Koníček", core_text::strtotitle($str));
+
+        // Check that null argument is allowed.
+        $this->assertSame(null, core_text::strtotitle(null));
     }
 
     /**
      * Test strrchr.
+     *
+     * @covers ::strrchr()
      */
-    public function test_strrchr() {
+    public function test_strrchr(): void {
         $str = "Žluťoučký koníček";
         $this->assertSame('koníček', core_text::strrchr($str, 'koní'));
         $this->assertSame('Žluťoučký ', core_text::strrchr($str, 'koní', true));
         $this->assertFalse(core_text::strrchr($str, 'A'));
         $this->assertFalse(core_text::strrchr($str, 'ç', true));
+
+        // Check that null argument is allowed.
+        $this->assertSame(false, core_text::strrchr(null, 'o'));
+    }
+
+    /**
+     * Tests the static checker is_charset_supported
+     *
+     * @dataProvider is_charset_supported_provider
+     * @param string $charset
+     * @param bool $expected
+     * @covers ::is_charset_supported()
+     */
+    public function test_is_charset_supported(string $charset, bool $expected): void {
+        $charset = core_text::parse_charset($charset);
+        $this->assertEquals($expected, core_text::is_charset_supported($charset));
+    }
+
+    /**
+     * Provider for the test_is_charset_supported()
+     * @return array[]
+     */
+    public static function is_charset_supported_provider(): array {
+        return [
+            "Check unsupported windows charset" => [
+                "cp1250", false
+            ],
+            "Check supported windows charset" => [
+                "cp1252", true
+            ]
+        ];
     }
 }
-

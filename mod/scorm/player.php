@@ -30,26 +30,26 @@ $displaymode = optional_param('display', '', PARAM_ALPHA);
 
 if (!empty($id)) {
     if (! $cm = get_coursemodule_from_id('scorm', $id, 0, true)) {
-        print_error('invalidcoursemodule');
+        throw new \moodle_exception('invalidcoursemodule');
     }
     if (! $course = $DB->get_record("course", array("id" => $cm->course))) {
-        print_error('coursemisconf');
+        throw new \moodle_exception('coursemisconf');
     }
     if (! $scorm = $DB->get_record("scorm", array("id" => $cm->instance))) {
-        print_error('invalidcoursemodule');
+        throw new \moodle_exception('invalidcoursemodule');
     }
 } else if (!empty($a)) {
     if (! $scorm = $DB->get_record("scorm", array("id" => $a))) {
-        print_error('invalidcoursemodule');
+        throw new \moodle_exception('invalidcoursemodule');
     }
     if (! $course = $DB->get_record("course", array("id" => $scorm->course))) {
-        print_error('coursemisconf');
+        throw new \moodle_exception('coursemisconf');
     }
     if (! $cm = get_coursemodule_from_instance("scorm", $scorm->id, $course->id, true)) {
-        print_error('invalidcoursemodule');
+        throw new \moodle_exception('invalidcoursemodule');
     }
 } else {
-    print_error('missingparameter');
+    throw new \moodle_exception('missingparameter');
 }
 
 // PARAM_RAW is used for $currentorg, validate it against records stored in the table.
@@ -83,6 +83,8 @@ if ($displaymode !== '') {
     $url->param('display', $displaymode);
 }
 $PAGE->set_url($url);
+$PAGE->set_secondary_active_tab("modulepage");
+
 $forcejs = get_config('scorm', 'forcejavascript');
 if (!empty($forcejs)) {
     $PAGE->add_body_class('forcejavascript');
@@ -158,15 +160,20 @@ $SESSION->scorm->attempt = $attempt;
 $completion = new completion_info($course);
 $completion->set_module_viewed($cm);
 
-// Print the page header.
+// Generate the exit button.
+$exiturl = "";
 if (empty($scorm->popup) || $displaymode == 'popup') {
-    // Redirect back to the correct section if one section per page is being used.
-    $exiturl = course_get_url($course, $cm->sectionnum);
-
-    $exitlink = html_writer::link($exiturl, $strexit, array('title' => $strexit));
-    $PAGE->set_button($exitlink);
+    if ($course->format == 'singleactivity' && $scorm->skipview == SCORM_SKIPVIEW_ALWAYS
+        && !has_capability('mod/scorm:viewreport', context_module::instance($cm->id))) {
+        // Redirect students back to site home to avoid redirect loop.
+        $exiturl = $CFG->wwwroot;
+    } else {
+        // Redirect back to the correct section if one section per page is being used.
+        $exiturl = course_get_url($course, $cm->sectionnum)->out();
+    }
 }
 
+// Print the page header.
 $PAGE->requires->data_for_js('scormplayerdata', Array('launch' => false,
                                                        'currentorg' => '',
                                                        'sco' => 0,
@@ -183,11 +190,14 @@ if (file_exists($CFG->dirroot.'/mod/scorm/datamodels/'.$scorm->version.'.js')) {
 } else {
     $PAGE->requires->js('/mod/scorm/datamodels/scorm_12.js', true);
 }
+$activityheader = $PAGE->activityheader;
+$headerconfig = [
+    'description' => '',
+    'hidecompletion' => true
+];
 
+$activityheader->set_attrs($headerconfig);
 echo $OUTPUT->header();
-if (!empty($scorm->displayactivityname)) {
-    echo $OUTPUT->heading(format_string($scorm->name));
-}
 
 $PAGE->requires->string_for_js('navigation', 'scorm');
 $PAGE->requires->string_for_js('toc', 'scorm');
@@ -197,15 +207,22 @@ $PAGE->requires->string_for_js('popupsblocked', 'scorm');
 
 $name = false;
 
+// Exit button should ONLY be displayed when in the current window.
+if ($displaymode !== 'popup') {
+    $renderer = $PAGE->get_renderer('mod_scorm');
+    echo $renderer->generate_exitbar($exiturl);
+}
+
 echo html_writer::start_div('', array('id' => 'scormpage'));
 echo html_writer::start_div('', array('id' => 'tocbox'));
 echo html_writer::div(html_writer::tag('script', '', array('id' => 'external-scormapi', 'type' => 'text/JavaScript')), '',
                         array('id' => 'scormapi-parent'));
 
 if ($scorm->hidetoc == SCORM_TOC_POPUP or $mode == 'browse' or $mode == 'review') {
-    echo html_writer::start_div('', array('id' => 'scormtop'));
-    echo $mode == 'browse' ? html_writer::div(get_string('browsemode', 'scorm'), 'scorm-left', array('id' => 'scormmode')) : '';
-    echo $mode == 'review' ? html_writer::div(get_string('reviewmode', 'scorm'), 'scorm-left', array('id' => 'scormmode')) : '';
+    echo html_writer::start_div('mb-3', array('id' => 'scormtop'));
+    if ($mode == 'browse' || $mode == 'review') {
+        echo html_writer::div(get_string("{$mode}mode", 'scorm'), 'scorm-left h3', ['id' => 'scormmode']);
+    }
     if ($scorm->hidetoc == SCORM_TOC_POPUP) {
         echo html_writer::div($result->tocmenu, 'scorm-right', array('id' => 'scormnav'));
     }
@@ -266,7 +283,8 @@ if (empty($scorm->popup) || $displaymode == 'popup') {
                             $scorm->hidetoc, $collapsetocwinsize, $result->toctitle, $name, $sco->id, $adlnav), false, $jsmodule);
 }
 if (!empty($forcejs)) {
-    echo $OUTPUT->box(get_string("forcejavascriptmessage", "scorm"), "generalbox boxaligncenter forcejavascriptmessage");
+    $message = $OUTPUT->box(get_string("forcejavascriptmessage", "scorm"), "generalbox boxaligncenter forcejavascriptmessage");
+    echo html_writer::tag('noscript', $message);
 }
 
 if (file_exists($CFG->dirroot.'/mod/scorm/datamodels/'.$scorm->version.'.php')) {
@@ -275,11 +293,9 @@ if (file_exists($CFG->dirroot.'/mod/scorm/datamodels/'.$scorm->version.'.php')) 
     include_once($CFG->dirroot.'/mod/scorm/datamodels/scorm_12.php');
 }
 
-// Add the checknet system to keep checking for a connection.
-$PAGE->requires->string_for_js('networkdropped', 'mod_scorm');
-$PAGE->requires->yui_module('moodle-core-checknet', 'M.core.checknet.init', array(array(
-    'message' => array('networkdropped', 'mod_scorm'),
-)));
+// Add the keepalive system to keep checking for a connection.
+\core\session\manager::keepalive('networkdropped', 'mod_scorm', 30, 10);
+
 echo $OUTPUT->footer();
 
 // Set the start time of this SCO.

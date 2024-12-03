@@ -126,7 +126,8 @@ class workshop_random_allocator implements workshop_allocator {
             $allreviewers = $reviewers[0];
             $allreviewersreloaded = false;
             foreach ($newallocations as $newallocation) {
-                list($reviewerid, $authorid) = each($newallocation);
+                $reviewerid = key($newallocation);
+                $authorid = current($newallocation);
                 $a = new stdClass();
                 if (isset($allreviewers[$reviewerid])) {
                     $a->reviewername = fullname($allreviewers[$reviewerid]);
@@ -164,13 +165,14 @@ class workshop_random_allocator implements workshop_allocator {
             // by reviewer
             $result->log(get_string('numofdeallocatedassessment', 'workshopallocation_random', count($delassessments)), 'info');
             foreach ($delassessments as $delassessmentkey => $delassessmentid) {
-                $a = new stdclass();
-                $a->authorname      = fullname((object)array(
-                        'lastname'  => $assessments[$delassessmentid]->authorlastname,
-                        'firstname' => $assessments[$delassessmentid]->authorfirstname));
-                $a->reviewername    = fullname((object)array(
-                        'lastname'  => $assessments[$delassessmentid]->reviewerlastname,
-                        'firstname' => $assessments[$delassessmentid]->reviewerfirstname));
+                $author = (object) [];
+                $reviewer = (object) [];
+                username_load_fields_from_object($author, $assessments[$delassessmentid], 'author');
+                username_load_fields_from_object($reviewer, $assessments[$delassessmentid], 'reviewer');
+                $a = [
+                    'authorname' => fullname($author),
+                    'reviewername' => fullname($reviewer),
+                ];
                 if (!is_null($assessments[$delassessmentid]->grade)) {
                     $result->log(get_string('allocationdeallocategraded', 'workshopallocation_random', $a), 'error', 1);
                     unset($delassessments[$delassessmentkey]);
@@ -261,13 +263,17 @@ class workshop_random_allocator implements workshop_allocator {
      * @return array of integers
      */
     public static function available_numofreviews_list() {
-        $options = array();
-        $options[30] = 30;
-        $options[20] = 20;
-        $options[15] = 15;
-        for ($i = 10; $i >= 0; $i--) {
+
+        $options = [];
+
+        for ($i = 100; $i > 20; $i = $i - 10) {
             $options[$i] = $i;
         }
+
+        for ($i = 20; $i >= 0; $i--) {
+            $options[$i] = $i;
+        }
+
         return $options;
     }
 
@@ -323,7 +329,8 @@ class workshop_random_allocator implements workshop_allocator {
         $submissions    = $this->workshop->get_submissions($authorids);
         $submissions    = $this->index_submissions_by_authors($submissions);
         foreach ($newallocations as $newallocation) {
-            list($reviewerid, $authorid) = each($newallocation);
+            $reviewerid = key($newallocation);
+            $authorid = current($newallocation);
             if (!isset($submissions[$authorid])) {
                 throw new moodle_exception('unabletoallocateauthorwithoutsubmission', 'workshop');
             }
@@ -407,7 +414,8 @@ class workshop_random_allocator implements workshop_allocator {
                 continue;
             }
             foreach ($newallocations as $newallocation) {
-                list($nrid, $naid) = each($newallocation);
+                $nrid = key($newallocation);
+                $naid = current($newallocation);
                 if (array($arid, $aaid) == array($nrid, $naid)) {
                     // re-allocation found - let us continue with the next assessment
                     $keepids[$assessmentid] = null;
@@ -694,7 +702,7 @@ class workshop_random_allocator implements workshop_allocator {
     protected function filter_current_assessments(&$newallocations, $assessments) {
         foreach ($assessments as $assessment) {
             $allocation     = array($assessment->reviewerid => $assessment->authorid);
-            $foundat        = array_keys($newallocations, $allocation);
+            $foundat        = moodle_array_keys_filter($newallocations, $allocation);
             $newallocations = array_diff_key($newallocations, array_flip($foundat));
         }
     }
@@ -723,6 +731,8 @@ class workshop_random_allocator_setting {
     public $assesswosubmission;
     /** @var bool add self-assessments */
     public $addselfassessment;
+    /** @var bool scheduled allocation status */
+    public $enablescheduled;
 
     /**
      * Use the factory method {@link self::instance_from_object()}

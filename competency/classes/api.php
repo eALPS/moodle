@@ -24,6 +24,7 @@
 namespace core_competency;
 defined('MOODLE_INTERNAL') || die();
 
+use core\invalid_persistent_exception;
 use stdClass;
 use cm_info;
 use context;
@@ -46,6 +47,9 @@ use required_capability_exception;
  */
 class api {
 
+    /** @var boolean Allow api functions even if competencies are not enabled for the site. */
+    private static $skipenabled = false;
+
     /**
      * Returns whether competencies are enabled.
      *
@@ -56,7 +60,30 @@ class api {
      * @return boolean True when enabled.
      */
     public static function is_enabled() {
-        return get_config('core_competency', 'enabled');
+        return self::$skipenabled || get_config('core_competency', 'enabled');
+    }
+
+    /**
+     * When competencies used to be enabled, we can show the text but do not include links.
+     *
+     * @return boolean True means show links.
+     */
+    public static function show_links() {
+        return isloggedin() && !isguestuser() && get_config('core_competency', 'enabled');
+    }
+
+    /**
+     * Allow calls to competency api functions even if competencies are not currently enabled.
+     */
+    public static function skip_enabled() {
+        self::$skipenabled = true;
+    }
+
+    /**
+     * Restore the checking that competencies are enabled with any api function.
+     */
+    public static function check_enabled() {
+        self::$skipenabled = false;
     }
 
     /**
@@ -165,7 +192,7 @@ class api {
         require_capability('moodle/competency:competencymanage', $competency->get_context());
 
         // Reset the sortorder, use reorder instead.
-        $competency->set('sortorder', null);
+        $competency->set('sortorder', 0);
         $competency->create();
 
         \core\event\competency_created::create_from_competency($competency)->trigger();
@@ -433,7 +460,7 @@ class api {
      *
      * @param int $id The id of the competency to read.
      * @param bool $includerelated Include related tags or not.
-     * @return stdClass
+     * @return competency
      */
     public static function read_competency($id, $includerelated = false) {
         static::require_enabled();
@@ -877,7 +904,7 @@ class api {
      * @param array $hasanycapability Array of capabilities passed to {@link has_any_capability()} in each context.
      * @return context[] An array of contexts where keys are context IDs.
      */
-    public static function get_related_contexts($context, $includes, array $hasanycapability = null) {
+    public static function get_related_contexts($context, $includes, ?array $hasanycapability = null) {
         global $DB;
         static::require_enabled();
 
@@ -1178,6 +1205,31 @@ class api {
     }
 
     /**
+     * Count the competencies associated to a course module.
+     *
+     * @param mixed $cmorid The course module, or its ID.
+     * @return int
+     */
+    public static function count_course_module_competencies($cmorid) {
+        static::require_enabled();
+        $cm = $cmorid;
+        if (!is_object($cmorid)) {
+            $cm = get_coursemodule_from_id('', $cmorid, 0, true, MUST_EXIST);
+        }
+
+        // Check the user have access to the course module.
+        self::validate_course_module($cm);
+        $context = context_module::instance($cm->id);
+
+        $capabilities = array('moodle/competency:coursecompetencyview', 'moodle/competency:coursecompetencymanage');
+        if (!has_any_capability($capabilities, $context)) {
+            throw new required_capability_exception($context, 'moodle/competency:coursecompetencyview', 'nopermissions', '');
+        }
+
+        return course_module_competency::count_competencies($cm->id);
+    }
+
+    /**
      * List the competencies associated to a course module.
      *
      * @param mixed $cmorid The course module, or its ID.
@@ -1205,7 +1257,7 @@ class api {
         $result = array();
 
         // TODO We could improve the performance of this into one single query.
-        $coursemodulecompetencies = course_competency::list_course_module_competencies($cm->id);
+        $coursemodulecompetencies = course_module_competency::list_course_module_competencies($cm->id);
         $competencies = course_module_competency::list_competencies($cm->id);
 
         // Build the return values.
@@ -1349,7 +1401,8 @@ class api {
                   JOIN {user} u
                     ON u.id = uc.userid
                  WHERE (uc.status = :waitingforreview
-                    OR (uc.status = :inreview AND uc.reviewerid = :reviewerid))";
+                    OR (uc.status = :inreview AND uc.reviewerid = :reviewerid))
+                   AND u.deleted = 0";
         $ordersql = " ORDER BY c.shortname ASC";
         $params = array(
             'inreview' => user_competency::STATUS_IN_REVIEW,
@@ -1530,9 +1583,11 @@ class api {
      *
      * @param int|course_module_competency $coursemodulecompetencyorid The course_module_competency, or its ID.
      * @param int $ruleoutcome The value of ruleoutcome.
+     * @param bool $overridegrade If true, will override existing grades in related competencies.
      * @return bool True on success.
      */
-    public static function set_course_module_competency_ruleoutcome($coursemodulecompetencyorid, $ruleoutcome) {
+    public static function set_course_module_competency_ruleoutcome($coursemodulecompetencyorid, $ruleoutcome,
+        $overridegrade = false) {
         static::require_enabled();
         $coursemodulecompetency = $coursemodulecompetencyorid;
         if (!is_object($coursemodulecompetency)) {
@@ -1547,6 +1602,8 @@ class api {
         require_capability('moodle/competency:coursecompetencymanage', $context);
 
         $coursemodulecompetency->set('ruleoutcome', $ruleoutcome);
+        $coursemodulecompetency->set('overridegrade', $overridegrade);
+
         return $coursemodulecompetency->update();
     }
 
@@ -3191,6 +3248,34 @@ class api {
     }
 
     /**
+     * List the plans with a competency.
+     *
+     * @param  int $userid The user id we want the plans for.
+     * @param  int $competencyorid The competency, or its ID.
+     * @return array[plan] Array of learning plans.
+     */
+    public static function list_plans_with_competency($userid, $competencyorid) {
+        global $USER;
+
+        static::require_enabled();
+        $competencyid = $competencyorid;
+        $competency = null;
+        if (is_object($competencyid)) {
+            $competency = $competencyid;
+            $competencyid = $competency->get('id');
+        }
+
+        $plans = plan::get_by_user_and_competency($userid, $competencyid);
+        foreach ($plans as $index => $plan) {
+            // Filter plans we cannot read.
+            if (!$plan->can_read()) {
+                unset($plans[$index]);
+            }
+        }
+        return $plans;
+    }
+
+    /**
      * List the competencies in a user plan.
      *
      * @param  int $planorid The plan, or its ID.
@@ -3759,7 +3844,7 @@ class api {
         if (!$userevidence->can_manage()) {
             throw new required_capability_exception($context, 'moodle/competency:userevidencemanage', 'nopermissions', '');
 
-        } else if (array_key_exists('userid', $data) && $data->userid != $userevidence->get('userid')) {
+        } else if (property_exists($data, 'userid') && $data->userid != $userevidence->get('userid')) {
             throw new coding_exception('Can not change the userid of a user evidence.');
         }
 
@@ -3959,7 +4044,7 @@ class api {
      * This method does not copy the related competencies.
      *
      * @param int $frameworkid - framework id
-     * @param competency[] $tree - array of competencies object
+     * @param stdClass[] $tree - list of framework competency nodes
      * @param int $oldparent - old parent id
      * @param int $newparent - new parent id
      * @return competency[] $matchids - List of old competencies ids matched with new competencies object.
@@ -3999,7 +4084,7 @@ class api {
     /**
      * Recursively migrate competency rules.
      *
-     * @param competency[] $tree - array of competencies object
+     * @param array $tree - array of competencies object
      * @param competency[] $matchids - List of old competencies ids matched with new competencies object
      */
     protected static function migrate_competency_tree_rules($tree, $matchids) {
@@ -4032,7 +4117,7 @@ class api {
     /**
      * Archive user competencies in a plan.
      *
-     * @param int $plan The plan object.
+     * @param plan $plan The plan object.
      * @return void
      */
     protected static function archive_user_competencies_in_plan($plan) {
@@ -4082,7 +4167,7 @@ class api {
     /**
      * Delete archived user competencies in a plan.
      *
-     * @param int $plan The plan object.
+     * @param plan $plan The plan object.
      * @return void
      */
     protected static function remove_archived_user_competencies_in_plan($plan) {
@@ -4199,7 +4284,7 @@ class api {
      */
     public static function add_evidence($userid, $competencyorid, $contextorid, $action, $descidentifier, $desccomponent,
                                         $desca = null, $recommend = false, $url = null, $grade = null, $actionuserid = null,
-                                        $note = null) {
+                                        $note = null, $overridegrade = false) {
         global $DB;
         static::require_enabled();
 
@@ -4270,8 +4355,8 @@ class api {
                         $usercompetencycourse = user_competency_course::create_relation($userid, $competencyid, $courseid);
                         $usercompetencycourse->create();
                     }
-                    // Only update the grade and proficiency if there is not already a grade.
-                    if ($usercompetencycourse->get('grade') === null) {
+                    // Only update the grade and proficiency if there is not already a grade or the override option is enabled.
+                    if ($usercompetencycourse->get('grade') === null || $overridegrade) {
                         // Set grade.
                         $usercompetencycourse->set('grade', $grade);
                         // Set proficiency.
@@ -4283,8 +4368,8 @@ class api {
                     $setucgrade = $coursesettings->get('pushratingstouserplans');
 
                     if ($setucgrade) {
-                        // Only push to user plans if there is not already a grade.
-                        if ($usercompetency->get('grade') !== null) {
+                        // Only push to user plans if there is not already a grade or the override option is enabled.
+                        if ($usercompetency->get('grade') !== null && !$overridegrade) {
                             $setucgrade = false;
                         } else {
                             $ucgrade = $grade;
@@ -4294,8 +4379,9 @@ class api {
                 } else {
 
                     // When completing the competency we fetch the default grade from the competency. But we only mark
-                    // the user competency when a grade has not been set yet. Complete is an action to use with automated systems.
-                    if ($usercompetency->get('grade') === null) {
+                    // the user competency when a grade has not been set yet or if override option is enabled.
+                    // Complete is an action to use with automated systems.
+                    if ($usercompetency->get('grade') === null || $overridegrade) {
                         $setucgrade = true;
                         $ucgrade = $grade;
                         $ucproficiency = $proficiency;
@@ -4418,7 +4504,7 @@ class api {
 
         // The competency was marked as completed, apply the rules.
         if ($wascompleted) {
-            self::apply_competency_rules_from_usercompetency($usercompetency, $competency);
+            self::apply_competency_rules_from_usercompetency($usercompetency, $competency, $overridegrade);
         }
 
         return $evidence;
@@ -4477,7 +4563,7 @@ class api {
      * @return void
      */
     protected static function apply_competency_rules_from_usercompetency(user_competency $usercompetency,
-                                                                         competency $competency = null) {
+                                                                         ?competency $competency = null, $overridegrade = false) {
 
         // Perform some basic checks.
         if (!$usercompetency->get('proficiency')) {
@@ -4544,7 +4630,12 @@ class api {
             'evidence_competencyrule',
             'core_competency',
             null,
-            $recommend
+            $recommend,
+            null,
+            null,
+            null,
+            null,
+            $overridegrade
         );
     }
 
@@ -4579,7 +4670,11 @@ class api {
                 $action = null;
                 $recommend = false;
                 $strdesc = 'evidence_coursemodulecompleted';
+                $overridegrade = $coursemodulecompetency->get('overridegrade');
 
+                if ($outcome == course_module_competency::OUTCOME_NONE) {
+                    continue;
+                }
                 if ($outcome == course_module_competency::OUTCOME_EVIDENCE) {
                     $action = evidence::ACTION_LOG;
 
@@ -4603,7 +4698,11 @@ class api {
                     'core_competency',
                     $cmname,
                     $recommend,
-                    $url
+                    $url,
+                    null,
+                    null,
+                    null,
+                    $overridegrade
                 );
             }
         }
@@ -4640,6 +4739,9 @@ class api {
             $recommend = false;
             $strdesc = 'evidence_coursecompleted';
 
+            if ($outcome == course_module_competency::OUTCOME_NONE) {
+                continue;
+            }
             if ($outcome == course_competency::OUTCOME_EVIDENCE) {
                 $action = evidence::ACTION_LOG;
 
@@ -4720,6 +4822,40 @@ class api {
     public static function hook_cohort_deleted(\stdClass $cohort) {
         global $DB;
         $DB->delete_records(template_cohort::TABLE, array('cohortid' => $cohort->id));
+    }
+
+    /**
+     * Action to perform when a user is deleted.
+     *
+     * @param int $userid The user id.
+     */
+    public static function hook_user_deleted($userid) {
+        global $DB;
+
+        $usercompetencies = $DB->get_records(user_competency::TABLE, ['userid' => $userid], '', 'id');
+        foreach ($usercompetencies as $usercomp) {
+            $DB->delete_records(evidence::TABLE, ['usercompetencyid' => $usercomp->id]);
+        }
+
+        $DB->delete_records(user_competency::TABLE, ['userid' => $userid]);
+        $DB->delete_records(user_competency_course::TABLE, ['userid' => $userid]);
+        $DB->delete_records(user_competency_plan::TABLE, ['userid' => $userid]);
+
+        // Delete any associated files.
+        $fs = get_file_storage();
+        $context = context_user::instance($userid);
+        $userevidences = $DB->get_records(user_evidence::TABLE, ['userid' => $userid], '', 'id');
+        foreach ($userevidences as $userevidence) {
+            $DB->delete_records(user_evidence_competency::TABLE, ['userevidenceid' => $userevidence->id]);
+            $DB->delete_records(user_evidence::TABLE, ['id' => $userevidence->id]);
+            $fs->delete_area_files($context->id, 'core_competency', 'userevidence', $userevidence->id);
+        }
+
+        $userplans = $DB->get_records(plan::TABLE, ['userid' => $userid], '', 'id');
+        foreach ($userplans as $userplan) {
+            $DB->delete_records(plan_competency::TABLE, ['planid' => $userplan->id]);
+            $DB->delete_records(plan::TABLE, ['id' => $userplan->id]);
+        }
     }
 
     /**
@@ -4986,8 +5122,9 @@ class api {
         static::require_enabled();
         $coursecontext = context_course::instance($courseid);
 
-        if (!has_any_capability(array('moodle/competency:competencyview', 'moodle/competency:competencymanage'), $coursecontext)) {
-            throw new required_capability_exception($coursecontext, 'moodle/competency:competencyview', 'nopermissions', '');
+        if (!has_any_capability(array('moodle/competency:coursecompetencyview', 'moodle/competency:coursecompetencymanage'),
+                $coursecontext)) {
+            throw new required_capability_exception($coursecontext, 'moodle/competency:coursecompetencyview', 'nopermissions', '');
         }
 
         return user_competency_course::get_least_proficient_competencies_for_course($courseid, $skip, $limit);
@@ -5154,9 +5291,12 @@ class api {
         $syscontext = context_system::instance();
         $hassystem = has_capability($capability, $syscontext, $userid);
 
-        $access = get_user_access_sitewide($userid);
+        $access = get_user_roles_sitewide_accessdata($userid);
         // Build up a list of level 2 contexts (candidates to be user context).
         $filtercontexts = array();
+        // Build list of roles to check overrides.
+        $roles = array();
+
         foreach ($access['ra'] as $path => $role) {
             $parts = explode('/', $path);
             if (count($parts) == 3) {
@@ -5165,24 +5305,23 @@ class api {
                 // We know this is not a user context because there is another path with more than 2 levels.
                 unset($filtercontexts[$parts[2]]);
             }
+            $roles = array_merge($roles, $role);
         }
 
         // Add all contexts in which a role may be overidden.
-        foreach ($access['rdef'] as $pathandroleid => $def) {
-            $matches = array();
-            if (!isset($def[$capability])) {
-                // The capability is not mentioned, we can ignore.
-                continue;
+        $rdefs = get_role_definitions($roles);
+        foreach ($rdefs as $roledef) {
+            foreach ($roledef as $path => $caps) {
+                if (!isset($caps[$capability])) {
+                    // The capability is not mentioned, we can ignore.
+                    continue;
+                }
+                $parts = explode('/', $path);
+                if (count($parts) === 3) {
+                    // Only get potential user contexts, they only ever have 2 slashes /parentId/Id.
+                    $filtercontexts[$parts[2]] = $parts[2];
+                }
             }
-
-            list($contextpath, $roleid) = explode(':', $pathandroleid, 2);
-            $parts = explode('/', $contextpath);
-            if (count($parts) != 3) {
-                // Only get potential user contexts, they only ever have 2 slashes /parentId/Id.
-                continue;
-            }
-
-            $filtercontexts[$parts[2]] = $parts[2];
         }
 
         // No interesting contexts - return all or no results.

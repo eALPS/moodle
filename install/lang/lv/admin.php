@@ -1,6 +1,5 @@
 <?php
-
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Automatically generated strings for Moodle installer
@@ -32,5 +31,14 @@ defined('MOODLE_INTERNAL') || die();
 
 $string['clianswerno'] = 'n';
 $string['cliansweryes'] = 'j';
+$string['cliincorrectvalueerror'] = 'Kļūda, nepareiza vērtība "{$a->value}" opcijai "{$a->option}"';
+$string['cliincorrectvalueretry'] = 'Nepareiza vērtība, lūdzu, mēģiniet vēlreiz';
+$string['clitypevalue'] = 'veida vērtība';
+$string['clitypevaluedefault'] = 'ierakstiet vērtību, nospiediet taustiņu Enter, lai izmantotu noklusējuma vērtību ({$a})';
+$string['cliunknowoption'] = 'Neatpazītas opcijas:
+   {$a}
+Lūdzu, izmantojiet opciju --help.';
+$string['cliyesnoprompt'] = 'ierakstiet j (nozīmē jā) vai n (nozīmē nē)';
 $string['environmentrequireinstall'] = 'nepieciešams instalēt/iespējot';
 $string['environmentrequireversion'] = 'nepieciešama versija {$a->needed}, bet jūs izmantojat versiju {$a->current}';
+$string['upgradekeyset'] = 'Jaunināšanas atslēga (lai to neiestatītu, atstājiet tukšu)';

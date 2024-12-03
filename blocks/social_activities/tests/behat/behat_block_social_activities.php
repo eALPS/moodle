@@ -56,7 +56,11 @@ class behat_block_social_activities extends behat_base {
     }
 
     /**
-     * Checks that the specified activity's action menu contains an item.
+     * Checks that the specified activity in the social activities block should have the specified editing icon.
+     *
+     * This includes items in the action menu for the item (does not require it to be open)
+     *
+     * You should be in the course page with editing mode turned on.
      *
      * @Then /^"(?P<activity_name_string>(?:[^"]|\\")*)" activity in social activities block should have "(?P<icon_name_string>(?:[^"]|\\")*)" editing icon$/
      * @param string $activityname
@@ -71,7 +75,11 @@ class behat_block_social_activities extends behat_base {
     }
 
     /**
-     * Checks that the specified activity's action menu contains an item.
+     * Checks that the specified activity in the social activities block should not have the specified editing icon.
+     *
+     * This includes items in the action menu for the item (does not require it to be open)
+     *
+     * You should be in the course page with editing mode turned on.
      *
      * @Then /^"(?P<activity_name_string>(?:[^"]|\\")*)" activity in social activities block should not have "(?P<icon_name_string>(?:[^"]|\\")*)" editing icon$/
      * @param string $activityname
@@ -103,7 +111,7 @@ class behat_block_social_activities extends behat_base {
     }
 
     /**
-     * Clicks on the specified element inside the activity container.
+     * Finds the element containing a specific activity in the social activity block.
      *
      * @throws ElementNotFoundException
      * @param string $element
@@ -114,36 +122,36 @@ class behat_block_social_activities extends behat_base {
     protected function get_social_block_activity_element($element, $selectortype, $activityname) {
         $activitynode = $this->get_social_block_activity_node($activityname);
 
-        // Transforming to Behat selector/locator.
-        list($selector, $locator) = $this->transform_selector($selectortype, $element);
-        $exception = new ElementNotFoundException($this->getSession(), '"' . $element . '" "' .
-            $selectortype . '" in "' . $activityname . '" ');
-
-        return $this->find($selector, $locator, $exception, $activitynode);
+        $exception = new ElementNotFoundException($this->getSession(), "'{$element}' '{$selectortype}' in '{$activityname}'");
+        return $this->find($selectortype, $element, $exception, $activitynode);
     }
 
     /**
-     * Checks that the specified activity is hidden.
+     * Checks that the specified activity is hidden in the social activities block.
      *
      * @Then /^"(?P<activity_name_string>(?:[^"]|\\")*)" activity in social activities block should be hidden$/
      * @param string $activityname
      */
     public function activity_in_social_activities_block_should_be_hidden($activityname) {
-        $this->get_social_block_activity_element("a.dimmed", "css_element", $activityname);
+        $activitynode = $this->get_social_block_activity_node($activityname);
+        $exception = new ExpectationException('"' . $activityname . '" is not hidden', $this->getSession());
+        $this->find('named_partial', array('badge', get_string('hiddenfromstudents')), $exception, $activitynode);
     }
 
     /**
-     * Checks that the specified activity is hidden.
+     * Checks that the specified activity is hidden in the social activities block.
      *
      * @Then /^"(?P<activity_name_string>(?:[^"]|\\")*)" activity in social activities block should be available but hidden from course page$/
      * @param string $activityname
      */
     public function activity_in_social_activities_block_should_be_available_but_hidden_from_course_page($activityname) {
-        $this->get_social_block_activity_element("a.stealth", "css_element", $activityname);
+        $activitynode = $this->get_social_block_activity_node($activityname);
+        $exception = new ExpectationException('"' . $activityname . '" is not hidden but available', $this->getSession());
+        $this->find('named_partial', array('badge', get_string('hiddenoncoursepage')), $exception, $activitynode);
     }
 
     /**
-     * Opens an activity actions menu if it is not already opened.
+     * Opens an activity actions menu in the social activities block if it is not already opened.
      *
      * @Given /^I open "(?P<activity_name_string>(?:[^"]|\\")*)" actions menu in social activities block$/
      * @throws DriverException The step is not available when Javascript is disabled
@@ -153,5 +161,18 @@ class behat_block_social_activities extends behat_base {
         $activityname = behat_context_helper::escape($activityname);
         $xpath = "//*[contains(concat(' ',normalize-space(@class),' '),' block_social_activities ')]//li[contains(., $activityname)]";
         $this->execute('behat_action_menu::i_open_the_action_menu_in', [$xpath, 'xpath_element']);
+    }
+
+    /**
+     * Return the list of partial named selectors.
+     *
+     * @return array
+     */
+    public static function get_partial_named_selectors(): array {
+        return [
+            new behat_component_named_selector('Activity', [
+                "//*[contains(concat(' ',normalize-space(@class),' '),' block_social_activities ')]//li[contains(., %locator%)]",
+            ]),
+        ];
     }
 }

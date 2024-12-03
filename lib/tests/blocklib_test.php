@@ -14,14 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Tests for the block_manager class in ../blocklib.php.
- *
- * @package   core
- * @category  phpunit
- * @copyright 2009 Tim Hunt
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -29,25 +22,31 @@ global $CFG;
 require_once($CFG->libdir . '/pagelib.php');
 require_once($CFG->libdir . '/blocklib.php');
 require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
-
+require_once(__DIR__ . '/fixtures/block_ablocktype.php');
+require_once(__DIR__ . '/fixtures/testable_block_manager.php');
 
 /**
- * Test various block related classes.
+ * Tests for the block_manager class in ../blocklib.php.
+ *
+ * @package   core
+ * @category  test
+ * @copyright 2009 Tim Hunt
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_blocklib_testcase extends advanced_testcase {
+class blocklib_test extends \advanced_testcase {
     protected $testpage;
     protected $blockmanager;
     protected $isediting = null;
 
-    protected function setUp() {
+    protected function setUp(): void {
         parent::setUp();
-        $this->testpage = new moodle_page();
-        $this->testpage->set_context(context_system::instance());
+        $this->testpage = new \moodle_page();
+        $this->testpage->set_context(\context_system::instance());
         $this->testpage->set_pagetype('phpunit-block-test');
-        $this->blockmanager = new testable_block_manager($this->testpage);
+        $this->blockmanager = new \testable_block_manager($this->testpage);
     }
 
-    protected function tearDown() {
+    protected function tearDown(): void {
         $this->testpage = null;
         $this->blockmanager = null;
         parent::tearDown();
@@ -63,49 +62,64 @@ class core_blocklib_testcase extends advanced_testcase {
         }
     }
 
-    public function test_no_regions_initially() {
+    /**
+     * Gets the last block created.
+     *
+     * @return stdClass a record from block_instances
+     */
+    protected function get_last_created_block() {
+        global $DB;
+        // The newest block should be the record with the highest id.
+        $records = $DB->get_records('block_instances', [], 'id DESC', '*', 0, 1);
+        $return = null;
+        foreach ($records as $record) {
+            // There should only be one.
+            $return = $record;
+        }
+        return $return;
+    }
+
+    public function test_no_regions_initially(): void {
         // Exercise SUT & Validate.
         $this->assertEquals(array(), $this->blockmanager->get_regions());
     }
 
-    public function test_add_region() {
+    public function test_add_region(): void {
         // Exercise SUT.
         $this->blockmanager->add_region('a-region-name', false);
         // Validate.
         $this->assertEquals(array('a-region-name'), $this->blockmanager->get_regions());
     }
 
-    public function test_add_regions() {
+    public function test_add_regions(): void {
         // Set up fixture.
         $regions = array('a-region', 'another-region');
         // Exercise SUT.
         $this->blockmanager->add_regions($regions, false);
         // Validate.
-        $this->assertEquals($regions, $this->blockmanager->get_regions(), '', 0, 10, true);
+        $this->assertEqualsCanonicalizing($regions, $this->blockmanager->get_regions());
     }
 
-    public function test_add_region_twice() {
+    public function test_add_region_twice(): void {
         // Exercise SUT.
         $this->blockmanager->add_region('a-region-name', false);
         $this->blockmanager->add_region('another-region', false);
         // Validate.
-        $this->assertEquals(array('a-region-name', 'another-region'), $this->blockmanager->get_regions(), '', 0, 10, true);
+        $this->assertEqualsCanonicalizing(array('a-region-name', 'another-region'), $this->blockmanager->get_regions());
     }
 
-    /**
-     * @expectedException coding_exception
-     */
-    public function test_cannot_add_region_after_loaded() {
+    public function test_cannot_add_region_after_loaded(): void {
         // Set up fixture.
         $this->blockmanager->mark_loaded();
         // Exercise SUT.
+        $this->expectException(\coding_exception::class);
         $this->blockmanager->add_region('too-late', false);
     }
 
     /**
      * Testing adding a custom region.
      */
-    public function test_add_custom_region() {
+    public function test_add_custom_region(): void {
         global $SESSION;
         // Exercise SUT.
         $this->blockmanager->add_region('a-custom-region-name');
@@ -120,14 +134,14 @@ class core_blocklib_testcase extends advanced_testcase {
     /**
      * Test adding two custom regions using add_regions method.
      */
-    public function test_add_custom_regions() {
+    public function test_add_custom_regions(): void {
         global $SESSION;
         // Set up fixture.
         $regions = array('a-region', 'another-custom-region');
         // Exercise SUT.
         $this->blockmanager->add_regions($regions);
         // Validate.
-        $this->assertEquals($regions, $this->blockmanager->get_regions(), '', 0, 10, true);
+        $this->assertEqualsCanonicalizing($regions, $this->blockmanager->get_regions());
         $this->assertTrue(isset($SESSION->custom_block_regions));
         $this->assertArrayHasKey('phpunit-block-test', $SESSION->custom_block_regions);
         $this->assertTrue(in_array('another-custom-region', $SESSION->custom_block_regions['phpunit-block-test']));
@@ -136,30 +150,28 @@ class core_blocklib_testcase extends advanced_testcase {
     /**
      * Test adding two custom block regions.
      */
-    public function test_add_custom_region_twice() {
+    public function test_add_custom_region_twice(): void {
         // Exercise SUT.
         $this->blockmanager->add_region('a-custom-region-name');
         $this->blockmanager->add_region('another-custom-region');
         // Validate.
-        $this->assertEquals(
+        $this->assertEqualsCanonicalizing(
             array('a-custom-region-name', 'another-custom-region'),
-            $this->blockmanager->get_regions(),
-            '', 0, 10, true
-        );
+            $this->blockmanager->get_regions());
     }
 
     /**
      * Test to ensure that we cannot add a region after the blocks have been loaded.
-     * @expectedException coding_exception
      */
-    public function test_cannot_add_custom_region_after_loaded() {
+    public function test_cannot_add_custom_region_after_loaded(): void {
         // Set up fixture.
         $this->blockmanager->mark_loaded();
         // Exercise SUT.
+        $this->expectException(\coding_exception::class);
         $this->blockmanager->add_region('too-late');
     }
 
-    public function test_set_default_region() {
+    public function test_set_default_region(): void {
         // Set up fixture.
         $this->blockmanager->add_region('a-region-name', false);
         // Exercise SUT.
@@ -168,45 +180,42 @@ class core_blocklib_testcase extends advanced_testcase {
         $this->assertEquals('a-region-name', $this->blockmanager->get_default_region());
     }
 
-    /**
-     * @expectedException coding_exception
-     */
-    public function test_cannot_set_unknown_region_as_default() {
+    public function test_cannot_set_unknown_region_as_default(): void {
         // Exercise SUT.
+        $this->expectException(\coding_exception::class);
         $this->blockmanager->set_default_region('a-region-name');
     }
 
-    /**
-     * @expectedException coding_exception
-     */
-    public function test_cannot_change_default_region_after_loaded() {
+    public function test_cannot_change_default_region_after_loaded(): void {
         // Set up fixture.
         $this->blockmanager->mark_loaded();
         // Exercise SUT.
+        $this->expectException(\coding_exception::class);
         $this->blockmanager->set_default_region('too-late');
     }
 
-    public function test_matching_page_type_patterns() {
-        $this->assertEquals(array('site-index', 'site-index-*', 'site-*', '*'),
-            matching_page_type_patterns('site-index'), '', 0, 10, true);
+    public function test_matching_page_type_patterns(): void {
+        $this->assertEqualsCanonicalizing(array('site-index', 'site-index-*', 'site-*', '*'),
+            matching_page_type_patterns('site-index'));
 
-        $this->assertEquals(array('mod-quiz-report-overview', 'mod-quiz-report-overview-*', 'mod-quiz-report-*', 'mod-quiz-*', 'mod-*', '*'),
-            matching_page_type_patterns('mod-quiz-report-overview'), '', 0, 10, true);
+        $this->assertEqualsCanonicalizing(array('mod-quiz-report-overview', 'mod-quiz-report-overview-*', 'mod-quiz-report-*', 'mod-quiz-*', 'mod-*', '*'),
+            matching_page_type_patterns('mod-quiz-report-overview'));
 
-        $this->assertEquals(array('mod-forum-view', 'mod-*-view', 'mod-forum-view-*', 'mod-forum-*', 'mod-*', '*'),
-            matching_page_type_patterns('mod-forum-view'), '', 0, 10, true);
+        $this->assertEqualsCanonicalizing(array('mod-forum-view', 'mod-*-view', 'mod-forum-view-*', 'mod-forum-*', 'mod-*', '*'),
+            matching_page_type_patterns('mod-forum-view'));
 
-        $this->assertEquals(array('mod-forum-index', 'mod-*-index', 'mod-forum-index-*', 'mod-forum-*', 'mod-*', '*'),
-            matching_page_type_patterns('mod-forum-index'), '', 0, 10, true);
+        $this->assertEqualsCanonicalizing(array('mod-forum-index', 'mod-*-index', 'mod-forum-index-*', 'mod-forum-*', 'mod-*', '*'),
+            matching_page_type_patterns('mod-forum-index'));
     }
 
     protected function get_a_page_and_block_manager($regions, $context, $pagetype, $subpage = '') {
-        $page = new moodle_page;
+        $page = new \moodle_page;
         $page->set_context($context);
         $page->set_pagetype($pagetype);
         $page->set_subpage($subpage);
+        $page->set_url(new \moodle_url('/'));
 
-        $blockmanager = new testable_block_manager($page);
+        $blockmanager = new \testable_block_manager($page);
         $blockmanager->add_regions($regions, false);
         $blockmanager->set_default_region($regions[0]);
 
@@ -215,7 +224,7 @@ class core_blocklib_testcase extends advanced_testcase {
 
     protected function get_a_known_block_type() {
         global $DB;
-        $block = new stdClass;
+        $block = new \stdClass;
         $block->name = 'ablocktype';
         $DB->insert_record('block', $block);
         return $block->name;
@@ -234,12 +243,12 @@ class core_blocklib_testcase extends advanced_testcase {
         }
     }
 
-    public function test_empty_initially() {
+    public function test_empty_initially(): void {
         $this->purge_blocks();
 
         // Set up fixture.
         list($page, $blockmanager) = $this->get_a_page_and_block_manager(array('a-region'),
-            context_system::instance(), 'page-type');
+            \context_system::instance(), 'page-type');
         // Exercise SUT.
         $blockmanager->load_blocks();
         // Validate.
@@ -247,13 +256,13 @@ class core_blocklib_testcase extends advanced_testcase {
         $this->assertEquals(array('a-region' => array()), $blocks);
     }
 
-    public function test_adding_and_retrieving_one_block() {
+    public function test_adding_and_retrieving_one_block(): void {
         $this->purge_blocks();
 
         // Set up fixture.
         $regionname = 'a-region';
         $blockname = $this->get_a_known_block_type();
-        $context = context_system::instance();
+        $context = \context_system::instance();
 
         list($page, $blockmanager) = $this->get_a_page_and_block_manager(array($regionname),
             $context, 'page-type');
@@ -266,13 +275,13 @@ class core_blocklib_testcase extends advanced_testcase {
         $this->assertContainsBlocksOfType(array($blockname), $blocks);
     }
 
-    public function test_adding_and_retrieving_two_blocks() {
+    public function test_adding_and_retrieving_two_blocks(): void {
         $this->purge_blocks();
 
         // Set up fixture.
         $regionname = 'a-region';
         $blockname = $this->get_a_known_block_type();
-        $context = context_system::instance();
+        $context = \context_system::instance();
 
         list($page, $blockmanager) = $this->get_a_page_and_block_manager(array($regionname),
             $context, 'page-type');
@@ -286,13 +295,13 @@ class core_blocklib_testcase extends advanced_testcase {
         $this->assertContainsBlocksOfType(array($blockname, $blockname), $blocks);
     }
 
-    public function test_adding_blocks() {
+    public function test_adding_blocks(): void {
         $this->purge_blocks();
 
         // Set up fixture.
         $regionname = 'a-region';
         $blockname = $this->get_a_known_block_type();
-        $context = context_system::instance();
+        $context = \context_system::instance();
 
         list($page, $blockmanager) = $this->get_a_page_and_block_manager(array($regionname),
             $context, 'page-type');
@@ -306,13 +315,38 @@ class core_blocklib_testcase extends advanced_testcase {
         $this->assertEquals('4', $blocks[1]->instance->weight);
     }
 
-    public function test_block_not_included_in_different_context() {
+    /**
+     * Test block instances.
+     *
+     * @return null
+     */
+    public function test_block_instances(): void {
         $this->purge_blocks();
 
         // Set up fixture.
-        $syscontext = context_system::instance();
+        $regionname = 'a-region';
+        $blockname = $this->get_a_known_block_type();
+        $context = \context_system::instance();
+
+        list($page, $blockmanager) = $this->get_a_page_and_block_manager(array($regionname),
+            $context, 'page-type');
+
+        $blockmanager->add_blocks(array($regionname => array($blockname, $blockname)), null, null, false, 3);
+        $blockmanager->load_blocks();
+
+        $blocks = $blockmanager->get_blocks_for_region($regionname);
+
+        $this->assertInstanceOf('\block_base', block_instance($blockname, $blocks[0]->instance));
+        $this->assertInstanceOf('\block_base', block_instance_by_id($blocks[0]->instance->id));
+    }
+
+    public function test_block_not_included_in_different_context(): void {
+        $this->purge_blocks();
+
+        // Set up fixture.
+        $syscontext = \context_system::instance();
         $cat = $this->getDataGenerator()->create_category(array('name' => 'testcategory'));
-        $fakecontext = context_coursecat::instance($cat->id);
+        $fakecontext = \context_coursecat::instance($cat->id);
         $regionname = 'a-region';
         $blockname = $this->get_a_known_block_type();
 
@@ -328,12 +362,12 @@ class core_blocklib_testcase extends advanced_testcase {
         $this->assertContainsBlocksOfType(array(), $blocks);
     }
 
-    public function test_block_included_in_sub_context() {
+    public function test_block_included_in_sub_context(): void {
         $this->purge_blocks();
 
         // Set up fixture.
-        $syscontext = context_system::instance();
-        $childcontext = context_coursecat::instance(1);
+        $syscontext = \context_system::instance();
+        $childcontext = \context_coursecat::instance(1);
         $regionname = 'a-region';
         $blockname = $this->get_a_known_block_type();
 
@@ -349,11 +383,11 @@ class core_blocklib_testcase extends advanced_testcase {
         $this->assertContainsBlocksOfType(array($blockname), $blocks);
     }
 
-    public function test_block_not_included_on_different_page_type() {
+    public function test_block_not_included_on_different_page_type(): void {
         $this->purge_blocks();
 
         // Set up fixture.
-        $syscontext = context_system::instance();
+        $syscontext = \context_system::instance();
         $regionname = 'a-region';
         $blockname = $this->get_a_known_block_type();
 
@@ -369,13 +403,13 @@ class core_blocklib_testcase extends advanced_testcase {
         $this->assertContainsBlocksOfType(array(), $blocks);
     }
 
-    public function test_block_not_included_on_different_sub_page() {
+    public function test_block_not_included_on_different_sub_page(): void {
         $this->purge_blocks();
 
         // Set up fixture.
         $regionname = 'a-region';
         $blockname = $this->get_a_known_block_type();
-        $syscontext = context_system::instance();
+        $syscontext = \context_system::instance();
 
         list($page, $blockmanager) = $this->get_a_page_and_block_manager(array($regionname),
             $syscontext, 'page-type', 'sub-page');
@@ -389,13 +423,13 @@ class core_blocklib_testcase extends advanced_testcase {
         $this->assertContainsBlocksOfType(array(), $blocks);
     }
 
-    public function test_block_included_with_explicit_sub_page() {
+    public function test_block_included_with_explicit_sub_page(): void {
         $this->purge_blocks();
 
         // Set up fixture.
         $regionname = 'a-region';
         $blockname = $this->get_a_known_block_type();
-        $syscontext = context_system::instance();
+        $syscontext = \context_system::instance();
 
         list($page, $blockmanager) = $this->get_a_page_and_block_manager(array($regionname),
             $syscontext, 'page-type', 'sub-page');
@@ -409,13 +443,13 @@ class core_blocklib_testcase extends advanced_testcase {
         $this->assertContainsBlocksOfType(array($blockname), $blocks);
     }
 
-    public function test_block_included_with_page_type_pattern() {
+    public function test_block_included_with_page_type_pattern(): void {
         $this->purge_blocks();
 
         // Set up fixture.
         $regionname = 'a-region';
         $blockname = $this->get_a_known_block_type();
-        $syscontext = context_system::instance();
+        $syscontext = \context_system::instance();
 
         list($page, $blockmanager) = $this->get_a_page_and_block_manager(array($regionname),
             $syscontext, 'page-type', 'sub-page');
@@ -429,7 +463,7 @@ class core_blocklib_testcase extends advanced_testcase {
         $this->assertContainsBlocksOfType(array($blockname), $blocks);
     }
 
-    public function test_matching_page_type_patterns_from_pattern() {
+    public function test_matching_page_type_patterns_from_pattern(): void {
         $pattern = '*';
         $expected = array('*');
         $this->assertEquals($expected, array_values(matching_page_type_patterns_from_pattern($pattern)));
@@ -479,14 +513,14 @@ class core_blocklib_testcase extends advanced_testcase {
         $this->assertEquals($expected, array_values(matching_page_type_patterns_from_pattern($pattern)));
     }
 
-    public function test_delete_instances() {
+    public function test_delete_instances(): void {
         global $DB;
         $this->purge_blocks();
         $this->setAdminUser();
 
         $regionname = 'a-region';
         $blockname = $this->get_a_known_block_type();
-        $context = context_system::instance();
+        $context = \context_system::instance();
 
         list($page, $blockmanager) = $this->get_a_page_and_block_manager(array($regionname),
             $context, 'page-type');
@@ -537,18 +571,18 @@ class core_blocklib_testcase extends advanced_testcase {
         list($insql, $inparams) = $DB->get_in_or_equal($preferences);
         $this->assertEquals(2, $DB->count_records_select('user_preferences', "name $insql", $inparams));
 
-        $this->assertFalse(context_block::instance($blockids[0], IGNORE_MISSING));
-        $this->assertFalse(context_block::instance($blockids[1], IGNORE_MISSING));
-        context_block::instance($tokeep);   // Would throw an exception if it was deleted.
+        $this->assertFalse(\context_block::instance($blockids[0], IGNORE_MISSING));
+        $this->assertFalse(\context_block::instance($blockids[1], IGNORE_MISSING));
+        \context_block::instance($tokeep);   // Would throw an exception if it was deleted.
     }
 
-    public function test_create_all_block_instances() {
+    public function test_create_all_block_instances(): void {
         global $CFG, $PAGE, $DB;
 
         $this->setAdminUser();
         $this->resetAfterTest();
         $regionname = 'side-pre';
-        $context = context_system::instance();
+        $context = \context_system::instance();
 
         $PAGE->reset_theme_and_output();
         $CFG->theme = 'boost';
@@ -564,7 +598,7 @@ class core_blocklib_testcase extends advanced_testcase {
 
         $PAGE->reset_theme_and_output();
         // Change to a theme with undeletable blocks.
-        $CFG->theme = 'clean';
+        $CFG->theme = 'classic';
 
         list($page, $blockmanager) = $this->get_a_page_and_block_manager(array($regionname),
             $context, 'page-type');
@@ -598,7 +632,7 @@ class core_blocklib_testcase extends advanced_testcase {
         // Assert that protecting a block does not make it auto-created.
         $this->assertCount(2, $blocks);
 
-        $requiredbytheme = block_manager::get_required_by_theme_block_types();
+        $requiredbytheme = $blockmanager->get_required_by_theme_block_types();
         foreach ($requiredbytheme as $blockname) {
             $instance = $DB->get_record('block_instances', array('blockname' => $blockname));
             $this->assertEquals(1, $instance->requiredbytheme);
@@ -622,25 +656,210 @@ class core_blocklib_testcase extends advanced_testcase {
         }
     }
 
-}
+    /**
+     * Test the block instance time fields (timecreated, timemodified).
+     */
+    public function test_block_instance_times(): void {
+        global $DB;
 
-/**
- * Test-specific subclass to make some protected things public.
- */
-class testable_block_manager extends block_manager {
+        $this->purge_blocks();
 
-    public function mark_loaded() {
-        $this->birecordsbyregion = array();
+        // Set up fixture.
+        $regionname = 'a-region';
+        $blockname = 'html';
+        $context = \context_system::instance();
+
+        list($page, $blockmanager) = $this->get_a_page_and_block_manager(array($regionname),
+                $context, 'page-type');
+
+        // Add block to page.
+        $before = time();
+        $blockmanager->add_block($blockname, $regionname, 0, false);
+        $after = time();
+
+        // Check database table to ensure it contains created/modified times.
+        $blockdata = $DB->get_record('block_instances', ['blockname' => 'html']);
+        $this->assertTrue($blockdata->timemodified >= $before && $blockdata->timemodified <= $after);
+        $this->assertTrue($blockdata->timecreated >= $before && $blockdata->timecreated <= $after);
+
+        // Get block from manager.
+        $blockmanager->load_blocks();
+        $blocks = $blockmanager->get_blocks_for_region($regionname);
+        $block = reset($blocks);
+
+        // Wait until at least the next second.
+        while (time() === $after) {
+            usleep(100000);
+        }
+
+        // Update block settings.
+        $this->setAdminUser();
+        $data = (object)['text' => ['text' => 'New text', 'itemid' => 0, 'format' => FORMAT_HTML]];
+        $before = time();
+        $block->instance_config_save($data);
+        $after = time();
+
+        // Check time modified updated, but time created didn't.
+        $newblockdata = $DB->get_record('block_instances', ['blockname' => 'html']);
+        $this->assertTrue(
+                $newblockdata->timemodified >= $before &&
+                $newblockdata->timemodified <= $after &&
+                $newblockdata->timemodified > $blockdata->timemodified);
+        $this->assertEquals($blockdata->timecreated, $newblockdata->timecreated);
+
+        // Also try repositioning the block.
+        while (time() === $after) {
+            usleep(100000);
+        }
+        $before = time();
+        $blockmanager->reposition_block($blockdata->id, $regionname, 10);
+        $after = time();
+        $blockdata = $newblockdata;
+        $newblockdata = $DB->get_record('block_instances', ['blockname' => 'html']);
+        $this->assertTrue(
+                $newblockdata->timemodified >= $before &&
+                $newblockdata->timemodified <= $after &&
+                $newblockdata->timemodified > $blockdata->timemodified);
+        $this->assertEquals($blockdata->timecreated, $newblockdata->timecreated);
     }
-    public function get_loaded_blocks() {
-        return $this->birecordsbyregion;
-    }
-}
 
-/**
- * Test-specific subclass to make some protected things public.
- */
-class block_ablocktype extends block_base {
-    public function init() {
+    /**
+     * Tests that dashboard pages get their blocks loaded correctly.
+     */
+    public function test_default_dashboard(): void {
+        global $CFG, $PAGE, $DB;
+        $storedpage = $PAGE;
+        require_once($CFG->dirroot . '/my/lib.php');
+        $this->purge_blocks();
+        $regionname = 'a-region';
+        $blockname = $this->get_a_known_block_type();
+        $user = self::getDataGenerator()->create_user();
+        $syscontext = \context_system::instance();
+        $usercontext = \context_user::instance($user->id);
+        // Add sitewide 'sticky' blocks. The page is not setup exactly as a site page would be...
+        // but it does seem to mean that the bloacks are added correctly.
+        list($sitepage, $sitebm) = $this->get_a_page_and_block_manager(array($regionname), $syscontext, 'site-index');
+        $sitebm->add_block($blockname, $regionname, 0, true, '*');
+        $sitestickyblock1 = $this->get_last_created_block();
+        $sitebm->add_block($blockname, $regionname, 1, true, '*');
+        $sitestickyblock2 = $this->get_last_created_block();
+        $sitebm->add_block($blockname, $regionname, 8, true, '*');
+        $sitestickyblock3 = $this->get_last_created_block();
+        // Blocks that should not be picked up by any other pages in this unit test.
+        $sitebm->add_block($blockname, $regionname, -8, true, 'site-index-*');
+        $sitebm->add_block($blockname, $regionname, -9, true, 'site-index');
+        $sitebm->load_blocks();
+        // This repositioning should not be picked up.
+        $sitebm->reposition_block($sitestickyblock3->id, $regionname, 9);
+        // Setup the default dashboard page. This adds the blocks with the correct parameters, but seems to not be
+        // an exact page/blockmanager setup for the default dashboard setup page.
+        $defaultmy = my_get_page(null, MY_PAGE_PRIVATE);
+        list($defaultmypage, $defaultmybm) = $this->get_a_page_and_block_manager(array($regionname), null, 'my-index', $defaultmy->id);
+        $PAGE = $defaultmypage;
+        $defaultmybm->add_block($blockname, $regionname, -2, false, $defaultmypage->pagetype, $defaultmypage->subpage);
+        $defaultblock1 = $this->get_last_created_block();
+        $defaultmybm->add_block($blockname, $regionname, 3, false, $defaultmypage->pagetype, $defaultmypage->subpage);
+        $defaultblock2 = $this->get_last_created_block();
+        $defaultmybm->load_blocks();
+        $defaultmybm->reposition_block($sitestickyblock1->id, $regionname, 4);
+        // Setup the user's dashboard.
+        $usermy = my_copy_page($user->id);
+        list($mypage, $mybm) = $this->get_a_page_and_block_manager(array($regionname), $usercontext, 'my-index', $usermy->id);
+        $PAGE = $mypage;
+        $mybm->add_block($blockname, $regionname, 5, false, $mypage->pagetype, $mypage->subpage);
+        $block1 = $this->get_last_created_block();
+        $mybm->load_blocks();
+        $mybm->reposition_block($sitestickyblock2->id, $regionname, -1);
+        // Reload the blocks in the managers.
+        \context_helper::reset_caches();
+        $defaultmybm->reset_caches();
+        $this->assertNull($defaultmybm->get_loaded_blocks());
+        $defaultmybm->load_blocks();
+        $this->assertNotNull($defaultmybm->get_loaded_blocks());
+        $defaultbr = $defaultmybm->get_blocks_for_region($regionname);
+        $mybm->reset_caches();
+        $this->assertNull($mybm->get_loaded_blocks());
+        $mybm->load_blocks();
+        $this->assertNotNull($mybm->get_loaded_blocks());
+        $mybr = $mybm->get_blocks_for_region($regionname);
+        // Test that a user dashboard when forced to use the default finds the correct blocks.
+        list($forcedmypage, $forcedmybm) = $this->get_a_page_and_block_manager(array($regionname), $usercontext, 'my-index', $defaultmy->id);
+        $forcedmybm->load_blocks();
+        $forcedmybr = $forcedmybm->get_blocks_for_region($regionname);
+        // Check that the default page is in the expected order.
+        $this->assertCount(5, $defaultbr);
+        $this->assertEquals($defaultblock1->id, $defaultbr[0]->instance->id);
+        $this->assertEquals('-2', $defaultbr[0]->instance->weight);
+        $this->assertEquals($sitestickyblock2->id, $defaultbr[1]->instance->id);
+        $this->assertEquals('1', $defaultbr[1]->instance->weight);
+        $this->assertEquals($defaultblock2->id, $defaultbr[2]->instance->id);
+        $this->assertEquals('3', $defaultbr[2]->instance->weight);
+        $this->assertEquals($sitestickyblock1->id, $defaultbr[3]->instance->id);
+        $this->assertEquals('4', $defaultbr[3]->instance->weight);
+        $this->assertEquals($sitestickyblock3->id, $defaultbr[4]->instance->id);
+        $this->assertEquals('8', $defaultbr[4]->instance->weight);
+        // Check that the correct block are present in the expected order for a.
+        $this->assertCount(5, $forcedmybr);
+        $this->assertEquals($defaultblock1->id, $forcedmybr[0]->instance->id);
+        $this->assertEquals('-2', $forcedmybr[0]->instance->weight);
+        $this->assertEquals($sitestickyblock2->id, $forcedmybr[1]->instance->id);
+        $this->assertEquals('1', $forcedmybr[1]->instance->weight);
+        $this->assertEquals($defaultblock2->id, $forcedmybr[2]->instance->id);
+        $this->assertEquals('3', $forcedmybr[2]->instance->weight);
+        $this->assertEquals($sitestickyblock1->id, $forcedmybr[3]->instance->id);
+        $this->assertEquals('4', $forcedmybr[3]->instance->weight);
+        $this->assertEquals($sitestickyblock3->id, $forcedmybr[4]->instance->id);
+        $this->assertEquals('8', $forcedmybr[4]->instance->weight);
+        // Check that the correct blocks are present in the standard my page.
+        $this->assertCount(6, $mybr);
+        $this->assertEquals('-2', $mybr[0]->instance->weight);
+        $this->assertEquals($sitestickyblock2->id, $mybr[1]->instance->id);
+        $this->assertEquals('-1', $mybr[1]->instance->weight);
+        $this->assertEquals('3', $mybr[2]->instance->weight);
+        // Test the override on the first sticky block was copied and picked up.
+        $this->assertEquals($sitestickyblock1->id, $mybr[3]->instance->id);
+        $this->assertEquals('4', $mybr[3]->instance->weight);
+        $this->assertEquals($block1->id, $mybr[4]->instance->id);
+        $this->assertEquals('5', $mybr[4]->instance->weight);
+        $this->assertEquals($sitestickyblock3->id, $mybr[5]->instance->id);
+        $this->assertEquals('8', $mybr[5]->instance->weight);
+        $PAGE = $storedpage;
+    }
+
+    /**
+     * Test get_unaddable_by_theme_block_types() method to return expected result depending on the theme.
+     *
+     * @covers \block_manager::get_unaddable_by_theme_block_types
+     */
+    public function test_get_unaddable_by_theme_block_types(): void {
+        global $CFG, $PAGE;
+
+        $this->setAdminUser();
+        $this->resetAfterTest();
+        $regionname = 'side-pre';
+        $context = \context_system::instance();
+
+        $PAGE->reset_theme_and_output();
+        $CFG->theme = 'boost';
+
+        list($page, $blockmanager) = $this->get_a_page_and_block_manager([$regionname], $context, 'page-type');
+        $blockmanager->load_blocks();
+        $blocks = $blockmanager->get_unaddable_by_theme_block_types();
+        // Assert that a few blocks are excluded for boost theme.
+        $this->assertCount(4, $blocks);
+        $this->assertContains('navigation', $blocks);
+        $this->assertContains('settings', $blocks);
+        $this->assertContains('course_list', $blocks);
+        $this->assertContains('section_links', $blocks);
+
+        // Change to a theme without unaddable blocks.
+        $PAGE->reset_theme_and_output();
+        $CFG->theme = 'classic';
+
+        list($page, $blockmanager) = $this->get_a_page_and_block_manager([$regionname], $context, 'page-type');
+        $blockmanager->load_blocks();
+        $blocks = $blockmanager->get_unaddable_by_theme_block_types();
+        // Assert that no blocks are excluded for classic theme.
+        $this->assertEmpty($blocks);
     }
 }

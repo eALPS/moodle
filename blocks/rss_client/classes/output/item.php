@@ -112,7 +112,7 @@ class item implements \renderable, \templatable {
      * Export context for use in mustache templates
      *
      * @see templatable::export_for_template()
-     * @param renderer_base $output
+     * @param \renderer_base $output
      * @return array
      */
     public function export_for_template(\renderer_base $output) {
@@ -131,7 +131,7 @@ class item implements \renderable, \templatable {
         }
 
         // Allow the renderer to format the title and description.
-        $data['title']          = $output->format_title($title);
+        $data['title']          = strip_tags($output->format_title($title));
         $data['description']    = $this->showdescription ? $output->format_description($this->description) : null;
 
         return $data;

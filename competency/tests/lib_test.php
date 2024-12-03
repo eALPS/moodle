@@ -21,6 +21,7 @@
  * @copyright  2015 Frédéric Massart - FMCorz.net
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+namespace core_competency;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -37,23 +38,23 @@ global $CFG;
  * @copyright  2015 Frédéric Massart - FMCorz.net
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_competency_lib_testcase extends advanced_testcase {
+class lib_test extends \advanced_testcase {
 
-    public function test_comment_add_user_competency() {
-        global $DB;
+    public function test_comment_add_user_competency(): void {
+        global $DB, $PAGE;
         $this->resetAfterTest();
         $dg = $this->getDataGenerator();
         $lpg = $dg->get_plugin_generator('core_competency');
 
-        $u1 = $dg->create_user();
+        $u1 = $dg->create_user(['picture' => 1]);
         $u2 = $dg->create_user();
         $u3 = $dg->create_user();
         $reviewerroleid = $dg->create_role();
-        assign_capability('moodle/competency:planview', CAP_ALLOW, $reviewerroleid, context_system::instance()->id, true);
+        assign_capability('moodle/competency:planview', CAP_ALLOW, $reviewerroleid, \context_system::instance()->id, true);
         assign_capability('moodle/competency:usercompetencycomment', CAP_ALLOW, $reviewerroleid,
-            context_system::instance()->id, true);
-        $dg->role_assign($reviewerroleid, $u2->id, context_user::instance($u1->id));
-        $dg->role_assign($reviewerroleid, $u3->id, context_user::instance($u1->id));
+            \context_system::instance()->id, true);
+        $dg->role_assign($reviewerroleid, $u2->id, \context_user::instance($u1->id));
+        $dg->role_assign($reviewerroleid, $u3->id, \context_user::instance($u1->id));
         accesslib_clear_all_caches_for_unit_testing();
 
         $f1 = $lpg->create_framework();
@@ -89,13 +90,21 @@ class core_competency_lib_testcase extends advanced_testcase {
 
         $expectedurlname = $c1->get('shortname');
         $expectedurl = url::user_competency_in_plan($u1->id, $c1->get('id'), $p1->get('id'));
-        $this->assertEquals(core_user::get_noreply_user()->id, $message->useridfrom);
+        $this->assertEquals(\core_user::get_noreply_user()->id, $message->useridfrom);
         $this->assertEquals($u2->id, $message->useridto);
         $this->assertTrue(strpos($message->fullmessage, 'Hello world!') !== false);
         $this->assertTrue(strpos($message->fullmessagehtml, 'Hello world!') !== false);
         $this->assertEquals(FORMAT_MOODLE, $message->fullmessageformat);
         $this->assertEquals($expectedurl->out(false), $message->contexturl);
         $this->assertEquals($expectedurlname, $message->contexturlname);
+        // Test customdata.
+        $customdata = json_decode($message->customdata);
+        $this->assertObjectHasProperty('notificationiconurl', $customdata);
+        $this->assertStringContainsString('tokenpluginfile.php', $customdata->notificationiconurl);
+        $userpicture = new \user_picture($u1);
+        $userpicture->size = 1; // Use f1 size.
+        $userpicture->includetoken = $u2->id;
+        $this->assertEquals($userpicture->get_url($PAGE)->out(false), $customdata->notificationiconurl);
 
         // Reviewer posts a comment for the user competency being in two plans. Owner is messaged.
         $this->setUser($u2);
@@ -109,7 +118,7 @@ class core_competency_lib_testcase extends advanced_testcase {
 
         $expectedurlname = $c2->get('shortname');
         $expectedurl = url::user_competency_in_plan($u1->id, $c2->get('id'), $p2->get('id'));
-        $this->assertEquals(core_user::get_noreply_user()->id, $message->useridfrom);
+        $this->assertEquals(\core_user::get_noreply_user()->id, $message->useridfrom);
         $this->assertEquals($u1->id, $message->useridto);
         $this->assertTrue(strpos($message->fullmessage, 'Hello world!') !== false);
         $this->assertTrue(strpos($message->fullmessagehtml, 'Hello world!') !== false);
@@ -129,7 +138,7 @@ class core_competency_lib_testcase extends advanced_testcase {
 
         $expectedurlname = get_string('userplans', 'core_competency');
         $expectedurl = url::plans($u1->id);
-        $this->assertEquals(core_user::get_noreply_user()->id, $message->useridfrom);
+        $this->assertEquals(\core_user::get_noreply_user()->id, $message->useridfrom);
         $this->assertEquals($u1->id, $message->useridto);
         $this->assertTrue(strpos($message->fullmessage, 'Hello world!') !== false);
         $this->assertTrue(strpos($message->fullmessagehtml, 'Hello world!') !== false);
@@ -147,9 +156,9 @@ class core_competency_lib_testcase extends advanced_testcase {
         $this->assertCount(2, $messages);
         $message1 = array_shift($messages);
         $message2 = array_shift($messages);
-        $this->assertEquals(core_user::get_noreply_user()->id, $message->useridfrom);
+        $this->assertEquals(\core_user::get_noreply_user()->id, $message->useridfrom);
         $this->assertEquals($u1->id, $message1->useridto);
-        $this->assertEquals(core_user::get_noreply_user()->id, $message->useridfrom);
+        $this->assertEquals(\core_user::get_noreply_user()->id, $message->useridfrom);
         $this->assertEquals($u2->id, $message2->useridto);
 
         // A comment is posted in HTML.
@@ -164,7 +173,7 @@ class core_competency_lib_testcase extends advanced_testcase {
 
         $expectedurlname = get_string('userplans', 'core_competency');
         $expectedurl = url::plans($u1->id);
-        $this->assertEquals(core_user::get_noreply_user()->id, $message->useridfrom);
+        $this->assertEquals(\core_user::get_noreply_user()->id, $message->useridfrom);
         $this->assertEquals($u1->id, $message->useridto);
         $this->assertTrue(strpos($message->fullmessage, '<em>Hello world!</em>') !== false);
         $this->assertTrue(strpos($message->fullmessagehtml, '<em>Hello world!</em>') !== false);
@@ -176,7 +185,7 @@ class core_competency_lib_testcase extends advanced_testcase {
     /**
      * Commenting on a plan.
      */
-    public function test_comment_add_plan() {
+    public function test_comment_add_plan(): void {
         $this->resetAfterTest();
         $dg = $this->getDataGenerator();
         $lpg = $dg->get_plugin_generator('core_competency');
@@ -186,14 +195,14 @@ class core_competency_lib_testcase extends advanced_testcase {
         $u3 = $dg->create_user();
         $userroleid = $dg->create_role();
         $reviewerroleid = $dg->create_role();
-        assign_capability('moodle/competency:planviewowndraft', CAP_ALLOW, $userroleid, context_system::instance()->id, true);
-        assign_capability('moodle/competency:planviewown', CAP_ALLOW, $userroleid, context_system::instance()->id, true);
-        assign_capability('moodle/competency:planviewdraft', CAP_ALLOW, $reviewerroleid, context_system::instance()->id, true);
-        assign_capability('moodle/competency:planmanage', CAP_ALLOW, $reviewerroleid, context_system::instance()->id, true);
-        assign_capability('moodle/competency:plancomment', CAP_ALLOW, $reviewerroleid, context_system::instance()->id, true);
-        $dg->role_assign($userroleid, $u1->id, context_user::instance($u1->id));
-        $dg->role_assign($reviewerroleid, $u2->id, context_user::instance($u1->id));
-        $dg->role_assign($reviewerroleid, $u3->id, context_system::instance());
+        assign_capability('moodle/competency:planviewowndraft', CAP_ALLOW, $userroleid, \context_system::instance()->id, true);
+        assign_capability('moodle/competency:planviewown', CAP_ALLOW, $userroleid, \context_system::instance()->id, true);
+        assign_capability('moodle/competency:planviewdraft', CAP_ALLOW, $reviewerroleid, \context_system::instance()->id, true);
+        assign_capability('moodle/competency:planmanage', CAP_ALLOW, $reviewerroleid, \context_system::instance()->id, true);
+        assign_capability('moodle/competency:plancomment', CAP_ALLOW, $reviewerroleid, \context_system::instance()->id, true);
+        $dg->role_assign($userroleid, $u1->id, \context_user::instance($u1->id));
+        $dg->role_assign($reviewerroleid, $u2->id, \context_user::instance($u1->id));
+        $dg->role_assign($reviewerroleid, $u3->id, \context_system::instance());
         accesslib_clear_all_caches_for_unit_testing();
 
         $p1 = $lpg->create_plan(array('userid' => $u1->id));
@@ -216,8 +225,11 @@ class core_competency_lib_testcase extends advanced_testcase {
         $sink->close();
         $this->assertCount(1, $messages);
         $message = array_pop($messages);
-        $this->assertEquals(core_user::get_noreply_user()->id, $message->useridfrom);
+        $this->assertEquals(\core_user::get_noreply_user()->id, $message->useridfrom);
         $this->assertEquals($u1->id, $message->useridto);
+        // Test customdata.
+        $customdata = json_decode($message->customdata);
+        $this->assertObjectHasProperty('notificationiconurl', $customdata);
 
         // Post a comment in a plan with reviewer. The reviewer is messaged.
         $p1->set('reviewerid', $u2->id);
@@ -230,7 +242,7 @@ class core_competency_lib_testcase extends advanced_testcase {
         $sink->close();
         $this->assertCount(1, $messages);
         $message = array_pop($messages);
-        $this->assertEquals(core_user::get_noreply_user()->id, $message->useridfrom);
+        $this->assertEquals(\core_user::get_noreply_user()->id, $message->useridfrom);
         $this->assertEquals($u2->id, $message->useridto);
 
         // Post a comment as reviewer in a plan being reviewed. The owner is messaged.
@@ -244,7 +256,7 @@ class core_competency_lib_testcase extends advanced_testcase {
         $sink->close();
         $this->assertCount(1, $messages);
         $message = array_pop($messages);
-        $this->assertEquals(core_user::get_noreply_user()->id, $message->useridfrom);
+        $this->assertEquals(\core_user::get_noreply_user()->id, $message->useridfrom);
         $this->assertEquals($u1->id, $message->useridto);
 
         // Post a comment as someone else in a plan being reviewed. The owner and reviewer are messaged.
@@ -259,9 +271,9 @@ class core_competency_lib_testcase extends advanced_testcase {
         $this->assertCount(2, $messages);
         $message1 = array_shift($messages);
         $message2 = array_shift($messages);
-        $this->assertEquals(core_user::get_noreply_user()->id, $message1->useridfrom);
+        $this->assertEquals(\core_user::get_noreply_user()->id, $message1->useridfrom);
         $this->assertEquals($u1->id, $message1->useridto);
-        $this->assertEquals(core_user::get_noreply_user()->id, $message2->useridfrom);
+        $this->assertEquals(\core_user::get_noreply_user()->id, $message2->useridfrom);
         $this->assertEquals($u2->id, $message2->useridto);
 
         $p1->set('reviewerid', null);

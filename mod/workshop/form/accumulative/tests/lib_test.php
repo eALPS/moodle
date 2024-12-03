@@ -18,10 +18,14 @@
  * Unit tests for Accumulative grading strategy logic
  *
  * @package    workshopform_accumulative
- * @category   phpunit
+ * @category   test
  * @copyright  2009 David Mudrak <david.mudrak@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+namespace workshopform_accumulative;
+
+use workshop;
+use workshop_accumulative_strategy;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -30,8 +34,10 @@ global $CFG;
 require_once($CFG->dirroot . '/mod/workshop/locallib.php');
 require_once($CFG->dirroot . '/mod/workshop/form/accumulative/lib.php');
 
-
-class workshop_accumulative_strategy_testcase extends advanced_testcase {
+/**
+ * Unit tests for Accumulative grading strategy lib.php
+ */
+class lib_test extends \advanced_testcase {
     /** workshop instance emulation */
     protected $workshop;
 
@@ -41,7 +47,7 @@ class workshop_accumulative_strategy_testcase extends advanced_testcase {
     /**
      * Setup testing environment
      */
-    protected function setUp() {
+    protected function setUp(): void {
         parent::setUp();
         $this->resetAfterTest();
         $this->setAdminUser();
@@ -52,13 +58,13 @@ class workshop_accumulative_strategy_testcase extends advanced_testcase {
         $this->strategy = new testable_workshop_accumulative_strategy($this->workshop);
     }
 
-    protected function tearDown() {
+    protected function tearDown(): void {
         $this->workshop = null;
         $this->strategy = null;
         parent::tearDown();
     }
 
-    public function test_calculate_peer_grade_null_grade() {
+    public function test_calculate_peer_grade_null_grade(): void {
         // fixture set-up
         $this->strategy->dimensions = array();
         $grades = array();
@@ -68,7 +74,7 @@ class workshop_accumulative_strategy_testcase extends advanced_testcase {
         $this->assertNull($suggested);
     }
 
-    public function test_calculate_peer_grade_one_numerical() {
+    public function test_calculate_peer_grade_one_numerical(): void {
         // fixture set-up
         $this->strategy->dimensions[1003] = (object)array('grade' => '20', 'weight' => '1');
         $grades[] = (object)array('dimensionid' => 1003, 'grade' => '5.00000');
@@ -78,18 +84,16 @@ class workshop_accumulative_strategy_testcase extends advanced_testcase {
         $this->assertEquals(grade_floatval(5/20 * 100), $suggested);
     }
 
-    /**
-     * @expectedException coding_exception
-     */
-    public function test_calculate_peer_grade_negative_weight() {
+    public function test_calculate_peer_grade_negative_weight(): void {
         // fixture set-up
         $this->strategy->dimensions[1003] = (object)array('grade' => '20', 'weight' => '-1');
         $grades[] = (object)array('dimensionid' => 1003, 'grade' => '20');
         // exercise SUT
+        $this->expectException(\coding_exception::class);
         $suggested = $this->strategy->calculate_peer_grade($grades);
     }
 
-    public function test_calculate_peer_grade_one_numerical_weighted() {
+    public function test_calculate_peer_grade_one_numerical_weighted(): void {
         // fixture set-up
         $this->strategy->dimensions[1003] = (object)array('grade' => '20', 'weight' => '3');
         $grades[] = (object)array('dimensionid' => '1003', 'grade' => '5');
@@ -99,7 +103,7 @@ class workshop_accumulative_strategy_testcase extends advanced_testcase {
         $this->assertEquals(grade_floatval(5/20 * 100), $suggested);
     }
 
-    public function test_calculate_peer_grade_three_numericals_same_weight() {
+    public function test_calculate_peer_grade_three_numericals_same_weight(): void {
         // fixture set-up
         $this->strategy->dimensions[1003] = (object)array('grade' => '20', 'weight' => '2');
         $this->strategy->dimensions[1004] = (object)array('grade' => '100', 'weight' => '2');
@@ -115,7 +119,7 @@ class workshop_accumulative_strategy_testcase extends advanced_testcase {
         $this->assertEquals(grade_floatval((11/20 + 87/100 + 10/10)/3 * 100), $suggested);
     }
 
-    public function test_calculate_peer_grade_three_numericals_different_weights() {
+    public function test_calculate_peer_grade_three_numericals_different_weights(): void {
         // fixture set-up
         $this->strategy->dimensions[1003] = (object)array('grade' => '15', 'weight' => 3);
         $this->strategy->dimensions[1004] = (object)array('grade' => '80', 'weight' => 1);
@@ -131,7 +135,7 @@ class workshop_accumulative_strategy_testcase extends advanced_testcase {
         $this->assertEquals(grade_floatval((7/15*3 + 66/80*1 + 4/5*2)/6 * 100), $suggested);
     }
 
-    public function test_calculate_peer_grade_one_scale_max() {
+    public function test_calculate_peer_grade_one_scale_max(): void {
         $this->resetAfterTest(true);
 
         // fixture set-up
@@ -146,7 +150,7 @@ class workshop_accumulative_strategy_testcase extends advanced_testcase {
         $this->assertEquals(100.00000, $suggested);
     }
 
-    public function test_calculate_peer_grade_one_scale_min_with_scale_caching() {
+    public function test_calculate_peer_grade_one_scale_min_with_scale_caching(): void {
         $this->resetAfterTest(true);
 
         // fixture set-up
@@ -161,7 +165,7 @@ class workshop_accumulative_strategy_testcase extends advanced_testcase {
         $this->assertEquals(0.00000, $suggested);
     }
 
-    public function test_calculate_peer_grade_two_scales_weighted() {
+    public function test_calculate_peer_grade_two_scales_weighted(): void {
         $this->resetAfterTest(true);
         // fixture set-up
         $scale13 = $this->getDataGenerator()->create_scale(array('scale'=>'Poor,Good,Excellent', 'id'=>13));
@@ -178,10 +182,7 @@ class workshop_accumulative_strategy_testcase extends advanced_testcase {
         $this->assertEquals(grade_floatval((1/2*2 + 4/6*3)/5 * 100), $suggested);
     }
 
-    /**
-     * @expectedException coding_exception
-     */
-    public function test_calculate_peer_grade_scale_exception() {
+    public function test_calculate_peer_grade_scale_exception(): void {
         $this->resetAfterTest(true);
         // fixture set-up
         $scale13 = $this->getDataGenerator()->create_scale(array('scale'=>'Poor,Good,Excellent', 'id'=>13));
@@ -189,6 +190,7 @@ class workshop_accumulative_strategy_testcase extends advanced_testcase {
         $grades[] = (object)array('dimensionid' => 1012, 'grade' => '4.00000'); // exceeds the number of scale items
 
         // Exercise SUT.
+        $this->expectException(\coding_exception::class);
         $suggested = $this->strategy->calculate_peer_grade($grades);
     }
 }

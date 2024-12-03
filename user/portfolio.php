@@ -25,7 +25,7 @@
 require_once(__DIR__ . '/../config.php');
 
 if (empty($CFG->enableportfolios)) {
-    print_error('disabled', 'portfolio');
+    throw new \moodle_exception('disabled', 'portfolio');
 }
 
 require_once($CFG->libdir . '/portfoliolib.php');
@@ -41,7 +41,7 @@ if ($config !== 0) {
     $url->param('config', $config);
 }
 if (! $course = $DB->get_record("course", array("id" => $courseid))) {
-    print_error('invalidcourseid');
+    throw new \moodle_exception('invalidcourseid');
 }
 
 $user = $USER;
@@ -76,7 +76,7 @@ if (!empty($config)) {
         exit;
     } else if ($fromform = $mform->get_data()) {
         if (!confirm_sesskey()) {
-            print_error('confirmsesskeybad', '', $baseurl);
+            throw new \moodle_exception('confirmsesskeybad', '', $baseurl);
         }
         // This branch is where you process validated data.
         $instance->set_user_config($fromform, $USER->id);
@@ -105,7 +105,7 @@ if ($display) {
     echo html_writer::tag('p', $introstr);
 
     if (!$instances = portfolio_instances(true, false)) {
-        print_error('noinstances', 'portfolio', $CFG->wwwroot . '/user/view.php');
+        throw new \moodle_exception('noinstances', 'portfolio', $CFG->wwwroot . '/user/view.php');
     }
 
     $table = new html_table();
@@ -113,12 +113,24 @@ if ($display) {
     $table->data = array();
 
     foreach ($instances as $i) {
+        // Contents of the actions (Show / hide) column.
+        $actions = '';
+
+        // Configure icon.
+        if ($i->has_user_config()) {
+            $configurl = new moodle_url($baseurl);
+            $configurl->param('config', $i->get('id'));
+            $actions .= html_writer::link($configurl, $OUTPUT->pix_icon('t/edit', get_string('configure', 'portfolio')));
+        }
+
+        // Hide/show icon.
         $visible = $i->get_user_config('visible', $USER->id);
-        $table->data[] = array($i->get('name'), $i->get('plugin'),
-            ($i->has_user_config()
-                ? '<a href="' . $baseurl . '?config=' . $i->get('id') . '"><img src="' . $OUTPUT->pix_url('t/edit') . '" alt="' . get_string('configure') . '" /></a>' : '') .
-                   ' <a href="' . $baseurl . '?hide=' . $i->get('id') . '"><img src="' . $OUTPUT->pix_url('t/' . (($visible) ? 'hide' : 'show')) . '" alt="' . get_string($visible ? 'hide' : 'show') . '" /></a><br />'
-        );
+        $visibilityaction = $visible ? 'hide' : 'show';
+        $showhideurl = new moodle_url($baseurl);
+        $showhideurl->param('hide', $i->get('id'));
+        $actions .= html_writer::link($showhideurl, $OUTPUT->pix_icon('t/' . $visibilityaction, get_string($visibilityaction)));
+
+        $table->data[] = array($i->get('name'), $i->get('plugin'), $actions);
     }
 
     echo html_writer::table($table);

@@ -10,7 +10,7 @@ Feature: Enable Block comments on an activity page and view comments
       | Course 1 | C1 | 0 |
     And the following "users" exist:
       | username | firstname | lastname | email |
-      | teacher1 | Teacher | Frist | teacher1@example.com |
+      | teacher1 | Teacher | First | teacher1@example.com |
       | student1 | Student | First | student1@example.com |
     And the following "course enrolments" exist:
       | user | course | role |
@@ -19,16 +19,12 @@ Feature: Enable Block comments on an activity page and view comments
     And the following "activities" exist:
       | activity | course | idnumber | name           | intro                 |
       | page    | C1      | page1    | Test page name | Test page description |
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I follow "Test page name"
-    And I add the "Comments" block
+    And the following "blocks" exist:
+      | blockname | contextlevel    | reference | pagetypepattern | defaultregion |
+      | comments  | Activity module | page1     | mod-page-*      | side-pre      |
+    And I am on the "Test page name" "page activity" page logged in as teacher1
     And I follow "Show comments"
     And I add "I'm a comment from the teacher" comment to comments block
-    And I log out
-    When I log in as "student1"
-    And I follow "Course 1"
-    And I follow "Test page name"
+    When I am on the "Test page name" "page activity" page logged in as student1
     And I follow "Show comments"
     Then I should see "I'm a comment from the teacher"

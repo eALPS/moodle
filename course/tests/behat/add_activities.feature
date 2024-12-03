@@ -5,73 +5,66 @@ Feature: Add activities to courses
   I need to add activites to a course
 
   Background:
-    Given the following "users" exist:
-      | username | firstname | lastname | email |
-      | student1 | Student | 1 | student1@example.com |
-      | student2 | Student | 2 | student2@example.com |
-    And the following "courses" exist:
+    Given the following "courses" exist:
       | fullname | shortname | format |
-      | Course 1 | C1 | topics |
-    And the following "course enrolments" exist:
-      | user | course | role |
-      | student1 | C1 | student |
-      | student2 | C1 | student |
-    And I log in as "admin"
-    And I am on site homepage
-    And I follow "Course 1"
-    And I turn editing mode on
+      | Course 1 | Course 1  | topics |
 
-  @javascript
   Scenario: Add an activity to a course
-    When I add a "Database" to section "3" and I fill the form with:
-      | Name | Test name |
-      | Description | Test database description |
-      | Entries required for completion | 9 |
-      | Allow comments on entries | Yes |
-    And I turn editing mode off
+    Given I log in as "admin"
+    When I add a data activity to course "Course 1" section "3" and I fill the form with:
+      | Name                      | Test name                 |
+      | Description               | Test database description |
+      | ID number                 | TESTNAME                  |
+      | Allow comments on entries | Yes                       |
+      | Force language            | English                   |
     Then I should not see "Adding a new"
-    And I turn editing mode on
-    And I open "Test name" actions menu
-    And I click on "Edit settings" "link" in the "Test name" activity
-    And I expand all fieldsets
-    And the field "Name" matches value "Test name"
-    And the field "Entries required for completion" matches value "9"
-    And the field "Allow comments on entries" matches value "Yes"
+    And I am on the "Test name" "data activity editing" page
+    And the following fields match these values:
+      | Name                      | Test name    |
+      | ID number                 | TESTNAME     |
+      | Allow comments on entries | Yes          |
+      | Force language            | English ‎(en)‎ |
 
-  @javascript
   Scenario: Add an activity supplying only the name
-    When I add a "Database" to section "3" and I fill the form with:
+    Given I log in as "admin"
+    When I add a data activity to course "Course 1" section "3" and I fill the form with:
       | Name | Test name |
     Then I should see "Test name"
 
-  @javascript
   Scenario: Set activity description to required then add an activity supplying only the name
-    Given I set the following administration settings values:
-      | requiremodintro | Yes |
-    When I am on site homepage
-    And I follow "Course 1"
-    And I add a "Database" to section "3" and I fill the form with:
+    Given the following config values are set as admin:
+      | requiremodintro | 1 |
+    And I log in as "admin"
+    And I add a data activity to course "Course 1" section "3" and I fill the form with:
       | Name | Test name |
     Then I should see "Required"
 
-  Scenario: Add an activity to a course with Javascript disabled
-    Then I should see "Add a resource to section 'Topic 1'"
-    And I should see "Add an activity to section 'Topic 1'"
-    And I should see "Add a resource to section 'Topic 2'"
-    And I should see "Add an activity to section 'Topic 2'"
-    And I should see "Add a resource to section 'Topic 3'"
-    And I should see "Add an activity to section 'Topic 3'"
-    And I add a "Label" to section "2"
-    And I should see "Adding a new Label to Topic 2"
-    And I set the following fields to these values:
-      | Label text | I'm a label |
-    And I press "Save and return to course"
-    And I add a "Database" to section "3"
-    And I should see "Adding a new Database to Topic 3"
-    And I set the following fields to these values:
-      | Name | Test database name |
-      | Description | Test database description |
-    And I press "Save and return to course"
-    And I should not see "Adding a new"
-    And I should see "Test database name"
-    And I should see "I'm a label"
+  Scenario: The activity description should use the user's preferred editor on creation
+    Given the following "user preferences" exist:
+      | user   | preference   | value    |
+      | admin  | htmleditor   | textarea |
+    And I am logged in as admin
+    When I add a data activity to course "Course 1" section "3"
+    Then the field "Description format" matches value "0"
+
+  Scenario: The activity description should preserve the format used once edited (markdown version)
+    Given the following "activities" exist:
+      | activity   | name         | intro  | introformat | course   |
+      | assign     | A4           | Desc 4 | 4           | Course 1 |
+    And the following "user preferences" exist:
+      | user   | preference   | value    |
+      | admin  | htmleditor   | textarea |
+    And I am logged in as admin
+    When I am on the "A4" "assign activity editing" page
+    Then the field "Description format" matches value "4"
+
+  Scenario: The activity description should preserve the format used once edited (plain text version)
+    Given the following "activities" exist:
+      | activity   | name         | intro  | introformat | course   |
+      | assign     | A2           | Desc 2 | 2           | Course 1 |
+    And the following "user preferences" exist:
+      | user   | preference   | value    |
+      | admin  | htmleditor   | textarea |
+    And I am logged in as admin
+    When I am on the "A2" "assign activity editing" page
+    Then the field "Description format" matches value "2"

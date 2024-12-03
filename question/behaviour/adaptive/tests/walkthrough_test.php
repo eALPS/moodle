@@ -14,17 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace qbehaviour_adaptive;
 
-/**
- * This file contains tests that walks a question through the adaptive
- * behaviour.
- *
- * @package    qbehaviour
- * @subpackage adaptive
- * @copyright  2009 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
+use question_state;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -36,48 +28,49 @@ require_once(__DIR__ . '/../../../engine/tests/helpers.php');
 /**
  * Unit tests for the adaptive behaviour.
  *
+ * @package    qbehaviour_adaptive
  * @copyright  2009 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_base {
+class walkthrough_test extends \qbehaviour_walkthrough_test_base {
     protected function get_contains_penalty_info_expectation($penalty) {
         $penaltyinfo = get_string('gradingdetailspenalty', 'qbehaviour_adaptive',
                                   format_float($penalty, $this->displayoptions->markdp));
-        return new question_pattern_expectation('/'.preg_quote($penaltyinfo, '/').'/');
+        return new \question_pattern_expectation('/'.preg_quote($penaltyinfo, '/').'/');
     }
 
     protected function get_does_not_contain_penalty_info_expectation() {
         $penaltyinfo = get_string('gradingdetailspenalty', 'qbehaviour_adaptive', 'XXXXX');
         $penaltypattern = '/'.str_replace('XXXXX', '\\w*', preg_quote($penaltyinfo, '/')).'/';
-        return new question_no_pattern_expectation($penaltypattern);
+        return new \question_no_pattern_expectation($penaltypattern);
     }
 
     protected function get_contains_total_penalty_expectation($penalty) {
         $penaltyinfo = get_string('gradingdetailspenaltytotal', 'qbehaviour_adaptive',
                                   format_float($penalty, $this->displayoptions->markdp));
-        return new question_pattern_expectation('/'.preg_quote($penaltyinfo, '/').'/');
+        return new \question_pattern_expectation('/'.preg_quote($penaltyinfo, '/').'/');
     }
 
     protected function get_does_not_contain_total_penalty_expectation() {
         $penaltyinfo = get_string('gradingdetailspenaltytotal', 'qbehaviour_adaptive', 'XXXXX');
         $penaltypattern = '/'.str_replace('XXXXX', '\\w*', preg_quote($penaltyinfo, '/')).'/';
-        return new question_no_pattern_expectation($penaltypattern);
+        return new \question_no_pattern_expectation($penaltypattern);
     }
 
     protected function get_contains_disregarded_info_expectation() {
         $penaltyinfo = get_string('disregardedwithoutpenalty', 'qbehaviour_adaptive');
-        return new question_pattern_expectation('/'.preg_quote($penaltyinfo, '/').'/');
+        return new \question_pattern_expectation('/'.preg_quote($penaltyinfo, '/').'/');
     }
 
     protected function get_does_not_contain_disregarded_info_expectation() {
         $penaltyinfo = get_string('disregardedwithoutpenalty', 'qbehaviour_adaptive');
-        return new question_no_pattern_expectation('/'.preg_quote($penaltyinfo, '/').'/');
+        return new \question_no_pattern_expectation('/'.preg_quote($penaltyinfo, '/').'/');
     }
 
-    public function test_adaptive_multichoice() {
+    public function test_adaptive_multichoice(): void {
 
         // Create a multiple choice, single response question.
-        $mc = test_question_maker::make_a_multichoice_single_question();
+        $mc = \test_question_maker::make_a_multichoice_single_question();
         $mc->penalty = 0.3333333;
         $this->start_attempt_at_question($mc, 'adaptive', 3);
 
@@ -110,7 +103,7 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
                 $this->get_contains_incorrect_expectation(),
                 $this->get_contains_penalty_info_expectation(1.00),
                 $this->get_does_not_contain_total_penalty_expectation());
-        $this->assertRegExp('/B|C/',
+        $this->assertMatchesRegularExpression('/B|C/',
                 $this->quba->get_response_summary($this->slot));
 
         // Process a change of answer to the right one, but not sumbitted.
@@ -124,7 +117,7 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
                 $this->get_contains_mc_radio_expectation($rightindex, true, true),
                 $this->get_contains_mc_radio_expectation(($rightindex + 1) % 3, true, false),
                 $this->get_contains_mc_radio_expectation(($rightindex + 2) % 3, true, false));
-        $this->assertRegExp('/B|C/',
+        $this->assertMatchesRegularExpression('/B|C/',
                 $this->quba->get_response_summary($this->slot));
 
         // Now submit the right answer.
@@ -165,7 +158,7 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
         $this->check_current_mark(1);
         $this->check_current_output(
                 $this->get_contains_mark_summary(1),
-                new question_pattern_expectation('/' . preg_quote('Not good enough!', '/') . '/'));
+                new \question_pattern_expectation('/' . preg_quote('Not good enough!', '/') . '/'));
 
         // Now change the correct answer to the question, and regrade.
         $mc->answers[13]->fraction = -0.33333333;
@@ -181,13 +174,13 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
                 $this->get_contains_partcorrect_expectation());
 
         $autogradedstep = $this->get_step($this->get_step_count() - 2);
-        $this->assertEquals($autogradedstep->get_fraction(), 1, '', 0.0000001);
+        $this->assertEqualsWithDelta($autogradedstep->get_fraction(), 1, 0.0000001);
     }
 
-    public function test_adaptive_multichoice2() {
+    public function test_adaptive_multichoice2(): void {
 
         // Create a multiple choice, multiple response question.
-        $mc = test_question_maker::make_a_multichoice_multi_question();
+        $mc = \test_question_maker::make_a_multichoice_multi_question();
         $mc->penalty = 0.3333333;
         $mc->shuffleanswers = 0;
         $this->start_attempt_at_question($mc, 'adaptive', 2);
@@ -236,10 +229,10 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
                 $this->get_contains_correct_expectation());
     }
 
-    public function test_adaptive_shortanswer_partially_right() {
+    public function test_adaptive_shortanswer_partially_right(): void {
 
         // Create a short answer question.
-        $sa = test_question_maker::make_question('shortanswer');
+        $sa = \test_question_maker::make_question('shortanswer');
         $this->start_attempt_at_question($sa, 'adaptive');
 
         // Check the initial state.
@@ -315,10 +308,10 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
                 $this->get_does_not_contain_validation_error_expectation());
     }
 
-    public function test_adaptive_shortanswer_wrong_right_wrong() {
+    public function test_adaptive_shortanswer_wrong_right_wrong(): void {
 
         // Create a short answer question.
-        $sa = test_question_maker::make_question('shortanswer');
+        $sa = \test_question_maker::make_question('shortanswer');
         $this->start_attempt_at_question($sa, 'adaptive', 6);
 
         // Check the initial state.
@@ -398,10 +391,10 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
                 $this->get_does_not_contain_validation_error_expectation());
     }
 
-    public function test_adaptive_shortanswer_invalid_after_complete() {
+    public function test_adaptive_shortanswer_invalid_after_complete(): void {
 
         // Create a short answer question.
-        $sa = test_question_maker::make_question('shortanswer');
+        $sa = \test_question_maker::make_question('shortanswer');
         $this->start_attempt_at_question($sa, 'adaptive');
 
         // Check the initial state.
@@ -480,10 +473,10 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
                 $this->get_does_not_contain_validation_error_expectation());
     }
 
-    public function test_adaptive_shortanswer_zero_penalty() {
+    public function test_adaptive_shortanswer_zero_penalty(): void {
 
         // Create a short answer question.
-        $sa = test_question_maker::make_question('shortanswer');
+        $sa = \test_question_maker::make_question('shortanswer');
         // Disable penalties for this question.
         $sa->penalty = 0;
         $this->start_attempt_at_question($sa, 'adaptive');
@@ -537,10 +530,10 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
                 $this->get_does_not_contain_validation_error_expectation());
     }
 
-    public function test_adaptive_shortanswer_try_to_submit_blank() {
+    public function test_adaptive_shortanswer_try_to_submit_blank(): void {
 
         // Create a short answer question with correct answer true.
-        $sa = test_question_maker::make_question('shortanswer');
+        $sa = \test_question_maker::make_question('shortanswer');
         $this->start_attempt_at_question($sa, 'adaptive');
 
         // Check the initial state.
@@ -596,10 +589,10 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
                 $this->get_contains_validation_error_expectation());
     }
 
-    public function test_adaptive_numerical() {
+    public function test_adaptive_numerical(): void {
 
         // Create a numerical question.
-        $sa = test_question_maker::make_question('numerical', 'pi');
+        $sa = \test_question_maker::make_question('numerical', 'pi');
         $this->start_attempt_at_question($sa, 'adaptive');
 
         // Check the initial state.
@@ -651,10 +644,10 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
                 $this->get_does_not_contain_validation_error_expectation());
     }
 
-    public function test_adaptive_numerical_invalid() {
+    public function test_adaptive_numerical_invalid(): void {
 
         // Create a numerical question.
-        $numq = test_question_maker::make_question('numerical', 'pi');
+        $numq = \test_question_maker::make_question('numerical', 'pi');
         $numq->penalty = 0.1;
         $this->start_attempt_at_question($numq, 'adaptive');
 
@@ -755,13 +748,13 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
                 $this->get_does_not_contain_disregarded_info_expectation());
     }
 
-    public function test_adaptive_multianswer() {
+    public function test_adaptive_multianswer(): void {
 
         // Create a multianswer question.
-        $q = test_question_maker::make_question('multianswer', 'twosubq');
+        $q = \test_question_maker::make_question('multianswer', 'twosubq');
         // To simplify testing, multichoice subquestion's answers are not shuffled.
         $q->subquestions[2]->shuffleanswers = 0;
-        $choices = array('' => '', '0' => 'Bow-wow', '1' => 'Wiggly worm', '2' => 'Pussy-cat');
+        $choices = array('0' => 'Bow-wow', '1' => 'Wiggly worm', '2' => 'Pussy-cat');
 
         $this->start_attempt_at_question($q, 'adaptive', 12);
 
@@ -777,10 +770,11 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
         $this->check_output_does_not_contain_text_input_with_class('sub1_answer', 'incorrect');
         $this->check_current_output(
                 $this->get_contains_marked_out_of_summary(),
-                $this->get_contains_select_expectation('sub2_answer', $choices, null, true),
                 $this->get_contains_submit_button_expectation(true),
                 $this->get_does_not_contain_validation_error_expectation(),
                 $this->get_does_not_contain_feedback_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub2_answer', $choices, null, true));
 
         // Submit an invalid response.
         $this->process_submission(array('sub1_answer' => '', 'sub2_answer' => 1, '-submit' => 1));
@@ -790,11 +784,12 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
         $this->check_current_mark(null);
         $this->check_output_contains_text_input('sub1_answer', '', true);
         $this->check_current_output(
-                $this->get_contains_select_expectation('sub2_answer', $choices, 1, true),
                 $this->get_contains_submit_button_expectation(true),
                 $this->get_does_not_contain_penalty_info_expectation(),
                 $this->get_does_not_contain_total_penalty_expectation(),
                 $this->get_contains_disregarded_info_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub2_answer', $choices, 1, true));
 
         // Check that extract responses will return the reset data.
         $prefix = $this->quba->get_field_prefix($this->slot);
@@ -813,11 +808,12 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
         $this->check_output_contains_text_input_with_class('sub1_answer', 'incorrect');
         $this->check_current_output(
                 $this->get_contains_mark_summary(0),
-                $this->get_contains_select_expectation('sub2_answer', $choices, 1, true),
                 $this->get_contains_submit_button_expectation(true),
                 $this->get_contains_incorrect_expectation(),
                 $this->get_contains_penalty_info_expectation(4.00),
                 $this->get_does_not_contain_validation_error_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub2_answer', $choices, 1, true));
 
         // Submit the right answer.
         $this->process_submission(array('sub1_answer' => 'Owl', 'sub2_answer' => 2, '-submit' => 1));
@@ -829,13 +825,14 @@ class qbehaviour_adaptive_walkthrough_test extends qbehaviour_walkthrough_test_b
         $this->check_output_contains_text_input('sub1_answer', 'Owl', true);
         $this->check_output_contains_text_input_with_class('sub1_answer', 'correct');
         $this->check_current_output(
-                $this->get_contains_select_expectation('sub2_answer', $choices, '2', true),
                 $this->get_contains_mark_summary(8.00),
                 $this->get_contains_submit_button_expectation(true),
                 $this->get_contains_correct_expectation(),
                 $this->get_does_not_contain_penalty_info_expectation(),
                 $this->get_does_not_contain_total_penalty_expectation(),
                 $this->get_does_not_contain_validation_error_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub2_answer', $choices, '2', true));
 
         // Finish the attempt.
         $this->quba->finish_all_questions();

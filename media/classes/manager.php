@@ -39,7 +39,7 @@ defined('MOODLE_INTERNAL') || die();
  * @author    2011 The Open University
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_media_manager {
+final class core_media_manager {
     /**
      * Option: Disable text link fallback.
      *
@@ -66,7 +66,8 @@ class core_media_manager {
      * Option: Enable players which are only suitable for use when we trust the
      * user who embedded the content.
      *
-     * At present, this option enables the SWF player.
+     * In the past, this option enabled the SWF player (which was removed).
+     * However, this setting will remain because it might be used by third-party plugins.
      *
      * To enable, set value to true.
      */
@@ -95,10 +96,10 @@ class core_media_manager {
     private $embeddablemarkers;
 
     /** @var core_media_manager caches a singleton instance */
-    static protected $instance;
+    static private $instance;
 
     /** @var moodle_page page this instance was initialised for */
-    protected $page;
+    private $page;
 
     /**
      * Returns a singleton instance of a manager
@@ -125,7 +126,7 @@ class core_media_manager {
      * @param moodle_page $page The page we are going to add requirements to.
      * @see core_media_manager::instance()
      */
-    protected function __construct($page) {
+    private function __construct($page) {
         if ($page) {
             $this->page = $page;
             $players = $this->get_players();
@@ -138,19 +139,10 @@ class core_media_manager {
     }
 
     /**
-     * Setup page requirements.
-     *
-     * This should must only be called once per page request.
-     *
-     * @deprecated Moodle 3.3, The setup is now done in ::instance() so there is no need to call this
-     * @param moodle_page $page The page we are going to add requirements to.
-     * @see core_media_manager::instance()
-     * @todo MDL-57632 final deprecation
+     * @deprecated since Moodle 3.3. The setup is now done in ::instance() so there is no need to call this.
      */
-    public function setup($page) {
-        debugging('core_media_manager::setup() is deprecated.' .
-                  'You only need to call core_media_manager::instance() now', DEBUG_DEVELOPER);
-        // No need to call ::instance from here, because the instance has already be set up.
+    public function setup() {
+        throw new coding_exception('core_media_manager::setup() can not be used any more because it is done in ::instance()');
     }
 
     /**
@@ -169,7 +161,7 @@ class core_media_manager {
      *
      * @return core_media_player[] Array of core_media_player objects in rank order
      */
-    protected function get_players() {
+    private function get_players() {
         // Save time by only building the list once.
         if (!$this->players) {
             $sortorder = \core\plugininfo\media::get_enabled_plugins();
@@ -298,7 +290,7 @@ class core_media_manager {
      * @param array $options Options array
      * @return string HTML code for embed
      */
-    protected function fallback_to_link($urls, $name, $options) {
+    private function fallback_to_link($urls, $name, $options) {
         // If link is turned off, return empty.
         if (!empty($options[self::OPTION_NO_LINK])) {
             return '';
@@ -399,6 +391,7 @@ class core_media_manager {
      * @return array Array of 1 or more moodle_url objects
      */
     public function split_alternatives($combinedurl, &$width, &$height) {
+        global $CFG;
         $urls = explode('#', $combinedurl);
         $width = 0;
         $height = 0;
@@ -426,8 +419,9 @@ class core_media_manager {
             }
 
             // Clean up url.
-            $url = clean_param($url, PARAM_URL);
-            if (empty($url)) {
+            $url = fix_utf8($url);
+            include_once($CFG->dirroot . '/lib/validateurlsyntax.php');
+            if (!validateUrlSyntax($url, 's?H?S?F?R?E?u-P-a?I?p?f?q?r?')) {
                 continue;
             }
 

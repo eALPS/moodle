@@ -244,7 +244,18 @@ class MoodleQuickForm_tags extends MoodleQuickForm_autocomplete {
      */
     public function exportValue(&$submitValues, $assoc = false) {
         if (!$this->is_tagging_enabled()) {
-            return $assoc ? array($this->getName() => array()) : array();
+            return $this->_prepareValue([], $assoc);
+        }
+        if ($this->_findValue($submitValues) === '_qf__force_multiselect_submission') {
+            // Nothing was selected.
+            return $this->_prepareValue([], $assoc);
+        }
+
+        // Submitted tag data will be encoded, we want original text.
+        if (array_key_exists($this->getName(), $submitValues)) {
+            array_walk($submitValues[$this->getName()], static function(string &$tag): void {
+                $tag = html_entity_decode($tag, ENT_COMPAT);
+            });
         }
 
         return parent::exportValue($submitValues, $assoc);

@@ -25,8 +25,6 @@
 require_once("../../config.php");
 require_once("lib.php");
 
-$current_tab = 'analysis';
-
 $id = required_param('id', PARAM_INT);  //the POST dominated the GET
 $courseitemfilter = optional_param('courseitemfilter', '0', PARAM_INT);
 $courseitemfiltertyp = optional_param('courseitemfiltertyp', '0', PARAM_ALPHANUM);
@@ -53,7 +51,7 @@ require_course_login($course, true, $cm);
 $feedback = $PAGE->activityrecord;
 
 if (!($feedback->publish_stats OR has_capability('mod/feedback:viewreports', $context))) {
-    print_error('error');
+    throw new \moodle_exception('error');
 }
 
 $feedbackstructure = new mod_feedback_structure($feedback, $PAGE->cm, $courseid);
@@ -71,16 +69,24 @@ $strfeedback  = get_string("modulename", "feedback");
 $PAGE->set_heading($course->fullname);
 $PAGE->set_title($feedback->name);
 echo $OUTPUT->header();
-echo $OUTPUT->heading(format_string($feedback->name));
-
-/// print the tabs
-require('tabs.php');
+if (!$PAGE->has_secondary_navigation()) {
+    echo $OUTPUT->heading(format_string($feedback->name));
+}
 
 //get the groupid
 //lstgroupid is the choosen id
 $mygroupid = false;
 
 $courseselectform->display();
+
+// Button "Export to excel".
+if (has_capability('mod/feedback:viewreports', $context) && $feedbackstructure->get_items()) {
+    echo $OUTPUT->container_start('form-buttons');
+    $aurl = new moodle_url('/mod/feedback/analysis_to_excel.php',
+        ['sesskey' => sesskey(), 'id' => $id, 'courseid' => (int)$courseid]);
+    echo $OUTPUT->single_button($aurl, get_string('export_to_excel', 'feedback'));
+    echo $OUTPUT->container_end();
+}
 
 // Show the summary.
 $summary = new mod_feedback\output\summary($feedbackstructure);
@@ -110,7 +116,7 @@ if ($courseitemfilter > 0) {
 
             echo '<tr>';
             echo '<td>'.$shortname.'</td>';
-            echo '<td align="right">';
+            echo '<td class="text-end">';
             echo format_float(($c->sumvalue / $c->countvalue), 2);
             echo '</td>';
             echo '</tr>';

@@ -156,7 +156,7 @@ class completion_criteria_grade extends completion_criteria {
      * @return string
      */
     public function get_type_title() {
-        return get_string('grade');
+        return get_string('gradenoun');
     }
 
     /**
@@ -269,7 +269,7 @@ class completion_criteria_grade extends completion_criteria {
      * @param array $attributes html attributes
      * @return pix_icon
      */
-    public function get_icon($alt, array $attributes = null) {
+    public function get_icon($alt, ?array $attributes = null) {
         return new pix_icon('i/grades', $alt, 'moodle', $attributes);
     }
 }

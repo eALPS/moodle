@@ -23,14 +23,19 @@
  */
 namespace tool_log\plugininfo;
 
-use core\plugininfo\base, moodle_url, part_of_admin_tree, admin_settingpage;
-
-defined('MOODLE_INTERNAL') || die();
+use admin_settingpage;
+use core\plugininfo\base;
+use moodle_url;
+use part_of_admin_tree;
 
 /**
  * Plugin info class for logging store plugins.
  */
 class logstore extends base {
+
+    public static function plugintype_supports_disabling(): bool {
+        return true;
+    }
 
     public function is_enabled() {
         $enabled = get_config('tool_log', 'enabled_stores');
@@ -42,12 +47,40 @@ class logstore extends base {
         return isset($enabled['logstore_' . $this->name]);
     }
 
+    public static function enable_plugin(string $pluginname, int $enabled): bool {
+        $haschanged = false;
+        $plugins = [];
+        $oldvalue = get_config('tool_log', 'enabled_stores');
+        if (!empty($oldvalue)) {
+            $plugins = array_flip(explode(',', $oldvalue));
+        }
+        // Only set visibility if it's different from the current value.
+        if ($enabled && !array_key_exists($pluginname, $plugins)) {
+            $plugins[$pluginname] = $pluginname;
+            $haschanged = true;
+        } else if (!$enabled && array_key_exists($pluginname, $plugins)) {
+            unset($plugins[$pluginname]);
+            $haschanged = true;
+        }
+
+        if ($haschanged) {
+            $new = implode(',', array_flip($plugins));
+            add_to_config_log('tool_logstore_visibility', !$enabled, $enabled, $pluginname);
+            set_config('enabled_stores', $new, 'tool_log');
+            // Reset caches.
+            \core_plugin_manager::reset_caches();
+        }
+
+        return $haschanged;
+    }
+
     public function get_settings_section_name() {
         return 'logsetting' . $this->name;
     }
 
     public function load_settings(part_of_admin_tree $adminroot, $parentnodename, $hassiteconfig) {
         global $CFG, $USER, $DB, $OUTPUT, $PAGE; // In case settings.php wants to refer to them.
+        /** @var \admin_root $ADMIN */
         $ADMIN = $adminroot; // May be used in settings.php.
         $section = $this->get_settings_section_name();
 

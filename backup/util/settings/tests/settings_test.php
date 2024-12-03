@@ -15,11 +15,25 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Setting tests (all).
+ *
  * @package   core_backup
- * @category  phpunit
+ * @category  test
  * @copyright 2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+
+namespace core_backup;
+
+use activity_backup_setting;
+use backup_setting;
+use backup_setting_exception;
+use base_setting;
+use base_setting_exception;
+use course_backup_setting;
+use section_backup_setting;
+use setting_dependency;
+use setting_dependency_disabledif_empty;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -36,16 +50,20 @@ require_once($CFG->dirroot . '/backup/util/settings/section/section_backup_setti
 require_once($CFG->dirroot . '/backup/util/settings/course/course_backup_setting.class.php');
 require_once($CFG->dirroot . '/backup/util/ui/backup_ui_setting.class.php');
 
-
 /**
- * setting tests (all)
+ * Setting tests (all).
+ *
+ * @package   core_backup
+ * @category  test
+ * @copyright 2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class backp_settings_testcase extends basic_testcase {
+class settings_test extends \basic_testcase {
 
     /**
      * test base_setting class
      */
-    function test_base_setting() {
+    public function test_base_setting(): void {
         // Instantiate base_setting and check everything
         $bs = new mock_base_setting('test', base_setting::IS_BOOLEAN);
         $this->assertTrue($bs instanceof base_setting);
@@ -74,7 +92,7 @@ class backp_settings_testcase extends basic_testcase {
         try {
             $bs = new mock_base_setting('test', 'one_wrong_type');
             $this->assertTrue(false, 'base_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_setting_exception);
             $this->assertEquals($e->errorcode, 'setting_invalid_type');
         }
@@ -83,7 +101,7 @@ class backp_settings_testcase extends basic_testcase {
         try {
             $bs = new mock_base_setting('test', base_setting::IS_INTEGER, 99.99);
             $this->assertTrue(false, 'base_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_setting_exception);
             $this->assertEquals($e->errorcode, 'setting_invalid_integer');
         }
@@ -92,7 +110,7 @@ class backp_settings_testcase extends basic_testcase {
         try {
             $bs = new mock_base_setting('test', base_setting::IS_FILENAME, '../../filename.txt');
             $this->assertTrue(false, 'base_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_setting_exception);
             $this->assertEquals($e->errorcode, 'setting_invalid_filename');
         }
@@ -101,7 +119,7 @@ class backp_settings_testcase extends basic_testcase {
         try {
             $bs = new mock_base_setting('test', base_setting::IS_BOOLEAN, null, 'one_wrong_visibility');
             $this->assertTrue(false, 'base_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_setting_exception);
             $this->assertEquals($e->errorcode, 'setting_invalid_visibility');
         }
@@ -110,7 +128,7 @@ class backp_settings_testcase extends basic_testcase {
         try {
             $bs = new mock_base_setting('test', base_setting::IS_BOOLEAN, null, null, 'one_wrong_status');
             $this->assertTrue(false, 'base_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_setting_exception);
             $this->assertEquals($e->errorcode, 'setting_invalid_status');
         }
@@ -119,16 +137,16 @@ class backp_settings_testcase extends basic_testcase {
         // We need a custom error handler to catch the type hinting error
         // that should return incorrect_object_passed
         $bs = new mock_base_setting('test', base_setting::IS_BOOLEAN);
-        set_error_handler('backup_setting_error_handler', E_RECOVERABLE_ERROR);
+        set_error_handler('\core_backup\backup_setting_error_handler', E_RECOVERABLE_ERROR);
         try {
             $bs->set_ui('one_wrong_ui_type', 'label', array(), array());
             $this->assertTrue(false, 'base_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_setting_exception);
             $this->assertEquals($e->errorcode, 'incorrect_object_passed');
-        } catch (TypeError $e) {
+        } catch (\TypeError $e) {
             // On PHP7+ we get a TypeError raised, lets check we've the right error.
-            $this->assertRegexp('/must be an instance of backup_setting_ui/', $e->getMessage());
+            $this->assertMatchesRegularExpression('/must be (of type|an instance of) backup_setting_ui/', $e->getMessage());
         }
         restore_error_handler();
 
@@ -136,16 +154,16 @@ class backp_settings_testcase extends basic_testcase {
         // We need a custom error handler to catch the type hinting error
         // that should return incorrect_object_passed
         $bs = new mock_base_setting('test', base_setting::IS_BOOLEAN);
-        set_error_handler('backup_setting_error_handler', E_RECOVERABLE_ERROR);
+        set_error_handler('\core_backup\backup_setting_error_handler', E_RECOVERABLE_ERROR);
         try {
             $bs->set_ui(base_setting::UI_HTML_CHECKBOX, 'one/wrong/label', array(), array());
             $this->assertTrue(false, 'base_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_setting_exception);
             $this->assertEquals($e->errorcode, 'incorrect_object_passed');
-        } catch (TypeError $e) {
+        } catch (\TypeError $e) {
             // On PHP7+ we get a TypeError raised, lets check we've the right error.
-            $this->assertRegexp('/must be an instance of backup_setting_ui/', $e->getMessage());
+            $this->assertMatchesRegularExpression('/must be (of type|an instance of) backup_setting_ui/', $e->getMessage());
         }
         restore_error_handler();
 
@@ -154,7 +172,7 @@ class backp_settings_testcase extends basic_testcase {
         try {
             $bs->set_value(true);
             $this->assertTrue(false, 'base_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_setting_exception);
             $this->assertEquals($e->errorcode, 'setting_locked_by_permission');
         }
@@ -164,7 +182,7 @@ class backp_settings_testcase extends basic_testcase {
         try {
             $bs->set_value(true);
             $this->assertTrue(false, 'base_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_setting_exception);
             $this->assertEquals($e->errorcode, 'setting_locked_by_config');
         }
@@ -176,7 +194,7 @@ class backp_settings_testcase extends basic_testcase {
         try {
             $bs1->add_dependency($bs2);
             $this->assertTrue(false, 'base_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_setting_exception);
             $this->assertEquals($e->errorcode, 'setting_already_added');
         }
@@ -186,10 +204,10 @@ class backp_settings_testcase extends basic_testcase {
         try {
             $bs1->add_dependency($bs1); // self
             $this->assertTrue(false, 'base_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_setting_exception);
             $this->assertEquals($e->errorcode, 'setting_circular_reference');
-            $this->assertTrue($e->a instanceof stdclass);
+            $this->assertTrue($e->a instanceof \stdClass);
             $this->assertEquals($e->a->main, 'test1');
             $this->assertEquals($e->a->alreadydependent, 'test1');
         }
@@ -204,10 +222,10 @@ class backp_settings_testcase extends basic_testcase {
         try {
             $bs4->add_dependency($bs1, null, array('value'=>0));
             $this->assertTrue(false, 'base_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_setting_exception);
             $this->assertEquals($e->errorcode, 'setting_circular_reference');
-            $this->assertTrue($e->a instanceof stdclass);
+            $this->assertTrue($e->a instanceof \stdClass);
             $this->assertEquals($e->a->main, 'test1');
             $this->assertEquals($e->a->alreadydependent, 'test4');
         }
@@ -219,10 +237,10 @@ class backp_settings_testcase extends basic_testcase {
             // $bs1 is already dependent on $bs2 so this should fail.
             $bs2->register_dependency(new setting_dependency_disabledif_empty($bs2, $bs1));
             $this->assertTrue(false, 'base_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof base_setting_exception);
             $this->assertEquals($e->errorcode, 'setting_circular_reference');
-            $this->assertTrue($e->a instanceof stdclass);
+            $this->assertTrue($e->a instanceof \stdClass);
             $this->assertEquals($e->a->main, 'test1');
             $this->assertEquals($e->a->alreadydependent, 'test2');
         }
@@ -291,26 +309,70 @@ class backp_settings_testcase extends basic_testcase {
     }
 
     /**
+     * Test that locked and unlocked states on dependent backup settings at the same level
+     * correctly do not flow from the parent to the child setting when the setting is locked by permissions.
+     */
+    public function test_dependency_empty_locked_by_permission_child_is_not_unlocked(): void {
+        // Check dependencies are working ok.
+        $bs1 = new mock_backup_setting('test1', base_setting::IS_INTEGER, 2);
+        $bs1->set_level(1);
+        $bs2 = new mock_backup_setting('test2', base_setting::IS_INTEGER, 2);
+        $bs2->set_level(1); // Same level *must* work.
+        $bs1->add_dependency($bs2, setting_dependency::DISABLED_EMPTY);
+
+        $bs1->set_status(base_setting::LOCKED_BY_PERMISSION);
+        $this->assertEquals(base_setting::LOCKED_BY_HIERARCHY, $bs2->get_status());
+        $this->assertEquals(base_setting::LOCKED_BY_PERMISSION, $bs1->get_status());
+        $bs2->set_status(base_setting::LOCKED_BY_PERMISSION);
+        $this->assertEquals(base_setting::LOCKED_BY_PERMISSION, $bs1->get_status());
+
+        // Unlocking the parent should NOT unlock the child.
+        $bs1->set_status(base_setting::NOT_LOCKED);
+
+        $this->assertEquals(base_setting::LOCKED_BY_PERMISSION, $bs2->get_status());
+    }
+
+    /**
+     * Test that locked and unlocked states on dependent backup settings at the same level
+     * correctly do flow from the parent to the child setting when the setting is locked by config.
+     */
+    public function test_dependency_not_empty_locked_by_config_parent_is_unlocked(): void {
+        $bs1 = new mock_backup_setting('test1', base_setting::IS_INTEGER, 0);
+        $bs1->set_level(1);
+        $bs2 = new mock_backup_setting('test2', base_setting::IS_INTEGER, 0);
+        $bs2->set_level(1); // Same level *must* work.
+        $bs1->add_dependency($bs2, setting_dependency::DISABLED_NOT_EMPTY);
+
+        $bs1->set_status(base_setting::LOCKED_BY_CONFIG);
+        $this->assertEquals(base_setting::LOCKED_BY_HIERARCHY, $bs2->get_status());
+        $this->assertEquals(base_setting::LOCKED_BY_CONFIG, $bs1->get_status());
+
+        // Unlocking the parent should unlock the child.
+        $bs1->set_status(base_setting::NOT_LOCKED);
+        $this->assertEquals(base_setting::NOT_LOCKED, $bs2->get_status());
+    }
+
+    /**
      * test backup_setting class
      */
-    function test_backup_setting() {
+    public function test_backup_setting(): void {
         // Instantiate backup_setting class and set level
         $bs = new mock_backup_setting('test', base_setting::IS_INTEGER, null);
         $bs->set_level(1);
         $this->assertEquals($bs->get_level(), 1);
 
         // Instantiate backup setting class and try to add one non backup_setting dependency
-        set_error_handler('backup_setting_error_handler', E_RECOVERABLE_ERROR);
+        set_error_handler('\core_backup\backup_setting_error_handler', E_RECOVERABLE_ERROR);
         $bs = new mock_backup_setting('test', base_setting::IS_INTEGER, null);
         try {
-            $bs->add_dependency(new stdclass());
+            $bs->add_dependency(new \stdClass());
             $this->assertTrue(false, 'backup_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof backup_setting_exception);
             $this->assertEquals($e->errorcode, 'incorrect_object_passed');
-        } catch (TypeError $e) {
+        } catch (\TypeError $e) {
             // On PHP7+ we get a TypeError raised, lets check we've the right error.
-            $this->assertRegexp('/must be an instance of base_setting/', $e->getMessage());
+            $this->assertMatchesRegularExpression('/must be (an instance of|of type) base_setting/', $e->getMessage());
         }
         restore_error_handler();
 
@@ -322,7 +384,7 @@ class backp_settings_testcase extends basic_testcase {
         try {
             $bs2->add_dependency($bs1);
             $this->assertTrue(false, 'backup_setting_exception expected');
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof backup_setting_exception);
             $this->assertEquals($e->errorcode, 'cannot_add_upper_level_dependency');
         }
@@ -340,7 +402,7 @@ class backp_settings_testcase extends basic_testcase {
     /**
      * test activity_backup_setting class
      */
-    function test_activity_backup_setting() {
+    public function test_activity_backup_setting(): void {
         $bs = new mock_activity_backup_setting('test', base_setting::IS_INTEGER, null);
         $this->assertEquals($bs->get_level(), backup_setting::ACTIVITY_LEVEL);
 
@@ -355,7 +417,7 @@ class backp_settings_testcase extends basic_testcase {
     /**
      * test section_backup_setting class
      */
-    function test_section_backup_setting() {
+    public function test_section_backup_setting(): void {
         $bs = new mock_section_backup_setting('test', base_setting::IS_INTEGER, null);
         $this->assertEquals($bs->get_level(), backup_setting::SECTION_LEVEL);
 
@@ -370,7 +432,7 @@ class backp_settings_testcase extends basic_testcase {
     /**
      * test course_backup_setting class
      */
-    function test_course_backup_setting() {
+    public function test_course_backup_setting(): void {
         $bs = new mock_course_backup_setting('test', base_setting::IS_INTEGER, null);
         $this->assertEquals($bs->get_level(), backup_setting::COURSE_LEVEL);
 
@@ -396,11 +458,6 @@ class mock_base_setting extends base_setting {
         $this->set_value($setting->get_value());
         $this->set_visibility($setting->get_visibility());
         $this->set_status($setting->get_status());
-    }
-
-    public function get_ui_info() {
-        // Return an array with all the ui info to be tested
-        return array($this->ui_type, $this->ui_label, $this->ui_values, $this->ui_options);
     }
 }
 
@@ -460,10 +517,9 @@ class mock_course_backup_setting extends course_backup_setting {
  * @param string $errstr
  * @param string $errfile
  * @param int $errline
- * @param array $errcontext
  * @return null
  */
-function backup_setting_error_handler($errno, $errstr, $errfile, $errline, $errcontext) {
+function backup_setting_error_handler($errno, $errstr, $errfile, $errline) {
     if ($errno !== E_RECOVERABLE_ERROR) {
         // Currently we only want to deal with type hinting errors
         return false;

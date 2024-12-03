@@ -72,6 +72,7 @@ class send_failed_login_notifications_task extends scheduled_task {
         // Get all the IPs with more than notifyloginthreshold failures since lastnotifyfailure
         // and insert them into the cache_flags temp table.
         $logmang = get_log_manager();
+        /** @var \core\log\sql_internal_table_reader[] $readers */
         $readers = $logmang->get_readers('\core\log\sql_internal_table_reader');
         $reader = reset($readers);
         $readername = key($readers);
@@ -115,7 +116,8 @@ class send_failed_login_notifications_task extends scheduled_task {
 
         // Now, select all the login error logged records belonging to the ips and infos
         // since lastnotifyfailure, that we have stored in the cache_flags table.
-        $namefields = get_all_user_name_fields(true, 'u');
+        $userfieldsapi = \core_user\fields::for_name();
+        $namefields = $userfieldsapi->get_sql('u', false, '', '', false)->selects;
         $sql = "SELECT * FROM (
                         SELECT l.*, u.username, $namefields
                           FROM {" . $logtable . "} l
@@ -145,7 +147,7 @@ class send_failed_login_notifications_task extends scheduled_task {
             $a->time = userdate($log->timecreated);
             if (empty($log->username)) {
                 // Entries with no valid username. We get attempted username from the event's other field.
-                $other = unserialize($log->other);
+                $other = \tool_log\local\privacy\helper::decode_other($log->other);
                 $a->info = empty($other['username']) ? '' : $other['username'];
                 $a->name = get_string('unknownuser');
             } else {

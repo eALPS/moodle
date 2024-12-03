@@ -29,7 +29,7 @@ defined('MOODLE_INTERNAL') || die();
 require_once($CFG->dirroot.'/question/type/ddimageortext/edit_ddtoimage_form_base.php');
 require_once($CFG->dirroot.'/question/type/ddmarker/shapes.php');
 
-define('QTYPE_DDMARKER_ALLOWED_TAGS_IN_MARKER', '<br><i><em><b><strong><sup><sub><u>');
+define('QTYPE_DDMARKER_ALLOWED_TAGS_IN_MARKER', '<br><i><em><b><strong><sup><sub><u><span>');
 
 
 /**
@@ -44,8 +44,8 @@ class qtype_ddmarker_edit_form extends qtype_ddtoimage_edit_form_base {
     }
 
     protected function definition_inner($mform) {
-        $mform->addElement('advcheckbox', 'showmisplaced', ' ',
-                                                get_string('showmisplaced', 'qtype_ddmarker'));
+        $mform->addElement('advcheckbox', 'showmisplaced', get_string('showmisplaced', 'qtype_ddmarker'));
+        $mform->setDefault('showmisplaced', $this->get_default_value('showmisplaced', 0));
         parent::definition_inner($mform);
 
         $mform->addHelpButton('drops[0]', 'dropzones', 'qtype_ddmarker');
@@ -53,26 +53,15 @@ class qtype_ddmarker_edit_form extends qtype_ddtoimage_edit_form_base {
 
     public function js_call() {
         global $PAGE;
-        $maxsizes = new stdClass();
-        $maxsizes->bgimage = new stdClass();
-        $maxsizes->bgimage->width = QTYPE_DDMARKER_BGIMAGE_MAXWIDTH;
-        $maxsizes->bgimage->height = QTYPE_DDMARKER_BGIMAGE_MAXHEIGHT;
-
-        $params = array('maxsizes' => $maxsizes,
-                        'topnode' => 'fieldset#id_previewareaheader');
-
-        $PAGE->requires->yui_module('moodle-qtype_ddmarker-form',
-                                        'M.qtype_ddmarker.init_form',
-                                        array($params));
+        $PAGE->requires->js_call_amd('qtype_ddmarker/form', 'init');
     }
 
 
     protected function definition_draggable_items($mform, $itemrepeatsatstart) {
         $mform->addElement('header', 'draggableitemheader',
                                 get_string('markers', 'qtype_ddmarker'));
-        $mform->addElement('advcheckbox', 'shuffleanswers', ' ',
-                                        get_string('shuffleimages', 'qtype_'.$this->qtype()));
-        $mform->setDefault('shuffleanswers', 0);
+        $mform->addElement('advcheckbox', 'shuffleanswers', get_string('shuffleimages', 'qtype_'.$this->qtype()));
+        $mform->setDefault('shuffleanswers', $this->get_default_value('shuffleanswers', 0));
         $this->repeat_elements($this->draggable_item($mform), $itemrepeatsatstart,
                 $this->draggable_items_repeated_options(),
                 'noitems', 'additems', self::ADD_NUM_ITEMS,
@@ -105,16 +94,10 @@ class qtype_ddmarker_edit_form extends qtype_ddtoimage_edit_form_base {
     }
 
     protected function drop_zone($mform, $imagerepeats) {
-        $dropzoneitem = array();
-
         $grouparray = array();
         $shapearray = qtype_ddmarker_shape::shape_options();
         $grouparray[] = $mform->createElement('select', 'shape',
                                     get_string('shape', 'qtype_ddmarker'), $shapearray);
-        $grouparray[] = $mform->createElement('text', 'coords',
-                                    get_string('coords', 'qtype_ddmarker'),
-                                    array('size' => 50, 'class' => 'tweakcss'));
-        $mform->setType('coords', PARAM_RAW); // These are validated manually.
         $markernos = array();
         $markernos[0] = '';
         for ($i = 1; $i <= $imagerepeats; $i += 1) {
@@ -122,6 +105,10 @@ class qtype_ddmarker_edit_form extends qtype_ddtoimage_edit_form_base {
         }
         $grouparray[] = $mform->createElement('select', 'choice',
                                     get_string('marker', 'qtype_ddmarker'), $markernos);
+        $grouparray[] = $mform->createElement('text', 'coords',
+                get_string('coords', 'qtype_ddmarker'),
+                array('size' => 30, 'class' => 'tweakcss'));
+        $mform->setType('coords', PARAM_RAW); // These are validated manually.
         $dropzone = $mform->createElement('group', 'drops',
                 get_string('dropzone', 'qtype_ddmarker', '{no}'), $grouparray);
         return array($dropzone);
@@ -141,8 +128,7 @@ class qtype_ddmarker_edit_form extends qtype_ddtoimage_edit_form_base {
                 array('rows' => 5), $this->editoroptions);
         $repeatedoptions['hint']['type'] = PARAM_RAW;
 
-        $repeated[] = $mform->createElement('checkbox', 'hintshownumcorrect',
-                        get_string('options', 'question'),
+        $repeated[] = $mform->createElement('checkbox', 'hintshownumcorrect', '',
                         get_string('shownumpartscorrect', 'question'));
         $repeated[] = $mform->createElement('checkbox', 'hintoptions',
                         '',
@@ -228,12 +214,13 @@ class qtype_ddmarker_edit_form extends qtype_ddtoimage_edit_form_base {
             $errors["bgimage"] = get_string('formerror_nobgimage', 'qtype_ddmarker');
         }
 
-        $allchoices = array();
+        $dropfound = false;
         for ($i = 0; $i < $data['nodropzone']; $i++) {
             $choice = $data['drops'][$i]['choice'];
             $choicepresent = ($choice !== '0');
 
             if ($choicepresent) {
+                $dropfound = true;
                 // Test coords here.
                 if ($bgimagesize !== null) {
                     $shape = $data['drops'][$i]['shape'];
@@ -250,20 +237,32 @@ class qtype_ddmarker_edit_form extends qtype_ddtoimage_edit_form_base {
                 }
             } else {
                 if (trim($data['drops'][$i]['coords']) !== '') {
+                    $dropfound = true;
                     $errorcode = 'noitemselected';
                     $errors["drops[{$i}]"] = get_string('formerror_'.$errorcode, 'qtype_ddmarker');
                 }
             }
-
         }
+        if (!$dropfound) {
+            $errors['drops[0]'] = get_string('formerror_droprequired', 'qtype_ddmarker');
+        }
+
+        $markerfound = false;
         for ($dragindex = 0; $dragindex < $data['noitems']; $dragindex++) {
             $label = $data['drags'][$dragindex]['label'];
+            if ($label !== '') {
+                $markerfound = true;
+            }
             if ($label != strip_tags($label, QTYPE_DDMARKER_ALLOWED_TAGS_IN_MARKER)) {
                 $errors["drags[{$dragindex}]"]
                     = get_string('formerror_onlysometagsallowed', 'qtype_ddmarker',
                                   s(QTYPE_DDMARKER_ALLOWED_TAGS_IN_MARKER));
             }
         }
+        if (!$markerfound) {
+            $errors['drags[0]'] = get_string('formerror_dragrequired', 'qtype_ddmarker');
+        }
+
         return $errors;
     }
 

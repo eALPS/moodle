@@ -16,59 +16,40 @@ Feature: A teacher can set available from and deadline dates to access a lesson
       | user | course | role |
       | teacher1 | C1 | editingteacher |
       | student1 | C1 | student |
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
+    And the following "activities" exist:
+      | activity   | name        | course | idnumber |
+      | lesson     | Test lesson | C1     | lesson1  |
+    And the following "mod_lesson > pages" exist:
+      | lesson      | qtype   | title            | content              |
+      | Test lesson | content | First page name  | First page contents  |
+    And the following "mod_lesson > answers" exist:
+      | page             | answer        | jumpto    |
+      | First page name  | Next page     | Next page |
 
   Scenario: Forbidding lesson accesses until a specified date
-    Given I add a "Lesson" to section "1"
-    And I expand all fieldsets
+    Given I am on the "Test lesson" "lesson activity editing" page logged in as teacher1
     And I set the field "id_available_enabled" to "1"
     And I set the following fields to these values:
-      | Name | Test lesson |
-      | Description | Test lesson description |
       | available[day] | 1 |
       | available[month] | January |
-      | available[year] | 2020 |
+      | available[year] | 2030 |
       | available[hour] | 08 |
       | available[minute] | 00 |
     And I press "Save and display"
-    And I follow "Test lesson"
-    And I follow "Add a content page"
-    And I set the following fields to these values:
-      | Page title | First page name |
-      | Page contents | First page contents |
-      | Description | The first one |
-    And I press "Save page"
-    And I log out
-    And I log in as "student1"
-    And I follow "Course 1"
-    When I follow "Test lesson"
-    Then I should see "This lesson will be open on Wednesday, 1 January 2020, 8:00"
+    When I am on the "Test lesson" "lesson activity" page logged in as student1
+    Then the activity date in "Test lesson" should contain "Opens: Tuesday, 1 January 2030, 8:00"
     And I should not see "First page contents"
 
-  Scenario: Forbidding lesson accesses until a specified date
-    Given I add a "Lesson" to section "1"
+  Scenario: Forbidding lesson accesses after a specified date
+    Given I am on the "Test lesson" "lesson activity editing" page logged in as teacher1
     And I set the field "id_deadline_enabled" to "1"
     And I set the following fields to these values:
-      | Name | Test lesson |
-      | Description | Test lesson description |
       | deadline[day] | 1 |
       | deadline[month] | January |
       | deadline[year] | 2000 |
       | deadline[hour] | 08 |
       | deadline[minute] | 00 |
     And I press "Save and display"
-    And I follow "Test lesson"
-    And I follow "Add a content page"
-    And I set the following fields to these values:
-      | Page title | First page name |
-      | Page contents | First page contents |
-      | Description | The first one |
-    And I press "Save page"
-    And I log out
-    And I log in as "student1"
-    And I follow "Course 1"
-    When I follow "Test lesson"
-    Then I should see "This lesson closed on Saturday, 1 January 2000, 8:00"
+    When I am on the "Test lesson" "lesson activity" page logged in as student1
+    Then the activity date in "Test lesson" should contain "Closed: Saturday, 1 January 2000, 8:00"
     And I should not see "First page contents"

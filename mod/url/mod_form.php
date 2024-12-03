@@ -38,6 +38,7 @@ class mod_url_mod_form extends moodleform_mod {
         //-------------------------------------------------------
         $mform->addElement('header', 'general', get_string('general', 'form'));
         $mform->addElement('text', 'name', get_string('name'), array('size'=>'48'));
+        $mform->addHelpButton('name', 'name', 'url');
         if (!empty($CFG->formatstringstriptags)) {
             $mform->setType('name', PARAM_TEXT);
         } else {
@@ -75,14 +76,14 @@ class mod_url_mod_form extends moodleform_mod {
         if (array_key_exists(RESOURCELIB_DISPLAY_POPUP, $options)) {
             $mform->addElement('text', 'popupwidth', get_string('popupwidth', 'url'), array('size'=>3));
             if (count($options) > 1) {
-                $mform->disabledIf('popupwidth', 'display', 'noteq', RESOURCELIB_DISPLAY_POPUP);
+                $mform->hideIf('popupwidth', 'display', 'noteq', RESOURCELIB_DISPLAY_POPUP);
             }
             $mform->setType('popupwidth', PARAM_INT);
             $mform->setDefault('popupwidth', $config->popupwidth);
 
             $mform->addElement('text', 'popupheight', get_string('popupheight', 'url'), array('size'=>3));
             if (count($options) > 1) {
-                $mform->disabledIf('popupheight', 'display', 'noteq', RESOURCELIB_DISPLAY_POPUP);
+                $mform->hideIf('popupheight', 'display', 'noteq', RESOURCELIB_DISPLAY_POPUP);
             }
             $mform->setType('popupheight', PARAM_INT);
             $mform->setDefault('popupheight', $config->popupheight);
@@ -92,34 +93,36 @@ class mod_url_mod_form extends moodleform_mod {
           array_key_exists(RESOURCELIB_DISPLAY_EMBED, $options) or
           array_key_exists(RESOURCELIB_DISPLAY_FRAME, $options)) {
             $mform->addElement('checkbox', 'printintro', get_string('printintro', 'url'));
-            $mform->disabledIf('printintro', 'display', 'eq', RESOURCELIB_DISPLAY_POPUP);
-            $mform->disabledIf('printintro', 'display', 'eq', RESOURCELIB_DISPLAY_OPEN);
-            $mform->disabledIf('printintro', 'display', 'eq', RESOURCELIB_DISPLAY_NEW);
+            $mform->hideIf('printintro', 'display', 'eq', RESOURCELIB_DISPLAY_POPUP);
+            $mform->hideIf('printintro', 'display', 'eq', RESOURCELIB_DISPLAY_OPEN);
+            $mform->hideIf('printintro', 'display', 'eq', RESOURCELIB_DISPLAY_NEW);
             $mform->setDefault('printintro', $config->printintro);
         }
 
         //-------------------------------------------------------
-        $mform->addElement('header', 'parameterssection', get_string('parametersheader', 'url'));
-        $mform->addElement('static', 'parametersinfo', '', get_string('parametersheader_help', 'url'));
+        if ($config->allowvariables) {
+            $mform->addElement('header', 'parameterssection', get_string('parametersheader', 'url'));
+            $mform->addElement('static', 'parametersinfo', '', get_string('parametersheader_help', 'url'));
 
-        if (empty($this->current->parameters)) {
-            $parcount = 5;
-        } else {
-            $parcount = 5 + count(unserialize($this->current->parameters));
-            $parcount = ($parcount > 100) ? 100 : $parcount;
-        }
-        $options = url_get_variable_options($config);
+            if (empty($this->current->parameters)) {
+                $parcount = 5;
+            } else {
+                $parcount = 5 + count((array)unserialize_array($this->current->parameters));
+                $parcount = ($parcount > 100) ? 100 : $parcount;
+            }
+            $options = url_get_variable_options($config);
 
-        for ($i=0; $i < $parcount; $i++) {
-            $parameter = "parameter_$i";
-            $variable  = "variable_$i";
-            $pargroup = "pargoup_$i";
-            $group = array(
-                $mform->createElement('text', $parameter, '', array('size'=>'12')),
-                $mform->createElement('selectgroups', $variable, '', $options),
-            );
-            $mform->addGroup($group, $pargroup, get_string('parameterinfo', 'url'), ' ', false);
-            $mform->setType($parameter, PARAM_RAW);
+            for ($i = 0; $i < $parcount; $i++) {
+                $parameter = "parameter_$i";
+                $variable = "variable_$i";
+                $pargroup = "pargoup_$i";
+                $group = [
+                    $mform->createElement('text', $parameter, '', ['size' => '12']),
+                    $mform->createElement('selectgroups', $variable, '', $options),
+                ];
+                $mform->addGroup($group, $pargroup, get_string('parameterinfo', 'url'), ' ', false);
+                $mform->setType($parameter, PARAM_RAW);
+            }
         }
 
         //-------------------------------------------------------
@@ -131,7 +134,7 @@ class mod_url_mod_form extends moodleform_mod {
 
     function data_preprocessing(&$default_values) {
         if (!empty($default_values['displayoptions'])) {
-            $displayoptions = unserialize($default_values['displayoptions']);
+            $displayoptions = (array) unserialize_array($default_values['displayoptions']);
             if (isset($displayoptions['printintro'])) {
                 $default_values['printintro'] = $displayoptions['printintro'];
             }
@@ -143,7 +146,7 @@ class mod_url_mod_form extends moodleform_mod {
             }
         }
         if (!empty($default_values['parameters'])) {
-            $parameters = unserialize($default_values['parameters']);
+            $parameters = (array) unserialize_array($default_values['parameters']);
             $i = 0;
             foreach ($parameters as $parameter=>$variable) {
                 $default_values['parameter_'.$i] = $parameter;

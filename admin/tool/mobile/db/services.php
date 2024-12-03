@@ -30,7 +30,9 @@ $functions = array(
         'methodname'  => 'get_plugins_supporting_mobile',
         'description' => 'Returns a list of Moodle plugins supporting the mobile app.',
         'type'        => 'read',
-        'services'    => array(MOODLE_OFFICIAL_MOBILE_SERVICE)
+        'services'    => array(MOODLE_OFFICIAL_MOBILE_SERVICE),
+        'ajax'          => true,
+        'loginrequired' => false,
     ),
 
     'tool_mobile_get_public_config' => array(
@@ -55,9 +57,45 @@ $functions = array(
         'classname'   => 'tool_mobile\external',
         'methodname'  => 'get_autologin_key',
         'description' => 'Creates an auto-login key for the current user.
-                            Is created only in https sites and is restricted by time and ip address.',
+                            Is created only in https sites and is restricted by time, ip address and only works if the request
+                            comes from the Moodle mobile or desktop app.',
         'type'        => 'write',
         'services'    => array(MOODLE_OFFICIAL_MOBILE_SERVICE),
-    )
-);
+    ),
 
+    'tool_mobile_get_content' => array(
+        'classname'   => 'tool_mobile\external',
+        'methodname'  => 'get_content',
+        'description' => 'Returns a piece of content to be displayed in the Mobile app.',
+        'type'        => 'read',
+        'services'    => array(MOODLE_OFFICIAL_MOBILE_SERVICE),
+    ),
+
+    'tool_mobile_call_external_functions' => array(
+        'classname'   => 'tool_mobile\external',
+        'methodname'  => 'call_external_functions',
+        'description' => 'Call multiple external functions and return all responses.',
+        'type'        => 'write',
+        'services'    => array(MOODLE_OFFICIAL_MOBILE_SERVICE),
+    ),
+
+    'tool_mobile_validate_subscription_key' => array(
+        'classname'   => 'tool_mobile\external',
+        'methodname'  => 'validate_subscription_key',
+        'description' => 'Check if the given site subscription key is valid.',
+        'type'        => 'write',
+        'services'    => array(MOODLE_OFFICIAL_MOBILE_SERVICE),
+        'ajax'          => true,
+        'loginrequired' => false,
+    ),
+
+    'tool_mobile_get_tokens_for_qr_login' => array(
+        'classname'   => 'tool_mobile\external',
+        'methodname'  => 'get_tokens_for_qr_login',
+        'description' => 'Returns a WebService token (and private token) for QR login.',
+        'type'        => 'read',
+        'services'    => array(MOODLE_OFFICIAL_MOBILE_SERVICE),
+        'ajax'          => true,
+        'loginrequired' => false,
+    ),
+);

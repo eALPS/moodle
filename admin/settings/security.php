@@ -1,4 +1,29 @@
 <?php
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * Adds security related settings links for security category to admin tree.
+ *
+ * @copyright  1999 Martin Dougiamas  http://dougiamas.com
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+defined('MOODLE_INTERNAL') || die();
+
+use core_admin\local\settings\filesize;
 
 if ($hassiteconfig) { // speedup for non-admins, add all caps used on this page
 
@@ -17,7 +42,12 @@ if ($hassiteconfig) { // speedup for non-admins, add all caps used on this page
     $temp->add(new admin_setting_configcheckbox('forcelogin', new lang_string('forcelogin', 'admin'), new lang_string('configforcelogin', 'admin'), 0));
     $temp->add(new admin_setting_configcheckbox('forceloginforprofiles', new lang_string('forceloginforprofiles', 'admin'), new lang_string('configforceloginforprofiles', 'admin'), 1));
     $temp->add(new admin_setting_configcheckbox('forceloginforprofileimage', new lang_string('forceloginforprofileimage', 'admin'), new lang_string('forceloginforprofileimage_help', 'admin'), 0));
-    $temp->add(new admin_setting_configcheckbox('opentogoogle', new lang_string('opentogoogle', 'admin'), new lang_string('configopentogoogle', 'admin'), 0));
+    $temp->add(new admin_setting_configcheckbox('opentowebcrawlers', new lang_string('opentowebcrawlers', 'admin'), new lang_string('configopentowebcrawlers', 'admin'), 0));
+    $temp->add(new admin_setting_configselect('allowindexing', new lang_string('allowindexing', 'admin'), new lang_string('allowindexing_desc', 'admin'),
+        0,
+        array(0 => new lang_string('allowindexingexceptlogin', 'admin'),
+              1 => new lang_string('allowindexingeverywhere', 'admin'),
+              2 => new lang_string('allowindexingnowhere', 'admin'))));
     $temp->add(new admin_setting_pickroles('profileroles',
         new lang_string('profileroles','admin'),
         new lang_string('configprofileroles', 'admin'),
@@ -31,12 +61,9 @@ if ($hassiteconfig) { // speedup for non-admins, add all caps used on this page
     // maxbytes set to 0 will allow the maximum server limit for uploads
     $temp->add(new admin_setting_configselect('maxbytes', new lang_string('maxbytes', 'admin'), new lang_string('configmaxbytes', 'admin'), 0, $max_upload_choices));
     // 100MB
-    $defaultuserquota = 104857600;
-    $params = new stdClass();
-    $params->bytes = $defaultuserquota;
-    $params->displaysize = display_size($defaultuserquota);
-    $temp->add(new admin_setting_configtext('userquota', new lang_string('userquota', 'admin'),
-                new lang_string('configuserquota', 'admin', $params), $defaultuserquota, PARAM_INT, 30));
+    $defaultuserquota = 100 * filesize::UNIT_MB;
+    $temp->add(new filesize('userquota', new lang_string('userquota', 'admin'),
+            new lang_string('userquota_desc', 'admin'), $defaultuserquota));
 
     $temp->add(new admin_setting_configcheckbox('allowobjectembed', new lang_string('allowobjectembed', 'admin'), new lang_string('configallowobjectembed', 'admin'), 0));
     $temp->add(new admin_setting_configcheckbox('enabletrusttext', new lang_string('enabletrusttext', 'admin'), new lang_string('configenabletrusttext', 'admin'), 0));
@@ -49,8 +76,7 @@ if ($hassiteconfig) { // speedup for non-admins, add all caps used on this page
                        3600 => new lang_string('numminutes', '', 60))));
 
     $temp->add(new admin_setting_configcheckbox('extendedusernamechars', new lang_string('extendedusernamechars', 'admin'), new lang_string('configextendedusernamechars', 'admin'), 0));
-    $temp->add(new admin_setting_configtext('sitepolicy', new lang_string('sitepolicy', 'admin'), new lang_string('sitepolicy_help', 'admin'), '', PARAM_RAW));
-    $temp->add(new admin_setting_configtext('sitepolicyguest', new lang_string('sitepolicyguest', 'admin'), new lang_string('sitepolicyguest_help', 'admin'), (isset($CFG->sitepolicy) ? $CFG->sitepolicy : ''), PARAM_RAW));
+
     $temp->add(new admin_setting_configcheckbox('extendedusernamechars', new lang_string('extendedusernamechars', 'admin'), new lang_string('configextendedusernamechars', 'admin'), 0));
     $temp->add(new admin_setting_configcheckbox('keeptagnamecase', new lang_string('keeptagnamecase','admin'),new lang_string('configkeeptagnamecase', 'admin'),'1'));
 
@@ -74,6 +100,9 @@ if ($hassiteconfig) { // speedup for non-admins, add all caps used on this page
     $temp->add(new admin_setting_configtext('minpasswordupper', new lang_string('minpasswordupper', 'admin'), new lang_string('configminpasswordupper', 'admin'), 1, PARAM_INT));
     $temp->add(new admin_setting_configtext('minpasswordnonalphanum', new lang_string('minpasswordnonalphanum', 'admin'), new lang_string('configminpasswordnonalphanum', 'admin'), 1, PARAM_INT));
     $temp->add(new admin_setting_configtext('maxconsecutiveidentchars', new lang_string('maxconsecutiveidentchars', 'admin'), new lang_string('configmaxconsecutiveidentchars', 'admin'), 0, PARAM_INT));
+    $temp->add(new admin_setting_configcheckbox('passwordpolicycheckonlogin',
+        new lang_string('passwordpolicycheckonlogin', 'admin'),
+        new lang_string('configpasswordpolicycheckonlogin', 'admin'), 0));
 
     $temp->add(new admin_setting_configtext('passwordreuselimit',
         new lang_string('passwordreuselimit', 'admin'),
@@ -97,36 +126,87 @@ if ($hassiteconfig) { // speedup for non-admins, add all caps used on this page
     $temp->add($adminsetting);
     $temp->add(new admin_setting_configcheckbox('passwordchangelogout',
         new lang_string('passwordchangelogout', 'admin'),
-        new lang_string('passwordchangelogout_desc', 'admin'), 0));
+        new lang_string('passwordchangelogout_desc', 'admin'), 1));
 
     $temp->add(new admin_setting_configcheckbox('passwordchangetokendeletion',
         new lang_string('passwordchangetokendeletion', 'admin'),
         new lang_string('passwordchangetokendeletion_desc', 'admin'), 0));
+
+    $temp->add(new admin_setting_configduration('tokenduration',
+        new lang_string('tokenduration', 'admin'),
+        new lang_string('tokenduration_desc', 'admin'), 12 * WEEKSECS, WEEKSECS));
 
     $temp->add(new admin_setting_configcheckbox('groupenrolmentkeypolicy', new lang_string('groupenrolmentkeypolicy', 'admin'), new lang_string('groupenrolmentkeypolicy_desc', 'admin'), 1));
     $temp->add(new admin_setting_configcheckbox('disableuserimages', new lang_string('disableuserimages', 'admin'), new lang_string('configdisableuserimages', 'admin'), 0));
     $temp->add(new admin_setting_configcheckbox('emailchangeconfirmation', new lang_string('emailchangeconfirmation', 'admin'), new lang_string('configemailchangeconfirmation', 'admin'), 1));
     $temp->add(new admin_setting_configselect('rememberusername', new lang_string('rememberusername','admin'), new lang_string('rememberusername_desc','admin'), 2, array(1=>new lang_string('yes'), 0=>new lang_string('no'), 2=>new lang_string('optional'))));
     $temp->add(new admin_setting_configcheckbox('strictformsrequired', new lang_string('strictformsrequired', 'admin'), new lang_string('configstrictformsrequired', 'admin'), 0));
+
+    $temp->add(new admin_setting_heading('adminpresets', new lang_string('siteadminpresetspluginname', 'core_adminpresets'), ''));
+    $sensiblesettingsdefault = 'recaptchapublickey@@none, recaptchaprivatekey@@none, googlemapkey3@@none, ';
+    $sensiblesettingsdefault .= 'secretphrase@@url, cronremotepassword@@none, smtpuser@@none, ';
+    $sensiblesettingsdefault .= 'smtppass@@none, proxypassword@@none, quizpassword@@quiz, allowedip@@none, blockedip@@none, ';
+    $sensiblesettingsdefault .= 'dbpass@@logstore_database, messageinbound_hostpass@@none, ';
+    $sensiblesettingsdefault .= 'bind_pw@@auth_cas, pass@@auth_db, bind_pw@@auth_ldap, ';
+    $sensiblesettingsdefault .= 'dbpass@@enrol_database, bind_pw@@enrol_ldap, ';
+    $sensiblesettingsdefault .= 'server_password@@search_solr, ssl_keypassword@@search_solr, ';
+    $sensiblesettingsdefault .= 'alternateserver_password@@search_solr, alternatessl_keypassword@@search_solr, ';
+    $sensiblesettingsdefault .= 'test_password@@cachestore_redis, password@@mlbackend_python, ';
+    $sensiblesettingsdefault .= 'badges_badgesalt@@none, calendar_exportsalt@@none, ';
+    $sensiblesettingsdefault .= 'bigbluebuttonbn_shared_secret@@none, apikey@@tiny_premium, ';
+    $sensiblesettingsdefault .= 'matrixaccesstoken@@communication_matrix, api_secret@@factor_sms';
+    $temp->add(new admin_setting_configtextarea('adminpresets/sensiblesettings',
+            get_string('sensiblesettings', 'core_adminpresets'),
+            get_string('sensiblesettingstext', 'core_adminpresets'),
+            $sensiblesettingsdefault, PARAM_TEXT));
+
     $ADMIN->add('security', $temp);
-
-
-
 
     // "httpsecurity" settingpage
     $temp = new admin_settingpage('httpsecurity', new lang_string('httpsecurity', 'admin'));
-    $temp->add(new admin_setting_configcheckbox('loginhttps', new lang_string('loginhttps', 'admin'), new lang_string('configloginhttps', 'admin'), 0));
+
     $temp->add(new admin_setting_configcheckbox('cookiesecure', new lang_string('cookiesecure', 'admin'), new lang_string('configcookiesecure', 'admin'), 1));
-    $temp->add(new admin_setting_configcheckbox('cookiehttponly', new lang_string('cookiehttponly', 'admin'), new lang_string('configcookiehttponly', 'admin'), 0));
     $temp->add(new admin_setting_configcheckbox('allowframembedding', new lang_string('allowframembedding', 'admin'), new lang_string('allowframembedding_help', 'admin'), 0));
 
     // Settings elements used by the \core\files\curl_security_helper class.
+    $blockedhostsdefault = [
+        '127.0.0.0/8',
+        '192.168.0.0/16',
+        '10.0.0.0/8',
+        '172.16.0.0/12',
+        '0.0.0.0',
+        'localhost',
+        '169.254.169.254',
+        '0000::1',
+    ];
+    $allowedportsdefault = ['443', '80'];
+
+    // By default, block various common internal network or cloud provider hosts.
     $temp->add(new admin_setting_configmixedhostiplist('curlsecurityblockedhosts',
-               new lang_string('curlsecurityblockedhosts', 'admin'),
-               new lang_string('curlsecurityblockedhostssyntax', 'admin'), ""));
+        new lang_string('curlsecurityblockedhosts', 'admin'),
+        new lang_string('curlsecurityblockedhostssyntax', 'admin'), implode(PHP_EOL, $blockedhostsdefault)));
+
+    // By default, only allow web ports.
     $temp->add(new admin_setting_configportlist('curlsecurityallowedport',
-               new lang_string('curlsecurityallowedport', 'admin'),
-               new lang_string('curlsecurityallowedportsyntax', 'admin'), ""));
+        new lang_string('curlsecurityallowedport', 'admin'),
+        new lang_string('curlsecurityallowedportsyntax', 'admin'), implode(PHP_EOL, $allowedportsdefault)));
+
+    // HTTP Header referrer policy settings.
+    $referreroptions = [
+        'default' => get_string('referrernone', 'admin'),
+        'no-referrer' => 'no-referrer',
+        'no-referrer-when-downgrade' => 'no-referrer-when-downgrade',
+        'origin' => 'origin',
+        'origin-when-cross-origin' => 'origin-when-cross-origin',
+        'same-origin' => 'same-origin',
+        'strict-origin' => 'strict-origin',
+        'strict-origin-when-cross-origin' => 'strict-origin-when-cross-origin',
+        'unsafe-url' => 'unsafe-url',
+    ];
+    $temp->add(new admin_setting_configselect('referrerpolicy',
+            new lang_string('referrerpolicy', 'admin'),
+            new lang_string('referrerpolicydesc', 'admin'), 'default', $referreroptions));
+
     $ADMIN->add('security', $temp);
 
     // "notifications" settingpage

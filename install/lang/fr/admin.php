@@ -1,6 +1,5 @@
 <?php
-
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Automatically generated strings for Moodle installer
@@ -38,8 +37,8 @@ $string['clitypevalue'] = 'type valeur';
 $string['clitypevaluedefault'] = 'type valeur, tapez Entrée pour utiliser la valeur par défaut ({$a})';
 $string['cliunknowoption'] = 'Options non reconnues :
  {$a}.
-Utilisez l\'option --help.';
+Utilisez l’option --help.';
 $string['cliyesnoprompt'] = 'Tapez y (pour oui) ou n (pour non)';
-$string['environmentrequireinstall'] = 'L\'extension doit être installée et activée';
+$string['environmentrequireinstall'] = 'L’extension doit être installée et activée';
 $string['environmentrequireversion'] = 'La version {$a->needed} est requise ; vous utilisez actuellement la version {$a->current}';
 $string['upgradekeyset'] = 'Mettre à jour la clef (laisser vide pour ne pas la définir)';

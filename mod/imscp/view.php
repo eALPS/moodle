@@ -69,7 +69,6 @@ if (!$imscp->structure) {
 }
 
 echo $OUTPUT->header();
-echo $OUTPUT->heading(format_string($imscp->name));
 
 imscp_print_content($imscp, $cm, $course);
 

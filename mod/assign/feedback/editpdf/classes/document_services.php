@@ -38,10 +38,14 @@ use DOMDocument;
  */
 class document_services {
 
+    /** Compoment name */
+    const COMPONENT = "assignfeedback_editpdf";
     /** File area for generated pdf */
     const FINAL_PDF_FILEAREA = 'download';
     /** File area for combined pdf */
     const COMBINED_PDF_FILEAREA = 'combined';
+    /** File area for partial combined pdf */
+    const PARTIAL_PDF_FILEAREA = 'partial';
     /** File area for importing html */
     const IMPORT_HTML_FILEAREA = 'importhtml';
     /** File area for page images */
@@ -52,6 +56,10 @@ class document_services {
     const STAMPS_FILEAREA = 'stamps';
     /** Filename for combined pdf */
     const COMBINED_PDF_FILENAME = 'combined.pdf';
+    /**  Temporary place to save JPG Image to PDF file */
+    const TMP_JPG_TO_PDF_FILEAREA = 'tmp_jpg_to_pdf';
+    /**  Temporary place to save (Automatically) Rotated JPG FILE */
+    const TMP_ROTATED_JPG_FILEAREA = 'tmp_rotated_jpg';
     /** Hash of blank pdf */
     const BLANK_PDF_HASH = '4c803c92c71f21b423d13de570c8a09e0a31c718';
 
@@ -83,7 +91,7 @@ EOD;
      * This function will take an int or an assignment instance and
      * return an assignment instance. It is just for convenience.
      * @param int|\assign $assignment
-     * @return assign
+     * @return \assign
      */
     private static function get_assignment_from_param($assignment) {
         global $CFG;
@@ -91,7 +99,7 @@ EOD;
         require_once($CFG->dirroot . '/mod/assign/locallib.php');
 
         if (!is_object($assignment)) {
-            $cm = \get_coursemodule_from_instance('assign', $assignment, 0, false, MUST_EXIST);
+            $cm = get_coursemodule_from_instance('assign', $assignment, 0, false, MUST_EXIST);
             $context = \context_module::instance($cm->id);
 
             $assignment = new \assign($context, null, null);
@@ -120,22 +128,22 @@ EOD;
      * @return string New html with no image tags.
      */
     protected static function strip_images($html) {
+        // Load HTML and suppress any parsing errors (DOMDocument->loadHTML() does not current support HTML5 tags).
         $dom = new DOMDocument();
-        $dom->loadHTML("<?xml version=\"1.0\" encoding=\"UTF-8\" ?>" . $html);
-        $images = $dom->getElementsByTagName('img');
-        $i = 0;
+        libxml_use_internal_errors(true);
+        $dom->loadHTML('<?xml version="1.0" encoding="UTF-8" ?>' . $html);
+        libxml_clear_errors();
 
-        for ($i = ($images->length - 1); $i >= 0; $i--) {
-            $node = $images->item($i);
+        // Find all img tags.
+        if ($imgnodes = $dom->getElementsByTagName('img')) {
+            // Replace img nodes with the img alt text without overriding DOM elements.
+            for ($i = ($imgnodes->length - 1); $i >= 0; $i--) {
+                $imgnode = $imgnodes->item($i);
+                $alt = ($imgnode->hasAttribute('alt')) ? ' [ ' . $imgnode->getAttribute('alt') . ' ] ' : ' ';
+                $textnode = $dom->createTextNode($alt);
 
-            if ($node->hasAttribute('alt')) {
-                $replacement = ' [ ' . $node->getAttribute('alt') . ' ] ';
-            } else {
-                $replacement = ' ';
+                $imgnode->parentNode->replaceChild($textnode, $imgnode);
             }
-
-            $text = $dom->createTextNode($replacement);
-            $node->parentNode->replaceChild($text, $node);
         }
         $count = 1;
         return str_replace("<?xml version=\"1.0\" encoding=\"UTF-8\" ?>", "", $dom->saveHTML(), $count);
@@ -145,19 +153,20 @@ EOD;
      * This function will search for all files that can be converted
      * and concatinated into a PDF (1.4) - for any submission plugin
      * for this students attempt.
+     *
      * @param int|\assign $assignment
      * @param int $userid
      * @param int $attemptnumber (-1 means latest attempt)
-     * @return array(stored_file)
+     * @return combined_document
      */
-    public static function list_compatible_submission_files_for_attempt($assignment, $userid, $attemptnumber) {
+    protected static function list_compatible_submission_files_for_attempt($assignment, $userid, $attemptnumber) {
         global $USER, $DB;
 
         $assignment = self::get_assignment_from_param($assignment);
 
         // Capability checks.
         if (!$assignment->can_view_submission($userid)) {
-            \print_error('nopermission');
+            throw new \moodle_exception('nopermission');
         }
 
         $files = array();
@@ -171,22 +180,42 @@ EOD;
 
         // User has not submitted anything yet.
         if (!$submission) {
-            return $files;
+            return new combined_document();
         }
 
         $fs = get_file_storage();
+        $converter = new \core_files\converter();
         // Ask each plugin for it's list of files.
         foreach ($assignment->get_submission_plugins() as $plugin) {
             if ($plugin->is_enabled() && $plugin->is_visible()) {
                 $pluginfiles = $plugin->get_files($submission, $user);
                 foreach ($pluginfiles as $filename => $file) {
                     if ($file instanceof \stored_file) {
-                        if ($file->get_mimetype() === 'application/pdf') {
+                        $mimetype = $file->get_mimetype();
+                        // PDF File, no conversion required.
+                        if ($mimetype === 'application/pdf') {
                             $files[$filename] = $file;
-                        } else if ($convertedfile = $fs->get_converted_document($file, 'pdf')) {
+                        } else if ($plugin->allow_image_conversion() && $mimetype === "image/jpeg") {
+                            // Rotates image based on the EXIF value.
+                            list ($rotateddata, $size) = $file->rotate_image();
+                            if ($rotateddata) {
+                                $file = self::save_rotated_image_file($assignment, $userid, $attemptnumber,
+                                    $rotateddata, $filename);
+                            }
+                            // Save as PDF file if there is no available converter.
+                            if (!$converter->can_convert_format_to('jpg', 'pdf')) {
+                                $pdffile = self::save_jpg_to_pdf($assignment, $userid, $attemptnumber, $file, $size);
+                                if ($pdffile) {
+                                    $files[$filename] = $pdffile;
+                                }
+                            }
+                        }
+                        // The file has not been converted to PDF, try to convert it to PDF.
+                        if (!isset($files[$filename])
+                            && $convertedfile = $converter->start_conversion($file, 'pdf')) {
                             $files[$filename] = $convertedfile;
                         }
-                    } else {
+                    } else if ($converter->can_convert_format_to('html', 'pdf')) {
                         // Create a tmp stored_file from this html string.
                         $file = reset($file);
                         // Strip image tags, because they will not be resolvable.
@@ -199,9 +228,28 @@ EOD;
                         $record->filepath = '/';
                         $record->filename = $plugin->get_type() . '-' . $filename;
 
-                        $htmlfile = $fs->create_file_from_string($record, $file);
-                        $convertedfile = $fs->get_converted_document($htmlfile, 'pdf');
-                        $htmlfile->delete();
+                        $htmlfile = $fs->get_file($record->contextid,
+                                $record->component,
+                                $record->filearea,
+                                $record->itemid,
+                                $record->filepath,
+                                $record->filename);
+
+                        $newhash = sha1($file);
+
+                        // If the file exists, and the content hash doesn't match, remove it.
+                        if ($htmlfile && $newhash !== $htmlfile->get_contenthash()) {
+                            $htmlfile->delete();
+                            $htmlfile = false;
+                        }
+
+                        // If the file doesn't exist, or if it was removed above, create a new one.
+                        if (!$htmlfile) {
+                            $htmlfile = $fs->create_file_from_string($record, $file);
+                        }
+
+                        $convertedfile = $converter->start_conversion($htmlfile, 'pdf');
+
                         if ($convertedfile) {
                             $files[$filename] = $convertedfile;
                         }
@@ -209,25 +257,28 @@ EOD;
                 }
             }
         }
-        return $files;
+        $combineddocument = new combined_document();
+        $combineddocument->set_source_files($files);
+
+        return $combineddocument;
     }
 
     /**
-     * This function return the combined pdf for all valid submission files.
+     * Fetch the current combined document ready for state checking.
+     *
      * @param int|\assign $assignment
      * @param int $userid
      * @param int $attemptnumber (-1 means latest attempt)
-     * @return stored_file
+     * @return combined_document
      */
-    public static function get_combined_pdf_for_attempt($assignment, $userid, $attemptnumber) {
-
+    public static function get_combined_document_for_attempt($assignment, $userid, $attemptnumber) {
         global $USER, $DB;
 
         $assignment = self::get_assignment_from_param($assignment);
 
         // Capability checks.
         if (!$assignment->can_view_submission($userid)) {
-            \print_error('nopermission');
+            throw new \moodle_exception('nopermissiontoaccesspage', 'error');
         }
 
         $grade = $assignment->get_user_grade($userid, true, $attemptnumber);
@@ -240,112 +291,64 @@ EOD;
         $contextid = $assignment->get_context()->id;
         $component = 'assignfeedback_editpdf';
         $filearea = self::COMBINED_PDF_FILEAREA;
+        $partialfilearea = self::PARTIAL_PDF_FILEAREA;
         $itemid = $grade->id;
         $filepath = '/';
         $filename = self::COMBINED_PDF_FILENAME;
-        $fs = \get_file_storage();
+        $fs = get_file_storage();
 
-        if (!$combinedpdf = $fs->get_file($contextid, $component, $filearea, $itemid, $filepath, $filename)) {
-            return self::generate_combined_pdf_for_attempt($assignment, $userid, $attemptnumber);
+        $partialpdf = $fs->get_file($contextid, $component, $partialfilearea, $itemid, $filepath, $filename);
+        if (!empty($partialpdf)) {
+            $combinedpdf = $partialpdf;
+        } else {
+            $combinedpdf = $fs->get_file($contextid, $component, $filearea, $itemid, $filepath, $filename);
         }
-        if ($submission && ($combinedpdf->get_timemodified() < $submission->timemodified ||
-                $combinedpdf->get_contenthash() == self::BLANK_PDF_HASH)) {
-            return self::generate_combined_pdf_for_attempt($assignment, $userid, $attemptnumber);
+
+        if ($combinedpdf && $submission) {
+            if ($combinedpdf->get_timemodified() < $submission->timemodified) {
+                // The submission has been updated since the PDF was generated.
+                $combinedpdf = false;
+            } else if ($combinedpdf->get_contenthash() == self::BLANK_PDF_HASH) {
+                // The PDF is for a blank page.
+                $combinedpdf = false;
+            }
         }
-        return $combinedpdf;
+
+        if (empty($combinedpdf)) {
+            // The combined PDF does not exist yet. Return the list of files to be combined.
+            return self::list_compatible_submission_files_for_attempt($assignment, $userid, $attemptnumber);
+        } else {
+            // The combined PDF aleady exists. Return it in a new combined_document object.
+            $combineddocument = new combined_document();
+            return $combineddocument->set_combined_file($combinedpdf);
+        }
     }
 
     /**
-     * This function will take all of the compatible files for a submission
-     * and combine them into one PDF.
+     * This function return the combined pdf for all valid submission files.
+     *
      * @param int|\assign $assignment
      * @param int $userid
      * @param int $attemptnumber (-1 means latest attempt)
-     * @return stored_file
+     * @return combined_document
      */
-    public static function generate_combined_pdf_for_attempt($assignment, $userid, $attemptnumber) {
-        global $CFG;
+    public static function get_combined_pdf_for_attempt($assignment, $userid, $attemptnumber) {
+        $document = self::get_combined_document_for_attempt($assignment, $userid, $attemptnumber);
 
-        require_once($CFG->libdir . '/pdflib.php');
-
-        $assignment = self::get_assignment_from_param($assignment);
-
-        if (!$assignment->can_view_submission($userid)) {
-            \print_error('nopermission');
-        }
-
-        $files = self::list_compatible_submission_files_for_attempt($assignment, $userid, $attemptnumber);
-
-        $pdf = new pdf();
-        if ($files) {
-            // Create a mega joined PDF.
-            $compatiblepdfs = array();
-            foreach ($files as $file) {
-                $compatiblepdf = pdf::ensure_pdf_compatible($file);
-                if ($compatiblepdf) {
-                    array_push($compatiblepdfs, $compatiblepdf);
-                }
-            }
-
-            $tmpdir = \make_temp_directory('assignfeedback_editpdf/combined/' . self::hash($assignment, $userid, $attemptnumber));
-            $tmpfile = $tmpdir . '/' . self::COMBINED_PDF_FILENAME;
-
-            @unlink($tmpfile);
-            try {
-                $pagecount = $pdf->combine_pdfs($compatiblepdfs, $tmpfile);
-            } catch (\Exception $e) {
-                debugging('TCPDF could not process the pdf files:' . $e->getMessage(), DEBUG_DEVELOPER);
-                // TCPDF does not recover from errors so we need to re-initialise the class.
-                $pagecount = 0;
-            }
-            if ($pagecount == 0) {
-                // We at least want a single blank page.
-                debugging('TCPDF did not produce a valid pdf:' . $tmpfile . '. Replacing with a blank pdf.', DEBUG_DEVELOPER);
-                @unlink($tmpfile);
-                $files = false;
-            }
-        }
-        $pdf->Close(); // No real need to close this pdf, because it has been saved by combine_pdfs(), but for clarity.
-
-        $grade = $assignment->get_user_grade($userid, true, $attemptnumber);
-        $record = new \stdClass();
-
-        $record->contextid = $assignment->get_context()->id;
-        $record->component = 'assignfeedback_editpdf';
-        $record->filearea = self::COMBINED_PDF_FILEAREA;
-        $record->itemid = $grade->id;
-        $record->filepath = '/';
-        $record->filename = self::COMBINED_PDF_FILENAME;
-        $fs = \get_file_storage();
-
-        $fs->delete_area_files($record->contextid, $record->component, $record->filearea, $record->itemid);
-
-        // Detect corrupt generated pdfs and replace with a blank one.
-        if ($files) {
-            $verifypdf = new pdf();
-            $pagecount = $verifypdf->load_pdf($tmpfile);
-            if ($pagecount <= 0) {
-                $files = false;
-            }
-            $verifypdf->Close(); // PDF loaded and never saved/outputted needs to be closed.
-        }
-
-        if (!$files) {
-            $file = $fs->create_file_from_string($record, base64_decode(self::BLANK_PDF_BASE64));
+        if ($document->get_status() === combined_document::STATUS_COMPLETE) {
+            // The combined document is already ready.
+            return $document;
         } else {
-            // This was a combined pdf.
-            $file = $fs->create_file_from_pathname($record, $tmpfile);
-            @unlink($tmpfile);
-
-            // Test the generated file for correctness.
-            $compatiblepdf = pdf::ensure_pdf_compatible($file);
+            // Attempt to combined the files in the document.
+            $grade = $assignment->get_user_grade($userid, true, $attemptnumber);
+            $document->combine_files($assignment->get_context()->id, $grade->id);
+            return $document;
         }
-
-        return $file;
     }
 
     /**
      * This function will return the number of pages of a pdf.
+     *
      * @param int|\assign $assignment
      * @param int $userid
      * @param int $attemptnumber (-1 means latest attempt)
@@ -360,7 +363,7 @@ EOD;
         $assignment = self::get_assignment_from_param($assignment);
 
         if (!$assignment->can_view_submission($userid)) {
-            \print_error('nopermission');
+            throw new \moodle_exception('nopermission');
         }
 
         // When in readonly we can return the number of images in the DB because they should already exist,
@@ -377,27 +380,8 @@ EOD;
         }
 
         // Get a combined pdf file from all submitted pdf files.
-        $file = self::get_combined_pdf_for_attempt($assignment, $userid, $attemptnumber);
-        if (!$file) {
-            \print_error('Could not generate combined pdf.');
-        }
-
-        // Store the combined pdf file somewhere to be opened by tcpdf.
-        $tmpdir = \make_temp_directory('assignfeedback_editpdf/pagetotal/'
-            . self::hash($assignment, $userid, $attemptnumber));
-        $combined = $tmpdir . '/' . self::COMBINED_PDF_FILENAME;
-        $file->copy_content_to($combined); // Copy the file.
-
-        // Get the total number of pages.
-        $pdf = new pdf();
-        $pagecount = $pdf->set_pdf($combined);
-        $pdf->Close(); // PDF loaded and never saved/outputted needs to be closed.
-
-        // Delete temporary folders and files.
-        @unlink($combined);
-        @rmdir($tmpdir);
-
-        return $pagecount;
+        $document = self::get_combined_pdf_for_attempt($assignment, $userid, $attemptnumber);
+        return $document->get_page_count();
     }
 
     /**
@@ -405,9 +389,10 @@ EOD;
      * @param int|\assign $assignment
      * @param int $userid
      * @param int $attemptnumber (-1 means latest attempt)
+     * @param bool $resetrotation check if need to reset page rotation information
      * @return array(stored_file)
      */
-    public static function generate_page_images_for_attempt($assignment, $userid, $attemptnumber) {
+    protected static function generate_page_images_for_attempt($assignment, $userid, $attemptnumber, $resetrotation = true) {
         global $CFG;
 
         require_once($CFG->libdir . '/pdflib.php');
@@ -415,18 +400,24 @@ EOD;
         $assignment = self::get_assignment_from_param($assignment);
 
         if (!$assignment->can_view_submission($userid)) {
-            \print_error('nopermission');
+            throw new \moodle_exception('nopermission');
         }
 
         // Need to generate the page images - first get a combined pdf.
-        $file = self::get_combined_pdf_for_attempt($assignment, $userid, $attemptnumber);
-        if (!$file) {
+        $document = self::get_combined_pdf_for_attempt($assignment, $userid, $attemptnumber);
+
+        $status = $document->get_status();
+        if ($status === combined_document::STATUS_FAILED) {
             throw new \moodle_exception('Could not generate combined pdf.');
+        } else if ($status === combined_document::STATUS_PENDING_INPUT) {
+            // The conversion is still in progress.
+            return [];
         }
 
-        $tmpdir = \make_temp_directory('assignfeedback_editpdf/pageimages/' . self::hash($assignment, $userid, $attemptnumber));
+        $tmpdir = \make_request_directory();
         $combined = $tmpdir . '/' . self::COMBINED_PDF_FILENAME;
-        $file->copy_content_to($combined); // Copy the file.
+
+        $document->get_combined_file()->copy_content_to($combined); // Copy the file.
 
         $pdf = new pdf();
 
@@ -441,15 +432,29 @@ EOD;
         $record->filearea = self::PAGE_IMAGE_FILEAREA;
         $record->itemid = $grade->id;
         $record->filepath = '/';
-        $fs = \get_file_storage();
+        $fs = get_file_storage();
 
         // Remove the existing content of the filearea.
         $fs->delete_area_files($record->contextid, $record->component, $record->filearea, $record->itemid);
 
         $files = array();
+        $images = $pdf->get_images();
         for ($i = 0; $i < $pagecount; $i++) {
             try {
-                $image = $pdf->get_image($i);
+                if (empty($images[$i])) {
+                    throw new \moodle_exception('error image');
+                }
+                $image = $images[$i];
+                if (!$resetrotation) {
+                    $pagerotation = page_editor::get_page_rotation($grade->id, $i);
+                    $degree = !empty($pagerotation) ? $pagerotation->degree : 0;
+                    if ($degree != 0) {
+                        $filepath = $tmpdir . '/' . $image;
+                        $imageresource = imagecreatefrompng($filepath);
+                        $content = imagerotate($imageresource, $degree, 0);
+                        imagepng($content, $filepath);
+                    }
+                }
             } catch (\moodle_exception $e) {
                 // We catch only moodle_exception here as other exceptions indicate issue with setup not the pdf.
                 $image = pdf::get_error_image($tmpdir, $i);
@@ -457,6 +462,12 @@ EOD;
             $record->filename = basename($image);
             $files[$i] = $fs->create_file_from_pathname($record, $tmpdir . '/' . $image);
             @unlink($tmpdir . '/' . $image);
+            // Set page rotation default value.
+            if (!empty($files[$i])) {
+                if ($resetrotation) {
+                    page_editor::set_page_rotation($grade->id, $i, false, $files[$i]->get_pathnamehash());
+                }
+            }
         }
         $pdf->Close(); // PDF loaded and never saved/outputted needs to be closed.
 
@@ -492,7 +503,7 @@ EOD;
         $assignment = self::get_assignment_from_param($assignment);
 
         if (!$assignment->can_view_submission($userid)) {
-            \print_error('nopermission');
+            throw new \moodle_exception('nopermission');
         }
 
         if ($assignment->get_instance()->teamsubmission) {
@@ -508,7 +519,7 @@ EOD;
         $filepath = '/';
         $filearea = self::PAGE_IMAGE_FILEAREA;
 
-        $fs = \get_file_storage();
+        $fs = get_file_storage();
 
         // If we are after the readonly pages...
         if ($readonly) {
@@ -524,6 +535,7 @@ EOD;
         $files = $fs->get_directory_files($contextid, $component, $filearea, $itemid, $filepath);
 
         $pages = array();
+        $resetrotation = false;
         if (!empty($files)) {
             $first = reset($files);
             $pagemodified = $first->get_timemodified();
@@ -547,11 +559,12 @@ EOD;
                 $fs->delete_area_files($contextid, $component, $filearea, $itemid);
                 page_editor::delete_draft_content($itemid);
                 $files = array();
+                $resetrotation = true;
             } else {
 
                 // Need to reorder the files following their name.
                 // because get_directory_files() return a different order than generate_page_images_for_attempt().
-                foreach($files as $file) {
+                foreach ($files as $file) {
                     // Extract the page number from the file name image_pageXXXX.png.
                     preg_match('/page([\d]+)\./', $file->get_filename(), $matches);
                     if (empty($matches) or !is_numeric($matches[1])) {
@@ -567,13 +580,27 @@ EOD;
             }
         }
 
-        if (empty($pages)) {
-            if ($readonly) {
-                // This should never happen, there should be a version of the pages available
-                // whenever we are requesting the readonly version.
-                throw new \moodle_exception('Could not find readonly pages for grade ' . $grade->id);
-            }
-            $pages = self::generate_page_images_for_attempt($assignment, $userid, $attemptnumber);
+        // This should never happen, there should be a version of the pages available
+        // whenever we are requesting the readonly version.
+        if (empty($pages) && $readonly) {
+            throw new \moodle_exception('Could not find readonly pages for grade ' . $grade->id);
+        }
+
+        // There are two situations where the number of page images generated does not
+        // match the number of pages in the PDF:
+        //
+        // 1. The document conversion adhoc task was interrupted somehow (node died, solar flare, etc)
+        // 2. The submission has been updated by the student
+        //
+        // In the case of 1. we need to regenerate the pages, see MDL-66626.
+        // In the case of 2. we should do nothing, see MDL-45580.
+        //
+        // To differentiate between 1. and 2. we can check if the submission has been modified since the
+        // pages were generated. If it has, then we're in situation 2.
+        $totalpagesforattempt = self::page_number_for_attempt($assignment, $userid, $attemptnumber, false);
+        $submissionmodified = isset($pagemodified) && $submission->timemodified > $pagemodified;
+        if (empty($pages) || (count($pages) != $totalpagesforattempt && !$submissionmodified)) {
+            $pages = self::generate_page_images_for_attempt($assignment, $userid, $attemptnumber, $resetrotation);
         }
 
         return $pages;
@@ -627,33 +654,55 @@ EOD;
      * @param int|\assign $assignment
      * @param int $userid
      * @param int $attemptnumber (-1 means latest attempt)
-     * @return stored_file
+     * @return \stored_file
      */
     public static function generate_feedback_document($assignment, $userid, $attemptnumber) {
+        global $CFG;
 
         $assignment = self::get_assignment_from_param($assignment);
 
         if (!$assignment->can_view_submission($userid)) {
-            \print_error('nopermission');
+            throw new \moodle_exception('nopermission');
         }
         if (!$assignment->can_grade()) {
-            \print_error('nopermission');
+            throw new \moodle_exception('nopermission');
         }
 
         // Need to generate the page images - first get a combined pdf.
-        $file = self::get_combined_pdf_for_attempt($assignment, $userid, $attemptnumber);
-        if (!$file) {
+        $document = self::get_combined_pdf_for_attempt($assignment, $userid, $attemptnumber);
+
+        $status = $document->get_status();
+        if ($status === combined_document::STATUS_FAILED) {
             throw new \moodle_exception('Could not generate combined pdf.');
+        } else if ($status === combined_document::STATUS_PENDING_INPUT) {
+            // The conversion is still in progress.
+            return false;
         }
 
-        $tmpdir = \make_temp_directory('assignfeedback_editpdf/final/' . self::hash($assignment, $userid, $attemptnumber));
+        $file = $document->get_combined_file();
+
+        $tmpdir = make_request_directory();
         $combined = $tmpdir . '/' . self::COMBINED_PDF_FILENAME;
         $file->copy_content_to($combined); // Copy the file.
 
         $pdf = new pdf();
 
-        $fs = \get_file_storage();
-        $stamptmpdir = \make_temp_directory('assignfeedback_editpdf/stamps/' . self::hash($assignment, $userid, $attemptnumber));
+        // Set fontname from course setting if it's enabled.
+        if (!empty($CFG->enablepdfexportfont)) {
+            $fontlist = $pdf->get_export_fontlist();
+            // Load font from course if it's more than 1.
+            if (count($fontlist) > 1) {
+                $course = $assignment->get_course();
+                if (!empty($course->pdfexportfont)) {
+                    $pdf->set_export_font_name($course->pdfexportfont);
+                }
+            } else {
+                $pdf->set_export_font_name(current($fontlist));
+            }
+        }
+
+        $fs = get_file_storage();
+        $stamptmpdir = make_request_directory();
         $grade = $assignment->get_user_grade($userid, true, $attemptnumber);
         // Copy any new stamps to this instance.
         if ($files = $fs->get_area_files($assignment->get_context()->id,
@@ -672,17 +721,28 @@ EOD;
         $grade = $assignment->get_user_grade($userid, true, $attemptnumber);
         page_editor::release_drafts($grade->id);
 
+        $allcomments = array();
+
         for ($i = 0; $i < $pagecount; $i++) {
-            $pdf->copy_page();
+            $pagerotation = page_editor::get_page_rotation($grade->id, $i);
+            $pagemargin = $pdf->getBreakMargin();
+            $autopagebreak = $pdf->getAutoPageBreak();
+            if (empty($pagerotation) || !$pagerotation->isrotated) {
+                $pdf->copy_page();
+            } else {
+                $rotatedimagefile = $fs->get_file_by_hash($pagerotation->pathnamehash);
+                if (empty($rotatedimagefile)) {
+                    $pdf->copy_page();
+                } else {
+                    $pdf->add_image_page($rotatedimagefile);
+                }
+            }
+
             $comments = page_editor::get_comments($grade->id, $i, false);
             $annotations = page_editor::get_annotations($grade->id, $i, false);
 
-            foreach ($comments as $comment) {
-                $pdf->add_comment($comment->rawtext,
-                                  $comment->x,
-                                  $comment->y,
-                                  $comment->width,
-                                  $comment->colour);
+            if (!empty($comments)) {
+                $allcomments[$i] = $comments;
             }
 
             foreach ($annotations as $annotation) {
@@ -695,6 +755,20 @@ EOD;
                                      $annotation->path,
                                      $stamptmpdir);
             }
+            $pdf->SetAutoPageBreak($autopagebreak, $pagemargin);
+            $pdf->setPageMark();
+        }
+
+        if (!empty($allcomments)) {
+            // Append all comments to the end of the document.
+            $links = $pdf->append_comments($allcomments);
+            // Add the comment markers with links.
+            foreach ($allcomments as $pageno => $comments) {
+                foreach ($comments as $index => $comment) {
+                    $pdf->add_comment_marker($comment->pageno, $index, $comment->x, $comment->y, $links[$pageno][$index],
+                            $comment->colour);
+                }
+            }
         }
 
         fulldelete($stamptmpdir);
@@ -705,7 +779,6 @@ EOD;
         $generatedpdf = $tmpdir . '/' . $filename;
         $pdf->save_pdf($generatedpdf);
 
-
         $record = new \stdClass();
 
         $record->contextid = $assignment->get_context()->id;
@@ -714,7 +787,6 @@ EOD;
         $record->itemid = $grade->id;
         $record->filepath = '/';
         $record->filename = $filename;
-
 
         // Only keep one current version of the generated pdf.
         $fs->delete_area_files($record->contextid, $record->component, $record->filearea, $record->itemid);
@@ -766,14 +838,14 @@ EOD;
      * @param int|\assign $assignment
      * @param int $userid
      * @param int $attemptnumber (-1 means latest attempt)
-     * @return stored_file
+     * @return \stored_file
      */
     public static function get_feedback_document($assignment, $userid, $attemptnumber) {
 
         $assignment = self::get_assignment_from_param($assignment);
 
         if (!$assignment->can_view_submission($userid)) {
-            \print_error('nopermission');
+            throw new \moodle_exception('nopermission');
         }
 
         $grade = $assignment->get_user_grade($userid, true, $attemptnumber);
@@ -784,7 +856,7 @@ EOD;
         $itemid = $grade->id;
         $filepath = '/';
 
-        $fs = \get_file_storage();
+        $fs = get_file_storage();
         $files = $fs->get_area_files($contextid,
                                      $component,
                                      $filearea,
@@ -809,10 +881,10 @@ EOD;
         $assignment = self::get_assignment_from_param($assignment);
 
         if (!$assignment->can_view_submission($userid)) {
-            \print_error('nopermission');
+            throw new \moodle_exception('nopermission');
         }
         if (!$assignment->can_grade()) {
-            \print_error('nopermission');
+            throw new \moodle_exception('nopermission');
         }
 
         $grade = $assignment->get_user_grade($userid, true, $attemptnumber);
@@ -822,8 +894,209 @@ EOD;
         $filearea = self::FINAL_PDF_FILEAREA;
         $itemid = $grade->id;
 
-        $fs = \get_file_storage();
+        $fs = get_file_storage();
         return $fs->delete_area_files($contextid, $component, $filearea, $itemid);
     }
 
+    /**
+     * Get All files in a File area
+     * @param int|\assign $assignment Assignment
+     * @param int $userid User ID
+     * @param int $attemptnumber Attempt Number
+     * @param string $filearea File Area
+     * @param string $filepath File Path
+     * @return array
+     */
+    private static function get_files($assignment, $userid, $attemptnumber, $filearea, $filepath = '/') {
+        $grade = $assignment->get_user_grade($userid, true, $attemptnumber);
+        $itemid = $grade->id;
+        $contextid = $assignment->get_context()->id;
+        $component = self::COMPONENT;
+        $fs = get_file_storage();
+        $files = $fs->get_directory_files($contextid, $component, $filearea, $itemid, $filepath);
+        return $files;
+    }
+
+    /**
+     * Save file.
+     * @param int|\assign $assignment Assignment
+     * @param int $userid User ID
+     * @param int $attemptnumber Attempt Number
+     * @param string $filearea File Area
+     * @param string $newfilepath File Path
+     * @param string $storedfilepath stored file path
+     * @return \stored_file
+     * @throws \file_exception
+     * @throws \stored_file_creation_exception
+     */
+    private static function save_file($assignment, $userid, $attemptnumber, $filearea, $newfilepath, $storedfilepath = '/') {
+        $grade = $assignment->get_user_grade($userid, true, $attemptnumber);
+        $itemid = $grade->id;
+        $contextid = $assignment->get_context()->id;
+
+        $record = new \stdClass();
+        $record->contextid = $contextid;
+        $record->component = self::COMPONENT;
+        $record->filearea = $filearea;
+        $record->itemid = $itemid;
+        $record->filepath = $storedfilepath;
+        $record->filename = basename($newfilepath);
+
+        $fs = get_file_storage();
+
+        $oldfile = $fs->get_file($record->contextid, $record->component, $record->filearea,
+            $record->itemid, $record->filepath, $record->filename);
+
+        if ($oldfile) {
+            $newhash = \file_storage::hash_from_path($newfilepath);
+            if ($newhash === $oldfile->get_contenthash()) {
+                // Use existing file if contenthash match.
+                return $oldfile;
+            }
+            // Delete existing file.
+            $oldfile->delete();
+        }
+
+        return $fs->create_file_from_pathname($record, $newfilepath);
+    }
+
+    /**
+     * This function rotate a page, and mark the page as rotated.
+     * @param int|\assign $assignment Assignment
+     * @param int $userid User ID
+     * @param int $attemptnumber Attempt Number
+     * @param int $index Index of Current Page
+     * @param bool $rotateleft To determine whether the page is rotated left or right.
+     * @return null|\stored_file return rotated File
+     * @throws \coding_exception
+     * @throws \file_exception
+     * @throws \moodle_exception
+     * @throws \stored_file_creation_exception
+     */
+    public static function rotate_page($assignment, $userid, $attemptnumber, $index, $rotateleft) {
+        $assignment = self::get_assignment_from_param($assignment);
+        $grade = $assignment->get_user_grade($userid, true, $attemptnumber);
+        // Check permission.
+        if (!$assignment->can_view_submission($userid)) {
+            throw new \moodle_exception('nopermission');
+        }
+
+        $filearea = self::PAGE_IMAGE_FILEAREA;
+        $files = self::get_files($assignment, $userid, $attemptnumber, $filearea);
+        if (!empty($files)) {
+            foreach ($files as $file) {
+                preg_match('/' . pdf::IMAGE_PAGE . '([\d]+)\./', $file->get_filename(), $matches);
+                if (empty($matches) or !is_numeric($matches[1])) {
+                    throw new \coding_exception("'" . $file->get_filename()
+                        . "' file hasn't the expected format filename: image_pageXXXX.png.");
+                }
+                $pagenumber = (int)$matches[1];
+
+                if ($pagenumber == $index) {
+                    $source = imagecreatefromstring($file->get_content());
+                    $pagerotation = page_editor::get_page_rotation($grade->id, $index);
+                    $degree = empty($pagerotation) ? 0 : $pagerotation->degree;
+                    if ($rotateleft) {
+                        $content = imagerotate($source, 90, 0);
+                        $degree = ($degree + 90) % 360;
+                    } else {
+                        $content = imagerotate($source, -90, 0);
+                        $degree = ($degree - 90) % 360;
+                    }
+                    $filename = $matches[0].'png';
+                    $tmpdir = make_request_directory();
+                    $tempfile = $tmpdir . '/' . time() . '_' . $filename;
+                    imagepng($content, $tempfile);
+
+                    $filearea = self::PAGE_IMAGE_FILEAREA;
+                    $newfile = self::save_file($assignment, $userid, $attemptnumber, $filearea, $tempfile);
+
+                    unlink($tempfile);
+                    rmdir($tmpdir);
+                    imagedestroy($source);
+                    imagedestroy($content);
+                    $file->delete();
+                    if (!empty($newfile)) {
+                        page_editor::set_page_rotation($grade->id, $pagenumber, true, $newfile->get_pathnamehash(), $degree);
+                    }
+                    return $newfile;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Convert jpg file to pdf file
+     * @param int|\assign $assignment Assignment
+     * @param int $userid User ID
+     * @param int $attemptnumber Attempt Number
+     * @param \stored_file $file file to save
+     * @param null|array $size size of image
+     * @return \stored_file
+     * @throws \file_exception
+     * @throws \stored_file_creation_exception
+     */
+    private static function save_jpg_to_pdf($assignment, $userid, $attemptnumber, $file, $size=null) {
+        // Temporary file.
+        $filename = $file->get_filename();
+        $tmpdir = make_request_directory();
+        $tempfile = $tmpdir . DIRECTORY_SEPARATOR . $filename . ".pdf";
+        // Determine orientation.
+        $orientation = 'P';
+        if (!empty($size['width']) && !empty($size['height'])) {
+            if ($size['width'] > $size['height']) {
+                $orientation = 'L';
+            }
+        }
+        // Save JPG image to PDF file.
+        $pdf = new pdf();
+        $pdf->SetHeaderMargin(0);
+        $pdf->SetFooterMargin(0);
+        $pdf->SetMargins(0, 0, 0, true);
+        $pdf->setPrintFooter(false);
+        $pdf->setPrintHeader(false);
+        $pdf->setImageScale(PDF_IMAGE_SCALE_RATIO);
+        $pdf->AddPage($orientation);
+        $pdf->SetAutoPageBreak(false);
+        // Width has to be define here to fit into A4 page. Otherwise the image will be inserted with original size.
+        if ($orientation == 'P') {
+            $pdf->Image('@' . $file->get_content(), 0, 0, 210);
+        } else {
+            $pdf->Image('@' . $file->get_content(), 0, 0, 297);
+        }
+        $pdf->setPageMark();
+        $pdf->save_pdf($tempfile);
+        $filearea = self::TMP_JPG_TO_PDF_FILEAREA;
+        $pdffile = self::save_file($assignment, $userid, $attemptnumber, $filearea, $tempfile);
+        if (file_exists($tempfile)) {
+            unlink($tempfile);
+            rmdir($tmpdir);
+        }
+        return $pdffile;
+    }
+
+    /**
+     * Save rotated image data to file.
+     * @param int|\assign $assignment Assignment
+     * @param int $userid User ID
+     * @param int $attemptnumber Attempt Number
+     * @param resource $rotateddata image data to save
+     * @param string $filename name of the image file
+     * @return \stored_file
+     * @throws \file_exception
+     * @throws \stored_file_creation_exception
+     */
+    private static function save_rotated_image_file($assignment, $userid, $attemptnumber, $rotateddata, $filename) {
+        $filearea = self::TMP_ROTATED_JPG_FILEAREA;
+        $tmpdir = make_request_directory();
+        $tempfile = $tmpdir . DIRECTORY_SEPARATOR . basename($filename);
+        imagejpeg($rotateddata, $tempfile);
+        $newfile = self::save_file($assignment, $userid, $attemptnumber, $filearea, $tempfile);
+        if (file_exists($tempfile)) {
+            unlink($tempfile);
+            rmdir($tmpdir);
+        }
+        return $newfile;
+    }
 }

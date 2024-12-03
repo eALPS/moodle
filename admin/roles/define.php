@@ -52,11 +52,12 @@ if ($return === 'manage') {
     $returnurl = new moodle_url('/admin/roles/define.php', array('action'=>'view', 'roleid'=>$roleid));;
 }
 
+admin_externalpage_setup('defineroles', '', array('action' => $action, 'roleid' => $roleid),
+    new moodle_url('/admin/roles/define.php'));
+
 // Check access permissions.
 $systemcontext = context_system::instance();
-require_login();
 require_capability('moodle/role:manage', $systemcontext);
-admin_externalpage_setup('defineroles', '', array('action' => $action, 'roleid' => $roleid), new moodle_url('/admin/roles/define.php'));
 
 // Export role.
 if ($action === 'export') {
@@ -86,6 +87,10 @@ if ($action === 'add') {
     $title = get_string('editingrolex', 'core_role', $rolenames[$roleid]->localname);
 }
 
+$PAGE->set_secondary_active_tab('users');
+$PAGE->set_primary_active_tab('siteadminnode');
+$PAGE->navbar->add($title, $baseurl);
+
 // Decide how to create new role.
 if ($action === 'add' and $resettype !== 'none') {
     $mform = new core_role_preset_form(null, array('action'=>'add', 'roleid'=>0, 'resettype'=>'0', 'return'=>'manage'));
@@ -103,7 +108,8 @@ if ($action === 'add' and $resettype !== 'none') {
             'contextlevels' => 1,
             'allowassign'   => 1,
             'allowoverride' => 1,
-            'allowswitch'   => 1);
+            'allowswitch'   => 1,
+            'allowview'   => 1);
         if ($showadvanced) {
             $definitiontable = new core_role_define_role_table_advanced($systemcontext, 0);
         } else {
@@ -150,7 +156,8 @@ if ($action === 'add' and $resettype !== 'none') {
             'contextlevels' => $data->contextlevels,
             'allowassign'   => $data->allowassign,
             'allowoverride' => $data->allowoverride,
-            'allowswitch'   => $data->allowswitch);
+            'allowswitch'   => $data->allowswitch,
+            'allowview'     => $data->allowview);
         if ($showadvanced) {
             $definitiontable = new core_role_define_role_table_advanced($systemcontext, $roleid);
         } else {
@@ -197,19 +204,6 @@ if (optional_param('cancel', false, PARAM_BOOL)) {
 if (optional_param('savechanges', false, PARAM_BOOL) && confirm_sesskey() && $definitiontable->is_submission_valid()) {
     $definitiontable->save_changes();
     $tableroleid = $definitiontable->get_role_id();
-    // Trigger event.
-    $event = \core\event\role_capabilities_updated::create(
-        array(
-            'context' => $systemcontext,
-            'objectid' => $tableroleid
-        )
-    );
-    $event->set_legacy_logdata(array(SITEID, 'role', $action, 'admin/roles/define.php?action=view&roleid=' . $tableroleid,
-        $definitiontable->get_role_name(), '', $USER->id));
-    if (!empty($role)) {
-        $event->add_record_snapshot('role', $role);
-    }
-    $event->trigger();
 
     if ($action === 'add') {
         redirect(new moodle_url('/admin/roles/define.php', array('action'=>'view', 'roleid'=>$definitiontable->get_role_id())));

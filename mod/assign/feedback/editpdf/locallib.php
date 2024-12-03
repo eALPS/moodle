@@ -58,97 +58,161 @@ class assign_feedback_editpdf extends assign_feedback_plugin {
      */
     public function get_widget($userid, $grade, $readonly) {
         $attempt = -1;
-        if ($grade) {
+        if ($grade && isset($grade->attemptnumber)) {
             $attempt = $grade->attemptnumber;
         } else {
             $grade = $this->assignment->get_user_grade($userid, true);
         }
 
-        $feedbackfile = document_services::get_feedback_document($this->assignment->get_instance()->id,
-                                                                 $userid,
-                                                                 $attempt);
+        $feedbackfile = document_services::get_feedback_document(
+            $this->assignment->get_instance()->id,
+            $userid,
+            $attempt
+        );
 
         $stampfiles = array();
         $fs = get_file_storage();
         $syscontext = context_system::instance();
+        $asscontext = $this->assignment->get_context();
 
-        // Copy any new stamps to this instance.
-        if ($files = $fs->get_area_files($syscontext->id,
-                                         'assignfeedback_editpdf',
-                                         'stamps',
-                                         0,
-                                         "filename",
-                                         false)) {
-            foreach ($files as $file) {
-                $filename = $file->get_filename();
-                if ($filename !== '.') {
+        // Three file areas are used for stamps.
+        // Current stamps are those configured as a site administration setting to be available for new uses.
+        // When a stamp is removed from this filearea it is no longer available for new grade items.
+        $currentstamps = $fs->get_area_files($syscontext->id, 'assignfeedback_editpdf', 'stamps', 0, 'filename', false);
 
-                    $existingfile = $fs->get_file($this->assignment->get_context()->id,
-                                                  'assignfeedback_editpdf',
-                                                  'stamps',
-                                                  $grade->id,
-                                                  '/',
-                                                  $file->get_filename());
-                    if (!$existingfile) {
-                        $newrecord = new stdClass();
-                        $newrecord->contextid = $this->assignment->get_context()->id;
-                        $newrecord->itemid = $grade->id;
-                        $fs->create_file_from_storedfile($newrecord, $file);
-                    }
-                }
+        // Grade stamps are those which have been assigned for a specific grade item.
+        // The stamps associated with a grade item are always used for that grade item, even if the stamp is removed
+        // from the list of current stamps.
+        $gradestamps = $fs->get_area_files($asscontext->id, 'assignfeedback_editpdf', 'stamps', $grade->id, 'filename', false);
+
+        // The system stamps are perpetual and always exist.
+        // They allow Moodle to serve a common URL for all users for any possible combination of stamps.
+        // Files in the perpetual stamp filearea are within the system context, in itemid 0, and use the original stamps
+        // contenthash as a folder name. This ensures that the combination of stamp filename, and stamp file content is
+        // unique.
+        $systemstamps = $fs->get_area_files($syscontext->id, 'assignfeedback_editpdf', 'systemstamps', 0, 'filename', false);
+
+        // First check that all current stamps are listed in the grade stamps.
+        foreach ($currentstamps as $stamp) {
+            // Ensure that the current stamp is in the list of perpetual stamps.
+            $systempathnamehash = $this->get_system_stamp_path($stamp);
+            if (!array_key_exists($systempathnamehash, $systemstamps)) {
+                $filerecord = (object) [
+                    'filearea' => 'systemstamps',
+                    'filepath' => '/' . $stamp->get_contenthash() . '/',
+                ];
+                $newstamp = $fs->create_file_from_storedfile($filerecord, $stamp);
+                $systemstamps[$newstamp->get_pathnamehash()] = $newstamp;
+            }
+
+            // Ensure that the current stamp is in the list of stamps for the current grade item.
+            $gradeitempathhash = $this->get_assignment_stamp_path($stamp, $grade->id);
+            if (!array_key_exists($gradeitempathhash, $gradestamps)) {
+                $filerecord = (object) [
+                    'contextid' => $asscontext->id,
+                    'filearea' => 'stamps',
+                    'itemid' => $grade->id,
+                ];
+                $newstamp = $fs->create_file_from_storedfile($filerecord, $stamp);
+                $gradestamps[$newstamp->get_pathnamehash()] = $newstamp;
             }
         }
 
-        // Now get the full list of stamp files for this instance.
-        if ($files = $fs->get_area_files($this->assignment->get_context()->id,
-                                         'assignfeedback_editpdf',
-                                         'stamps',
-                                         $grade->id,
-                                         "filename",
-                                         false)) {
-            foreach ($files as $file) {
-                $filename = $file->get_filename();
-                if ($filename !== '.') {
-                    $url = moodle_url::make_pluginfile_url($this->assignment->get_context()->id,
-                                                   'assignfeedback_editpdf',
-                                                   'stamps',
-                                                   $grade->id,
-                                                   '/',
-                                                   $file->get_filename(),
-                                                   false);
-                    array_push($stampfiles, $url->out());
-                }
+        foreach ($gradestamps as $stamp) {
+            // All gradestamps should be available in the systemstamps filearea, but some legacy stamps may not be.
+            // These need to be copied over.
+            // Note: This should ideally be performed as an upgrade step, but there may be other cases that these do not
+            // exist, for example restored backups.
+            // In any case this is a cheap operation as it is solely performing an array lookup.
+            $systempathnamehash = $this->get_system_stamp_path($stamp);
+            if (!array_key_exists($systempathnamehash, $systemstamps)) {
+                $filerecord = (object) [
+                    'contextid' => $syscontext->id,
+                    'itemid' => 0,
+                    'filearea' => 'systemstamps',
+                    'filepath' => '/' . $stamp->get_contenthash() . '/',
+                ];
+                $systemstamp = $fs->create_file_from_storedfile($filerecord, $stamp);
+                $systemstamps[$systemstamp->get_pathnamehash()] = $systemstamp;
             }
+
+            // Always serve the perpetual system stamp.
+            // This ensures that the stamp is highly cached and reduces the hit on the application server.
+            $gradestamp = $systemstamps[$systempathnamehash];
+            $url = moodle_url::make_pluginfile_url(
+                $gradestamp->get_contextid(),
+                $gradestamp->get_component(),
+                $gradestamp->get_filearea(),
+                null,
+                $gradestamp->get_filepath(),
+                $gradestamp->get_filename(),
+                false
+            );
+            array_push($stampfiles, $url->out());
         }
 
         $url = false;
         $filename = '';
         if ($feedbackfile) {
-            $url = moodle_url::make_pluginfile_url($this->assignment->get_context()->id,
-                                                   'assignfeedback_editpdf',
-                                                   document_services::FINAL_PDF_FILEAREA,
-                                                   $grade->id,
-                                                   '/',
-                                                   $feedbackfile->get_filename(),
-                                                   false);
+            $url = moodle_url::make_pluginfile_url(
+                $this->assignment->get_context()->id,
+                'assignfeedback_editpdf',
+                document_services::FINAL_PDF_FILEAREA,
+                $grade->id,
+                '/',
+                $feedbackfile->get_filename(),
+                false
+            );
            $filename = $feedbackfile->get_filename();
         }
 
-        // Retrieve total number of pages.
-        $pagetotal = document_services::page_number_for_attempt($this->assignment->get_instance()->id,
-                $userid,
-                $attempt,
-                $readonly);
-
-        $widget = new assignfeedback_editpdf_widget($this->assignment->get_instance()->id,
-                                                    $userid,
-                                                    $attempt,
-                                                    $url,
-                                                    $filename,
-                                                    $stampfiles,
-                                                    $readonly,
-                                                    $pagetotal);
+        $widget = new assignfeedback_editpdf_widget(
+            $this->assignment->get_instance()->id,
+            $userid,
+            $attempt,
+            $url,
+            $filename,
+            $stampfiles,
+            $readonly
+        );
         return $widget;
+    }
+
+    /**
+     * Get the pathnamehash for the specified stamp if in the system stamps.
+     *
+     * @param   stored_file $file
+     * @return  string
+     */
+    protected function get_system_stamp_path(stored_file $stamp): string {
+        $systemcontext = context_system::instance();
+
+        return file_storage::get_pathname_hash(
+            $systemcontext->id,
+            'assignfeedback_editpdf',
+            'systemstamps',
+            0,
+            '/' . $stamp->get_contenthash() . '/',
+            $stamp->get_filename()
+        );
+    }
+
+    /**
+     * Get the pathnamehash for the specified stamp if in the current assignment stamps.
+     *
+     * @param   stored_file $file
+     * @param   int $gradeid
+     * @return  string
+     */
+    protected function get_assignment_stamp_path(stored_file $stamp, int $gradeid): string {
+        return file_storage::get_pathname_hash(
+            $this->assignment->get_context()->id,
+            'assignfeedback_editpdf',
+            'stamps',
+            $gradeid,
+            $stamp->get_filepath(),
+            $stamp->get_filename()
+        );
     }
 
     /**
@@ -169,6 +233,14 @@ class assign_feedback_editpdf extends assign_feedback_plugin {
         }
 
         $renderer = $PAGE->get_renderer('assignfeedback_editpdf');
+
+        // Links to download the generated pdf...
+        if ($attempt > -1 && page_editor::has_annotations_or_comments($grade->id, false)) {
+            $html = $this->assignment->render_area_files('assignfeedback_editpdf',
+                                                         document_services::FINAL_PDF_FILEAREA,
+                                                         $grade->id);
+            $mform->addElement('static', 'editpdf_files', get_string('downloadfeedback', 'assignfeedback_editpdf'), $html);
+        }
 
         $widget = $this->get_widget($userid, $grade, false);
 
@@ -211,7 +283,10 @@ class assign_feedback_editpdf extends assign_feedback_plugin {
                     foreach ($nondraftannotations as $ndannotation) {
                         foreach ($draftannotations as $dannotation) {
                             foreach ($ndannotation as $key => $value) {
-                                if ($key != 'id' && $value != $dannotation->{$key}) {
+                                // As the $draft was included in the class annotation,
+                                // it is necessary to omit it in the condition below as well,
+                                // otherwise, an error would be raised.
+                                if ($key != 'id' && $key != 'draft' && $value != $dannotation->{$key}) {
                                     continue 2;
                                 }
                             }
@@ -233,7 +308,10 @@ class assign_feedback_editpdf extends assign_feedback_plugin {
                     foreach ($nondraftcomments as $ndcomment) {
                         foreach ($draftcomments as $dcomment) {
                             foreach ($ndcomment as $key => $value) {
-                                if ($key != 'id' && $value != $dcomment->{$key}) {
+                                // As the $draft was included in the class comment,
+                                // it is necessary to omit it in the condition below as well,
+                                // otherwise, an error would be raised.
+                                if ($key != 'id' && $key != 'draft' && $value != $dcomment->{$key}) {
                                     continue 2;
                                 }
                             }
@@ -333,17 +411,17 @@ class assign_feedback_editpdf extends assign_feedback_plugin {
             list($gradeids, $params) = $DB->get_in_or_equal(array_keys($grades), SQL_PARAMS_NAMED);
             $DB->delete_records_select('assignfeedback_editpdf_annot', 'gradeid ' . $gradeids, $params);
             $DB->delete_records_select('assignfeedback_editpdf_cmnt', 'gradeid ' . $gradeids, $params);
+            $DB->delete_records_select('assignfeedback_editpdf_rot', 'gradeid ' . $gradeids, $params);
         }
         return true;
     }
 
     /**
-     * Automatically enable or disable editpdf feedback plugin based on
-     * whether the ghostscript path is set correctly.
+     * Determine if ghostscript is available and working.
      *
      * @return bool
      */
-    public function is_enabled() {
+    public function is_available() {
         if ($this->enabledcache === null) {
             $testpath = assignfeedback_editpdf\pdf::test_gs_path(false);
             $this->enabledcache = ($testpath->status == assignfeedback_editpdf\pdf::GSPATH_OK);
@@ -351,12 +429,12 @@ class assign_feedback_editpdf extends assign_feedback_plugin {
         return $this->enabledcache;
     }
     /**
-     * Automatically hide the setting for the editpdf feedback plugin.
+     * Prevent enabling this plugin if ghostscript is not available.
      *
      * @return bool false
      */
     public function is_configurable() {
-        return false;
+        return $this->is_available();
     }
 
     /**
@@ -365,7 +443,28 @@ class assign_feedback_editpdf extends assign_feedback_plugin {
      * @return array - An array of fileareas (keys) and descriptions (values)
      */
     public function get_file_areas() {
-        return array(document_services::FINAL_PDF_FILEAREA => $this->get_name());
+        return [
+            document_services::FINAL_PDF_FILEAREA => $this->get_name(),
+            document_services::COMBINED_PDF_FILEAREA => $this->get_name(),
+            document_services::PARTIAL_PDF_FILEAREA => $this->get_name(),
+            document_services::IMPORT_HTML_FILEAREA => $this->get_name(),
+            document_services::PAGE_IMAGE_FILEAREA => $this->get_name(),
+            document_services::PAGE_IMAGE_READONLY_FILEAREA => $this->get_name(),
+            document_services::STAMPS_FILEAREA => $this->get_name(),
+            document_services::TMP_JPG_TO_PDF_FILEAREA => $this->get_name(),
+            document_services::TMP_ROTATED_JPG_FILEAREA => $this->get_name()
+        ];
+    }
+
+    /**
+     * Get all file areas for user data related to this plugin.
+     *
+     * @return array - An array of user data fileareas (keys) and descriptions (values)
+     */
+    public function get_user_data_file_areas(): array {
+        return [
+            document_services::FINAL_PDF_FILEAREA => $this->get_name(),
+        ];
     }
 
     /**

@@ -41,6 +41,11 @@ M.core_comment = {
                 this.courseid = args.courseid;
                 this.contextid = args.contextid;
                 this.autostart = (args.autostart);
+                // Fail fast if the comments element cannot be found, such as in embedded-type views where blocks may be loaded
+                // then discarded.
+                if (!Y.one('#comment-ctrl-'+this.client_id)) {
+                    return;
+                }
                 // expand comments?
                 if (this.autostart) {
                     this.view(args.page);
@@ -82,7 +87,7 @@ M.core_comment = {
                         action: 'add',
                         scope: scope,
                         params: params,
-                        callback: function(id, obj, args) {
+                        callback: async function(id, obj, args) {
                             var scope = args.scope;
                             var cid = scope.client_id;
                             var ta = Y.one('#dlg-content-'+cid);
@@ -91,13 +96,13 @@ M.core_comment = {
                             ta.setStyle('backgroundImage', 'none');
                             scope.toggle_textarea(false);
                             var container = Y.one('#comment-list-'+cid);
-                            var result = scope.render([obj], true);
+                            var result = await scope.render([obj], true);
                             var newcomment = Y.Node.create(result.html);
                             container.appendChild(newcomment);
                             var ids = result.ids;
-                            var linkText = Y.one('#comment-link-text-' + cid);
-                            if (linkText) {
-                                linkText.set('innerHTML', M.util.get_string('commentscount', 'moodle', obj.count));
+                            var linkTextCount = Y.one('#comment-link-text-' + cid + ' .comment-link-count');
+                            if (linkTextCount) {
+                                linkTextCount.set('innerHTML', obj.count);
                             }
                             for(var i in ids) {
                                 var attributes = {
@@ -178,7 +183,7 @@ M.core_comment = {
                     this.wait();
                 }
             },
-            render: function(list, newcmt) {
+            render: async function(list, newcmt) {
                 var ret = {};
                 ret.ids = [];
                 var template = Y.one('#cmt-tmpl');
@@ -191,18 +196,9 @@ M.core_comment = {
                     } else {
                         val = val.replace('___name___', list[i].fullname);
                     }
-                    if (list[i]['delete']||newcmt) {
-                        var tokens = {
-                            user: list[i].fullname,
-                            time: list[i].time
-                        };
-                        var deleteStr = Y.Escape.html(M.util.get_string('deletecommentbyon', 'moodle', tokens));
-                        list[i].content = '<div class="comment-delete">' +
-                            '<a href="#" role="button" id ="comment-delete-' + this.client_id + '-' + list[i].id + '"' +
-                            '   title="' + deleteStr + '">' +
-                            '<img alt="' + deleteStr + '" src="' + M.util.image_url('t/delete', 'core') + '" />' +
-                            '</a>' +
-                            '</div>' + list[i].content;
+                    if (list[i].delete || newcmt) {
+                        list[i].clientid = this.client_id;
+                        list[i].content += await this.renderDeleteIcon(list[i]);
                     }
                     val = val.replace('___time___', list[i].time);
                     val = val.replace('___picture___', list[i].avatar);
@@ -214,6 +210,34 @@ M.core_comment = {
                 ret.html = html;
                 return ret;
             },
+            renderDeleteIcon: async function(list) {
+                return new Promise(function(resolve) {
+                    require(['core/templates', 'core/str'], (Templates, Str) => {
+                        return Str.get_string('deletecommentbyon', 'moodle', {
+                            user: list.fullname,
+                            time: list.time
+                        }).then(function(deleteStr) {
+                            return Templates.renderPix('t/delete', 'core', deleteStr).then(function(deleteIcon) {
+                                var deleteDiv = document.createElement('div');
+                                deleteDiv.className = 'comment-delete';
+
+                                var deleteLink = document.createElement('a');
+                                deleteLink.href = '#';
+                                deleteLink.role = 'button';
+                                deleteLink.title = deleteStr;
+                                deleteLink.id = `comment-delete-${list.clientid}-${list.id}`;
+                                deleteLink.innerHTML = deleteIcon;
+
+                                deleteDiv.appendChild(deleteLink);
+
+                                resolve(deleteDiv.outerHTML);
+
+                                return true;
+                            });
+                        });
+                    });
+                });
+            },
             load: function(page) {
                 var scope = this;
                 var container = Y.one('#comment-ctrl-'+this.client_id);
@@ -224,10 +248,10 @@ M.core_comment = {
                 this.request({
                     scope: scope,
                     params: params,
-                    callback: function(id, ret, args) {
-                        var linkText = Y.one('#comment-link-text-' + scope.client_id);
-                        if (ret.count && linkText) {
-                            linkText.set('innerHTML', M.util.get_string('commentscount', 'moodle', ret.count));
+                    callback: async function(id, ret, args) {
+                        var linkTextCount = Y.one('#comment-link-text-' + scope.client_id + ' .comment-link-count');
+                        if (linkTextCount) {
+                            linkTextCount.set('innerHTML', ret.count);
                         }
                         var container = Y.one('#comment-list-'+scope.client_id);
                         var pagination = Y.one('#comment-pagination-'+scope.client_id);
@@ -241,7 +265,7 @@ M.core_comment = {
                             var result = {};
                             result.html = M.util.get_string('commentsrequirelogin', 'moodle');
                         } else {
-                            var result = scope.render(ret.list);
+                            var result = await scope.render(ret.list);
                         }
                         container.set('innerHTML', result.html);
                         var img = Y.one('#comment-img-'+scope.client_id);
@@ -260,10 +284,10 @@ M.core_comment = {
                     params = {'commentid': id};
                 function remove_dom(type, anim, cmt) {
                     cmt.remove();
-                    var linkText = Y.one('#comment-link-text-' + cid),
+                    var linkTextCount = Y.one('#comment-link-text-' + cid + ' .comment-link-count'),
                         comments = Y.all('#comment-list-' + cid + ' li');
-                    if (linkText && comments) {
-                        linkText.set('innerHTML', M.util.get_string('commentscount', 'moodle', comments.size()));
+                    if (linkTextCount) {
+                        linkTextCount.set('innerHTML', comments.size());
                     }
                 }
                 this.request({
@@ -380,7 +404,9 @@ M.core_comment = {
                     } else {
                         collapsedimage = 't/collapsed';
                     }
-                    img.set('src', M.util.image_url(collapsedimage, 'core'));
+                    if (img) {
+                        img.set('src', M.util.image_url(collapsedimage, 'core'));
+                    }
                     if (ta) {
                         ta.set('value','');
                     }
@@ -430,74 +456,5 @@ M.core_comment = {
         });
 
         new CommentHelper(options);
-    },
-    init_admin: function(Y) {
-        var select_all = Y.one('#comment_select_all');
-        if (select_all) {
-            select_all.on('click', function(e) {
-                var comments = document.getElementsByName('comments');
-                var checked = false;
-                for (var i in comments) {
-                    if (comments[i].checked) {
-                        checked=true;
-                    }
-                }
-                for (i in comments) {
-                    comments[i].checked = !checked;
-                }
-                this.set('checked', !checked);
-            });
-        }
-
-        var comments_delete = Y.one('#comments_delete');
-        if (comments_delete) {
-            comments_delete.on('click', function(e) {
-                e.preventDefault();
-                var list = '';
-                var comments = document.getElementsByName('comments');
-                for (var i in comments) {
-                    if (typeof comments[i] == 'object' && comments[i].checked) {
-                        list += (comments[i].value + '-');
-                    }
-                }
-                if (!list) {
-                    return;
-                }
-                var args = {};
-                args.message = M.util.get_string('confirmdeletecomments', 'admin');
-                args.callback = function() {
-                    var url = M.cfg.wwwroot + '/comment/index.php';
-
-                    var data = {
-                        'commentids': list,
-                        'sesskey': M.cfg.sesskey,
-                        'action': 'delete'
-                    };
-                    var cfg = {
-                        method: 'POST',
-                        on: {
-                            complete: function(id,o,p) {
-                                if (!o) {
-                                    alert('IO FATAL');
-                                    return;
-                                }
-                                if (o.responseText == 'yes') {
-                                    location.reload();
-                                }
-                            }
-                        },
-                        arguments: {
-                            scope: this
-                        },
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                        },
-                        data: build_querystring(data)
-                    };
-                    Y.io(url, cfg);
-                };
-                M.util.show_confirm_dialog(e, args);
-            });
-        }
     }
 };

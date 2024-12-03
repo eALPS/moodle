@@ -46,20 +46,15 @@ class summary implements renderable, templatable {
     /** @var int */
     protected $mygroupid;
 
-    /** @var bool  */
-    protected $extradetails;
-
     /**
      * Constructor.
      *
      * @param mod_feedback_structure $feedbackstructure
      * @param int $mygroupid currently selected group
-     * @param bool $extradetails display additional details (time open, time closed)
      */
-    public function __construct($feedbackstructure, $mygroupid = false, $extradetails = false) {
+    public function __construct($feedbackstructure, $mygroupid = false) {
         $this->feedbackstructure = $feedbackstructure;
         $this->mygroupid = $mygroupid;
-        $this->extradetails = $extradetails;
     }
 
     /**
@@ -72,12 +67,6 @@ class summary implements renderable, templatable {
         $r = new stdClass();
         $r->completedcount = $this->feedbackstructure->count_completed_responses($this->mygroupid);
         $r->itemscount = count($this->feedbackstructure->get_items(true));
-        if ($this->extradetails && ($timeopen = $this->feedbackstructure->get_feedback()->timeopen)) {
-            $r->timeopen = userdate($timeopen);
-        }
-        if ($this->extradetails && ($timeclose = $this->feedbackstructure->get_feedback()->timeclose)) {
-            $r->timeclose = userdate($timeclose);
-        }
 
         return $r;
     }

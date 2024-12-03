@@ -32,6 +32,8 @@ require_once($CFG->libdir.'/ddl/sql_generator.php');
  * It extends XMLDBgenerator so everything can be
  * overridden as needed to generate correct SQL.
  *
+ * @property mysqli_native_moodle_database $mdb
+ *
  * @package    core_ddl
  * @copyright  1999 onwards Martin Dougiamas     http://dougiamas.com
  *             2001-3001 Eloy Lafuente (stronk7) http://contiento.com
@@ -321,6 +323,27 @@ class mysql_sql_generator extends sql_generator {
         return $sqls;
     }
 
+    public function getAlterFieldSQL($xmldb_table, $xmldb_field, $skip_type_clause = NULL, $skip_default_clause = NULL, $skip_notnull_clause = NULL)
+    {
+        $tablename = $xmldb_table->getName();
+        $dbcolumnsinfo = $this->mdb->get_columns($tablename);
+
+        if (($this->mdb->has_breaking_change_sqlmode()) &&
+            ($dbcolumnsinfo[$xmldb_field->getName()]->meta_type == 'X') &&
+            ($xmldb_field->getType() == XMLDB_TYPE_INTEGER)) {
+            // Ignore 1292 ER_TRUNCATED_WRONG_VALUE Truncated incorrect INTEGER value: '%s'.
+            $altercolumnsqlorig = $this->alter_column_sql;
+            $this->alter_column_sql = str_replace('ALTER TABLE', 'ALTER IGNORE TABLE', $this->alter_column_sql);
+            $result = parent::getAlterFieldSQL($xmldb_table, $xmldb_field, $skip_type_clause, $skip_default_clause, $skip_notnull_clause);
+            // Restore the original ALTER SQL statement pattern.
+            $this->alter_column_sql = $altercolumnsqlorig;
+
+            return $result;
+        }
+
+        return parent::getAlterFieldSQL($xmldb_table, $xmldb_field, $skip_type_clause, $skip_default_clause, $skip_notnull_clause);
+    }
+
     /**
      * Given one correct xmldb_table, returns the SQL statements
      * to create temporary table (inside one array).
@@ -329,12 +352,9 @@ class mysql_sql_generator extends sql_generator {
      * @return array of sql statements
      */
     public function getCreateTempTableSQL($xmldb_table) {
-        $engine = $this->mdb->get_dbengine();
         // Do we know collation?
         $collation = $this->mdb->get_dbcollation();
         $this->temptables->add_temptable($xmldb_table->getName());
-
-        $rowformat = $this->mdb->get_row_format_sql($engine, $collation);
 
         $sqlarr = parent::getCreateTableSQL($xmldb_table);
 
@@ -347,7 +367,7 @@ class mysql_sql_generator extends sql_generator {
                     if (strpos($collation, 'utf8_') === 0) {
                         $sqlarr[$i] .= " DEFAULT CHARACTER SET utf8";
                     }
-                    $sqlarr[$i] .= " DEFAULT COLLATE $collation $rowformat";
+                    $sqlarr[$i] .= " DEFAULT COLLATE $collation ROW_FORMAT=DYNAMIC";
                 }
             }
         }
@@ -366,7 +386,6 @@ class mysql_sql_generator extends sql_generator {
         $sqlarr = parent::getDropTableSQL($xmldb_table);
         if ($this->temptables->is_temptable($xmldb_table->getName())) {
             $sqlarr = preg_replace('/^DROP TABLE/', "DROP TEMPORARY TABLE", $sqlarr);
-            $this->temptables->delete_temptable($xmldb_table->getName());
         }
         return $sqlarr;
     }
@@ -492,7 +511,7 @@ class mysql_sql_generator extends sql_generator {
         $fieldsql = $this->getFieldSQL($xmldb_table, $xmldb_field_clone);
 
         $sql = 'ALTER TABLE ' . $this->getTableName($xmldb_table) . ' CHANGE ' .
-               $xmldb_field->getName() . ' ' . $fieldsql;
+               $this->getEncQuoted($xmldb_field->getName()) . ' ' . $fieldsql;
 
         return array($sql);
     }
@@ -521,7 +540,7 @@ class mysql_sql_generator extends sql_generator {
      * @param xmldb_table $xmldb_table The xmldb_table object instance.
      * @return array Array of SQL statements to add one comment to the table.
      */
-    function getCommentSQL ($xmldb_table) {
+    function getCommentSQL($xmldb_table) {
         $comment = '';
 
         if ($xmldb_table->getComment()) {
@@ -571,9 +590,9 @@ class mysql_sql_generator extends sql_generator {
      * @return array An array of database specific reserved words
      */
     public static function getReservedWords() {
-        // This file contains the reserved words for MySQL databases
-        // from http://dev.mysql.com/doc/refman/6.0/en/reserved-words.html
+        // This file contains the reserved words for MySQL databases.
         $reserved_words = array (
+            // From http://dev.mysql.com/doc/refman/6.0/en/reserved-words.html.
             'accessible', 'add', 'all', 'alter', 'analyze', 'and', 'as', 'asc',
             'asensitive', 'before', 'between', 'bigint', 'binary',
             'blob', 'both', 'by', 'call', 'cascade', 'case', 'change',
@@ -613,7 +632,16 @@ class mysql_sql_generator extends sql_generator {
             'upgrade', 'usage', 'use', 'using', 'utc_date', 'utc_time',
             'utc_timestamp', 'values', 'varbinary', 'varchar', 'varcharacter',
             'varying', 'when', 'where', 'while', 'with', 'write', 'x509',
-            'xor', 'year_month', 'zerofill'
+            'xor', 'year_month', 'zerofill',
+            // Added in MySQL 8.0, compared to MySQL 5.7:
+            // https://dev.mysql.com/doc/refman/8.0/en/keywords.html#keywords-new-in-current-series.
+            '_filename', 'admin', 'cume_dist', 'dense_rank', 'empty', 'except', 'first_value', 'grouping', 'groups',
+            'json_table', 'lag', 'last_value', 'lead', 'nth_value', 'ntile',
+            'of', 'over', 'percent_rank', 'persist', 'persist_only', 'rank', 'recursive', 'row_number',
+            'system', 'window',
+            // Added in Amazon Aurora MySQL version 3.06.0:
+            // https://docs.aws.amazon.com/AmazonRDS/latest/AuroraMySQLReleaseNotes/AuroraMySQL.Updates.3060.html .
+            'accept', 'aws_bedrock_invoke_model', 'aws_sagemaker_invoke_endpoint', 'content_type', 'timeout_ms',
         );
         return $reserved_words;
     }

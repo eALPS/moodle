@@ -49,6 +49,12 @@ list($options, $unrecognized) = cli_get_params(
         'torun'    => 0,
         'optimize-runs' => '',
         'add-core-features-to-theme' => false,
+        'axe'      => null,
+        'disable-composer' => false,
+        'composer-upgrade' => true,
+        'composer-self-update' => true,
+        'scss-deprecations' => false,
+        'no-icon-deprecations' => false,
     ),
     array(
         'j' => 'parallel',
@@ -64,28 +70,55 @@ $help = "
 Behat utilities to initialise behat tests
 
 Usage:
-  php init.php [--parallel=value [--maxruns=value] [--fromrun=value --torun=value]] [--help]
+  php init.php      [--parallel=value [--maxruns=value] [--fromrun=value --torun=value]]
+                    [--no-axe] [--scss-deprecations] [--no-icon-deprecations] [-o | --optimize-runs]
+                    [-a | --add-core-features-to-theme]
+                    [--no-composer-self-update] [--no-composer-upgrade]
+                    [--disable-composer]
+                    [--help]
 
 Options:
--j, --parallel   Number of parallel behat run to initialise
--m, --maxruns    Max parallel processes to be executed at one time.
---fromrun        Execute run starting from (Used for parallel runs on different vms)
---torun          Execute run till (Used for parallel runs on different vms)
+-j, --parallel         Number of parallel behat run to initialise
+-m, --maxruns          Max parallel processes to be executed at one time
+--fromrun              Execute run starting from (Used for parallel runs on different vms)
+--torun                Execute run till (Used for parallel runs on different vms)
+--no-axe               Disable axe accessibility tests.
+--scss-deprecations    Enable SCSS deprecation checks.
+--no-icon-deprecations Disable icon deprecation checks.
 
--o, --optimize-runs Split features with specified tags in all parallel runs.
--a, --add-core-features-to-theme Add all core features to specified theme's
+-o, --optimize-runs
+                    Split features with specified tags in all parallel runs.
 
--h, --help     Print out this help
+-a, --add-core-features-to-theme
+                    Add all core features to specified theme's
+
+--no-composer-self-update
+                    Prevent upgrade of the composer utility using its self-update command
+
+--no-composer-upgrade
+                    Prevent update development dependencies using composer
+
+--disable-composer
+                    A shortcut to disable composer self-update and dependency update
+                    Note: Installation of composer and/or dependencies will still happen as required
+
+-h, --help          Print out this help
 
 Example from Moodle root directory:
 \$ php admin/tool/behat/cli/init.php --parallel=2
 
-More info in http://docs.moodle.org/dev/Acceptance_testing#Running_tests
+More info in https://moodledev.io/general/development/tools/behat/running
 ";
 
 if (!empty($options['help'])) {
     echo $help;
     exit(0);
+}
+
+if ($options['axe']) {
+    echo "Axe accessibility tests are enabled by default, to disable them, use the --no-axe option.\n";
+} else if ($options['axe'] === false) {
+    echo "Axe accessibility tests have been disabled.\n";
 }
 
 // Check which util file to call.
@@ -96,18 +129,19 @@ if ($options['parallel'] && $options['parallel'] > 1) {
     $utilfile = 'util.php';
     // Sanitize all input options, so they can be passed to util.
     foreach ($options as $option => $value) {
-        if ($value) {
-            $commandoptions .= " --$option=\"$value\"";
-        }
+        $commandoptions .= behat_get_command_flags($option, $value);
     }
 } else {
     // Only sanitize options for single run.
-    $cmdoptionsforsinglerun = array('add-core-features-to-theme');
+    $cmdoptionsforsinglerun = [
+        'add-core-features-to-theme',
+        'axe',
+        'scss-deprecations',
+        'no-icon-deprecations',
+    ];
 
     foreach ($cmdoptionsforsinglerun as $option) {
-        if (!empty($options[$option])) {
-            $commandoptions .= " --$option='$options[$option]'";
-        }
+        $commandoptions .= behat_get_command_flags($option, $options[$option]);
     }
 }
 
@@ -115,8 +149,15 @@ if ($options['parallel'] && $options['parallel'] > 1) {
 $cwd = getcwd();
 $output = null;
 
-// If behat dependencies not downloaded then do it first, else symfony/process can't be used.
-testing_update_composer_dependencies();
+if ($options['disable-composer']) {
+    // Disable self-update and upgrade easily.
+    // Note: Installation will still occur regardless of this setting.
+    $options['composer-self-update'] = false;
+    $options['composer-upgrade'] = false;
+}
+
+// Install and update composer and dependencies as required.
+testing_update_composer_dependencies($options['composer-self-update'], $options['composer-upgrade']);
 
 // Check whether the behat test environment needs to be updated.
 chdir(__DIR__);

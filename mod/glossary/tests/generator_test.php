@@ -14,14 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * mod_glossary generator tests
- *
- * @package    mod_glossary
- * @category   test
- * @copyright  2013 Marina Glancy
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace mod_glossary;
 
 /**
  * Genarator tests class for mod_glossary.
@@ -31,9 +24,9 @@
  * @copyright  2013 Marina Glancy
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class mod_glossary_generator_testcase extends advanced_testcase {
+class generator_test extends \advanced_testcase {
 
-    public function test_create_instance() {
+    public function test_create_instance(): void {
         global $DB;
         $this->resetAfterTest();
         $this->setAdminUser();
@@ -53,7 +46,7 @@ class mod_glossary_generator_testcase extends advanced_testcase {
         $this->assertEquals('Another glossary', $records[$glossary->id]->name);
     }
 
-    public function test_create_content() {
+    public function test_create_content(): void {
         global $DB;
         $this->resetAfterTest();
         $this->setAdminUser();
@@ -64,12 +57,15 @@ class mod_glossary_generator_testcase extends advanced_testcase {
         $glossarygenerator = $this->getDataGenerator()->get_plugin_generator('mod_glossary');
 
         $entry1 = $glossarygenerator->create_content($glossary);
-        $entry2 = $glossarygenerator->create_content($glossary, array('concept' => 'Custom concept'), array('alias1', 'alias2'));
+        $entry2 = $glossarygenerator->create_content($glossary,
+            array('concept' => 'Custom concept', 'tags' => array('Cats', 'mice')), array('alias1', 'alias2'));
         $records = $DB->get_records('glossary_entries', array('glossaryid' => $glossary->id), 'id');
         $this->assertCount(2, $records);
         $this->assertEquals($entry1->id, $records[$entry1->id]->id);
         $this->assertEquals($entry2->id, $records[$entry2->id]->id);
         $this->assertEquals('Custom concept', $records[$entry2->id]->concept);
+        $this->assertEquals(array('Cats', 'mice'),
+            array_values(\core_tag_tag::get_item_tags_array('mod_glossary', 'glossary_entries', $entry2->id)));
         $aliases = $DB->get_records_menu('glossary_alias', array('entryid' => $entry2->id), 'id ASC', 'id, alias');
         $this->assertSame(array('alias1', 'alias2'), array_values($aliases));
 

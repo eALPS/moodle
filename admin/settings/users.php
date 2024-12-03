@@ -1,9 +1,10 @@
 <?php
 
-// This file defines settingpages and externalpages under the "users" category
+// This file defines settingpages and externalpages under the "users" category.
 
 $ADMIN->add('users', new admin_category('accounts', new lang_string('accounts', 'admin')));
 $ADMIN->add('users', new admin_category('roles', new lang_string('permissions', 'role')));
+$ADMIN->add('users', new admin_category('privacy', new lang_string('privacyandpolicies', 'admin')));
 
 if ($hassiteconfig
  or has_capability('moodle/user:create', $systemcontext)
@@ -12,20 +13,48 @@ if ($hassiteconfig
  or has_capability('moodle/role:manage', $systemcontext)
  or has_capability('moodle/role:assign', $systemcontext)
  or has_capability('moodle/cohort:manage', $systemcontext)
- or has_capability('moodle/cohort:view', $systemcontext)) { // speedup for non-admins, add all caps used on this page
+ or has_capability('moodle/cohort:view', $systemcontext)) { // Speedup for non-admins, add all caps used on this page.
 
 
-    if (empty($CFG->loginhttps)) {
-        $securewwwroot = $CFG->wwwroot;
-    } else {
-        $securewwwroot = str_replace('http:','https:',$CFG->wwwroot);
-    }
-    // stuff under the "accounts" subcategory
+    // Stuff under the "accounts" subcategory.
     $ADMIN->add('accounts', new admin_externalpage('editusers', new lang_string('userlist','admin'), "$CFG->wwwroot/$CFG->admin/user.php", array('moodle/user:update', 'moodle/user:delete')));
     $ADMIN->add('accounts', new admin_externalpage('userbulk', new lang_string('userbulk','admin'), "$CFG->wwwroot/$CFG->admin/user/user_bulk.php", array('moodle/user:update', 'moodle/user:delete')));
-    $ADMIN->add('accounts', new admin_externalpage('addnewuser', new lang_string('addnewuser'), "$securewwwroot/user/editadvanced.php?id=-1", 'moodle/user:create'));
+    $ADMIN->add('accounts', new admin_externalpage('addnewuser', new lang_string('addnewuser'), "$CFG->wwwroot/user/editadvanced.php?id=-1", 'moodle/user:create'));
 
-    // "User default preferences" settingpage.
+    // User management settingpage.
+    $temp = new admin_settingpage('usermanagement', new lang_string('usermanagement', 'admin'));
+    if ($ADMIN->fulltree) {
+        $choices = array();
+        $choices['realname'] = new lang_string('fullnameuser');
+        $choices['lastname'] = new lang_string('lastname');
+        $choices['firstname'] = new lang_string('firstname');
+        $choices['username'] = new lang_string('username');
+        $choices['email'] = new lang_string('email');
+        $choices['city'] = new lang_string('city');
+        $choices['country'] = new lang_string('country');
+        $choices['confirmed'] = new lang_string('confirmed', 'admin');
+        $choices['suspended'] = new lang_string('suspended', 'auth');
+        $choices['profile'] = new lang_string('profilefields', 'admin');
+        $choices['courserole'] = new lang_string('courserole', 'filters');
+        $choices['anycourses'] = new lang_string('anycourses', 'filters');
+        $choices['systemrole'] = new lang_string('globalrole', 'role');
+        $choices['cohort'] = new lang_string('idnumber', 'core_cohort');
+        $choices['firstaccess'] = new lang_string('firstaccess', 'filters');
+        $choices['lastaccess'] = new lang_string('lastaccess');
+        $choices['neveraccessed'] = new lang_string('neveraccessed', 'filters');
+        $choices['timecreated'] = new lang_string('timecreated');
+        $choices['timemodified'] = new lang_string('lastmodified');
+        $choices['nevermodified'] = new lang_string('nevermodified', 'filters');
+        $choices['auth'] = new lang_string('authentication');
+        $choices['idnumber'] = new lang_string('idnumber');
+        $choices['lastip'] = new lang_string('lastip');
+        $choices['mnethostid'] = new lang_string('mnetidprovider', 'mnet');
+        $temp->add(new admin_setting_configmultiselect('userfiltersdefault', new lang_string('userfiltersdefault', 'admin'),
+            new lang_string('userfiltersdefault_desc', 'admin'), array('realname'), $choices));
+    }
+    $ADMIN->add('accounts', $temp);
+
+    // User default preferences settingpage.
     $temp = new admin_settingpage('userdefaultpreferences', new lang_string('userdefaultpreferences', 'admin'));
     if ($ADMIN->fulltree) {
         $choices = array();
@@ -33,7 +62,7 @@ if ($hassiteconfig
         $choices['1'] = new lang_string('emaildisplayyes');
         $choices['2'] = new lang_string('emaildisplaycourse');
         $temp->add(new admin_setting_configselect('defaultpreference_maildisplay', new lang_string('emaildisplay'),
-            '', 2, $choices));
+            new lang_string('emaildisplay_help'), 2, $choices));
 
         $choices = array();
         $choices['0'] = new lang_string('textformat');
@@ -59,16 +88,32 @@ if ($hassiteconfig
         $choices['1'] = new lang_string('trackforumsyes');
         $temp->add(new admin_setting_configselect('defaultpreference_trackforums', new lang_string('trackforums'),
             '', 0, $choices));
+
+        $choices = [];
+        $choices[\core_contentbank\content::VISIBILITY_PUBLIC] = new lang_string('visibilitychoicepublic', 'core_contentbank');
+        $choices[\core_contentbank\content::VISIBILITY_UNLISTED] = new lang_string('visibilitychoiceunlisted', 'core_contentbank');
+        $temp->add(new admin_setting_configselect('defaultpreference_core_contentbank_visibility',
+            new lang_string('visibilitypref', 'core_contentbank'),
+            new lang_string('visibilitypref_help', 'core_contentbank'),
+            \core_contentbank\content::VISIBILITY_PUBLIC, $choices));
     }
     $ADMIN->add('accounts', $temp);
 
     $ADMIN->add('accounts', new admin_externalpage('profilefields', new lang_string('profilefields','admin'), "$CFG->wwwroot/user/profile/index.php", 'moodle/site:config'));
     $ADMIN->add('accounts', new admin_externalpage('cohorts', new lang_string('cohorts', 'cohort'), $CFG->wwwroot . '/cohort/index.php', array('moodle/cohort:manage', 'moodle/cohort:view')));
+    $ADMIN->add(
+        'accounts',
+        new admin_externalpage(
+            'cohort_customfield',
+            new lang_string('cohort_customfield', 'admin'),
+            $CFG->wwwroot . '/cohort/customfield.php',
+            ['moodle/cohort:configurecustomfields']
+        )
+    );
 
+    // Stuff under the "roles" subcategory.
 
-    // stuff under the "roles" subcategory
-
-    // "userpolicies" settingpage
+    // User policies settingpage.
     $temp = new admin_settingpage('userpolicies', new lang_string('userpolicies', 'admin'));
     if ($ADMIN->fulltree) {
         if (!during_initial_install()) {
@@ -142,7 +187,7 @@ if ($hassiteconfig
             $temp->add(new admin_setting_configselect('restorernewroleid', new lang_string('restorernewroleid', 'admin'),
                           new lang_string('restorernewroleid_help', 'admin'), $defaultteacherid, $restorersnewrole));
 
-            // release memory
+            // Release memory.
             unset($otherroles);
             unset($guestroles);
             unset($userroles);
@@ -150,20 +195,19 @@ if ($hassiteconfig
             unset($restorersnewrole);
         }
 
+        $temp->add(new admin_setting_configcheckbox('enroladminnewcourse', new lang_string('enroladminnewcourse', 'admin'),
+            new lang_string('enroladminnewcourse_help', 'admin'), 1));
+
         $temp->add(new admin_setting_configcheckbox('autologinguests', new lang_string('autologinguests', 'admin'), new lang_string('configautologinguests', 'admin'), 0));
 
         $temp->add(new admin_setting_configmultiselect('hiddenuserfields', new lang_string('hiddenuserfields', 'admin'),
                    new lang_string('confighiddenuserfields', 'admin'), array(),
                        array('description' => new lang_string('description'),
+                             'email' => new lang_string('email'),
                              'city' => new lang_string('city'),
                              'country' => new lang_string('country'),
+                             'moodlenetprofile' => new lang_string('moodlenetprofile', 'user'),
                              'timezone' => new lang_string('timezone'),
-                             'webpage' => new lang_string('webpage'),
-                             'icqnumber' => new lang_string('icqnumber'),
-                             'skypeid' => new lang_string('skypeid'),
-                             'yahooid' => new lang_string('yahooid'),
-                             'aimid' => new lang_string('aimid'),
-                             'msnid' => new lang_string('msnid'),
                              'firstaccess' => new lang_string('firstaccess'),
                              'lastaccess' => new lang_string('lastaccess'),
                              'lastip' => new lang_string('lastip'),
@@ -176,20 +220,40 @@ if ($hassiteconfig
         // with moodle/site:viewuseridentity).
         // Options include fields from the user table that might be helpful to
         // distinguish when adding or listing users ('I want to add the John
-        // Smith from Science faculty').
-        // Username is not included as an option because in some sites, it might
-        // be a security problem to reveal usernames even to trusted staff.
-        // Custom user profile fields are not currently supported.
+        // Smith from Science faculty') and any custom profile fields.
         $temp->add(new admin_setting_configmulticheckbox('showuseridentity',
                 new lang_string('showuseridentity', 'admin'),
-                new lang_string('showuseridentity_desc', 'admin'), array('email' => 1), array(
-                    'idnumber'    => new lang_string('idnumber'),
-                    'email'       => new lang_string('email'),
-                    'phone1'      => new lang_string('phone1'),
-                    'phone2'      => new lang_string('phone2'),
-                    'department'  => new lang_string('department'),
-                    'institution' => new lang_string('institution'),
-                )));
+                new lang_string('showuseridentity_desc', 'admin'), ['email' => 1],
+                function() {
+                    global $CFG;
+                    require_once($CFG->dirroot.'/user/profile/lib.php');
+
+                    // Basic fields available in user table.
+                    $fields = [
+                        'username'    => new lang_string('username'),
+                        'idnumber'    => new lang_string('idnumber'),
+                        'email'       => new lang_string('email'),
+                        'phone1'      => new lang_string('phone1'),
+                        'phone2'      => new lang_string('phone2'),
+                        'department'  => new lang_string('department'),
+                        'institution' => new lang_string('institution'),
+                        'city'        => new lang_string('city'),
+                        'country'     => new lang_string('country'),
+                    ];
+
+                    // Custom profile fields.
+                    $profilefields = profile_get_custom_fields();
+                    foreach ($profilefields as $field) {
+                        // Only reasonable-length text fields can be used as identity fields.
+                        if ($field->param2 > 255 || $field->datatype != 'text') {
+                            continue;
+                        }
+                        $fields['profile_field_' . $field->shortname] = format_string($field->name, true,
+                            ['context' => context_system::instance()]) . ' *';
+                    }
+
+                    return $fields;
+                }));
         $setting = new admin_setting_configtext('fullnamedisplay', new lang_string('fullnamedisplay', 'admin'),
             new lang_string('configfullnamedisplay', 'admin'), 'language', PARAM_TEXT, 50);
         $setting->set_force_ltr(true);
@@ -211,4 +275,67 @@ if ($hassiteconfig
     $ADMIN->add('roles', new admin_externalpage('assignroles', new lang_string('assignglobalroles', 'role'), "$CFG->wwwroot/$CFG->admin/roles/assign.php?contextid=".$systemcontext->id, 'moodle/role:assign'));
     $ADMIN->add('roles', new admin_externalpage('checkpermissions', new lang_string('checkglobalpermissions', 'role'), "$CFG->wwwroot/$CFG->admin/roles/check.php?contextid=".$systemcontext->id, array('moodle/role:assign', 'moodle/role:safeoverride', 'moodle/role:override', 'moodle/role:manage')));
 
-} // end of speedup
+} // End of speedup.
+
+// Privacy settings.
+if ($hassiteconfig) {
+    $temp = new admin_settingpage('privacysettings', new lang_string('privacysettings', 'admin'));
+
+    $options = array(
+        0 => get_string('no'),
+        1 => get_string('yes')
+    );
+    $url = new moodle_url('/admin/settings.php?section=supportcontact');
+    $url = $url->out();
+    $setting = new admin_setting_configselect('agedigitalconsentverification',
+        new lang_string('agedigitalconsentverification', 'admin'),
+        new lang_string('agedigitalconsentverification_desc', 'admin', $url), 0, $options);
+    $setting->set_force_ltr(true);
+    $temp->add($setting);
+
+    // See {@link https://gdpr-info.eu/art-8-gdpr/}.
+    // See {@link https://www.betterinternetforkids.eu/web/portal/practice/awareness/detail?articleId=3017751}.
+    $ageofdigitalconsentmap = implode(PHP_EOL, [
+        '*, 16',
+        'AT, 14',
+        'BE, 13',
+        'BG, 14',
+        'CY, 14',
+        'CZ, 15',
+        'DK, 13',
+        'EE, 13',
+        'ES, 14',
+        'FI, 13',
+        'FR, 15',
+        'GB, 13',
+        'GR, 15',
+        'IT, 14',
+        'LT, 14',
+        'LV, 13',
+        'MT, 13',
+        'NO, 13',
+        'PT, 13',
+        'SE, 13',
+        'US, 13'
+    ]);
+    $setting = new admin_setting_agedigitalconsentmap('agedigitalconsentmap',
+        new lang_string('ageofdigitalconsentmap', 'admin'),
+        new lang_string('ageofdigitalconsentmap_desc', 'admin'),
+        $ageofdigitalconsentmap,
+        PARAM_RAW
+    );
+    $temp->add($setting);
+
+    $ADMIN->add('privacy', $temp);
+
+    // Policy settings.
+    $temp = new admin_settingpage('policysettings', new lang_string('policysettings', 'admin'));
+    $temp->add(new admin_settings_sitepolicy_handler_select('sitepolicyhandler', new lang_string('sitepolicyhandler', 'core_admin'),
+        new lang_string('sitepolicyhandler_desc', 'core_admin')));
+    $temp->add(new admin_setting_configtext('sitepolicy', new lang_string('sitepolicy', 'core_admin'),
+        new lang_string('sitepolicy_help', 'core_admin'), '', PARAM_RAW));
+    $temp->add(new admin_setting_configtext('sitepolicyguest', new lang_string('sitepolicyguest', 'core_admin'),
+        new lang_string('sitepolicyguest_help', 'core_admin'), (isset($CFG->sitepolicy) ? $CFG->sitepolicy : ''), PARAM_RAW));
+
+    $ADMIN->add('privacy', $temp);
+}

@@ -18,7 +18,6 @@
  * use the YUI version in AMD code until it is replaced.
  *
  * @module     tool_lp/dialogue
- * @package    tool_lp
  * @copyright  2015 Damyon Wiese <damyon@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -33,8 +32,11 @@ define(['core/yui'], function(Y) {
      * @param {function} afterShow Callback executed after the window is opened.
      * @param {function} afterHide Callback executed after the window is closed.
      * @param {Boolean} wide Specify we want an extra wide dialogue (the size is standard, but wider than the default).
+     * @param {String} height The height of the dialogue.
      */
-    var dialogue = function(title, content, afterShow, afterHide, wide) {
+    var dialogue = function(title, content, afterShow, afterHide, wide, height) {
+        M.util.js_pending('tool_lp/dialogue:dialogue');
+
         this.yuiDialogue = null;
         var parent = this;
 
@@ -49,6 +51,10 @@ define(['core/yui'], function(Y) {
                 width = '800px';
             }
 
+            if (!height) {
+                height = 'auto';
+            }
+
             parent.yuiDialogue = new M.core.dialogue({
                 headerContent: title,
                 bodyContent: content,
@@ -56,7 +62,12 @@ define(['core/yui'], function(Y) {
                 visible: false,
                 center: true,
                 modal: true,
-                width: width
+                width: width,
+                height: height
+            });
+
+            parent.yuiDialogue.before('visibleChange', function() {
+                M.util.js_pending('tool_lp/dialogue:before:visibleChange');
             });
 
             parent.yuiDialogue.after('visibleChange', function(e) {
@@ -67,18 +78,25 @@ define(['core/yui'], function(Y) {
                         Y.soon(function() {
                             afterShow(parent);
                             parent.yuiDialogue.centerDialogue();
+                            M.util.js_complete('tool_lp/dialogue:before:visibleChange');
                         });
+                    } else {
+                        M.util.js_complete('tool_lp/dialogue:before:visibleChange');
                     }
                 } else {
                     if ((typeof afterHide !== 'undefined')) {
                         Y.soon(function() {
                             afterHide(parent);
+                            M.util.js_complete('tool_lp/dialogue:before:visibleChange');
                         });
+                    } else {
+                        M.util.js_complete('tool_lp/dialogue:before:visibleChange');
                     }
                 }
             });
 
             parent.yuiDialogue.show();
+            M.util.js_complete('tool_lp/dialogue:dialogue');
         });
     };
 

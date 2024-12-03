@@ -35,10 +35,11 @@ if ($subscribe !== null) {
     $url->param('subscribe', $subscribe);
 }
 $PAGE->set_url($url);
+$PAGE->set_secondary_active_tab('coursehome');
 
 if ($id) {
     if (!$course = $DB->get_record('course', array('id' => $id))) {
-        print_error('invalidcourseid');
+        throw new \moodle_exception('invalidcourseid');
     }
 } else {
     $course = get_site();
@@ -240,9 +241,10 @@ if ($generalforums) {
                 if (isset($untracked[$forum->id])) {
                         $unreadlink  = '-';
                 } else if ($unread = forum_tp_count_forum_unread_posts($cm, $course)) {
-                        $unreadlink = '<span class="unread"><a href="view.php?f='.$forum->id.'">'.$unread.'</a>';
+                    $unreadlink = '<span class="unread"><a href="view.php?f='.$forum->id.'#unread">'.$unread.'</a>';
+                    $icon = $OUTPUT->pix_icon('t/markasread', $strmarkallread);
                     $unreadlink .= '<a title="'.$strmarkallread.'" href="markposts.php?f='.
-                                   $forum->id.'&amp;mark=read&amp;sesskey=' . sesskey() . '"><img src="'.$OUTPUT->pix_url('t/markasread') . '" alt="'.$strmarkallread.'" class="iconsmall" /></a></span>';
+                                   $forum->id.'&amp;mark=read&amp;sesskey=' . sesskey() . '">' . $icon . '</a></span>';
                 } else {
                     $unreadlink = '<span class="read">0</span>';
                 }
@@ -370,9 +372,10 @@ if ($course->id != SITEID) {    // Only real courses have learning forums
                     if (isset($untracked[$forum->id])) {
                         $unreadlink  = '-';
                     } else if ($unread = forum_tp_count_forum_unread_posts($cm, $course)) {
-                        $unreadlink = '<span class="unread"><a href="view.php?f='.$forum->id.'">'.$unread.'</a>';
+                        $unreadlink = '<span class="unread"><a href="view.php?f='.$forum->id.'#unread">'.$unread.'</a>';
+                        $icon = $OUTPUT->pix_icon('t/markasread', $strmarkallread);
                         $unreadlink .= '<a title="'.$strmarkallread.'" href="markposts.php?f='.
-                                       $forum->id.'&amp;mark=read&sesskey=' . sesskey() . '"><img src="'.$OUTPUT->pix_url('t/markasread') . '" alt="'.$strmarkallread.'" class="iconsmall" /></a></span>';
+                                       $forum->id.'&amp;mark=read&sesskey=' . sesskey() . '">' . $icon . '</a></span>';
                     } else {
                         $unreadlink = '<span class="read">0</span>';
                     }
@@ -452,8 +455,11 @@ if ($course->id != SITEID) {    // Only real courses have learning forums
 $PAGE->navbar->add($strforums);
 $PAGE->set_title("$course->shortname: $strforums");
 $PAGE->set_heading($course->fullname);
-$PAGE->set_button($searchform);
 echo $OUTPUT->header();
+
+echo html_writer::start_div('input-group me-5');
+echo $searchform;
+echo html_writer::end_div();
 
 if (!isguestuser() && isloggedin() && $showsubscriptioncolumns) {
     // Show the subscribe all options only to non-guest, enrolled users.

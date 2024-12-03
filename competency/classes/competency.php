@@ -53,6 +53,9 @@ class competency extends persistent {
     /** @var competency Object before update. */
     protected $beforeupdate = null;
 
+    /** @var competency|null To store new parent. */
+    protected $newparent;
+
     /**
      * Return the definition of the properties of this model.
      *
@@ -68,7 +71,7 @@ class competency extends persistent {
             ),
             'description' => array(
                 'default' => '',
-                'type' => PARAM_RAW
+                'type' => PARAM_CLEANHTML
             ),
             'descriptionformat' => array(
                 'choices' => array(FORMAT_HTML, FORMAT_MOODLE, FORMAT_PLAIN, FORMAT_MARKDOWN),
@@ -76,7 +79,7 @@ class competency extends persistent {
                 'default' => FORMAT_HTML
             ),
             'sortorder' => array(
-                'default' => null,
+                'default' => 0,
                 'type' => PARAM_INT
             ),
             'parentid' => array(
@@ -361,7 +364,7 @@ class competency extends persistent {
      * @param competency $parent The parent competency object.
      * @return void
      */
-    protected function set_new_path(competency $parent = null) {
+    protected function set_new_path(?competency $parent = null) {
         $path = '/0/';
         if ($this->get('parentid')) {
             $parent = $parent !== null ? $parent : $this->get_parent();
@@ -676,7 +679,8 @@ class competency extends persistent {
     public static function share_same_framework(array $ids) {
         global $DB;
         list($insql, $params) = $DB->get_in_or_equal($ids);
-        return $DB->count_records_select(self::TABLE, "id $insql", $params, "COUNT(DISTINCT(competencyframeworkid))") == 1;
+        $sql = "SELECT COUNT('x') FROM (SELECT DISTINCT(competencyframeworkid) FROM {" . self::TABLE . "} WHERE id {$insql}) f";
+        return $DB->count_records_sql($sql, $params) == 1;
     }
 
     /**
@@ -720,7 +724,7 @@ class competency extends persistent {
      * Build a framework tree with competency nodes.
      *
      * @param  int  $frameworkid the framework id
-     * @return node[] tree of framework competency nodes
+     * @return stdClass[] tree of framework competency nodes
      */
     public static function get_framework_tree($frameworkid) {
         $competencies = self::search('', $frameworkid);
@@ -730,7 +734,7 @@ class competency extends persistent {
     /**
      * Get the context from the framework.
      *
-     * @return context
+     * @return \context
      */
     public function get_context() {
         return $this->get_framework()->get_context();
@@ -741,7 +745,7 @@ class competency extends persistent {
      *
      * @param array $all - List of all competency classes.
      * @param int $parentid - The current parent ID. Pass 0 to build the tree from the top.
-     * @return node[] $tree tree of nodes
+     * @return stdClass[] $tree tree of nodes
      */
     protected static function build_tree($all, $parentid) {
         $tree = array();
@@ -768,6 +772,8 @@ class competency extends persistent {
      * @return bool True if we can delete the competencies.
      */
     public static function can_all_be_deleted($ids) {
+        global $CFG;
+
         if (empty($ids)) {
             return true;
         }
@@ -791,6 +797,13 @@ class competency extends persistent {
         if (user_competency_plan::has_records_for_competencies($ids)) {
             return false;
         }
+
+        require_once($CFG->libdir . '/badgeslib.php');
+        // Check if competency is used in a badge.
+        if (badge_award_criteria_competency_has_records_for_competencies($ids)) {
+            return false;
+        }
+
         return true;
     }
 

@@ -260,115 +260,184 @@ function forum_get_potential_subscribers() {
 }
 
 /**
- * Builds and returns the body of the email notification in plain text.
- *
- * @uses CONTEXT_MODULE
- * @param object $course
- * @param object $cm
- * @param object $forum
- * @param object $discussion
- * @param object $post
- * @param object $userfrom
- * @param object $userto
- * @param boolean $bare
- * @param string $replyaddress The inbound address that a user can reply to the generated e-mail with. [Since 2.8].
- * @return string The email body in plain text format.
  * @deprecated since Moodle 3.0 use \mod_forum\output\forum_post_email instead
  */
-function forum_make_mail_text($course, $cm, $forum, $discussion, $post, $userfrom, $userto, $bare = false, $replyaddress = null) {
-    global $PAGE;
-    $renderable = new \mod_forum\output\forum_post_email(
-        $course,
-        $cm,
-        $forum,
-        $discussion,
-        $post,
-        $userfrom,
-        $userto,
-        forum_user_can_post($forum, $discussion, $userto, $cm, $course)
-        );
-
-    $modcontext = context_module::instance($cm->id);
-    $renderable->viewfullnames = has_capability('moodle/site:viewfullnames', $modcontext, $userto->id);
-
-    if ($bare) {
-        $renderer = $PAGE->get_renderer('mod_forum', 'emaildigestfull', 'textemail');
-    } else {
-        $renderer = $PAGE->get_renderer('mod_forum', 'email', 'textemail');
-    }
-
-    debugging("forum_make_mail_text() has been deprecated, please use the \mod_forum\output\forum_post_email renderable instead.",
-            DEBUG_DEVELOPER);
-
-    return $renderer->render($renderable);
+function forum_make_mail_text() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. Please use '
+        . '\mod_forum\output\forum_post_email');
 }
 
 /**
- * Builds and returns the body of the email notification in html format.
- *
- * @param object $course
- * @param object $cm
- * @param object $forum
- * @param object $discussion
- * @param object $post
- * @param object $userfrom
- * @param object $userto
- * @param string $replyaddress The inbound address that a user can reply to the generated e-mail with. [Since 2.8].
- * @return string The email text in HTML format
  * @deprecated since Moodle 3.0 use \mod_forum\output\forum_post_email instead
  */
-function forum_make_mail_html($course, $cm, $forum, $discussion, $post, $userfrom, $userto, $replyaddress = null) {
-    return forum_make_mail_post($course,
-        $cm,
-        $forum,
-        $discussion,
-        $post,
-        $userfrom,
-        $userto,
-        forum_user_can_post($forum, $discussion, $userto, $cm, $course)
-    );
+function forum_make_mail_html() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. Please use '
+        . '\mod_forum\output\forum_post_email');
 }
 
 /**
- * Given the data about a posting, builds up the HTML to display it and
- * returns the HTML in a string.  This is designed for sending via HTML email.
- *
- * @param object $course
- * @param object $cm
- * @param object $forum
- * @param object $discussion
- * @param object $post
- * @param object $userfrom
- * @param object $userto
- * @param bool $ownpost
- * @param bool $reply
- * @param bool $link
- * @param bool $rate
- * @param string $footer
- * @return string
  * @deprecated since Moodle 3.0 use \mod_forum\output\forum_post_email instead
  */
-function forum_make_mail_post($course, $cm, $forum, $discussion, $post, $userfrom, $userto,
-                              $ownpost=false, $reply=false, $link=false, $rate=false, $footer="") {
-    global $PAGE;
-    $renderable = new \mod_forum\output\forum_post_email(
-        $course,
-        $cm,
-        $forum,
-        $discussion,
-        $post,
-        $userfrom,
-        $userto,
-        $reply);
+function forum_make_mail_post() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. Please use '
+        . '\mod_forum\output\forum_post_email');
+}
 
-    $modcontext = context_module::instance($cm->id);
-    $renderable->viewfullnames = has_capability('moodle/site:viewfullnames', $modcontext, $userto->id);
+/**
+ * @deprecated since Moodle 3.7
+ */
+function forum_cron_minimise_user_record() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. It has not been replaced.');
+}
 
-    // Assume that this is being used as a standard forum email.
-    $renderer = $PAGE->get_renderer('mod_forum', 'email', 'htmlemail');
+/**
+ * @deprecated since Moodle 3.7
+ */
+function forum_cron() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. Please use the forum tasks');
+}
 
-    debugging("forum_make_mail_post() has been deprecated, please use the \mod_forum\output\forum_post_email renderable instead.",
-            DEBUG_DEVELOPER);
+/**
+ * @deprecated since Moodle 3.7
+ */
+function forum_print_discussion() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. ' .
+        'please use \mod_forum\local\renderers\discussion instead');
+}
 
-    return $renderer->render($renderable);
+
+/**
+ * @deprecated since Moodle 3.7
+ */
+function forum_post_nesting_cache() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. ' .
+        'please use \mod_forum\local\renderers\posts instead');
+}
+
+/**
+ * @deprecated since Moodle 3.7
+ */
+function forum_should_start_post_nesting() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. ' .
+        'please use \mod_forum\local\renderers\posts instead');
+}
+
+/**
+ * @deprecated since Moodle 3.7
+ */
+function forum_should_end_post_nesting() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. ' .
+        'please use \mod_forum\local\renderers\posts instead');
+}
+
+/**
+ * @deprecated since Moodle 3.7
+ */
+function forum_print_post_start() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. ' .
+        'please use \mod_forum\local\renderers\posts instead');
+}
+
+/**
+ * @deprecated since Moodle 3.7
+ */
+function forum_print_post_end() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. ' .
+        'please use \mod_forum\local\renderers\posts instead');
+}
+
+/**
+ * @deprecated since Moodle 3.7
+ */
+function forum_print_post() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. ' .
+        'please use \mod_forum\local\renderers\posts instead');
+}
+
+/**
+ * @deprecated since Moodle 3.7
+ */
+function forum_print_posts_flat() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. ' .
+        'please use \mod_forum\local\renderers\posts instead');
+}
+
+/**
+ * @deprecated since Moodle 3.7
+ */
+function forum_print_posts_threaded() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. ' .
+        'please use \mod_forum\local\renderers\posts instead');
+}
+
+/**
+ * @deprecated since Moodle 3.7
+ */
+function forum_print_posts_nested() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. ' .
+        'please use \mod_forum\local\renderers\posts instead');
+}
+
+/**
+ * @deprecated since Moodle 3.7
+ */
+function forum_print_latest_discussions() {
+    throw new coding_exception(__FUNCTION__ . '() can not be used any more. ');
+}
+
+/**
+ * @deprecated since Moodle 3.7
+ */
+function forum_count_replies() {
+    throw new coding_exception(__FUNCTION__ . ' has been removed. Please use get_reply_count_for_post_id_in_discussion_id in
+    the post vault.');
+}
+
+/**
+ * @deprecated since Moodle 3.8
+ */
+function forum_scale_used() {
+    throw new coding_exception('forum_scale_used() can not be used anymore. Plugins can implement ' .
+        '<modname>_scale_used_anywhere, all implementations of <modname>_scale_used are now ignored');
+}
+
+/**
+ * @deprecated since Moodle 3.8
+ */
+function forum_get_user_grades() {
+    throw new \coding_exception('forum_get_user_grades() is deprecated and no longer used. '  .
+        'Please use rating_manager::get_user_grades() instead.');
+}
+
+/**
+ * @deprecated since Moodle 3.11
+ */
+function forum_get_completion_state() {
+    $completionclass = \mod_forum\completion\custom_completion::class;
+    throw new coding_exception(__FUNCTION__ . "() has been removed, please use the '{$completionclass}' class instead");
+}
+
+/**
+ * @deprecated since Moodle 4.0
+ */
+#[\core\attribute\deprecated(
+    since: '4.0',
+    reason: 'The \'Manage subscribers\' button has been replaced with tertiary navigation.',
+    mdl: 'MDL-73415',
+    final: true
+)]
+function forum_update_subscriptions_button(): void {
+    \core\deprecation::emit_deprecation_if_present(__FUNCTION__);
+}
+
+/**
+ * This function prints the overview of a discussion in the forum listing.
+ * It needs some discussion information and some post information, these
+ * happen to be combined for efficiency in the $post parameter by the function
+ * that calls this one: forum_print_latest_discussions()
+ *
+ * @deprecated since Moodle 4.3
+ */
+function forum_print_discussion_header() {
+    throw new \coding_exception('forum_print_discussion_header has been deprecated');
 }

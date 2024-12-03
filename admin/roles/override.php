@@ -90,10 +90,11 @@ $title = get_string('overridepermissionsforrole', 'core_role', $a);
 $currenttab = 'permissions';
 
 $PAGE->set_title($title);
+$PAGE->activityheader->disable();
 $PAGE->navbar->add($straction);
 switch ($context->contextlevel) {
     case CONTEXT_SYSTEM:
-        print_error('cannotoverridebaserole', 'error');
+        throw new \moodle_exception('cannotoverridebaserole', 'error');
         break;
     case CONTEXT_USER:
         $fullname = fullname($user, has_capability('moodle/site:viewfullnames', $context));
@@ -124,7 +125,7 @@ if (empty($overridableroles[$roleid])) {
     $a = new stdClass;
     $a->roleid = $roleid;
     $a->context = $contextname;
-    print_error('cannotoverriderolehere', '', $context->get_url(), $a);
+    throw new \moodle_exception('cannotoverriderolehere', '', $context->get_url(), $a);
 }
 
 // If we are actually overriding a role, create the table object, and save changes if appropriate.
@@ -134,22 +135,6 @@ $overridestable->read_submitted_permissions();
 if (optional_param('savechanges', false, PARAM_BOOL) && confirm_sesskey()) {
     $overridestable->save_changes();
     $rolename = $overridableroles[$roleid];
-    // Trigger event.
-    $event = \core\event\role_capabilities_updated::create(
-        array(
-            'context' => $context,
-            'objectid' => $roleid,
-        )
-    );
-
-    $event->set_legacy_logdata(
-        array(
-            $course->id, 'role', 'override', 'admin/roles/override.php?contextid=' . $context->id . '&roleid=' . $roleid,
-            $rolename, '', $USER->id
-        )
-    );
-    $event->add_record_snapshot('role', $role);
-    $event->trigger();
 
     redirect($returnurl);
 }
@@ -179,7 +164,8 @@ if (!empty($capabilities)) {
     echo html_writer::start_tag('div', array('class'=>'submit_buttons'));
     $attrs = array('type'=>'submit', 'name'=>'savechanges', 'value'=>get_string('savechanges'), 'class'=>'btn btn-primary');
     echo html_writer::empty_tag('input', $attrs);
-    $attrs = array('type'=>'submit', 'name'=>'cancel', 'value'=>get_string('cancel'), 'class' => 'btn btn-secondary');
+    $attrs = array('type' => 'submit', 'name' => 'cancel', 'value' => get_string('cancel'),
+        'class' => 'btn btn-secondary ms-1');
     echo html_writer::empty_tag('input', $attrs);
     echo html_writer::end_tag('div');
     echo html_writer::end_tag('div');

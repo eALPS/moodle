@@ -44,12 +44,27 @@ class restore_generic_setting extends root_backup_setting {}
 class restore_users_setting extends restore_generic_setting {}
 
 /**
+ * root setting to control if restore will create override permission information by roles
+ */
+class restore_permissions_setting extends restore_generic_setting {
+}
+
+/**
  * root setting to control if restore will create groups/grouping information. Depends on @restore_users_setting
  *
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @copyright 2014 Matt Sammarco
  */
 class restore_groups_setting extends restore_generic_setting {
+}
+
+/**
+ * root setting to control if restore will include custom field information
+ *
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @copyright 2018 Daniel Neis Araujo
+ */
+class restore_customfield_setting extends restore_generic_setting {
 }
 
 /**
@@ -143,6 +158,41 @@ class restore_course_generic_setting extends course_backup_setting {}
  */
 class restore_course_overwrite_conf_setting extends restore_course_generic_setting {}
 
+/**
+ * Setting to switch between current and new course name/startdate
+ *
+ * @copyright   2017 Marina Glancy
+ * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class restore_course_defaultcustom_setting extends restore_course_generic_setting {
+    /**
+     * Validates that the value $value has type $vtype
+     * @param int $vtype
+     * @param mixed $value
+     * @return mixed
+     */
+    public function validate_value($vtype, $value) {
+        if ($value === false) {
+            // Value "false" means default and is allowed for this setting type even if it does not match $vtype.
+            return $value;
+        }
+        return parent::validate_value($vtype, $value);
+    }
+
+    /**
+     * Special method for this element only. When value is "false" returns the default value.
+     * @return mixed
+     */
+    public function get_normalized_value() {
+        $value = $this->get_value();
+        if ($value === false && $this->get_ui() instanceof backup_setting_ui_defaultcustom) {
+            $attributes = $this->get_ui()->get_attributes();
+            return $attributes['defaultvalue'];
+        }
+        return $value;
+    }
+}
+
 
 class restore_course_generic_text_setting extends restore_course_generic_setting {
 
@@ -172,6 +222,39 @@ class restore_section_included_setting extends restore_section_generic_setting {
  */
 class restore_section_userinfo_setting extends restore_section_generic_setting {}
 
+/**
+ * Subsection base class (delegated section).
+ */
+class restore_subsection_generic_setting extends restore_section_generic_setting {
+    /**
+     * Class constructor.
+     *
+     * @param string $name Name of the setting
+     * @param string $vtype Type of the setting, for example base_setting::IS_TEXT
+     * @param mixed $value Value of the setting
+     * @param bool $visibility Is the setting visible in the UI, for example base_setting::VISIBLE
+     * @param int $status Status of the setting with regards to the locking, for example base_setting::NOT_LOCKED
+     */
+    public function __construct($name, $vtype, $value = null, $visibility = self::VISIBLE, $status = self::NOT_LOCKED) {
+        parent::__construct($name, $vtype, $value, $visibility, $status);
+        $this->level = self::SUBSECTION_LEVEL;
+    }
+}
+
+/**
+ * Setting to define if one subsection is included or no.
+ *
+ * Activities _included settings depend of them if available.
+ */
+class restore_subsection_included_setting extends restore_subsection_generic_setting {
+}
+
+/**
+ * Subsection backup setting to control if section will include
+ * user information or no, depends of @restore_users_setting.
+ */
+class restore_subsection_userinfo_setting extends restore_subsection_generic_setting {
+}
 
 // Activity backup settings
 
@@ -192,3 +275,50 @@ class restore_activity_included_setting extends restore_activity_generic_setting
  * user information or no, depends of @restore_users_setting
  */
 class restore_activity_userinfo_setting extends restore_activity_generic_setting {}
+
+/**
+ * Generic subactivity setting to pass various settings between tasks and steps
+ */
+class restore_subactivity_generic_setting extends restore_activity_generic_setting {
+    /**
+     * Class constructor.
+     *
+     * @param string $name Name of the setting
+     * @param string $vtype Type of the setting, for example base_setting::IS_TEXT
+     * @param mixed $value Value of the setting
+     * @param bool $visibility Is the setting visible in the UI, for example base_setting::VISIBLE
+     * @param int $status Status of the setting with regards to the locking, for example base_setting::NOT_LOCKED
+     */
+    public function __construct($name, $vtype, $value = null, $visibility = self::VISIBLE, $status = self::NOT_LOCKED) {
+        parent::__construct($name, $vtype, $value, $visibility, $status);
+        $this->level = self::SUBACTIVITY_LEVEL;
+    }
+}
+
+/**
+ * Subactivity backup setting to control if activity will be included or no.
+ *
+ * Depends of restore_activities_setting and optionally parent section included setting.
+ */
+class restore_subactivity_included_setting extends restore_subactivity_generic_setting {
+}
+
+/**
+ * Subactivity backup setting to control if activity will include user information.
+ *
+ * Depends of restore_users_setting.
+ */
+class restore_subactivity_userinfo_setting extends restore_subactivity_generic_setting {
+}
+
+/**
+ * root setting to control if restore will create content bank content or no
+ */
+class restore_contentbankcontent_setting extends restore_generic_setting {
+}
+
+/**
+ * Root setting to control if restore will create xAPI states or not.
+ */
+class restore_xapistate_setting extends restore_generic_setting {
+}

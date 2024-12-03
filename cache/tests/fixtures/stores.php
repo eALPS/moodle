@@ -15,17 +15,6 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Cache store test fixtures.
- *
- * @package    core
- * @category   cache
- * @copyright  2013 Sam Hemelryk
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
-
-/**
  * An abstract class to make writing unit tests for cache stores very easy.
  *
  * @package    core
@@ -34,7 +23,6 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class cachestore_tests extends advanced_testcase {
-
     /**
      * Returns the class name for the store.
      *
@@ -46,10 +34,10 @@ abstract class cachestore_tests extends advanced_testcase {
      * Sets up the fixture, for example, open a network connection.
      * This method is called before a test is executed.
      */
-    public function setUp() {
+    public function setUp(): void {
         $class = $this->get_class_name();
         if (!class_exists($class) || !$class::are_requirements_met()) {
-            $this->markTestSkipped('Could not test '.$class.'. Requirements are not met.');
+            $this->markTestSkipped('Could not test ' . $class . '. Requirements are not met.');
         }
         parent::setUp();
     }
@@ -62,10 +50,10 @@ abstract class cachestore_tests extends advanced_testcase {
         $modes = $class::get_supported_modes();
         if ($modes & cache_store::MODE_APPLICATION) {
             $definition = cache_definition::load_adhoc(cache_store::MODE_APPLICATION, $class, 'phpunit_test');
-            $instance = new $class($class.'_test', $class::unit_test_configuration());
+            $instance = new $class($class . '_test', $class::unit_test_configuration());
 
             if (!$instance->is_ready()) {
-                $this->markTestSkipped('Could not test '.$class.'. No test instance configured for application caches.');
+                $this->markTestSkipped('Could not test ' . $class . '. No test instance configured for application caches.');
             } else {
                 $instance->initialise($definition);
                 $this->run_tests($instance);
@@ -73,10 +61,10 @@ abstract class cachestore_tests extends advanced_testcase {
         }
         if ($modes & cache_store::MODE_SESSION) {
             $definition = cache_definition::load_adhoc(cache_store::MODE_SESSION, $class, 'phpunit_test');
-            $instance = new $class($class.'_test', $class::unit_test_configuration());
+            $instance = new $class($class . '_test', $class::unit_test_configuration());
 
             if (!$instance->is_ready()) {
-                $this->markTestSkipped('Could not test '.$class.'. No test instance configured for session caches.');
+                $this->markTestSkipped('Could not test ' . $class . '. No test instance configured for session caches.');
             } else {
                 $instance->initialise($definition);
                 $this->run_tests($instance);
@@ -84,10 +72,10 @@ abstract class cachestore_tests extends advanced_testcase {
         }
         if ($modes & cache_store::MODE_REQUEST) {
             $definition = cache_definition::load_adhoc(cache_store::MODE_REQUEST, $class, 'phpunit_test');
-            $instance = new $class($class.'_test', $class::unit_test_configuration());
+            $instance = new $class($class . '_test', $class::unit_test_configuration());
 
             if (!$instance->is_ready()) {
-                $this->markTestSkipped('Could not test '.$class.'. No test instance configured for request caches.');
+                $this->markTestSkipped('Could not test ' . $class . '. No test instance configured for request caches.');
             } else {
                 $instance->initialise($definition);
                 $this->run_tests($instance);
@@ -99,7 +87,7 @@ abstract class cachestore_tests extends advanced_testcase {
      * Test the store for basic functionality.
      */
     public function run_tests(cache_store $instance) {
-        $object = new stdClass;
+        $object = new stdClass();
         $object->data = 1;
 
         // Test set with a string.
@@ -116,10 +104,10 @@ abstract class cachestore_tests extends advanced_testcase {
         // Test find and find with prefix if this class implements the searchable interface.
         if ($instance->is_searchable()) {
             // Extra settings here ignore the return order of the array.
-            $this->assertEquals(['test3', 'test1', 'test2', 'other3'], $instance->find_all(), '', 0, 1, true);
+            $this->assertEqualsCanonicalizing(['test3', 'test1', 'test2', 'other3'], $instance->find_all());
 
             // Extra settings here ignore the return order of the array.
-            $this->assertEquals(['test2', 'test1', 'test3'], $instance->find_by_prefix('test'), '', 0, 1, true);
+            $this->assertEqualsCanonicalizing(['test2', 'test1', 'test3'], $instance->find_by_prefix('test'));
             $this->assertEquals(['test2'], $instance->find_by_prefix('test2'));
             $this->assertEquals(['other3'], $instance->find_by_prefix('other'));
             $this->assertEquals([], $instance->find_by_prefix('nothere'));
@@ -131,16 +119,16 @@ abstract class cachestore_tests extends advanced_testcase {
 
         // Test get with an int.
         $this->assertSame(1, $instance->get('test1'));
-        $this->assertInternalType('int', $instance->get('test1'));
+        $this->assertIsInt($instance->get('test1'));
         $this->assertSame(2, $instance->get('test2'));
-        $this->assertInternalType('int', $instance->get('test2'));
+        $this->assertIsInt($instance->get('test2'));
 
         // Test set with a bool.
         $this->assertTrue($instance->set('test1', true));
 
         // Test get with an bool.
         $this->assertSame(true, $instance->get('test1'));
-        $this->assertInternalType('boolean', $instance->get('test1'));
+        $this->assertIsBool($instance->get('test1'));
 
         // Test with an object.
         $this->assertTrue($instance->set('obj', $object));
@@ -163,31 +151,31 @@ abstract class cachestore_tests extends advanced_testcase {
         $this->assertFalse($instance->get('test2'));
 
         // Test set_many.
-        $outcome = $instance->set_many(array(
-            array('key' => 'many1', 'value' => 'many1'),
-            array('key' => 'many2', 'value' => 'many2'),
-            array('key' => 'many3', 'value' => 'many3'),
-            array('key' => 'many4', 'value' => 'many4'),
-            array('key' => 'many5', 'value' => 'many5')
-        ));
+        $outcome = $instance->set_many([
+            ['key' => 'many1', 'value' => 'many1'],
+            ['key' => 'many2', 'value' => 'many2'],
+            ['key' => 'many3', 'value' => 'many3'],
+            ['key' => 'many4', 'value' => 'many4'],
+            ['key' => 'many5', 'value' => 'many5'],
+        ]);
         $this->assertSame(5, $outcome);
         $this->assertSame('many1', $instance->get('many1'));
         $this->assertSame('many5', $instance->get('many5'));
         $this->assertFalse($instance->get('many6'));
 
         // Test get_many.
-        $result = $instance->get_many(array('many1', 'many3', 'many5', 'many6'));
-        $this->assertInternalType('array', $result);
+        $result = $instance->get_many(['many1', 'many3', 'many5', 'many6']);
+        $this->assertIsArray($result);
         $this->assertCount(4, $result);
-        $this->assertSame(array(
+        $this->assertSame([
             'many1' => 'many1',
             'many3' => 'many3',
             'many5' => 'many5',
             'many6' => false,
-        ), $result);
+        ], $result);
 
         // Test delete_many.
-        $this->assertSame(3, $instance->delete_many(array('many2', 'many3', 'many4')));
-        $this->assertSame(2, $instance->delete_many(array('many1', 'many5', 'many6')));
+        $this->assertSame(3, $instance->delete_many(['many2', 'many3', 'many4']));
+        $this->assertSame(2, $instance->delete_many(['many1', 'many5', 'many6']));
     }
 }

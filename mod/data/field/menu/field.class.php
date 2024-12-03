@@ -32,6 +32,26 @@ class data_field_menu extends data_field_base {
      */
     protected static $priority = self::HIGH_PRIORITY;
 
+    public function supports_preview(): bool {
+        return true;
+    }
+
+    public function get_data_content_preview(int $recordid): stdClass {
+        $options = explode("\n", $this->field->param1);
+        $options = array_map('trim', $options);
+        $selected = $options[$recordid % count($options)];
+        return (object)[
+            'id' => 0,
+            'fieldid' => $this->field->id,
+            'recordid' => $recordid,
+            'content' => $selected,
+            'content1' => null,
+            'content2' => null,
+            'content3' => null,
+            'content4' => null,
+        ];
+    }
+
     function display_add_field($recordid = 0, $formdata = null) {
         global $DB, $OUTPUT;
 
@@ -58,8 +78,7 @@ class data_field_menu extends data_field_base {
         $str .= '<label for="' . 'field_' . $this->field->id . '">';
         $str .= html_writer::span($this->field->name, 'accesshide');
         if ($this->field->required) {
-            $image = html_writer::img($OUTPUT->pix_url('req'), get_string('requiredelement', 'form'),
-                                     array('class' => 'req', 'title' => get_string('requiredelement', 'form')));
+            $image = $OUTPUT->pix_icon('req', get_string('requiredelement', 'form'));
             $str .= html_writer::div($image, 'inline-req');
         }
         $str .= '</label>';
@@ -105,13 +124,18 @@ class data_field_menu extends data_field_base {
 
         $return = html_writer::label(get_string('fieldtypelabel', "datafield_" . $this->type),
             'menuf_' . $this->field->id, false, array('class' => 'accesshide'));
-        $return .= html_writer::select($options, 'f_'.$this->field->id, $content, array('class' => 'custom-select'));
+        $return .= html_writer::select($options, 'f_'.$this->field->id, $content, array('' => get_string('menuchoose', 'data')),
+                array('class' => 'custom-select'));
         return $return;
     }
 
-     function parse_search_field() {
-            return optional_param('f_'.$this->field->id, '', PARAM_NOTAGS);
-     }
+    public function parse_search_field($defaults = null) {
+        $param = 'f_'.$this->field->id;
+        if (empty($defaults[$param])) {
+            $defaults = array($param => '');
+        }
+        return optional_param($param, $defaults[$param], PARAM_NOTAGS);
+    }
 
     function generate_sql($tablealias, $value) {
         global $DB;
@@ -135,4 +159,18 @@ class data_field_menu extends data_field_base {
         return strval($value) !== '';
     }
 
+    /**
+     * Return the plugin configs for external functions.
+     *
+     * @return array the list of config parameters
+     * @since Moodle 3.3
+     */
+    public function get_config_for_external() {
+        // Return all the config parameters.
+        $configs = [];
+        for ($i = 1; $i <= 10; $i++) {
+            $configs["param$i"] = $this->field->{"param$i"};
+        }
+        return $configs;
+    }
 }

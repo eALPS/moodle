@@ -34,60 +34,55 @@ Feature: As a teacher I need to see an accurate list of subscribed users
     And the following "grouping groups" exist:
       | grouping | group |
       | GG1      | G1    |
+    And the following "activities" exist:
+      | activity | course | idnumber | type    | name           | forcesubscribe |
+      | forum    | C1     | 1        | general | Forced Forum 1 | 1              |
+      | forum    | C1     | 0001     | general | Forced Forum 2 |                |
+      | forum    | C1     | 0002     | general | Forced Forum 3 | 2              |
     And I log in as "teacher"
-    And I follow "Course 1"
-    And I turn editing mode on
+    And I am on "Course 1" course homepage with editing mode on
 
   @javascript
   Scenario: A forced forum lists all subscribers
-    When I add a "Forum" to section "1" and I fill the form with:
-      | Forum name        | Forced Forum 1 |
-      | Forum type        | Standard forum for general use |
-      | Description       | Test forum description |
-      | Subscription mode | Forced subscription |
-    And I follow "Forced Forum 1"
-    And I navigate to "Show/edit current subscribers" in current page administration
+    When I am on the "Forced Forum 1" "forum activity" page
+    And I navigate to "Subscriptions" in current page administration
     Then I should see "Student 1"
     And I should see "Teacher Teacher"
     And I should see "Student 2"
     And I should see "Student 3"
-    And I follow "Forced Forum 1"
-    And I navigate to "Edit settings" in current page administration
+    And I am on the "Forced Forum 1" "forum activity editing" page
     And I expand all fieldsets
     And I click on "Add restriction..." "button"
     And I click on "Grouping" "button" in the "Add restriction..." "dialogue"
     And I set the field with xpath "//select[@name='id']" to "Grouping 1"
     And I press "Save and display"
-    And I navigate to "Show/edit current subscribers" in current page administration
+    And I navigate to "Subscriptions" in current page administration
     And I should see "Student 1"
     And I should see "Teacher Teacher"
     And I should not see "Student 2"
     And I should not see "Student 3"
 
   Scenario: A forced forum does not allow to edit the subscribers
-    When I add a "Forum" to section "1" and I fill the form with:
-      | Forum name        | Forced Forum 2 |
-      | Forum type        | Standard forum for general use |
-      | Description       | Test forum description |
+    Given I am on the "Forced Forum 2" "forum activity editing" page
+    And I set the following fields to these values:
       | Subscription mode | Forced subscription |
-      | Visible           | Show |
-    And I follow "Forced Forum 2"
-    And I navigate to "Show/edit current subscribers" in current page administration
+      | Availability      | Show on course page |
+    And I press "Save and return to course"
+    And I am on the "Forced Forum 2" "forum activity" page
+    And I navigate to "Subscriptions" in current page administration
     Then I should see "Teacher Teacher"
     And I should see "Student 1"
     And I should see "Student 2"
     And I should see "Student 3"
-    And I should not see "Turn editing on"
 
   Scenario: A forced and hidden forum lists only teachers
-    When I add a "Forum" to section "1" and I fill the form with:
-      | Forum name        | Forced Forum 2 |
-      | Forum type        | Standard forum for general use |
-      | Description       | Test forum description |
+    Given I am on the "Forced Forum 2" "forum activity editing" page
+    And I set the following fields to these values:
       | Subscription mode | Forced subscription |
-      | Visible           | Hide |
-    And I follow "Forced Forum 2"
-    And I navigate to "Show/edit current subscribers" in current page administration
+      | Availability      | Hide on course page |
+    And I press "Save and return to course"
+    And I am on the "Forced Forum 2" "forum activity" page
+    And I navigate to "Subscriptions" in current page administration
     Then I should see "Teacher Teacher"
     And I should not see "Student 1"
     And I should not see "Student 2"
@@ -95,25 +90,19 @@ Feature: As a teacher I need to see an accurate list of subscribed users
 
   @javascript
   Scenario: An automatic forum lists all subscribers
-    When I add a "Forum" to section "1" and I fill the form with:
-      | Forum name        | Forced Forum 1 |
-      | Forum type        | Standard forum for general use |
-      | Description       | Test forum description |
-      | Subscription mode | Auto subscription |
-    And I follow "Forced Forum 1"
-    And I navigate to "Show/edit current subscribers" in current page administration
+    When I am on the "Forced Forum 3" "forum activity" page
+    And I navigate to "Subscriptions" in current page administration
     Then I should see "Student 1"
     And I should see "Teacher Teacher"
     And I should see "Student 2"
     And I should see "Student 3"
-    And I follow "Forced Forum 1"
-    And I navigate to "Edit settings" in current page administration
+    And I am on the "Forced Forum 3" "forum activity editing" page
     And I expand all fieldsets
     And I click on "Add restriction..." "button"
     And I click on "Grouping" "button" in the "Add restriction..." "dialogue"
     And I set the field with xpath "//select[@name='id']" to "Grouping 1"
     And I press "Save and display"
-    And I navigate to "Show/edit current subscribers" in current page administration
+    And I navigate to "Subscriptions" in current page administration
     And I should see "Student 1"
     And I should see "Teacher Teacher"
     And I should not see "Student 2"

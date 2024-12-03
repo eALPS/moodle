@@ -36,7 +36,7 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class testing_block_generator extends component_generator_base {
-    /** @var number of created instances */
+    /** @var int number of created instances */
     protected $instancecount = 0;
 
     /**
@@ -114,18 +114,42 @@ abstract class testing_block_generator extends component_generator_base {
      * @return stdClass the block_instance record that has just been created.
      */
     public function create_instance($record = null, $options = array()) {
-        global $DB;
+        global $DB, $PAGE;
 
         $this->instancecount++;
+
+        // Creating a block is a back end operation, which should not cause any output to happen.
+        // This will allow us to check that the theme was not initialised while creating the block instance.
+        $outputstartedbefore = $PAGE->get_where_theme_was_initialised();
 
         $record = (object)(array)$record;
         $this->preprocess_record($record, $options);
         $record = $this->prepare_record($record);
 
+        if (empty($record->timecreated)) {
+            $record->timecreated = time();
+        }
+        if (empty($record->timemodified)) {
+            $record->timemodified = time();
+        }
+
         $id = $DB->insert_record('block_instances', $record);
         context_block::instance($id);
 
         $instance = $DB->get_record('block_instances', array('id' => $id), '*', MUST_EXIST);
+
+        // If the theme was initialised while creating the block instance, something somewhere called an output
+        // function. Rather than leaving this as a hard-to-debug situation, let's make it fail with a clear error.
+        $outputstartedafter = $PAGE->get_where_theme_was_initialised();
+
+        if ($outputstartedbefore === null && $outputstartedafter !== null) {
+            throw new coding_exception('Creating a block_' . $this->get_blockname() . ' initialised the theme and output!',
+                'This should not happen. Creating a block should be a pure back-end operation. Unnecessarily initialising ' .
+                'the output mechanism at the wrong time can cause subtle bugs and is a significant performance hit. There is ' .
+                'likely a call to an output function that caused it:' . PHP_EOL . PHP_EOL .
+                format_backtrace($outputstartedafter, true));
+        }
+
         return $instance;
     }
 

@@ -59,7 +59,7 @@ abstract class pdo_moodle_database extends moodle_database {
      * @param array $dboptions driver specific options
      * @return bool success
      */
-    public function connect($dbhost, $dbuser, $dbpass, $dbname, $prefix, array $dboptions=null) {
+    public function connect($dbhost, $dbuser, $dbpass, $dbname, $prefix, ?array $dboptions=null) {
         $driverstatus = $this->driver_installed();
 
         if ($driverstatus !== true) {
@@ -205,7 +205,7 @@ abstract class pdo_moodle_database extends moodle_database {
         return true;
     }
 
-    public function delete_records_select($table, $select, array $params=null) {
+    public function delete_records_select($table, $select, ?array $params=null) {
         $sql = "DELETE FROM {{$table}}";
         if ($select) {
             $sql .= " WHERE $select";
@@ -231,7 +231,7 @@ abstract class pdo_moodle_database extends moodle_database {
      * @param array $params query parameters
      * @return bool success
      */
-    public function execute($sql, array $params=null) {
+    public function execute($sql, ?array $params=null) {
         list($sql, $params, $type) = $this->fix_sql_params($sql, $params);
 
         $result = true;
@@ -264,7 +264,7 @@ abstract class pdo_moodle_database extends moodle_database {
      * @param int $limitnum return a subset comprising this many records (optional, required if $limitfrom is set).
      * @return moodle_recordset instance
      */
-    public function get_recordset_sql($sql, array $params=null, $limitfrom=0, $limitnum=0) {
+    public function get_recordset_sql($sql, ?array $params=null, $limitfrom=0, $limitnum=0) {
 
         $result = true;
 
@@ -292,7 +292,7 @@ abstract class pdo_moodle_database extends moodle_database {
      * @param array $params array of sql parameters
      * @return array of values
      */
-    public function get_fieldset_sql($sql, array $params=null) {
+    public function get_fieldset_sql($sql, ?array $params=null) {
         $rs = $this->get_recordset_sql($sql, $params);
         if (!$rs->valid()) {
             $rs->close(); // Not going to iterate (but exit), close rs
@@ -320,7 +320,7 @@ abstract class pdo_moodle_database extends moodle_database {
      * @param int $limitnum return a subset comprising this many records (optional, required if $limitfrom is set).
      * @return array of objects, or empty array if no records were found, or false if an error occurred.
      */
-    public function get_records_sql($sql, array $params=null, $limitfrom=0, $limitnum=0) {
+    public function get_records_sql($sql, ?array $params=null, $limitfrom=0, $limitnum=0) {
         global $CFG;
 
         $rs = $this->get_recordset_sql($sql, $params, $limitfrom, $limitnum);
@@ -390,7 +390,7 @@ abstract class pdo_moodle_database extends moodle_database {
      * If the return ID isn't required, then this just reports success as true/false.
      * $data is an object containing needed data
      * @param string $table The database table to be inserted into
-     * @param object $data A data object with values for one or more fields in the record
+     * @param object|array $dataobject A data object with values for one or more fields in the record
      * @param bool $returnid Should the id of the newly created record entry be returned? If this option is not requested then true/false is returned.
      * @param bool $bulk true means repeated inserts expected
      * @return bool|int true or new id
@@ -429,7 +429,7 @@ abstract class pdo_moodle_database extends moodle_database {
     /**
      * Update record in database, as fast as possible, no safety checks, lobs not supported.
      * @param string $table name
-     * @param mixed $params data record as object or array
+     * @param stdClass|array $params data record as object or array
      * @param bool true means repeated updates expected
      * @return bool success
      */
@@ -499,7 +499,7 @@ abstract class pdo_moodle_database extends moodle_database {
      * @param array $params array of sql parameters
      * @return bool success
      */
-    public function set_field_select($table, $newfield, $newvalue, $select, array $params=null) {
+    public function set_field_select($table, $newfield, $newvalue, $select, ?array $params=null) {
         if ($select) {
             $select = "WHERE $select";
         }
@@ -527,19 +527,31 @@ abstract class pdo_moodle_database extends moodle_database {
                 break;
             default:
                 $this->lastError = __FILE__ . ' LINE: ' . __LINE__ . '.';
-                print_error(unknowparamtype, 'error', '', $this->lastError);
+                throw new \moodle_exception(unknowparamtype, 'error', '', $this->lastError);
             }
         }
         $sql = "UPDATE {{$table}} SET $newfield $select";
         return $this->execute($sql, $params);
     }
 
-    public function sql_concat() {
-        print_error('TODO');
+    public function sql_concat(...$arr) {
+        throw new \moodle_exception('TODO');
     }
 
     public function sql_concat_join($separator="' '", $elements=array()) {
-        print_error('TODO');
+        throw new \moodle_exception('TODO');
+    }
+
+    /**
+     * Return SQL for performing group concatenation on given field/expression
+     *
+     * @param string $field
+     * @param string $separator
+     * @param string $sort
+     * @return string
+     */
+    public function sql_group_concat(string $field, string $separator = ', ', string $sort = ''): string {
+        return ''; // TODO.
     }
 
     protected function begin_transaction() {
@@ -602,12 +614,12 @@ abstract class pdo_moodle_database extends moodle_database {
      * Overridden to ensure $this->lastErorr is reset each query
      *
      * @param string $sql
-     * @param array array of parameters
+     * @param array|null $params An array of parameters.
      * @param int $type type of query
      * @param mixed $extrainfo driver specific extra information
      * @return void
      */
-    protected function query_start($sql, array $params=null, $type, $extrainfo=null) {
+    protected function query_start($sql, ?array $params, $type, $extrainfo=null) {
         $this->lastError = null;
         parent::query_start($sql, $params, $type, $extrainfo);
     }

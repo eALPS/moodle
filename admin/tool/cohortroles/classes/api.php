@@ -25,7 +25,7 @@ namespace tool_cohortroles;
 
 use stdClass;
 use context_system;
-use core_competency\invalid_persistent_exception;
+use core\invalid_persistent_exception;
 
 /**
  * Class for doing things with cohort roles.
@@ -144,6 +144,10 @@ class api {
         $rolesadded = array();
         $rolesremoved = array();
 
+        // Remove any cohort role mappings for roles which have been deleted.
+        // The role assignments are not a consideration because these will have been removed when the role was.
+        $DB->delete_records_select('tool_cohortroles', "roleid NOT IN (SELECT id FROM {role})");
+
         // Get all cohort role assignments and group them by user and role.
         $all = cohort_role_assignment::get_records(array(), 'userid, roleid');
         // We build an better structure to loop on.
@@ -167,7 +171,7 @@ class api {
                 $params['roleid'] = $roleid;
                 $params['userid'] = $userid;
 
-                $sql = 'SELECT u.id AS userid, ra.id, ctx.id AS contextid
+                $sql = 'SELECT DISTINCT u.id AS userid, ra.id, ctx.id AS contextid
                           FROM {user} u
                           JOIN {cohort_members} cm ON u.id = cm.userid
                           JOIN {context} ctx ON u.id = ctx.instanceid AND ctx.contextlevel = :usercontext
@@ -175,6 +179,7 @@ class api {
                            AND ra.roleid = :roleid
                            AND ra.userid = :userid
                          WHERE cm.cohortid ' . $cohortsql . '
+                           AND u.deleted = 0
                            AND ra.id IS NULL';
 
                 $toadd = $DB->get_records_sql($sql, $params);
@@ -217,6 +222,48 @@ class api {
                         'useridassignedto' => $userid,
                         'useridassignedover' => $remove->userid,
                         'roleid' => $roleid
+                    );
+                }
+            }
+        }
+
+        // Clean the legacy role assignments which are stale.
+        $paramsclean['usercontext'] = CONTEXT_USER;
+        $paramsclean['component'] = 'tool_cohortroles';
+        $sql = 'SELECT DISTINCT(ra.id), ra.roleid, ra.userid, ra.contextid, ctx.instanceid
+                  FROM {role_assignments} ra
+                  JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = :usercontext
+                  JOIN {cohort_members} cm ON cm.userid = ctx.instanceid
+                  LEFT JOIN {tool_cohortroles} tc ON tc.cohortid = cm.cohortid
+                    AND tc.userid = ra.userid
+                    AND tc.roleid = ra.roleid
+                 WHERE ra.component = :component
+                   AND tc.id is null';
+        if ($candidatelegacyassignments = $DB->get_records_sql($sql, $paramsclean)) {
+            $sql = 'SELECT DISTINCT(ra.id)
+                  FROM {role_assignments} ra
+                  JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = :usercontext
+                  JOIN {cohort_members} cm ON cm.userid = ctx.instanceid
+                  JOIN {tool_cohortroles} tc ON tc.cohortid = cm.cohortid AND tc.userid = ra.userid
+                 WHERE ra.component = :component';
+            if ($currentvalidroleassignments = $DB->get_records_sql($sql, $paramsclean)) {
+                foreach ($candidatelegacyassignments as $candidate) {
+                    if (!array_key_exists($candidate->id, $currentvalidroleassignments)) {
+                        role_unassign($candidate->roleid, $candidate->userid, $candidate->contextid, 'tool_cohortroles');
+                        $rolesremoved[] = array(
+                            'useridassignedto' => $candidate->userid,
+                            'useridassignedover' => $candidate->instanceid,
+                            'roleid' => $candidate->roleid
+                        );
+                    }
+                }
+            } else {
+                foreach ($candidatelegacyassignments as $candidate) {
+                    role_unassign($candidate->roleid, $candidate->userid, $candidate->contextid, 'tool_cohortroles');
+                    $rolesremoved[] = array(
+                        'useridassignedto' => $candidate->userid,
+                        'useridassignedover' => $candidate->instanceid,
+                        'roleid' => $candidate->roleid
                     );
                 }
             }

@@ -31,7 +31,7 @@ require_once($CFG->libdir . '/adminlib.php');
 require_once($CFG->libdir . '/tablelib.php');
 
 // Check permissions.
-require_login();
+require_login(null, false);
 $systemcontext = context_system::instance();
 require_capability('moodle/question:config', $systemcontext);
 
@@ -84,39 +84,37 @@ if (!empty($config->disabledbehaviours)) {
 // Disable.
 if (($disable = optional_param('disable', '', PARAM_PLUGIN)) && confirm_sesskey()) {
     if (!isset($behaviours[$disable])) {
-        print_error('unknownbehaviour', 'question', $thispageurl, $disable);
+        throw new \moodle_exception('unknownbehaviour', 'question', $thispageurl, $disable);
     }
 
     if (array_search($disable, $disabledbehaviours) === false) {
-        $disabledbehaviours[] = $disable;
-        set_config('disabledbehaviours', implode(',', $disabledbehaviours), 'question');
+        $class = \core_plugin_manager::resolve_plugininfo_class('qbehaviour');
+        $class::enable_plugin($disable, false);
     }
-    core_plugin_manager::reset_caches();
     redirect($thispageurl);
 }
 
 // Enable.
 if (($enable = optional_param('enable', '', PARAM_PLUGIN)) && confirm_sesskey()) {
     if (!isset($behaviours[$enable])) {
-        print_error('unknownbehaviour', 'question', $thispageurl, $enable);
+        throw new \moodle_exception('unknownbehaviour', 'question', $thispageurl, $enable);
     }
 
     if (!$archetypal[$enable]) {
-        print_error('cannotenablebehaviour', 'question', $thispageurl, $enable);
+        throw new \moodle_exception('cannotenablebehaviour', 'question', $thispageurl, $enable);
     }
 
     if (($key = array_search($enable, $disabledbehaviours)) !== false) {
-        unset($disabledbehaviours[$key]);
-        set_config('disabledbehaviours', implode(',', $disabledbehaviours), 'question');
+        $class = \core_plugin_manager::resolve_plugininfo_class('qbehaviour');
+        $class::enable_plugin($enable, true);
     }
-    core_plugin_manager::reset_caches();
     redirect($thispageurl);
 }
 
 // Move up in order.
 if (($up = optional_param('up', '', PARAM_PLUGIN)) && confirm_sesskey()) {
     if (!isset($behaviours[$up])) {
-        print_error('unknownbehaviour', 'question', $thispageurl, $up);
+        throw new \moodle_exception('unknownbehaviour', 'question', $thispageurl, $up);
     }
 
     // This function works fine for behaviours, as well as qtypes.
@@ -128,7 +126,7 @@ if (($up = optional_param('up', '', PARAM_PLUGIN)) && confirm_sesskey()) {
 // Move down in order.
 if (($down = optional_param('down', '', PARAM_PLUGIN)) && confirm_sesskey()) {
     if (!isset($behaviours[$down])) {
-        print_error('unknownbehaviour', 'question', $thispageurl, $down);
+        throw new \moodle_exception('unknownbehaviour', 'question', $thispageurl, $down);
     }
 
     // This function works fine for behaviours, as well as qtypes.
@@ -170,7 +168,7 @@ foreach ($sortedbehaviours as $behaviour => $behaviourname) {
     if ($version) {
         $row[] = $version;
     } else {
-        $row[] = html_writer::tag('span', get_string('nodatabase', 'admin'), array('class' => 'disabled'));
+        $row[] = html_writer::tag('span', get_string('nodatabase', 'admin'), array('class' => 'text-muted'));
     }
 
     // Other question types required by this one.
@@ -238,4 +236,3 @@ function question_behaviour_icon_html($action, $behaviour, $icon, $alt, $tip) {
             new pix_icon($icon, $alt, 'moodle', array('title' => '', 'class' => 'iconsmall')),
             null, array('title' => $tip));
 }
-

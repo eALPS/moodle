@@ -26,8 +26,17 @@
 
 defined('MOODLE_INTERNAL') || die;
 
-require_once($CFG->libdir . '/externallib.php');
 require_once($CFG->dirroot . '/mod/chat/lib.php');
+
+use core_course\external\helper_for_get_mods_by_courses;
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
+use core_external\external_warnings;
+use core_external\util;
+use mod_chat\external\chat_message_exporter;
 
 /**
  * Chat external functions
@@ -106,7 +115,7 @@ class mod_chat_external extends external_api {
         // Get the unique chat session id.
         // Since we are going to use the chat via Web Service requests we set the ajax version (since it's the most similar).
         if (!$chatsid = chat_login_user($chat->id, 'ajax', $groupid, $course)) {
-            throw moodle_exception('cantlogin', 'chat');
+            throw new moodle_exception('cantlogin', 'chat');
         }
 
         $result = array();
@@ -118,7 +127,7 @@ class mod_chat_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.0
      */
     public static function login_user_returns() {
@@ -201,7 +210,7 @@ class mod_chat_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.0
      */
     public static function get_chat_users_returns() {
@@ -297,7 +306,7 @@ class mod_chat_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.0
      */
     public static function send_chat_message_returns() {
@@ -375,15 +384,20 @@ class mod_chat_external extends external_api {
         $returnedmessages = array();
 
         foreach ($messages as $message) {
-
             // FORMAT_MOODLE is mandatory in the chat plugin.
-            list($messageformatted, $format) = external_format_text($message->message, FORMAT_MOODLE, $context->id, 'mod_chat',
-                                                                    '', 0);
+            [$messageformatted] = \core_external\util::format_text(
+                $message->message,
+                FORMAT_MOODLE,
+                $context->id,
+                'mod_chat',
+                '',
+                0
+            );
 
             $returnedmessages[] = array(
                 'id' => $message->id,
                 'userid' => $message->userid,
-                'system' => (bool) $message->system,
+                'system' => (bool) $message->issystem,
                 'message' => $messageformatted,
                 'timestamp' => $message->timestamp,
             );
@@ -402,7 +416,7 @@ class mod_chat_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.0
      */
     public static function get_chat_latest_messages_returns() {
@@ -478,7 +492,7 @@ class mod_chat_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.0
      */
     public static function view_chat_returns() {
@@ -532,24 +546,15 @@ class mod_chat_external extends external_api {
         // Ensure there are courseids to loop through.
         if (!empty($params['courseids'])) {
 
-            list($courses, $warnings) = external_util::validate_courses($params['courseids'], $courses);
+            list($courses, $warnings) = util::validate_courses($params['courseids'], $courses);
 
             // Get the chats in this course, this function checks users visibility permissions.
             // We can avoid then additional validate_context calls.
             $chats = get_all_instances_in_courses("chat", $courses);
             foreach ($chats as $chat) {
                 $chatcontext = context_module::instance($chat->coursemodule);
-                // Entry to return.
-                $chatdetails = array();
-                // First, we return information that any user can see in the web interface.
-                $chatdetails['id'] = $chat->id;
-                $chatdetails['coursemodule']      = $chat->coursemodule;
-                $chatdetails['course']            = $chat->course;
-                $chatdetails['name']              = external_format_string($chat->name, $chatcontext->id);
-                // Format intro.
-                list($chatdetails['intro'], $chatdetails['introformat']) =
-                    external_format_text($chat->intro, $chat->introformat, $chatcontext->id, 'mod_chat', 'intro', null);
-                $chatdetails['introfiles'] = external_util::get_area_files($chatcontext->id, 'mod_chat', 'intro', false, false);
+
+                $chatdetails = helper_for_get_mods_by_courses::standard_coursemodule_element_values($chat, 'mod_chat');
 
                 if (has_capability('mod/chat:chat', $chatcontext)) {
                     $chatdetails['chatmethod']    = $CFG->chat_method;
@@ -561,10 +566,6 @@ class mod_chat_external extends external_api {
 
                 if (has_capability('moodle/course:manageactivities', $chatcontext)) {
                     $chatdetails['timemodified']  = $chat->timemodified;
-                    $chatdetails['section']       = $chat->section;
-                    $chatdetails['visible']       = $chat->visible;
-                    $chatdetails['groupmode']     = $chat->groupmode;
-                    $chatdetails['groupingid']    = $chat->groupingid;
                 }
                 $returnedchats[] = $chatdetails;
             }
@@ -585,29 +586,247 @@ class mod_chat_external extends external_api {
         return new external_single_structure(
             array(
                 'chats' => new external_multiple_structure(
-                    new external_single_structure(
-                        array(
-                            'id' => new external_value(PARAM_INT, 'Chat id'),
-                            'coursemodule' => new external_value(PARAM_INT, 'Course module id'),
-                            'course' => new external_value(PARAM_INT, 'Course id'),
-                            'name' => new external_value(PARAM_RAW, 'Chat name'),
-                            'intro' => new external_value(PARAM_RAW, 'The Chat intro'),
-                            'introformat' => new external_format_value('intro'),
-                            'introfiles' => new external_files('Files in the introduction text', VALUE_OPTIONAL),
-                            'chatmethod' => new external_value(PARAM_ALPHA, 'chat method (sockets, daemon)', VALUE_OPTIONAL),
+                    new external_single_structure(array_merge(
+                        helper_for_get_mods_by_courses::standard_coursemodule_elements_returns(),
+                        [
+                            'chatmethod' => new external_value(PARAM_PLUGIN, 'chat method (sockets, ajax, header_js)',
+                                VALUE_OPTIONAL),
                             'keepdays' => new external_value(PARAM_INT, 'keep days', VALUE_OPTIONAL),
                             'studentlogs' => new external_value(PARAM_INT, 'student logs visible to everyone', VALUE_OPTIONAL),
                             'chattime' => new external_value(PARAM_INT, 'chat time', VALUE_OPTIONAL),
                             'schedule' => new external_value(PARAM_INT, 'schedule type', VALUE_OPTIONAL),
                             'timemodified' => new external_value(PARAM_INT, 'time of last modification', VALUE_OPTIONAL),
-                            'section' => new external_value(PARAM_INT, 'course section id', VALUE_OPTIONAL),
-                            'visible' => new external_value(PARAM_BOOL, 'visible', VALUE_OPTIONAL),
-                            'groupmode' => new external_value(PARAM_INT, 'group mode', VALUE_OPTIONAL),
-                            'groupingid' => new external_value(PARAM_INT, 'group id', VALUE_OPTIONAL),
-                        ), 'Chats'
-                    )
+                        ]
+                    ), 'Chats')
                 ),
                 'warnings' => new external_warnings(),
+            )
+        );
+    }
+
+    /**
+     * Returns description of method parameters
+     *
+     * @return external_function_parameters
+     * @since Moodle 3.4
+     */
+    public static function get_sessions_parameters() {
+        return new external_function_parameters(
+            array(
+                'chatid' => new external_value(PARAM_INT, 'Chat instance id.'),
+                'groupid' => new external_value(PARAM_INT, 'Get messages from users in this group.
+                                                0 means that the function will determine the user group', VALUE_DEFAULT, 0),
+                'showall' => new external_value(PARAM_BOOL, 'Whether to show completed sessions or not.', VALUE_DEFAULT, false),
+            )
+        );
+    }
+
+    /**
+     * Retrieves chat sessions for a given chat.
+     *
+     * @param int $chatid the chat instance id
+     * @param int $groupid filter messages by this group. 0 to determine the group.
+     * @param bool $showall whether to include incomplete sessions or not
+     * @return array of warnings and the sessions
+     * @since Moodle 3.4
+     * @throws moodle_exception
+     */
+    public static function get_sessions($chatid, $groupid = 0, $showall = false) {
+        global $DB;
+
+        $params = self::validate_parameters(self::get_sessions_parameters(),
+                                            array(
+                                                'chatid' => $chatid,
+                                                'groupid' => $groupid,
+                                                'showall' => $showall,
+                                            ));
+        $sessions = $warnings = array();
+
+        // Request and permission validation.
+        $chat = $DB->get_record('chat', array('id' => $params['chatid']), '*', MUST_EXIST);
+        list($course, $cm) = get_course_and_cm_from_instance($chat, 'chat');
+
+        $context = context_module::instance($cm->id);
+        self::validate_context($context);
+
+        if (empty($chat->studentlogs) && !has_capability('mod/chat:readlog', $context)) {
+            throw new moodle_exception('nopermissiontoseethechatlog', 'chat');
+        }
+
+        if (!empty($params['groupid'])) {
+            $groupid = $params['groupid'];
+            // Determine is the group is visible to user.
+            if (!groups_group_visible($groupid, $course, $cm)) {
+                throw new moodle_exception('notingroup');
+            }
+        } else {
+            // Check to see if groups are being used here.
+            if ($groupmode = groups_get_activity_groupmode($cm)) {
+                $groupid = groups_get_activity_group($cm);
+                // Determine is the group is visible to user (this is particullary for the group 0).
+                if (!groups_group_visible($groupid, $course, $cm)) {
+                    throw new moodle_exception('notingroup');
+                }
+            } else {
+                $groupid = 0;
+            }
+        }
+
+        $messages = chat_get_session_messages($chat->id, $groupid, 0, 0, 'timestamp DESC');
+        if ($messages) {
+            $chatsessions = chat_get_sessions($messages, $params['showall']);
+            // Format sessions for external.
+            foreach ($chatsessions as $session) {
+                $sessionusers = array();
+                foreach ($session->sessionusers as $sessionuser => $usermessagecount) {
+                    $sessionusers[] = array(
+                        'userid' => $sessionuser,
+                        'messagecount' => $usermessagecount
+                    );
+                }
+                $session->sessionusers = $sessionusers;
+                $sessions[] = $session;
+            }
+        }
+
+        $result = array();
+        $result['sessions'] = $sessions;
+        $result['warnings'] = $warnings;
+        return $result;
+    }
+
+    /**
+     * Returns description of method result value
+     *
+     * @return \core_external\external_description
+     * @since Moodle 3.4
+     */
+    public static function get_sessions_returns() {
+        return new external_single_structure(
+            array(
+                'sessions' => new external_multiple_structure(
+                    new external_single_structure(
+                        array(
+                            'sessionstart' => new external_value(PARAM_INT, 'Session start time.'),
+                            'sessionend' => new external_value(PARAM_INT, 'Session end time.'),
+                            'sessionusers' => new external_multiple_structure(
+                                new external_single_structure(
+                                    array(
+                                        'userid' => new external_value(PARAM_INT, 'User id.'),
+                                        'messagecount' => new external_value(PARAM_INT, 'Number of messages in the session.'),
+                                    )
+                                ), 'Session users.'
+                            ),
+                            'iscomplete' => new external_value(PARAM_BOOL, 'Whether the session is completed or not.'),
+                        )
+                    ),
+                    'list of users'
+                ),
+                'warnings' => new external_warnings()
+            )
+        );
+    }
+
+    /**
+     * Returns description of method parameters
+     *
+     * @return external_function_parameters
+     * @since Moodle 3.4
+     */
+    public static function get_session_messages_parameters() {
+        return new external_function_parameters(
+            array(
+                'chatid' => new external_value(PARAM_INT, 'Chat instance id.'),
+                'sessionstart' => new external_value(PARAM_INT, 'The session start time (timestamp).'),
+                'sessionend' => new external_value(PARAM_INT, 'The session end time (timestamp).'),
+                'groupid' => new external_value(PARAM_INT, 'Get messages from users in this group.
+                                                0 means that the function will determine the user group', VALUE_DEFAULT, 0),
+            )
+        );
+    }
+
+    /**
+     * Retrieves messages of the given chat session.
+     *
+     * @param int $chatid the chat instance id
+     * @param int $sessionstart the session start time (timestamp)
+     * @param int $sessionend the session end time (timestamp)
+     * @param int $groupid filter messages by this group. 0 to determine the group.
+     * @return array of warnings and the messages
+     * @since Moodle 3.4
+     * @throws moodle_exception
+     */
+    public static function get_session_messages($chatid, $sessionstart, $sessionend, $groupid = 0) {
+        global $DB, $PAGE;
+
+        $params = self::validate_parameters(self::get_session_messages_parameters(),
+                                            array(
+                                                'chatid' => $chatid,
+                                                'sessionstart' => $sessionstart,
+                                                'sessionend' => $sessionend,
+                                                'groupid' => $groupid,
+                                            ));
+        $messages = $warnings = array();
+
+        // Request and permission validation.
+        $chat = $DB->get_record('chat', array('id' => $params['chatid']), '*', MUST_EXIST);
+        list($course, $cm) = get_course_and_cm_from_instance($chat, 'chat');
+
+        $context = context_module::instance($cm->id);
+        self::validate_context($context);
+
+        if (empty($chat->studentlogs) && !has_capability('mod/chat:readlog', $context)) {
+            throw new moodle_exception('nopermissiontoseethechatlog', 'chat');
+        }
+
+        if (!empty($params['groupid'])) {
+            $groupid = $params['groupid'];
+            // Determine is the group is visible to user.
+            if (!groups_group_visible($groupid, $course, $cm)) {
+                throw new moodle_exception('notingroup');
+            }
+        } else {
+            // Check to see if groups are being used here.
+            if ($groupmode = groups_get_activity_groupmode($cm)) {
+                $groupid = groups_get_activity_group($cm);
+                // Determine is the group is visible to user (this is particullary for the group 0).
+                if (!groups_group_visible($groupid, $course, $cm)) {
+                    throw new moodle_exception('notingroup');
+                }
+            } else {
+                $groupid = 0;
+            }
+        }
+
+        $messages = chat_get_session_messages($chat->id, $groupid, $params['sessionstart'], $params['sessionend'],
+            'timestamp ASC');
+        if ($messages) {
+            foreach ($messages as $message) {
+                $exporter = new chat_message_exporter($message, array('context' => $context));
+                $returneditems[] = $exporter->export($PAGE->get_renderer('core'));
+            }
+        }
+
+        $result = array(
+            'messages' => $messages,
+            'warnings' => $warnings,
+        );
+        return $result;
+    }
+
+    /**
+     * Returns description of method result value
+     *
+     * @return \core_external\external_description
+     * @since Moodle 3.4
+     */
+    public static function get_session_messages_returns() {
+        return new external_single_structure(
+            array(
+                'messages' => new external_multiple_structure(
+                    chat_message_exporter::get_read_structure()
+                ),
+                'warnings' => new external_warnings()
             )
         );
     }

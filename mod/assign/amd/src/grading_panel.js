@@ -17,21 +17,42 @@
  * Javascript controller for the "Grading" panel at the right of the page.
  *
  * @module     mod_assign/grading_panel
- * @package    mod_assign
- * @class      GradingPanel
  * @copyright  2016 Damyon Wiese <damyon@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @since      3.1
  */
-define(['jquery', 'core/yui', 'core/notification', 'core/templates', 'core/fragment',
-        'core/ajax', 'core/str', 'mod_assign/grading_form_change_checker',
-        'mod_assign/grading_events'],
-       function($, Y, notification, templates, fragment, ajax, str, checker, GradingEvents) {
+define([
+    'jquery',
+    'core/yui',
+    'core/notification',
+    'core/templates',
+    'core/fragment',
+    'core/ajax',
+    'core/str',
+    'mod_assign/grading_form_change_checker',
+    'mod_assign/grading_events',
+    'core_form/events',
+    'core/toast',
+    'core_form/changechecker',
+], function(
+    $,
+    Y,
+    notification,
+    templates,
+    fragment,
+    ajax,
+    str,
+    checker,
+    GradingEvents,
+    FormEvents,
+    Toast,
+    FormChangeChecker
+) {
 
     /**
      * GradingPanel class.
      *
-     * @class GradingPanel
+     * @class mod_assign/grading_panel
      * @param {String} selector The selector for the page region containing the user navigation.
      */
     var GradingPanel = function(selector) {
@@ -42,17 +63,23 @@ define(['jquery', 'core/yui', 'core/notification', 'core/templates', 'core/fragm
         this.registerEventListeners();
     };
 
-    /** @type {String} Selector for the page region containing the user navigation. */
+    /** @property {String} Selector for the page region containing the user navigation. */
     GradingPanel.prototype._regionSelector = null;
 
-    /** @type {Integer} Remember the last user id to prevent unnessecary reloads. */
+    /** @property {Integer} Remember the last user id to prevent unnessecary reloads. */
     GradingPanel.prototype._lastUserId = 0;
 
-    /** @type {Integer} Remember the last attempt number to prevent unnessecary reloads. */
+    /** @property {Integer} Remember the last attempt number to prevent unnessecary reloads. */
     GradingPanel.prototype._lastAttemptNumber = -1;
 
-    /** @type {JQuery} JQuery node for the page region containing the user navigation. */
+    /** @property {JQuery} JQuery node for the page region containing the user navigation. */
     GradingPanel.prototype._region = null;
+
+     /** @property {Integer} The id of the next user in the grading list */
+    GradingPanel.prototype.nextUserId = null;
+
+     /** @property {Boolean} Next user exists in the grading list */
+    GradingPanel.prototype.nextUser = false;
 
     /**
      * Fade the dom node out, update it, and fade it back.
@@ -83,11 +110,6 @@ define(['jquery', 'core/yui', 'core/notification', 'core/templates', 'core/fragm
      * @method _saveFormState
      */
     GradingPanel.prototype._saveFormState = function() {
-        // Grrrrr! TinyMCE you know what you did.
-        if (typeof window.tinyMCE !== 'undefined') {
-            window.tinyMCE.triggerSave();
-        }
-
         // Copy data from notify students checkbox which was moved out of the form.
         var checked = $('[data-region="grading-actions-form"] [name="sendstudentnotifications"]').prop("checked");
         $('.gradeform [name="sendstudentnotifications"]').val(checked);
@@ -99,16 +121,34 @@ define(['jquery', 'core/yui', 'core/notification', 'core/templates', 'core/fragm
      * @private
      * @param {Object} event
      * @param {Integer} nextUserId
+     * @param {Boolean} nextUser optional. Load next user in the grading list.
      * @method _submitForm
+     * @fires event:formSubmittedByJavascript
      */
-    GradingPanel.prototype._submitForm = function(event, nextUserId) {
+    GradingPanel.prototype._submitForm = function(event, nextUserId, nextUser) {
+        // If the form has data in comment-area, then we need to save that comment
+        var commentAreaElement = document.querySelector('.comment-area');
+        if (commentAreaElement) {
+            var commentTextAreaElement = commentAreaElement.querySelector('.db > textarea');
+            if (commentTextAreaElement.value !== '') {
+                var commentActionPostElement = commentAreaElement.querySelector('.fd a[id^="comment-action-post-"]');
+                commentActionPostElement.click();
+            }
+        }
+
         // The form was submitted - send it via ajax instead.
         var form = $(this._region.find('form.gradeform'));
 
         $('[data-region="overlay"]').show();
 
+        // Mark the form as submitted in the change checker.
+        FormChangeChecker.markFormSubmitted(form[0]);
+
         // We call this, so other modules can update the form with the latest state.
         form.trigger('save-form-state');
+
+        // Tell all form fields we are about to submit the form.
+        FormEvents.notifyFormSubmittedByJavascript(form[0]);
 
         // Now we get all the current values from the form.
         var data = form.serialize();
@@ -118,7 +158,7 @@ define(['jquery', 'core/yui', 'core/notification', 'core/templates', 'core/fragm
         ajax.call([{
             methodname: 'mod_assign_submit_grading_form',
             args: {assignmentid: assignmentid, userid: this._lastUserId, jsonformdata: JSON.stringify(data)},
-            done: this._handleFormSubmissionResponse.bind(this, data, nextUserId),
+            done: this._handleFormSubmissionResponse.bind(this, data, nextUserId, nextUser),
             fail: notification.exception
         }]);
     };
@@ -129,10 +169,11 @@ define(['jquery', 'core/yui', 'core/notification', 'core/templates', 'core/fragm
      * @private
      * @method _handleFormSubmissionResponse
      * @param {Array} formdata - submitted values
-     * @param {Integer} nextUserId - optional. The id of the user to load after the form is saved.
+     * @param {Number} [nextUserId] The id of the user to load after the form is saved
+     * @param {Boolean} [nextUser] - Whether to switch to next user in the grading list.
      * @param {Array} response List of errors.
      */
-    GradingPanel.prototype._handleFormSubmissionResponse = function(formdata, nextUserId, response) {
+    GradingPanel.prototype._handleFormSubmissionResponse = function(formdata, nextUserId, nextUser, response) {
         if (typeof nextUserId === "undefined") {
             nextUserId = this._lastUserId;
         }
@@ -141,17 +182,21 @@ define(['jquery', 'core/yui', 'core/notification', 'core/templates', 'core/fragm
             // validation errors.
             $(document).trigger('reset', [this._lastUserId, formdata]);
         } else {
-            str.get_strings([
-                {key: 'changessaved', component: 'core'},
-                {key: 'gradechangessaveddetail', component: 'mod_assign'},
-            ]).done(function(strs) {
-                notification.alert(strs[0], strs[1]);
-            }).fail(notification.exception);
-            Y.use('moodle-core-formchangechecker', function() {
-                M.core_formchangechecker.reset_form_dirty_state();
-            });
+            str.get_string('gradechangessaveddetail', 'mod_assign')
+            .then(function(str) {
+                Toast.add(str);
+                return str;
+            })
+            .catch(notification.exception);
+
+            // Reset the form state.
+            var form = $(this._region.find('form.gradeform'));
+            FormChangeChecker.resetFormDirtyState(form[0]);
+
             if (nextUserId == this._lastUserId) {
                 $(document).trigger('reset', nextUserId);
+            } else if (nextUser) {
+                $(document).trigger('done-saving-show-next', true);
             } else {
                 $(document).trigger('user-changed', nextUserId);
             }
@@ -311,6 +356,29 @@ define(['jquery', 'core/yui', 'core/notification', 'core/templates', 'core/fragm
     };
 
     /**
+     * Get next user data and store it in global variables
+     *
+     * @private
+     * @method _getNextUser
+     * @param {Event} event
+     * @param {Object} data Next user's data
+     */
+    GradingPanel.prototype._getNextUser = function(event, data) {
+        this.nextUserId = data.nextUserId;
+        this.nextUser = data.nextUser;
+    };
+
+    /**
+     * Handle the save-and-show-next event
+     *
+     * @private
+     * @method _handleSaveAndShowNext
+     */
+    GradingPanel.prototype._handleSaveAndShowNext = function() {
+        this._submitForm(null, this.nextUserId, this.nextUser);
+    };
+
+    /**
      * Get the grade panel element.
      *
      * @method getPanelElement
@@ -351,8 +419,10 @@ define(['jquery', 'core/yui', 'core/notification', 'core/templates', 'core/fragm
             e.preventDefault();
         });
 
+        docElement.on('next-user', this._getNextUser.bind(this));
         docElement.on('user-changed', this._refreshGradingPanel.bind(this));
         docElement.on('save-changes', this._submitForm.bind(this));
+        docElement.on('save-and-show-next', this._handleSaveAndShowNext.bind(this));
         docElement.on('reset', this._resetForm.bind(this));
 
         docElement.on('save-form-state', this._saveFormState.bind(this));

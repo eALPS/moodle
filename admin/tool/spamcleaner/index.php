@@ -41,7 +41,6 @@ $ignore = optional_param('ignore', '', PARAM_RAW);
 $reset = optional_param('reset', '', PARAM_RAW);
 $id = optional_param('id', '', PARAM_INT);
 
-require_login();
 admin_externalpage_setup('toolspamcleaner');
 
 // Delete one user
@@ -96,7 +95,7 @@ echo $OUTPUT->box_start();     // The forms section at the top
 
 <div class="mdl-align">
 
-<form method="post" action="index.php" class="form-inline spamcleanerform">
+<form method="post" action="index.php" class="d-flex flex-wrap align-items-center spamcleanerform">
   <div>
     <label class="accesshide" for="keyword_el"><?php print_string('spamkeyword', 'tool_spamcleaner') ?></label>
     <input type="text" class="form-control" name="keyword" id="keyword_el" value="<?php p($keyword) ?>" />
@@ -234,15 +233,19 @@ function search_spammers($keywords) {
     $keywordlist = implode(', ', $keywords);
     echo $OUTPUT->box(get_string('spamresult', 'tool_spamcleaner').s($keywordlist)).' ...';
 
-    print_user_list(array($spamusers_desc,
-                          $spamusers_blog,
-                          $spamusers_blogsub,
-                          $spamusers_comment,
-                          $spamusers_message,
-                          $spamusers_forumpost,
-                          $spamusers_forumpostsub
-                         ),
-                         $keywords);
+    $recordsets = [
+        $spamusers_desc,
+        $spamusers_blog,
+        $spamusers_blogsub,
+        $spamusers_comment,
+        $spamusers_message,
+        $spamusers_forumpost,
+        $spamusers_forumpostsub
+    ];
+    print_user_list($recordsets, $keywords);
+    foreach ($recordsets as $rs) {
+        $rs->close();
+    }
 }
 
 

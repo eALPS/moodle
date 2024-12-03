@@ -139,19 +139,28 @@ class block_mnet_hosts extends block_list {
 
         if ($hosts) {
             foreach ($hosts as $host) {
-                $icon  = '<img src="'.$OUTPUT->pix_url('i/'.$host->application.'_host') . '"'.
-                         ' class="icon" alt="'.get_string('server', 'block_mnet_hosts').'" />&nbsp;';
-
                 if ($host->id == $USER->mnethostid) {
-                    $this->content->items[]="<a title=\"" .s($host->name).
-                        "\" href=\"{$host->wwwroot}\">".$icon. s($host->name) ."</a>";
+                    $url = new \moodle_url($host->wwwroot);
                 } else {
-                    $this->content->items[]="<a title=\"" .s($host->name).
-                        "\" href=\"{$CFG->wwwroot}/auth/mnet/jump.php?hostid={$host->id}\">" .$icon. s($host->name) ."</a>";
+                    $url = new \moodle_url('/auth/mnet/jump.php', array('hostid' => $host->id));
                 }
+                $this->content->items[] = html_writer::tag('a',
+                    $OUTPUT->pix_icon("i/{$host->application}_host", get_string('server', 'block_mnet_hosts')) . s($host->name),
+                    array('href' => $url->out(), 'title' => s($host->name))
+                );
             }
         }
 
         return $this->content;
+    }
+
+    /**
+     * This block shouldn't be added to a page if the mnet authentication method is disabled.
+     *
+     * @param moodle_page $page
+     * @return bool
+     */
+    public function can_block_be_added(moodle_page $page): bool {
+        return is_enabled_auth('mnet');
     }
 }

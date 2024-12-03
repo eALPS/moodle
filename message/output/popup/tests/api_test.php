@@ -14,14 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Test message popup API.
- *
- * @package message_popup
- * @category test
- * @copyright 2016 Ryan Wyllie <ryan@moodle.com>
- * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace message_popup;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -38,15 +31,19 @@ require_once($CFG->dirroot . '/message/output/popup/tests/base.php');
  * @copyright 2016 Ryan Wyllie <ryan@moodle.com>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class message_popup_api_testcase extends advanced_testcase {
-    use message_popup_test_helper;
+class api_test extends \advanced_testcase {
+    use \message_popup_test_helper;
+
+    /** @var \phpunit_message_sink message redirection. */
+    public $messagesink;
 
     /**
      * Test set up.
      *
      * This is executed before running any test in this file.
      */
-    public function setUp() {
+    public function setUp(): void {
+        parent::setUp();
         $this->preventResetByRollback(); // Messaging is not compatible with transactions.
         $this->messagesink = $this->redirectMessages();
         $this->resetAfterTest();
@@ -55,7 +52,7 @@ class message_popup_api_testcase extends advanced_testcase {
     /**
      * Test that the get_popup_notifications function will return the correct notifications.
      */
-    public function test_message_get_popup_notifications() {
+    public function test_message_get_popup_notifications(): void {
         $sender = $this->getDataGenerator()->create_user(array('firstname' => 'Test1', 'lastname' => 'User1'));
         $recipient = $this->getDataGenerator()->create_user(array('firstname' => 'Test2', 'lastname' => 'User2'));
 
@@ -78,7 +75,7 @@ class message_popup_api_testcase extends advanced_testcase {
      * Test that the get_popup_notifications function works correctly with limiting and offsetting
      * the result set if requested.
      */
-    public function test_message_get_popup_notifications_all_limit_and_offset() {
+    public function test_message_get_popup_notifications_all_limit_and_offset(): void {
         $sender = $this->getDataGenerator()->create_user(array('firstname' => 'Test1', 'lastname' => 'User1'));
         $recipient = $this->getDataGenerator()->create_user(array('firstname' => 'Test2', 'lastname' => 'User2'));
 
@@ -109,7 +106,7 @@ class message_popup_api_testcase extends advanced_testcase {
     /**
      * Test count_unread_popup_notifications.
      */
-    public function test_message_count_unread_popup_notifications() {
+    public function test_message_count_unread_popup_notifications(): void {
         $sender1 = $this->getDataGenerator()->create_user(array('firstname' => 'Test1', 'lastname' => 'User1'));
         $sender2 = $this->getDataGenerator()->create_user(array('firstname' => 'Test2', 'lastname' => 'User2'));
         $recipient1 = $this->getDataGenerator()->create_user(array('firstname' => 'Test3', 'lastname' => 'User3'));

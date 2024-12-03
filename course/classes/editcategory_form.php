@@ -25,7 +25,6 @@
 defined('MOODLE_INTERNAL') || die;
 
 require_once($CFG->libdir.'/formslib.php');
-require_once($CFG->libdir.'/coursecatlib.php');
 
 /**
  * Edit category form.
@@ -52,7 +51,7 @@ class core_course_editcategory_form extends moodleform {
         }
         if ($categoryid) {
             // Editing an existing category.
-            $options += coursecat::make_categories_list('moodle/category:manage', $categoryid);
+            $options += core_course_category::make_categories_list('moodle/category:manage', $categoryid);
             if (empty($options[$parent])) {
                 // Ensure the the category parent has been included in the options.
                 $options[$parent] = $DB->get_field('course_categories', 'name', array('id'=>$parent));
@@ -60,11 +59,12 @@ class core_course_editcategory_form extends moodleform {
             $strsubmit = get_string('savechanges');
         } else {
             // Making a new category.
-            $options += coursecat::make_categories_list('moodle/category:manage');
+            $options += core_course_category::make_categories_list('moodle/category:manage');
             $strsubmit = get_string('createcategory');
         }
 
-        $mform->addElement('select', 'parent', get_string('parentcategory'), $options);
+        $mform->addElement('autocomplete', 'parent', get_string('parentcategory'), $options);
+        $mform->addRule('parent', null, 'required', null, 'client');
 
         $mform->addElement('text', 'name', get_string('categoryname'), array('size' => '30'));
         $mform->addRule('name', get_string('required'), 'required', null);
@@ -76,6 +76,7 @@ class core_course_editcategory_form extends moodleform {
 
         $mform->addElement('editor', 'description_editor', get_string('description'), null,
             $this->get_description_editor_options());
+        $mform->setType('description_editor', PARAM_RAW);
 
         if (!empty($CFG->allowcategorythemes)) {
             $themes = array(''=>get_string('forceno'));
@@ -106,7 +107,8 @@ class core_course_editcategory_form extends moodleform {
         return array(
             'maxfiles'  => EDITOR_UNLIMITED_FILES,
             'maxbytes'  => $CFG->maxbytes,
-            'trusttext' => true,
+            'trusttext' => false,
+            'noclean'   => true,
             'context'   => $context,
             'subdirs'   => file_area_contains_subdirs($context, 'coursecat', 'description', $itemid),
         );

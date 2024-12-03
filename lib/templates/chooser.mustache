@@ -57,21 +57,19 @@
                     </div>
                     <div class="alloptions">
                         {{#sections}}
-                            <div class="moduletypetitle">
-                                <label for="item_{{id}}">
-                                    <span class="typename">{{label}}</span>
-                                </label>
-                            </div>
-                            {{#items}}
-                                {{>core/chooser_item}}
-                            {{/items}}
+                            <fieldset>
+                                <legend class="moduletypetitle">{{label}}</legend>
+                                {{#items}}
+                                    {{>core/chooser_item}}
+                                {{/items}}
+                            </fieldset>
                         {{/sections}}
                     </div>
                 </div>
 
                 <div class="submitbuttons">
-                    <input type="submit" name="submitbutton" class="submitbutton" value={{#quote}}{{#str}}add{{/str}}{{/quote}}>
-                    <input type="submit" name="addcancel" class="addcancel" value={{#quote}}{{#str}}cancel{{/str}}{{/quote}}>
+                    <input type="submit" name="submitbutton" class="submitbutton btn btn-primary" value="{{#cleanstr}}add{{/cleanstr}}">
+                    <input type="submit" name="addcancel" class="addcancel btn btn-secondary" value="{{#cleanstr}}cancel{{/cleanstr}}">
                 </div>
 
             </form>

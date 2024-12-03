@@ -14,41 +14,28 @@ Feature: Automatic deletion of groups and groupings
     And the following "course enrolments" exist:
       | user | course | role |
       | teacher1 | C1 | editingteacher |
+    And the following "groups" exist:
+      | course | name               | idnumber |
+      | C1     | Group (without ID) |          |
+      | C1     | Group (with ID)    | An ID    |
+    And the following "groupings" exist:
+      | course | name                  | idnumber |
+      | C1     | Grouping (without ID) |          |
+      | C1     | Grouping (with ID)    | An ID    |
     And I log in as "teacher1"
-    And I follow "Course 1"
-    And I navigate to "Users > Groups" in current page administration
-    And I press "Create group"
-    And I set the following fields to these values:
-      | Group name | Group (without ID) |
-    And I press "Save changes"
-    And I press "Create group"
-    And I set the following fields to these values:
-      | Group name | Group (with ID) |
-      | Group ID number | An ID |
-    And I press "Save changes"
-    And I follow "Groupings"
-    And I press "Create grouping"
-    And I set the following fields to these values:
-      | Grouping name | Grouping (without ID) |
-    And I press "Save changes"
-    And I press "Create grouping"
-    And I set the following fields to these values:
-      | Grouping name | Grouping (with ID) |
-      | Grouping ID number | An ID |
-    And I press "Save changes"
-    And I follow "Groups"
+    And I am on the "Course 1" "groups" page logged in as "teacher1"
 
   @javascript
   Scenario: Delete groups and groupings with and without ID numbers
     Given I set the field "groups" to "Group (without ID) (0)"
-    And I press "Delete selected group"
+    And I press "Delete"
     And I press "Yes"
     Then the "groups" select box should not contain "Group (without ID) (0)"
     And I set the field "groups" to "Group (with ID) (0)"
-    And I press "Delete selected group"
+    And I press "Delete"
     And I press "Yes"
     And the "groups" select box should not contain "Group (with ID) (0)"
-    And I follow "Groupings"
+    And I set the field "Participants tertiary navigation" to "Groupings"
     And I click on "Delete" "link" in the "Grouping (without ID)" "table_row"
     And I press "Yes"
     And I should not see "Grouping (without ID)"
@@ -56,23 +43,19 @@ Feature: Automatic deletion of groups and groupings
     And I press "Yes"
     And I should not see "Grouping (with ID)"
 
-  @javascript
+  @javascript @skip_chrome_zerosize
   Scenario: Delete groups and groupings with and without ID numbers without the 'moodle/course:changeidnumber' capability
-    Given I log out
-    And I log in as "admin"
-    And I set the following system permissions of "Teacher" role:
-     | moodle/course:changeidnumber | Prevent |
-    And I log out
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I navigate to "Users > Groups" in current page administration
+    Given the following "role capability" exists:
+      | role                         | editingteacher |
+      | moodle/course:changeidnumber | prevent        |
+    And I am on the "Course 1" "groups" page
     When I set the field "groups" to "Group (with ID) (0)"
-    Then the "Delete selected group" "button" should be disabled
+    Then the "Delete" "button" should be disabled
     And I set the field "groups" to "Group (without ID) (0)"
-    And I press "Delete selected group"
+    And I press "Delete"
     And I press "Yes"
     And I should not see "Group (without ID)"
-    And I follow "Groupings"
+    And I set the field "Participants tertiary navigation" to "Groupings"
     And "Delete" "link" should not exist in the "Grouping (with ID)" "table_row"
     And I click on "Delete" "link" in the "Grouping (without ID)" "table_row"
     And I press "Yes"

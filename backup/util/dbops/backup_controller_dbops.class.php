@@ -234,7 +234,9 @@ abstract class backup_controller_dbops extends backup_dbops {
             'sectionid'  => $task->get_sectionid(),
             'modulename' => $task->get_modulename(),
             'title'      => $task->get_name(),
-            'directory'  => 'activities/' . $task->get_modulename() . '_' . $task->get_moduleid());
+            'directory'  => 'activities/' . $task->get_modulename() . '_' . $task->get_moduleid(),
+            'insubsection' => ($task->is_in_subsection()) ? 1 : '',
+        );
 
         // Now get activity settings
         // Calculate prefix to find valid settings
@@ -246,7 +248,7 @@ abstract class backup_controller_dbops extends backup_dbops {
                 continue;
             }
             // Validate level is correct (activity)
-            if ($setting->get_level() != backup_setting::ACTIVITY_LEVEL) {
+            if (!in_array($setting->get_level(), [backup_setting::ACTIVITY_LEVEL, backup_setting::SUBACTIVITY_LEVEL])) {
                 throw new backup_controller_exception('setting_not_activity_level', $setting);
             }
             $settinginfo = array(
@@ -268,7 +270,10 @@ abstract class backup_controller_dbops extends backup_dbops {
         $contentinfo = array(
             'sectionid'  => $task->get_sectionid(),
             'title'      => $task->get_name(),
-            'directory'  => 'sections/' . 'section_' . $task->get_sectionid());
+            'directory'  => 'sections/' . 'section_' . $task->get_sectionid(),
+            'parentcmid' => $task->get_delegated_cm() ?? '',
+            'modname' => $task->get_modname() ?? '',
+        );
 
         // Now get section settings
         // Calculate prefix to find valid settings
@@ -280,7 +285,7 @@ abstract class backup_controller_dbops extends backup_dbops {
                 continue;
             }
             // Validate level is correct (section)
-            if ($setting->get_level() != backup_setting::SECTION_LEVEL) {
+            if (!in_array($setting->get_level(), [backup_setting::SECTION_LEVEL, backup_setting::SUBSECTION_LEVEL])) {
                 throw new backup_controller_exception('setting_not_section_level', $setting);
             }
             $settinginfo = array(
@@ -359,7 +364,7 @@ abstract class backup_controller_dbops extends backup_dbops {
      * @param \core\progress\base $progress Optional progress monitor
      */
     public static function get_moodle_backup_information($backupid,
-            \core\progress\base $progress = null) {
+            ?\core\progress\base $progress = null) {
 
         // Start tracking progress if required (for load_controller).
         if ($progress) {
@@ -548,6 +553,7 @@ abstract class backup_controller_dbops extends backup_dbops {
 
         switch ($mode) {
             case backup::MODE_GENERAL:
+            case backup::MODE_ASYNC:
                 // Load the general defaults
                 $settings = array(
                         'backup_general_users'              => 'users',
@@ -555,6 +561,7 @@ abstract class backup_controller_dbops extends backup_dbops {
                         'backup_general_role_assignments'   => 'role_assignments',
                         'backup_general_activities'         => 'activities',
                         'backup_general_blocks'             => 'blocks',
+                        'backup_general_files'              => 'files',
                         'backup_general_filters'            => 'filters',
                         'backup_general_comments'           => 'comments',
                         'backup_general_badges'             => 'badges',
@@ -564,7 +571,11 @@ abstract class backup_controller_dbops extends backup_dbops {
                         'backup_general_histories'          => 'grade_histories',
                         'backup_general_questionbank'       => 'questionbank',
                         'backup_general_groups'             => 'groups',
-                        'backup_general_competencies'       => 'competencies'
+                        'backup_general_competencies'       => 'competencies',
+                        'backup_general_customfield'        => 'customfield',
+                        'backup_general_contentbankcontent' => 'contentbankcontent',
+                        'backup_general_xapistate'          => 'xapistate',
+                        'backup_general_legacyfiles'        => 'legacyfiles'
                 );
                 self::apply_admin_config_defaults($controller, $settings, true);
                 break;
@@ -575,11 +586,26 @@ abstract class backup_controller_dbops extends backup_dbops {
                         'backup_import_blocks'             => 'blocks',
                         'backup_import_filters'            => 'filters',
                         'backup_import_calendarevents'     => 'calendarevents',
+                        'backup_import_permissions'        => 'permissions',
                         'backup_import_questionbank'       => 'questionbank',
                         'backup_import_groups'             => 'groups',
-                        'backup_import_competencies'       => 'competencies'
+                        'backup_import_competencies'       => 'competencies',
+                        'backup_import_customfield'        => 'customfield',
+                        'backup_import_contentbankcontent' => 'contentbankcontent',
+                        'backup_import_legacyfiles'        => 'legacyfiles'
                 );
                 self::apply_admin_config_defaults($controller, $settings, true);
+                if ((!$controller->get_interactive()) &&
+                        $controller->get_type() == backup::TYPE_1ACTIVITY) {
+                    // This is duplicate - there is no concept of defaults - these settings must be on.
+                    $settings = array(
+                         'activities',
+                         'blocks',
+                         'filters',
+                         'questionbank'
+                    );
+                    self::force_enable_settings($controller, $settings);
+                }
                 break;
             case backup::MODE_AUTOMATED:
                 // Load the automated defaults.
@@ -588,6 +614,7 @@ abstract class backup_controller_dbops extends backup_dbops {
                         'backup_auto_role_assignments'   => 'role_assignments',
                         'backup_auto_activities'         => 'activities',
                         'backup_auto_blocks'             => 'blocks',
+                        'backup_auto_files'              => 'files',
                         'backup_auto_filters'            => 'filters',
                         'backup_auto_comments'           => 'comments',
                         'backup_auto_badges'             => 'badges',
@@ -597,13 +624,41 @@ abstract class backup_controller_dbops extends backup_dbops {
                         'backup_auto_histories'          => 'grade_histories',
                         'backup_auto_questionbank'       => 'questionbank',
                         'backup_auto_groups'             => 'groups',
-                        'backup_auto_competencies'       => 'competencies'
+                        'backup_auto_competencies'       => 'competencies',
+                        'backup_auto_customfield'        => 'customfield',
+                        'backup_auto_contentbankcontent' => 'contentbankcontent',
+                        'backup_auto_xapistate'          => 'xapistate',
+                        'backup_auto_legacyfiles'        => 'legacyfiles'
                 );
                 self::apply_admin_config_defaults($controller, $settings, false);
                 break;
             default:
                 // Nothing to do for other modes (HUB...). Some day we
                 // can define defaults (admin UI...) for them if we want to
+        }
+    }
+
+    /**
+     * Turn these settings on. No defaults from admin settings.
+     *
+     * @param backup_controller $controller
+     * @param array $settings a map from admin config names to setting names (Config name => Setting name)
+     */
+    private static function force_enable_settings(backup_controller $controller, array $settings) {
+        $plan = $controller->get_plan();
+        foreach ($settings as $config => $settingname) {
+            $value = true;
+            if ($plan->setting_exists($settingname)) {
+                $setting = $plan->get_setting($settingname);
+                // We do not allow this setting to be locked for a duplicate function.
+                if ($setting->get_status() !== base_setting::NOT_LOCKED) {
+                    $setting->set_status(base_setting::NOT_LOCKED);
+                }
+                $setting->set_value($value);
+                $setting->set_status(base_setting::LOCKED_BY_CONFIG);
+            } else {
+                $controller->log('Unknown setting: ' . $setting, BACKUP::LOG_DEBUG);
+            }
         }
     }
 
@@ -640,5 +695,32 @@ abstract class backup_controller_dbops extends backup_dbops {
                 $controller->log('Unknown setting: ' . $setting, BACKUP::LOG_DEBUG);
             }
         }
+    }
+
+    /**
+     * Get the progress details of a backup operation.
+     * Get backup records directly from database, if the backup has successfully completed
+     * there will be no controller object to load.
+     *
+     * @param string $backupid The backup id to query.
+     * @return array $progress The backup progress details.
+     */
+    public static function get_progress($backupid) {
+        global $DB;
+
+        $progress = array();
+        $backuprecord = $DB->get_record(
+            'backup_controllers',
+            array('backupid' => $backupid),
+            'status, progress, operation',
+            MUST_EXIST);
+
+        $status = $backuprecord->status;
+        $progress = $backuprecord->progress;
+        $operation = $backuprecord->operation;
+
+        $progress = array('status' => $status, 'progress' => $progress, 'backupid' => $backupid, 'operation' => $operation);
+
+        return $progress;
     }
 }

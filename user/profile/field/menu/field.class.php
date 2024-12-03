@@ -43,10 +43,11 @@ class profile_field_menu extends profile_field_base {
      *
      * @param int $fieldid
      * @param int $userid
+     * @param object $fielddata
      */
-    public function __construct($fieldid = 0, $userid = 0) {
+    public function __construct($fieldid = 0, $userid = 0, $fielddata = null) {
         // First call parent constructor.
-        parent::__construct($fieldid, $userid);
+        parent::__construct($fieldid, $userid, $fielddata);
 
         // Param 1 for menu type is the options.
         if (isset($this->field->param1)) {
@@ -59,7 +60,8 @@ class profile_field_menu extends profile_field_base {
             $this->options[''] = get_string('choose').'...';
         }
         foreach ($options as $key => $option) {
-            $this->options[$option] = format_string($option); // Multilang formatting with filters.
+            // Multilang formatting with filters.
+            $this->options[$option] = format_string($option, true, ['context' => context_system::instance()]);
         }
 
         // Set the data key.
@@ -70,16 +72,6 @@ class profile_field_menu extends profile_field_base {
                 $this->datakey = $key;
             }
         }
-    }
-
-    /**
-     * Old syntax of class constructor. Deprecated in PHP7.
-     *
-     * @deprecated since Moodle 3.1
-     */
-    public function profile_field_menu($fieldid=0, $userid=0) {
-        debugging('Use of class name as constructor is deprecated', DEBUG_DEVELOPER);
-        self::__construct($fieldid, $userid);
     }
 
     /**
@@ -175,6 +167,24 @@ class profile_field_menu extends profile_field_base {
      */
     public function get_field_properties() {
         return array(PARAM_TEXT, NULL_NOT_ALLOWED);
+    }
+
+    /**
+     * Return the field settings suitable to be exported via an external function.
+     *
+     * @return array all the settings
+     */
+    public function get_field_config_for_external() {
+
+        if (isset($this->field->param1) && !empty($this->options)) {
+            // Remove "Choose" option to make it consisten with the rest of the data.
+            if (!empty($this->field->required)) {
+                unset($this->options['']);
+            }
+            $this->field->param2 = implode("\n", array_values($this->options));
+        }
+
+        return (array) $this->field;
     }
 }
 

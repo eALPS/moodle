@@ -36,7 +36,7 @@ abstract class message_output {
      * @see message_send()
      * @param stdClass $message The event data submitted by the message provider to message_send() plus $eventdata->savedmessageid
      */
-    public abstract function send_message($message);
+    abstract public function send_message($message);
 
     /**
      * Load the config data from database to put on the config form on the messaging preferences page
@@ -44,14 +44,14 @@ abstract class message_output {
      * @param array $preferences Array of user preferences
      * @param int $userid The user ID
      */
-    public abstract function load_data(&$preferences, $userid);
+    abstract public function load_data(&$preferences, $userid);
 
     /**
      * Create necessary fields in the config form on the messaging preferences page
      *
      * @param array $preferences An array of user preferences
      */
-    public abstract function config_form($preferences);
+    abstract public function config_form($preferences);
 
     /**
      * Parse the submitted form and save data into an array of user preferences
@@ -59,7 +59,7 @@ abstract class message_output {
      * @param stdClass $form preferences form class
      * @param array $preferences preferences array
      */
-    public abstract function process_form($form, &$preferences);
+    abstract public function process_form($form, &$preferences);
 
     /**
      * Are the message processor's system settings configured?
@@ -82,12 +82,11 @@ abstract class message_output {
 
     /**
      * Returns the message processors default settings
-     * Should the processor be enabled for logged in users by default?
-     * Should the processor be enabled for logged off users by default?
+     * Should the processor be enabled in users by default?
      * Is enabling it disallowed, permitted or forced?
      *
      * @return int The Default message output settings expressed as a bit mask
-     *         MESSAGE_DEFAULT_LOGGEDIN + MESSAGE_DEFAULT_LOGGEDOFF + MESSAGE_DISALLOWED|MESSAGE_PERMITTED|MESSAGE_FORCED
+     *         MESSAGE_DEFAULT_ENABLED + MESSAGE_PERMITTED
      */
     public function get_default_messaging_settings() {
         return MESSAGE_PERMITTED;
@@ -112,7 +111,35 @@ abstract class message_output {
     public function has_message_preferences() {
         return true;
     }
+
+    /**
+     * Determines if this processor should process a message regardless of user preferences or site settings.
+     *
+     * @return bool
+     */
+    public function force_process_messages() {
+        return false;
+    }
+
+    /**
+     * Allow processors to perform cleanup tasks for all notifications by overriding this method
+     *
+     * @since Moodle 3.9
+     * @param int $notificationdeletetime
+     * @return void
+     */
+    public function cleanup_all_notifications(int $notificationdeletetime): void {
+        return;
+    }
+
+    /**
+     * Allow processors to perform cleanup tasks for read notifications by overriding this method
+     *
+     * @since Moodle 3.9
+     * @param int $notificationdeletetime
+     * @return void
+     */
+    public function cleanup_read_notifications(int $notificationdeletetime): void {
+        return;
+    }
 }
-
-
-

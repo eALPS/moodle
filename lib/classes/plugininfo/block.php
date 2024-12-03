@@ -23,14 +23,19 @@
  */
 namespace core\plugininfo;
 
-use moodle_url, part_of_admin_tree, admin_settingpage, admin_externalpage;
-
-defined('MOODLE_INTERNAL') || die();
+use admin_settingpage;
+use moodle_url;
+use part_of_admin_tree;
 
 /**
  * Class for page side blocks
  */
 class block extends base {
+
+    public static function plugintype_supports_disabling(): bool {
+        return true;
+    }
+
     /**
      * Finds all enabled plugins, the result may include missing plugins.
      * @return array|null of enabled plugins $pluginname=>$pluginname, null means unknown
@@ -39,6 +44,29 @@ class block extends base {
         global $DB;
 
         return $DB->get_records_menu('block', array('visible'=>1), 'name ASC', 'name, name AS val');
+    }
+
+    public static function enable_plugin(string $pluginname, int $enabled): bool {
+        global $DB;
+
+        if (!$block = $DB->get_record('block', ['name' => $pluginname])) {
+            throw new \moodle_exception('blockdoesnotexist', 'error');
+        }
+
+        $haschanged = false;
+
+        // Only set visibility if it's different from the current value.
+        if ($block->visible != $enabled) {
+            // Set block visibility.
+            $DB->set_field('block', 'visible', $enabled, ['id' => $block->id]);
+            $haschanged = true;
+
+            // Include this information into config changes table.
+            add_to_config_log('block_visibility', $block->visible, $enabled, $pluginname);
+            \core_plugin_manager::reset_caches();
+        }
+
+        return $haschanged;
     }
 
     /**
@@ -77,6 +105,7 @@ class block extends base {
 
     public function load_settings(part_of_admin_tree $adminroot, $parentnodename, $hassiteconfig) {
         global $CFG, $USER, $DB, $OUTPUT, $PAGE; // In case settings.php wants to refer to them.
+        /** @var \admin_root $ADMIN */
         $ADMIN = $adminroot; // May be used in settings.php.
         $plugininfo = $this; // Also can be used inside settings.php.
         $block = $this;      // Also can be used inside settings.php.
@@ -147,11 +176,9 @@ class block extends base {
 
         if ($block = $DB->get_record('block', array('name'=>$this->name))) {
             // Inform block it's about to be deleted.
-            if (file_exists("$CFG->dirroot/blocks/$block->name/block_$block->name.php")) {
-                $blockobject = block_instance($block->name);
-                if ($blockobject) {
-                    $blockobject->before_delete();  // Only if we can create instance, block might have been already removed.
-                }
+            $blockobject = block_instance($block->name);
+            if ($blockobject) {
+                $blockobject->before_delete();  // Only if we can create instance, block might have been already removed.
             }
 
             // First delete instances and related contexts.

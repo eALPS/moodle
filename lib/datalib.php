@@ -45,16 +45,25 @@ define('MAX_COURSE_CATEGORIES', 10000);
  *
  * We allow overwrites from config.php, useful to ensure coherence in performance
  * tests results.
+ *
+ * Note: For web service requests in the external_tokens field, we use a different constant
+ * webservice::TOKEN_LASTACCESS_UPDATE_SECS.
  */
 if (!defined('LASTACCESS_UPDATE_SECS')) {
     define('LASTACCESS_UPDATE_SECS', 60);
 }
+/**
+ * The constant value when we use the search option.
+ */
+define('USER_SEARCH_STARTS_WITH', 0);
+define('USER_SEARCH_CONTAINS', 1);
+define('USER_SEARCH_EXACT_MATCH', 2);
 
 /**
  * Returns $user object of the main admin user
  *
  * @static stdClass $mainadmin
- * @return stdClass {@link $USER} record from DB, false if not found
+ * @return stdClass|false {user} record from DB, false if not found
  */
 function get_admin() {
     global $CFG, $DB;
@@ -138,7 +147,7 @@ function get_admins() {
  * @param array $exceptions A list of IDs to ignore, eg 2,4,5,8,9,10
  * @return array
  */
-function search_users($courseid, $groupid, $searchtext, $sort='', array $exceptions=null) {
+function search_users($courseid, $groupid, $searchtext, $sort='', ?array $exceptions=null) {
     global $DB;
 
     $fullname  = $DB->sql_fullname('u.firstname', 'u.lastname');
@@ -213,9 +222,10 @@ function search_users($courseid, $groupid, $searchtext, $sort='', array $excepti
  * @param string $search the text to search for (empty string = find all)
  * @param string $u the table alias for the user table in the query being
  *     built. May be ''.
- * @param bool $searchanywhere If true (default), searches in the middle of
- *     names, otherwise only searches at start
- * @param array $extrafields Array of extra user fields to include in search
+ * @param int $searchtype If 0(default): searches at start, 1: searches in the middle of names
+ *      2: search exact match.
+ * @param array $extrafields Array of extra user fields to include in search, must be prefixed with table alias if they are not in
+ *     the user table.
  * @param array $exclude Array of user ids to exclude (empty = don't exclude)
  * @param array $includeonly If specified, only returns users that have ids
  *     incldued in this array (empty = don't restrict)
@@ -223,8 +233,8 @@ function search_users($courseid, $groupid, $searchtext, $sort='', array $excepti
  *     where clause the query, and an associative array containing any required
  *     parameters (using named placeholders).
  */
-function users_search_sql($search, $u = 'u', $searchanywhere = true, array $extrafields = array(),
-        array $exclude = null, array $includeonly = null) {
+function users_search_sql(string $search, string $u = 'u', int $searchtype = USER_SEARCH_STARTS_WITH, array $extrafields = [],
+        ?array $exclude = null, ?array $includeonly = null): array {
     global $DB, $CFG;
     $params = array();
     $tests = array();
@@ -233,23 +243,35 @@ function users_search_sql($search, $u = 'u', $searchanywhere = true, array $extr
         $u .= '.';
     }
 
-    // If we have a $search string, put a field LIKE '$search%' condition on each field.
     if ($search) {
         $conditions = array(
             $DB->sql_fullname($u . 'firstname', $u . 'lastname'),
             $conditions[] = $u . 'lastname'
         );
         foreach ($extrafields as $field) {
-            $conditions[] = $u . $field;
+            // Add the table alias for the user table if the field doesn't already have an alias.
+            $conditions[] = strpos($field, '.') !== false ? $field : $u . $field;
         }
-        if ($searchanywhere) {
-            $searchparam = '%' . $search . '%';
-        } else {
-            $searchparam = $search . '%';
+        switch ($searchtype) {
+            case USER_SEARCH_STARTS_WITH:
+                // Put a field LIKE 'search%' condition on each field.
+                $searchparam = $search . '%';
+                break;
+            case USER_SEARCH_CONTAINS:
+                // Put a field LIKE '$search%' condition on each field.
+                $searchparam = '%' . $search . '%';
+                break;
+            case USER_SEARCH_EXACT_MATCH:
+                // Match exact the $search string.
+                $searchparam = $search;
+                break;
         }
         $i = 0;
         foreach ($conditions as $key => $condition) {
             $conditions[$key] = $DB->sql_like($condition, ":con{$i}00", false, false);
+            if ($searchtype === USER_SEARCH_EXACT_MATCH) {
+                $conditions[$key] = "$condition = :con{$i}00";
+            }
             $params["con{$i}00"] = $searchparam;
             $i++;
         }
@@ -302,7 +324,7 @@ function users_search_sql($search, $u = 'u', $searchanywhere = true, array $extr
  *  - firstname
  *  - lastname
  *  - $DB->sql_fullname
- *  - those returned by get_extra_user_fields
+ *  - those returned by \core_user\fields::get_identity_fields or those included in $customfieldmappings
  *
  * If named parameters are used (which is the default, and highly recommended),
  * then the parameter names are like :usersortexactN, where N is an int.
@@ -331,13 +353,15 @@ function users_search_sql($search, $u = 'u', $searchanywhere = true, array $extr
  * @param string $usertablealias (optional) any table prefix for the {users} table. E.g. 'u'.
  * @param string $search (optional) a current search string. If given,
  *      any exact matches to this string will be sorted first.
- * @param context $context the context we are in. Use by get_extra_user_fields.
+ * @param context|null $context the context we are in. Used by \core_user\fields::get_identity_fields.
  *      Defaults to $PAGE->context.
+ * @param array $customfieldmappings associative array of mappings for custom fields returned by \core_user\fields::get_sql.
  * @return array with two elements:
  *      string SQL fragment to use in the ORDER BY clause. For example, "firstname, lastname".
- *      array of parameters used in the SQL fragment.
+ *      array of parameters used in the SQL fragment. If $search is not given, this is guaranteed to be an empty array.
  */
-function users_order_by_sql($usertablealias = '', $search = null, context $context = null) {
+function users_order_by_sql(string $usertablealias = '', ?string $search = null, ?context $context = null,
+        array $customfieldmappings = []) {
     global $DB, $PAGE;
 
     if ($usertablealias) {
@@ -365,9 +389,17 @@ function users_order_by_sql($usertablealias = '', $search = null, context $conte
     $params[$paramkey] = $search;
     $paramkey++;
 
-    $fieldstocheck = array_merge(array('firstname', 'lastname'), get_extra_user_fields($context));
+    if ($customfieldmappings) {
+        $fieldstocheck = array_merge([$tableprefix . 'firstname', $tableprefix . 'lastname'], array_values($customfieldmappings));
+    } else {
+        $fieldstocheck = array_merge(['firstname', 'lastname'], \core_user\fields::get_identity_fields($context, false));
+        $fieldstocheck = array_map(function($field) use ($tableprefix) {
+            return $tableprefix . $field;
+        }, $fieldstocheck);
+    }
+
     foreach ($fieldstocheck as $key => $field) {
-        $exactconditions[] = 'LOWER(' . $tableprefix . $field . ') = LOWER(:' . $paramkey . ')';
+        $exactconditions[] = 'LOWER(' . $field . ') = LOWER(:' . $paramkey . ')';
         $params[$paramkey] = $search;
         $paramkey++;
     }
@@ -397,8 +429,8 @@ function users_order_by_sql($usertablealias = '', $search = null, context $conte
  * @return array|int|bool  {@link $USER} records unless get is false in which case the integer count of the records found is returned.
  *                        False is returned if an error is encountered.
  */
-function get_users($get=true, $search='', $confirmed=false, array $exceptions=null, $sort='firstname ASC',
-                   $firstinitial='', $lastinitial='', $page='', $recordsperpage='', $fields='*', $extraselect='', array $extraparams=null) {
+function get_users($get=true, $search='', $confirmed=false, ?array $exceptions=null, $sort='firstname ASC',
+                   $firstinitial='', $lastinitial='', $page='', $recordsperpage='', $fields='*', $extraselect='', ?array $extraparams=null) {
     global $DB, $CFG;
 
     if ($get && !$recordsperpage) {
@@ -471,12 +503,12 @@ function get_users($get=true, $search='', $confirmed=false, array $exceptions=nu
  */
 function get_users_listing($sort='lastaccess', $dir='ASC', $page=0, $recordsperpage=0,
                            $search='', $firstinitial='', $lastinitial='', $extraselect='',
-                           array $extraparams=null, $extracontext = null) {
+                           ?array $extraparams=null, $extracontext = null) {
     global $DB, $CFG;
 
     $fullname  = $DB->sql_fullname();
 
-    $select = "deleted <> 1 AND id <> :guestid";
+    $select = "deleted <> 1 AND u.id <> :guestid";
     $params = array('guestid' => $CFG->siteguest);
 
     if (!empty($search)) {
@@ -499,30 +531,38 @@ function get_users_listing($sort='lastaccess', $dir='ASC', $page=0, $recordsperp
     }
 
     if ($extraselect) {
+        // The extra WHERE clause may refer to the 'id' column which can now be ambiguous because we
+        // changed the query to include joins, so replace any 'id' that is on its own (no alias)
+        // with 'u.id'.
+        $extraselect = preg_replace('~([ =]|^)id([ =]|$)~', '$1u.id$2', $extraselect);
         $select .= " AND $extraselect";
         $params = $params + (array)$extraparams;
     }
 
-    if ($sort) {
-        $sort = " ORDER BY $sort $dir";
+    // If a context is specified, get extra user fields that the current user
+    // is supposed to see, otherwise just get the name fields.
+    $userfields = \core_user\fields::for_name();
+    if ($extracontext) {
+        $userfields->with_identity($extracontext, true);
     }
 
-    // If a context is specified, get extra user fields that the current user
-    // is supposed to see.
-    $extrafields = '';
-    if ($extracontext) {
-        $extrafields = get_extra_user_fields_sql($extracontext, '', '',
-                array('id', 'username', 'email', 'firstname', 'lastname', 'city', 'country',
-                'lastaccess', 'confirmed', 'mnethostid'));
+    $userfields->excluding('id');
+    $userfields->including('username', 'email', 'city', 'country', 'lastaccess', 'confirmed', 'mnethostid', 'suspended');
+    ['selects' => $selects, 'joins' => $joins, 'params' => $joinparams, 'mappings' => $mappings] =
+            (array)$userfields->get_sql('u', true);
+
+    if ($sort) {
+        $orderbymap = $mappings;
+        $orderbymap['default'] = 'lastaccess';
+        $sort = get_safe_orderby($orderbymap, $sort, $dir);
     }
-    $namefields = get_all_user_name_fields(true);
-    $extrafields = "$extrafields, $namefields";
 
     // warning: will return UNCONFIRMED USERS
-    return $DB->get_records_sql("SELECT id, username, email, city, country, lastaccess, confirmed, mnethostid, suspended $extrafields
-                                   FROM {user}
+    return $DB->get_records_sql("SELECT u.id $selects
+                                   FROM {user} u
+                                        $joins
                                   WHERE $select
-                                  $sort", $params, $page, $recordsperpage);
+                                  $sort", array_merge($params, $joinparams), $page, $recordsperpage);
 
 }
 
@@ -597,13 +637,16 @@ function get_course($courseid, $clone = true) {
  *            we are using distinct. You almost _NEVER_ need all the fields
  *            in such a large SELECT
  *
+ * Consider using core_course_category::get_courses()
+ * or core_course_category::search_courses() instead since they use caching.
+ *
  * @global object
  * @global object
  * @global object
  * @uses CONTEXT_COURSE
  * @param string|int $categoryid Either a category id or 'all' for everything
  * @param string $sort A field and direction to sort by
- * @param string $fields The additional fields to return
+ * @param string $fields The additional fields to return (note that "id, category, visible" are always present)
  * @return array Array of courses
  */
 function get_courses($categoryid="all", $sort="c.sortorder ASC", $fields="c.*") {
@@ -631,6 +674,19 @@ function get_courses($categoryid="all", $sort="c.sortorder ASC", $fields="c.*") 
     $ccjoin = "LEFT JOIN {context} ctx ON (ctx.instanceid = c.id AND ctx.contextlevel = :contextlevel)";
     $params['contextlevel'] = CONTEXT_COURSE;
 
+    // The fields "id, category, visible" are required in the subsequent loop and must always be present.
+    if ($fields !== 'c.*') {
+        $fieldarray = array_merge(
+            // Split fields on comma + zero or more whitespace, merge with required fields.
+            preg_split('/,\s*/', $fields), [
+                'c.id',
+                'c.category',
+                'c.visible',
+            ]
+        );
+        $fields = implode(',', array_unique($fieldarray));
+    }
+
     $sql = "SELECT $fields $ccselect
               FROM {course} c
            $ccjoin
@@ -643,91 +699,11 @@ function get_courses($categoryid="all", $sort="c.sortorder ASC", $fields="c.*") 
         // loop throught them
         foreach ($courses as $course) {
             context_helper::preload_from_record($course);
-            if (isset($course->visible) && $course->visible <= 0) {
-                // for hidden courses, require visibility check
-                if (has_capability('moodle/course:viewhiddencourses', context_course::instance($course->id))) {
-                    $visiblecourses [$course->id] = $course;
-                }
-            } else {
+            if (core_course_category::can_view_course_info($course)) {
                 $visiblecourses [$course->id] = $course;
             }
         }
     }
-    return $visiblecourses;
-}
-
-
-/**
- * Returns list of courses, for whole site, or category
- *
- * Similar to get_courses, but allows paging
- * Important: Using c.* for fields is extremely expensive because
- *            we are using distinct. You almost _NEVER_ need all the fields
- *            in such a large SELECT
- *
- * @global object
- * @global object
- * @global object
- * @uses CONTEXT_COURSE
- * @param string|int $categoryid Either a category id or 'all' for everything
- * @param string $sort A field and direction to sort by
- * @param string $fields The additional fields to return
- * @param int $totalcount Reference for the number of courses
- * @param string $limitfrom The course to start from
- * @param string $limitnum The number of courses to limit to
- * @return array Array of courses
- */
-function get_courses_page($categoryid="all", $sort="c.sortorder ASC", $fields="c.*",
-                          &$totalcount, $limitfrom="", $limitnum="") {
-    global $USER, $CFG, $DB;
-
-    $params = array();
-
-    $categoryselect = "";
-    if ($categoryid !== "all" && is_numeric($categoryid)) {
-        $categoryselect = "WHERE c.category = :catid";
-        $params['catid'] = $categoryid;
-    } else {
-        $categoryselect = "";
-    }
-
-    $ccselect = ', ' . context_helper::get_preload_record_columns_sql('ctx');
-    $ccjoin = "LEFT JOIN {context} ctx ON (ctx.instanceid = c.id AND ctx.contextlevel = :contextlevel)";
-    $params['contextlevel'] = CONTEXT_COURSE;
-
-    $totalcount = 0;
-    if (!$limitfrom) {
-        $limitfrom = 0;
-    }
-    $visiblecourses = array();
-
-    $sql = "SELECT $fields $ccselect
-              FROM {course} c
-              $ccjoin
-           $categoryselect
-          ORDER BY $sort";
-
-    // pull out all course matching the cat
-    $rs = $DB->get_recordset_sql($sql, $params);
-    // iteration will have to be done inside loop to keep track of the limitfrom and limitnum
-    foreach($rs as $course) {
-        context_helper::preload_from_record($course);
-        if ($course->visible <= 0) {
-            // for hidden courses, require visibility check
-            if (has_capability('moodle/course:viewhiddencourses', context_course::instance($course->id))) {
-                $totalcount++;
-                if ($totalcount > $limitfrom && (!$limitnum or count($visiblecourses) < $limitnum)) {
-                    $visiblecourses [$course->id] = $course;
-                }
-            }
-        } else {
-            $totalcount++;
-            if ($totalcount > $limitfrom && (!$limitnum or count($visiblecourses) < $limitnum)) {
-                $visiblecourses [$course->id] = $course;
-            }
-        }
-    }
-    $rs->close();
     return $visiblecourses;
 }
 
@@ -742,10 +718,12 @@ function get_courses_page($categoryid="all", $sort="c.sortorder ASC", $fields="c
  * @param int $recordsperpage The number of records per page
  * @param int $totalcount Passed in by reference.
  * @param array $requiredcapabilities Extra list of capabilities used to filter courses
- * @return object {@link $COURSE} records
+ * @param array $searchcond additional search conditions, for example ['c.enablecompletion = :p1']
+ * @param array $params named parameters for additional search conditions, for example ['p1' => 1]
+ * @return stdClass[] {@link $COURSE} records
  */
 function get_courses_search($searchterms, $sort, $page, $recordsperpage, &$totalcount,
-                            $requiredcapabilities = array()) {
+                            $requiredcapabilities = array(), $searchcond = [], $params = []) {
     global $CFG, $DB;
 
     if ($DB->sql_regex_supported()) {
@@ -753,8 +731,6 @@ function get_courses_search($searchterms, $sort, $page, $recordsperpage, &$total
         $NOTREGEXP = $DB->sql_regex(false);
     }
 
-    $searchcond = array();
-    $params     = array();
     $i = 0;
 
     // Thanks Oracle for your non-ansi concat and type limits in coalesce. MDL-29912
@@ -787,7 +763,7 @@ function get_courses_search($searchterms, $sort, $page, $recordsperpage, &$total
             $searchcond[] = "$concat $REGEXP :ss$i";
             $params['ss'.$i] = "(^|[^a-zA-Z0-9])$searchterm([^a-zA-Z0-9]|$)";
 
-        } else if (substr($searchterm,0,1) == "-") {
+        } else if ((substr($searchterm,0,1) == "-") && (core_text::strlen($searchterm) > 1)) {
             $searchterm = trim($searchterm, '+-');
             $searchterm = preg_quote($searchterm, '|');
             $searchcond[] = "$concat $NOTREGEXP :ss$i";
@@ -822,12 +798,13 @@ function get_courses_search($searchterms, $sort, $page, $recordsperpage, &$total
              WHERE $searchcond AND c.id <> ".SITEID."
           ORDER BY $sort";
 
+    $mycourses = enrol_get_my_courses();
     $rs = $DB->get_recordset_sql($sql, $params);
     foreach($rs as $course) {
         // Preload contexts only for hidden courses or courses we need to return.
         context_helper::preload_from_record($course);
         $coursecontext = context_course::instance($course->id);
-        if (!$course->visible && !has_capability('moodle/course:viewhiddencourses', $coursecontext)) {
+        if (!array_key_exists($course->id, $mycourses) && !core_course_category::can_view_course_info($course)) {
             continue;
         }
         if (!empty($requiredcapabilities)) {
@@ -857,7 +834,6 @@ function get_courses_search($searchterms, $sort, $page, $recordsperpage, &$total
  *
  * @global object
  * @global object
- * @uses MAX_COURSES_IN_CATEGORY
  * @uses MAX_COURSE_CATEGORIES
  * @uses SITEID
  * @uses CONTEXT_COURSE
@@ -874,7 +850,8 @@ function fix_course_sortorder() {
 
     if ($unsorted = $DB->get_records('course_categories', array('sortorder'=>0))) {
         //move all categories that are not sorted yet to the end
-        $DB->set_field('course_categories', 'sortorder', MAX_COURSES_IN_CATEGORY*MAX_COURSE_CATEGORIES, array('sortorder'=>0));
+        $DB->set_field('course_categories', 'sortorder',
+            get_max_courses_in_category() * MAX_COURSE_CATEGORIES, array('sortorder' => 0));
         $cacheevents['changesincoursecat'] = true;
     }
 
@@ -974,7 +951,7 @@ function fix_course_sortorder() {
         $categories = array();
         foreach ($updatecounts as $cat) {
             $cat->coursecount = $cat->newcount;
-            if ($cat->coursecount >= MAX_COURSES_IN_CATEGORY) {
+            if ($cat->coursecount >= get_max_courses_in_category()) {
                 $categories[] = $cat->id;
             }
             unset($cat->newcount);
@@ -982,7 +959,11 @@ function fix_course_sortorder() {
         }
         if (!empty($categories)) {
             $str = implode(', ', $categories);
-            debugging("The number of courses (category id: $str) has reached MAX_COURSES_IN_CATEGORY (" . MAX_COURSES_IN_CATEGORY . "), it will cause a sorting performance issue, please increase the value of MAX_COURSES_IN_CATEGORY in lib/datalib.php file. See tracker issue: MDL-25669", DEBUG_DEVELOPER);
+            debugging("The number of courses (category id: $str) has reached max number of courses " .
+                "in a category (" . get_max_courses_in_category() . "). It will cause a sorting performance issue. " .
+                "Please set higher value for \$CFG->maxcoursesincategory in config.php. " .
+                "Please also make sure \$CFG->maxcoursesincategory * MAX_COURSE_CATEGORIES less than max integer. " .
+                "See tracker issues: MDL-25669 and MDL-69573", DEBUG_DEVELOPER);
         }
         $cacheevents['changesincoursecat'] = true;
     }
@@ -991,13 +972,13 @@ function fix_course_sortorder() {
     $sql = "SELECT DISTINCT cc.id, cc.sortorder
               FROM {course_categories} cc
               JOIN {course} c ON c.category = cc.id
-             WHERE c.sortorder < cc.sortorder OR c.sortorder > cc.sortorder + ".MAX_COURSES_IN_CATEGORY;
+             WHERE c.sortorder < cc.sortorder OR c.sortorder > cc.sortorder + " . get_max_courses_in_category();
 
     if ($fixcategories = $DB->get_records_sql($sql)) {
         //fix the course sortorder ranges
         foreach ($fixcategories as $cat) {
             $sql = "UPDATE {course}
-                       SET sortorder = ".$DB->sql_modulo('sortorder', MAX_COURSES_IN_CATEGORY)." + ?
+                       SET sortorder = ".$DB->sql_modulo('sortorder', get_max_courses_in_category())." + ?
                      WHERE category = ?";
             $DB->execute($sql, array($cat->sortorder, $cat->id));
         }
@@ -1065,7 +1046,6 @@ function fix_course_sortorder() {
  * @todo Document the arguments of this function better
  *
  * @global object
- * @uses MAX_COURSES_IN_CATEGORY
  * @uses CONTEXT_COURSECAT
  * @param array $children
  * @param int $sortorder
@@ -1082,7 +1062,7 @@ function _fix_course_cats($children, &$sortorder, $parent, $depth, $path, &$fixc
     $changesmade = false;
 
     foreach ($children as $cat) {
-        $sortorder = $sortorder + MAX_COURSES_IN_CATEGORY;
+        $sortorder = $sortorder + get_max_courses_in_category();
         $update = false;
         if ($parent != $cat->parent or $depth != $cat->depth or $path.'/'.$cat->id != $cat->path) {
             $cat->parent = $parent;
@@ -1172,13 +1152,19 @@ function get_my_remotehosts() {
 function get_scales_menu($courseid=0) {
     global $DB;
 
-    $sql = "SELECT id, name
+    $sql = "SELECT id, name, courseid
               FROM {scale}
              WHERE courseid = 0 or courseid = ?
           ORDER BY courseid ASC, name ASC";
     $params = array($courseid);
-
-    return $scales = $DB->get_records_sql_menu($sql, $params);
+    $scales = array();
+    $results = $DB->get_records_sql($sql, $params);
+    foreach ($results as $index => $record) {
+        $context = empty($record->courseid) ? context_system::instance() : context_course::instance($record->courseid);
+        $scales[$index] = format_string($record->name, false, ["context" => $context]);
+    }
+    // Format: [id => 'scale name'].
+    return $scales;
 }
 
 /**
@@ -1195,7 +1181,7 @@ function get_scales_menu($courseid=0) {
  * @param string $select use empty string when updating all records
  * @param array $params optional select parameters
  */
-function increment_revision_number($table, $field, $select, array $params = null) {
+function increment_revision_number($table, $field, $select, ?array $params = null) {
     global $DB;
 
     $now = time();
@@ -1219,7 +1205,7 @@ function increment_revision_number($table, $field, $select, array $params = null
  *
  * @global object
  * @param int $courseid The id of the course as found in the 'course' table.
- * @return array
+ * @return array|false
  */
 function get_course_mods($courseid) {
     global $DB;
@@ -1250,7 +1236,7 @@ function get_course_mods($courseid) {
  * @param int $strictness IGNORE_MISSING means compatible mode, false returned if record not found, debug message if more found;
  *                        IGNORE_MULTIPLE means return first, ignore multiple records found(not recommended);
  *                        MUST_EXIST means throw exception if no record or multiple records found
- * @return stdClass
+ * @return stdClass|false
  */
 function get_coursemodule_from_id($modulename, $cmid, $courseid=0, $sectionnum=false, $strictness=IGNORE_MISSING) {
     global $DB;
@@ -1387,7 +1373,7 @@ function get_coursemodules_in_course($modulename, $courseid, $extrafields='') {
  * in the course. Returns an empty array on any errors.
  *
  * The returned objects includle the columns cw.section, cm.visible,
- * cm.groupmode, and cm.groupingid, and are indexed by cm.id.
+ * cm.groupmode, cm.groupingid and cm.lang and are indexed by cm.id.
  *
  * @global object
  * @global object
@@ -1415,7 +1401,7 @@ function get_all_instances_in_courses($modulename, $courses, $userid=NULL, $incl
     $params['modulename'] = $modulename;
 
     if (!$rawmods = $DB->get_records_sql("SELECT cm.id AS coursemodule, m.*, cw.section, cm.visible AS visible,
-                                                 cm.groupmode, cm.groupingid
+                                                 cm.groupmode, cm.groupingid, cm.lang
                                             FROM {course_modules} cm, {course_sections} cw, {modules} md,
                                                  {".$modulename."} m
                                            WHERE cm.course $coursessql AND
@@ -1573,13 +1559,28 @@ function add_to_config_log($name, $oldvalue, $value, $plugin) {
     global $USER, $DB;
 
     $log = new stdClass();
-    $log->userid       = during_initial_install() ? 0 :$USER->id; // 0 as user id during install
+    // Use 0 as user id during install.
+    $log->userid       = during_initial_install() ? 0 : $USER->id;
     $log->timemodified = time();
     $log->name         = $name;
     $log->oldvalue  = $oldvalue;
     $log->value     = $value;
     $log->plugin    = $plugin;
-    $DB->insert_record('config_log', $log);
+
+    $id = $DB->insert_record('config_log', $log);
+
+    $event = core\event\config_log_created::create(array(
+            'objectid' => $id,
+            'userid' => $log->userid,
+            'context' => \context_system::instance(),
+            'other' => array(
+                'name' => $log->name,
+                'oldvalue' => $log->oldvalue,
+                'value' => $log->value,
+                'plugin' => $log->plugin
+            )
+        ));
+    $event->trigger();
 }
 
 /**
@@ -1605,6 +1606,11 @@ function user_accesstime_log($courseid=0) {
 
     if (isguestuser()) {
         // Do not update guest access times/ips for performance.
+        return;
+    }
+
+    if (defined('USER_KEY_LOGIN') && USER_KEY_LOGIN === true) {
+        // Do not update user login time when using user key login.
         return;
     }
 
@@ -1674,25 +1680,334 @@ function user_accesstime_log($courseid=0) {
 /// GENERAL HELPFUL THINGS  ///////////////////////////////////
 
 /**
- * Dumps a given object's information for debugging purposes
+ * Dumps a given object's information for debugging purposes. (You can actually use this function
+ * to print any type of value such as arrays or simple strings, not just objects.)
  *
- * When used in a CLI script, the object's information is written to the standard
- * error output stream. When used in a web script, the object is dumped to a
- * pre-formatted block with the "notifytiny" CSS class.
+ * When used in a web script, the object is dumped in a fancy-formatted div.
  *
- * @param mixed $object The data to be printed
- * @return void output is echo'd
+ * When used in a CLI script, the object's information is written to the standard error output
+ * stream.
+ *
+ * When used in an AJAX script, the object's information is dumped to the server error log.
+ *
+ * In text mode, private fields are shown with * and protected with +.
+ *
+ * In web view, formatting is done with Bootstrap classes. You can hover over some items to see
+ * more information, such as value types or access controls, or full field names if the names get
+ * cut off.
+ *
+ * By default, this will recurse to child objects, except where that would result in infinite
+ * recursion. To change that, set $expandclasses to an empty array (= do not recurse) or to a list
+ * of the class names that you would like to expand. You can also set values in this array to a
+ * regular expression beginning with / if you want to match a range of classes.
+ *
+ * @param mixed $item Object, array, or other item to display
+ * @param string[] $expandclasses Optional list of class patterns to recurse to
+ * @param bool $textonly If true, outputs text-only (automatically set for CLI and AJAX)
+ * @param bool $return For internal use - if true, returns value instead of echoing it
+ * @param int $depth For internal use - depth of recursion within print_object call
+ * @param \stdClass[] $done For internal use - array listing already-printed objects
+ * @return string  HTML code (or text if CLI) to display, if $return is true, otherwise empty string
  */
-function print_object($object) {
-
-    // we may need a lot of memory here
+function print_object($item, array $expandclasses = ['/./'], bool $textonly = false, bool $return = false,
+        int $depth = 0, array $done = []): string {
+    // We may need a lot of memory here.
     raise_memory_limit(MEMORY_EXTRA);
 
-    if (CLI_SCRIPT) {
-        fwrite(STDERR, print_r($object, true));
-        fwrite(STDERR, PHP_EOL);
+    // Set text (instead of HTML) mode if in CLI or AJAX script.
+    if (CLI_SCRIPT || AJAX_SCRIPT) {
+        $textonly = true;
+    }
+
+    /**
+     * Gets styling for types of variable.
+     *
+     * @param mixed $item Arbitrary PHP variable (simple primitive type) to display
+     * @return string Bootstrap class for styling the display
+     */
+    $gettypestyle = function($item): string {
+        switch (gettype($item)) {
+            case 'NULL':
+            case 'boolean':
+                return 'font-italic';
+            case 'integer':
+            case 'double':
+                return 'text-primary';
+            case 'string' :
+                return 'text-success';
+            default:
+                return '';
+        }
+    };
+
+    /**
+     * Formats and escapes the text for the contents of a variable.
+     *
+     * @param mixed $item Arbitrary PHP variable (simple primitive type) to display
+     * @return string Contents as text
+     */
+    $getobjectstr = function($item) use($textonly): string {
+        if (is_null($item)) {
+            return 'null';
+        }
+        $objectstr = (string)$item;
+        if (is_string($item)) {
+            // Quotes around strings.
+            $objectstr = "'$objectstr'";
+        } else if (is_bool($item)) {
+            // Show true or false for bools.
+            $objectstr = $item ? 'true' : 'false';
+        } else if (is_float($item)) {
+            // Add 'f' for floats.
+            $objectstr = $item . 'f';
+        }
+        if ($textonly) {
+            return $objectstr;
+        } else {
+            return s($objectstr);
+        }
+    };
+
+    if ($textonly) {
+        $out = '';
     } else {
-        echo html_writer::tag('pre', s(print_r($object, true)), array('class' => 'notifytiny'));
+        $notype = false;
+        $cssclass = $gettypestyle($item);
+        if (is_object($item) || is_array($item)) {
+            // For object and array, don't show the title on hover - it makes no sense because
+            // they're big, plus we already show the word 'array' or the object type.
+            $notype = true;
+            // Add a fancy box, with alternating colour, around the object and non-empty array.
+            if (is_object($item) || count($item) > 0) {
+                if (($depth & 1) === 0) {
+                    $cssclass .= ' bg-white rounded p-2';
+                } else {
+                    $cssclass .= ' bg-light rounded p-2';
+                }
+            }
+        }
+        if ($depth === 0) {
+            // The top-level object being printed has print-object class in case anyone wants to
+            // do extra styling.
+            $cssclass .= ' print-object';
+        }
+        $attributes = [];
+        if (!$notype) {
+            // We show the item type on hover. Note there is no need to include the actual value
+            // in the title attribute here, because the full text will be displayed anyway with
+            // wrapping if needed..
+            $attributes['title'] = gettype($item);
+        }
+        $out = html_writer::start_div($cssclass, $attributes);
+    }
+
+    // Depending on the level of nesting, we allocate a slightly different proportion (ranging
+    // from 2/12 to 5/12) of the available width for the key names.
+    $bsdepth = floor(min(6, $depth) / 2);
+    $bootstrapdt = 'col-sm-' . ($bsdepth + 2);
+    $bootstrapdd = 'col-sm-' . (12 - ($bsdepth + 2));
+
+    // This main code handles objects and arrays.
+    if (is_array($item) || is_object($item)) {
+        if (is_object($item)) {
+            // Object header: class name.
+            if ($textonly) {
+                $out .= '[' . get_class($item) . ']';
+            } else {
+                // Objects display the class name as a badge. Content goes within a <dl>.
+                $badge = html_writer::span(get_class($item), 'badge bg-primary text-white');
+                $out .= html_writer::tag('h5', $badge);
+                $out .= html_writer::start_tag('dl', ['class' => 'row']);
+                $dl = true;
+            }
+            // Record that we have output this object already (to prevent circular refs).
+            $done[] = $item;
+            $object = true;
+            // Cast to array so we can loop through all properties.
+            $item = (array)$item;
+        } else {
+            // Array header: 'array' and a count.
+            $arrayinfo = 'array (' . count($item) . ')';
+            if ($textonly) {
+                $out .= $arrayinfo;
+            } else {
+                // Arrays show the same as objects but the badge is grey.
+                $badge = html_writer::span($arrayinfo, 'badge bg-secondary text-dark');
+                // Decide if there will be a <dl> tag - only if there is some content.
+                $dl = count($item) > 0;
+                $attributes = [];
+                if (!$dl) {
+                    // When there is no content inside the array, don't show bottom margin on heading.
+                    $attributes['class'] = 'mb-0';
+                }
+                $out .= html_writer::tag('h5', $badge, $attributes);
+                if ($dl) {
+                    $out .= html_writer::start_tag('dl', ['class' => 'row']);
+                }
+            }
+            $object = false;
+        }
+
+        // Properties.
+        foreach ($item as $key => $value) {
+            // Detect private and protected variables.
+            $matches = [];
+            $stringkey = (string)$key;
+            if (preg_match('~^\x00(.*)\x00(.*)$~', $stringkey, $matches)) {
+                $shortkey = $matches[2];
+                $access = $matches[1] == '*' ? 'protected' : 'private';
+            } else {
+                $shortkey = $stringkey;
+                $access = 'public';
+            }
+            if ($textonly) {
+                switch ($access) {
+                    case 'protected' :
+                        $shortkey = '+' . $shortkey;
+                        break;
+                    case 'private' :
+                        $shortkey = '*' . $shortkey;
+                        break;
+                }
+                $out .= PHP_EOL . '  ' . $shortkey . ' = ';
+            } else {
+                switch ($access) {
+                    case 'protected':
+                        // Protected is in normal font.
+                        $bootstrapstyle = ' font-weight-normal';
+                        break;
+                    case 'private':
+                        // Private is italic.
+                        $bootstrapstyle = ' font-weight-normal font-italic';
+                        break;
+                    default:
+                        // Public is bold, same for array keys.
+                        $bootstrapstyle = '';
+                        break;
+                }
+                $attributes = ['class' => $bootstrapdt . ' text-truncate' . $bootstrapstyle];
+                if ($object) {
+                    // For an object property, the title is the full text of the key (in case it
+                    // gets cut off) and the access modifier.
+                    $attributes['title'] = s($shortkey) . ' (' . $access . ')';
+                    $objectstr = s($shortkey);
+                } else {
+                    // For an array key, the title is the full text of the key (in case it gets
+                    // cut off) and the type of the key. Array keys can't have an access modifier.
+                    $attributes['title'] = s($shortkey) . ' (' . gettype($key) . ')';
+                    // Array keys are styled according to the normal styling for that type.
+                    $typestyle = $gettypestyle($key);
+                    if ($typestyle) {
+                        $attributes['class'] .= ' ' . $typestyle;
+                    }
+                    // Array keys also use a special object string e.g. 'true' for bool, quoted.
+                    $objectstr = $getobjectstr($key);
+                }
+                $out .= html_writer::tag('dt', $objectstr, $attributes);
+            }
+            // Consider how to display the value for this key.
+            $extraclass = '';
+            switch (gettype($value)) {
+                case 'object' :
+                    $objclass = get_class($value);
+
+                    // See if we printed it further up the tree in which case
+                    // it will definitely not be printed (infinite recursion).
+                    if (in_array($value, $done)) {
+                        if ($textonly) {
+                            $display = '[circular reference: ' . $objclass . ']';
+                        } else {
+                            $display = '[circular reference: ' . s($objclass) . ']';
+                            $extraclass = ' text-danger';
+                        }
+                        break;
+                    }
+
+                    // Recurse only to specified types.
+                    $recurse = false;
+                    foreach ($expandclasses as $pattern) {
+                        if (substr($pattern, 0, 1) === '/') {
+                            // Allow regular expressions beginning with a / symbol.
+                            if (preg_match($pattern, $objclass)) {
+                                $recurse = true;
+                                break;
+                            }
+                        } else {
+                            // Other strings must be exact match.
+                            if ($objclass === $pattern) {
+                                $recurse = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if ($recurse) {
+                        // Recursively display the object.
+                        $display = print_object($value, $expandclasses, $textonly, true, $depth + 1, $done);
+                        if ($textonly) {
+                            // Indent by adding spaces after each LF.
+                            $display = str_replace(PHP_EOL, PHP_EOL . '  ', $display);
+                        }
+                    } else {
+                        // Do not display the object, just a marker in square breackets.
+                        if ($textonly) {
+                            $display = '[object: ' . $objclass . ']';
+                        } else {
+                            $display = '[object: ' . s($objclass) . ']';
+                        }
+                    }
+                    break;
+
+                case 'array' :
+                    // Recursively display the array.
+                    $display = print_object($value, $expandclasses, $textonly, true, $depth + 1, $done);
+                    if ($textonly) {
+                        // Indent by adding spaces after each LF.
+                        $display = str_replace(PHP_EOL, PHP_EOL . '  ', $display);
+                    }
+                    break;
+
+                default:
+                    // Plain value - recurse to display.
+                    $display = print_object($value, [], $textonly, true, $depth + 1);
+                    break;
+            }
+            if ($textonly) {
+                $out .= $display;
+            } else {
+                $out .= html_writer::tag('dd', $display, ['class' => $bootstrapdd . $extraclass]);
+            }
+        }
+        if (!$textonly && $dl) {
+            $out .= html_writer::end_tag('dl');
+        }
+    } else {
+        // For things which are not objects or arrays, just convert to string for display.
+        $out .= $getobjectstr($item);
+    }
+
+    if (!$textonly) {
+        $out .= html_writer::end_div();
+    }
+
+    // Display or return result.
+    if ($return) {
+        return $out;
+    } else {
+        if (CLI_SCRIPT) {
+            fwrite(STDERR, $out);
+            fwrite(STDERR, PHP_EOL);
+        } else if (AJAX_SCRIPT) {
+            foreach (explode(PHP_EOL, $out) as $line) {
+                error_log($line);
+            }
+        } else {
+            if ($textonly) {
+                $out = html_writer::tag('pre', s($out));
+            }
+            echo $out . "\n";
+        }
+        return '';
     }
 }
 
@@ -1851,4 +2166,114 @@ function decompose_update_into_safe_changes(array $newvalues, $unusedvalue) {
     }
 
     return $safechanges;
+}
+
+/**
+ * Return maximum number of courses in a category
+ *
+ * @uses MAX_COURSES_IN_CATEGORY
+ * @return int number of courses
+ */
+function get_max_courses_in_category() {
+    global $CFG;
+    // Use default MAX_COURSES_IN_CATEGORY if $CFG->maxcoursesincategory is not set or invalid.
+    if (!isset($CFG->maxcoursesincategory) || clean_param($CFG->maxcoursesincategory, PARAM_INT) == 0) {
+        return MAX_COURSES_IN_CATEGORY;
+    } else {
+        return $CFG->maxcoursesincategory;
+    }
+}
+
+/**
+ * Prepare a safe ORDER BY statement from user interactable requests.
+ *
+ * This allows safe user specified sorting (ORDER BY), by abstracting the SQL from the value being requested by the user.
+ * A standard string (and optional direction) can be specified, which will be mapped to a predefined allow list of SQL ordering.
+ * The mapping can optionally include a 'default', which will be used if the key provided is invalid.
+ *
+ * Example usage:
+ *      -If $orderbymap = [
+ *              'courseid' => 'c.id',
+ *              'somecustomvalue'=> 'c.startdate, c.shortname',
+ *              'default' => 'c.fullname',
+ *       ]
+ *      -A value from the map array's keys can be passed in by a user interaction (eg web service) along with an optional direction.
+ *      -get_safe_orderby($orderbymap, 'courseid', 'DESC') would return: ORDER BY c.id DESC
+ *      -get_safe_orderby($orderbymap, 'somecustomvalue') would return: ORDER BY c.startdate, c.shortname
+ *      -get_safe_orderby($orderbymap, 'invalidblah', 'DESC') would return: ORDER BY c.fullname DESC
+ *      -If no default key was specified in $orderbymap, the invalidblah example above would return empty string.
+ *
+ * @param array $orderbymap An array in the format [keystring => sqlstring]. A default fallback can be set with the key 'default'.
+ * @param string $orderbykey A string to be mapped to a key in $orderbymap.
+ * @param string $direction Optional ORDER BY direction (ASC/DESC, case insensitive).
+ * @param bool $useprefix Whether ORDER BY is prefixed to the output (true by default). This should not be modified in most cases.
+ *                        It is included to enable get_safe_orderby_multiple() to use this function multiple times.
+ * @return string The ORDER BY statement, or empty string if $orderbykey is invalid and no default is mapped.
+ */
+function get_safe_orderby(array $orderbymap, string $orderbykey, string $direction = '', bool $useprefix = true): string {
+    $orderby = $useprefix ? ' ORDER BY ' : '';
+    $output = '';
+
+    // Only include an order direction if ASC/DESC is explicitly specified (case insensitive).
+    $direction = strtoupper($direction);
+    if (!in_array($direction, ['ASC', 'DESC'], true)) {
+        $direction = '';
+    } else {
+        $direction = " {$direction}";
+    }
+
+    // Prepare the statement if the key maps to a defined sort parameter.
+    if (isset($orderbymap[$orderbykey])) {
+        $output = "{$orderby}{$orderbymap[$orderbykey]}{$direction}";
+    } else if (array_key_exists('default', $orderbymap)) {
+        // Fall back to use the default if one is specified.
+        $output = "{$orderby}{$orderbymap['default']}{$direction}";
+    }
+
+    return $output;
+}
+
+/**
+ * Prepare a safe ORDER BY statement from user interactable requests using multiple values.
+ *
+ * This allows safe user specified sorting (ORDER BY) similar to get_safe_orderby(), but supports multiple keys and directions.
+ * This is useful in cases where combinations of columns are needed and/or each item requires a specified direction (ASC/DESC).
+ * The mapping can optionally include a 'default', which will be used if the key provided is invalid.
+ *
+ * Example usage:
+ *      -If $orderbymap = [
+ *              'courseid' => 'c.id',
+ *              'fullname'=> 'c.fullname',
+ *              'default' => 'c.startdate',
+ *          ]
+ *      -An array of values from the map's keys can be passed in by a user interaction (eg web service), with optional directions.
+ *      -get_safe_orderby($orderbymap, ['courseid', 'fullname'], ['DESC', 'ASC']) would return: ORDER BY c.id DESC, c.fullname ASC
+ *      -get_safe_orderby($orderbymap, ['courseid', 'invalidblah'], ['aaa', 'DESC']) would return: ORDER BY c.id, c.startdate DESC
+ *      -If no default key was specified in $orderbymap, the invalidblah example above would return: ORDER BY c.id
+ *
+ * @param array $orderbymap An array in the format [keystring => sqlstring]. A default fallback can be set with the key 'default'.
+ * @param array $orderbykeys An array of strings to be mapped to keys in $orderbymap.
+ * @param array $directions Optional array of ORDER BY direction (ASC/DESC, case insensitive).
+ *                          The array keys should match array keys in $orderbykeys.
+ * @return string The ORDER BY statement, or empty string if $orderbykeys contains no valid items and no default is mapped.
+ */
+function get_safe_orderby_multiple(array $orderbymap, array $orderbykeys, array $directions = []): string {
+    $output = '';
+
+    // Check each key for a valid mapping and add to the ORDER BY statement (invalid entries will be empty strings).
+    foreach ($orderbykeys as $index => $orderbykey) {
+        $direction = $directions[$index] ?? '';
+        $safeorderby = get_safe_orderby($orderbymap, $orderbykey, $direction, false);
+
+        if (!empty($safeorderby)) {
+            $output .= ", {$safeorderby}";
+        }
+    }
+
+    // Prefix with ORDER BY if any valid ordering is specified (and remove comma from the start).
+    if (!empty($output)) {
+        $output = ' ORDER BY' . ltrim($output, ',');
+    }
+
+    return $output;
 }

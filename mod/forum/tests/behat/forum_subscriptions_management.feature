@@ -18,29 +18,37 @@ Feature: A teacher can control the subscription to a forum
       | teacher  | C1     | editingteacher |
       | student1 | C1     | student        |
       | student2 | C1     | student        |
-    And I log in as "teacher"
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Forum" to section "1" and I fill the form with:
-      | Forum name        | Test forum name                |
-      | Forum type        | Standard forum for general use |
-      | Description       | Test forum description         |
-      | Subscription mode | Auto subscription              |
 
   Scenario: A teacher can change toggle subscription editing on and off
-    Given I follow "Test forum name"
-    And I follow "Show/edit current subscribers"
-    Then ".userselector" "css_element" should not exist
-    And "Turn editing on" "button" should exist
-    And I press "Turn editing on"
-    And ".userselector" "css_element" should exist
-    And "Turn editing off" "button" should exist
-    And I press "Turn editing off"
-    And ".userselector" "css_element" should not exist
-    And "Turn editing on" "button" should exist
-    And I press "Turn editing on"
-    And ".userselector" "css_element" should exist
-    And "Turn editing off" "button" should exist
-    And I press "Turn editing off"
-    And ".userselector" "css_element" should not exist
-    And "Turn editing on" "button" should exist
+    Given the following "activity" exists:
+      | activity         | forum                  |
+      | course           | C1                     |
+      | idnumber         | f01                    |
+      | name             | Test forum name        |
+    When I am on the "Test forum name" "forum activity" page logged in as teacher
+    And I navigate to "Subscriptions" in current page administration
+    Then I select "Manage subscribers" from the "Subscribers" singleselect
+    And "Add" "button" should exist
+    And "Remove" "button" should exist
+    And I select "View subscribers" from the "Subscribers" singleselect
+    And the "Subscribers" select box should contain "View subscribers"
+
+  @javascript
+  Scenario Outline: Toggle forum subscription mode via settings navigation
+    Given the following "activity" exists:
+      | course         | C1            |
+      | activity       | forum         |
+      | name           | Test forum    |
+      | idnumber       | F1            |
+      | type           | general       |
+      | forcesubscribe | <initialmode> |
+    When I am on the "Test forum" "forum activity" page logged in as "teacher"
+    And I navigate to "Subscriptions" in current page administration
+    And I select "<updatedmode>" from the "Subscription mode" singleselect
+    Then I should see "<updatedmodeconfirmed>"
+    Examples:
+      | initialmode | updatedmode           | updatedmodeconfirmed                     |
+      | 1           | Optional subscription | Everyone can now choose to be subscribed |
+      | 0           | Forced subscription   | Everyone is now subscribed to this forum |
+      | 0           | Auto subscription     | Everyone is now subscribed to this forum |
+      | 0           | Subscription disabled | Subscriptions are now disallowed         |

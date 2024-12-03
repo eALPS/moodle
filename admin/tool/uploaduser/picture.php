@@ -36,14 +36,12 @@ define ('PIX_FILE_SKIPPED', 2);
 
 admin_externalpage_setup('tooluploaduserpictures');
 
-require_login();
-
 require_capability('tool/uploaduser:uploaduserpictures', context_system::instance());
 
 $site = get_site();
 
 if (!$adminuser = get_admin()) {
-    print_error('noadmins', 'error');
+    throw new \moodle_exception('noadmins', 'error');
 }
 
 $strfile = get_string('file');

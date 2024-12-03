@@ -58,7 +58,7 @@ class restore_glossary_random_block_task extends restore_block_task {
 
         // Extract block configdata and update it to point to the new glossary
         if ($configdata = $DB->get_field('block_instances', 'configdata', array('id' => $blockid))) {
-            $config = unserialize(base64_decode($configdata));
+            $config = $this->decode_configdata($configdata);
             if (!empty($config->glossary)) {
                 if ($glossarymap = restore_dbops::get_backup_ids_record($this->get_restoreid(), 'glossary', $config->glossary)) {
                     // Get glossary mapping and replace it in config
@@ -85,11 +85,11 @@ class restore_glossary_random_block_task extends restore_block_task {
         }
     }
 
-    static public function define_decode_contents() {
+    public static function define_decode_contents() {
         return array();
     }
 
-    static public function define_decode_rules() {
+    public static function define_decode_rules() {
         return array();
     }
 }

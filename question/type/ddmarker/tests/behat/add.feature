@@ -6,37 +6,36 @@ Feature: Test creating a drag and drop markers question
 
   Background:
     Given the following "users" exist:
-      | username | firstname | lastname | email               |
-      | teacher1 | T1        | Teacher1 | teacher1@moodle.com |
+      | username |
+      | teacher  |
     And the following "courses" exist:
       | fullname | shortname | category |
       | Course 1 | C1        | 0        |
     And the following "course enrolments" exist:
-      | user     | course | role           |
-      | teacher1 | C1     | editingteacher |
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I navigate to "Question bank" node in "Course administration"
+      | user    | course | role           |
+      | teacher | C1     | editingteacher |
 
   @javascript @_file_upload
   Scenario: Create a drag and drop markers question
-    When I press "Create a new question ..."
+    When I am on the "Course 1" "core_question > course question bank" page logged in as teacher
+    And I press "Create a new question ..."
     And I set the field "Drag and drop markers" to "1"
-    And I press "Add"
+    And I click on "Add" "button" in the "Choose a question type to add" "dialogue"
     And I set the field "Question name" to "Drag and drop markers"
     And I set the field "Question text" to "Please place the markers on the map of Milton Keynes and be aware that there is more than one railway station."
     And I set the field "General feedback" to "The Open University is at the junction of Brickhill Street and Groveway. There are three railway stations, Wolverton, Milton Keynes Central and Bletchley."
+    And I set the field "id_showmisplaced" to "1"
     And I upload "question/type/ddmarker/tests/fixtures/mkmap.png" file to "Background image" filemanager
+    And I expand all fieldsets
 
     # Markers.
-    And I follow "Markers"
+    And I set the field "id_shuffleanswers" to "1"
     And I set the field "id_drags_0_label" to "OU"
     And I set the field "id_drags_0_noofdrags" to "1"
     And I set the field "id_drags_1_label" to "Railway station"
     And I set the field "id_drags_1_noofdrags" to "3"
 
     # Drop zones.
-    And I follow "Drop zones"
     And I set the field "id_drops_0_shape" to "Circle"
     And I set the field "id_drops_0_coords" to "322,213;10"
     And I set the field "id_drops_0_choice" to "1"
@@ -57,3 +56,23 @@ Feature: Test creating a drag and drop markers question
     And I set the field "id_drops_3_choice" to "2"
     And I press "id_submitbutton"
     And I should see "Drag and drop markers"
+    # Checking that the next new question form displays user preferences settings.
+    And I press "Create a new question ..."
+    And I set the field "item_qtype_ddmarker" to "1"
+    And I click on "Add" "button" in the "Choose a question type to add" "dialogue"
+    And the following fields match these values:
+      | id_showmisplaced  | 1 |
+      | id_shuffleanswers | 1 |
+
+  @javascript @_file_upload
+  Scenario: Question must have at least one marker and one drop zone
+    When I am on the "Course 1" "core_question > course question bank" page logged in as teacher
+    And I press "Create a new question ..."
+    And I set the field "Drag and drop markers" to "1"
+    And I click on "Add" "button" in the "Choose a question type to add" "dialogue"
+    And I set the field "Question name" to "Drag and drop markers"
+    And I set the field "Question text" to "Markers, who need markers?"
+    And I upload "question/type/ddmarker/tests/fixtures/mkmap.png" file to "Background image" filemanager
+    And I press "Save changes"
+    Then I should see "You must add at least one marker to this question."
+    And I should see "You must define at least one drop zone for this question."

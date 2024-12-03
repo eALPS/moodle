@@ -22,6 +22,9 @@
  * @copyright  2013 Adrian Greeve
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+namespace mod_data;
+
+use stdClass;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -35,7 +38,7 @@ require_once($CFG->dirroot . '/mod/data/lib.php');
  * @copyright  2013 Adrian Greeve
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class mod_data_lib_testcase extends advanced_testcase {
+class lib_test extends \advanced_testcase {
 
     /**
      * @var moodle_database
@@ -45,16 +48,71 @@ class mod_data_lib_testcase extends advanced_testcase {
     /**
      * Tear Down to reset DB.
      */
-    public function tearDown() {
+    public function tearDown(): void {
         global $DB;
 
         if (isset($this->DB)) {
             $DB = $this->DB;
             $this->DB = null;
         }
+        parent::tearDown();
     }
 
-    public function test_data_delete_record() {
+    /**
+     * Confirms that completionentries is working
+     * Sets it to 1, confirms that
+     * it is not complete. Inserts a record and
+     * confirms that it is complete.
+     */
+    public function test_data_completion(): void {
+        global $DB, $CFG;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $CFG->enablecompletion = 1;
+        $course = $this->getDataGenerator()->create_course(array('enablecompletion' => 1));
+        $record = new \stdClass();
+        $record->course = $course->id;
+        $record->name = "Mod data completion test";
+        $record->intro = "Some intro of some sort";
+        $record->completionentries = "1";
+        /* completion=2 means Show activity commplete when condition is met and completionentries means 1 record is
+         * required for the activity to be considered complete
+         */
+        $module = $this->getDataGenerator()->create_module('data', $record, array('completion' => 2, 'completionentries' => 1));
+
+        $cm = get_coursemodule_from_instance('data', $module->id, $course->id);
+        $completion = new \completion_info($course);
+        $completiondata = $completion->get_data($cm, true, 0);
+        /* Confirm it is not complete as there are no entries */
+        $this->assertNotEquals(1, $completiondata->completionstate);
+
+        $field = data_get_field_new('text', $module);
+        $fielddetail = new \stdClass();
+        $fielddetail->d = $module->id;
+        $fielddetail->mode = 'add';
+        $fielddetail->type = 'text';
+        $fielddetail->sesskey = sesskey();
+        $fielddetail->name = 'Name';
+        $fielddetail->description = 'Some name';
+
+        $field->define_field($fielddetail);
+        $field->insert_field();
+        $recordid = data_add_record($module);
+
+        $datacontent = array();
+        $datacontent['fieldid'] = $field->field->id;
+        $datacontent['recordid'] = $recordid;
+        $datacontent['content'] = 'Asterix';
+        $contentid = $DB->insert_record('data_content', $datacontent);
+
+        $cm = get_coursemodule_from_instance('data', $module->id, $course->id);
+        $completion = new \completion_info($course);
+        $completiondata = $completion->get_data($cm);
+        /* Confirm it is complete because it has 1 entry */
+        $this->assertEquals(1, $completiondata->completionstate);
+    }
+
+    public function test_data_delete_record(): void {
         global $DB;
 
         $this->resetAfterTest();
@@ -62,7 +120,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         // Create a record for deleting.
         $this->setAdminUser();
         $course = $this->getDataGenerator()->create_course();
-        $record = new stdClass();
+        $record = new \stdClass();
         $record->course = $course->id;
         $record->name = "Mod data delete test";
         $record->intro = "Some intro of some sort";
@@ -71,7 +129,7 @@ class mod_data_lib_testcase extends advanced_testcase {
 
         $field = data_get_field_new('text', $module);
 
-        $fielddetail = new stdClass();
+        $fielddetail = new \stdClass();
         $fielddetail->d = $module->id;
         $fielddetail->mode = 'add';
         $fielddetail->type = 'text';
@@ -125,7 +183,7 @@ class mod_data_lib_testcase extends advanced_testcase {
     /**
      * Test comment_created event.
      */
-    public function test_data_comment_created_event() {
+    public function test_data_comment_created_event(): void {
         global $CFG, $DB;
         require_once($CFG->dirroot . '/comment/lib.php');
 
@@ -134,7 +192,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         // Create a record for deleting.
         $this->setAdminUser();
         $course = $this->getDataGenerator()->create_course();
-        $record = new stdClass();
+        $record = new \stdClass();
         $record->course = $course->id;
         $record->name = "Mod data delete test";
         $record->intro = "Some intro of some sort";
@@ -143,7 +201,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         $module = $this->getDataGenerator()->create_module('data', $record);
         $field = data_get_field_new('text', $module);
 
-        $fielddetail = new stdClass();
+        $fielddetail = new \stdClass();
         $fielddetail->name = 'Name';
         $fielddetail->description = 'Some name';
 
@@ -159,8 +217,8 @@ class mod_data_lib_testcase extends advanced_testcase {
         $contentid = $DB->insert_record('data_content', $datacontent);
         $cm = get_coursemodule_from_instance('data', $module->id, $course->id);
 
-        $context = context_module::instance($module->cmid);
-        $cmt = new stdClass();
+        $context = \context_module::instance($module->cmid);
+        $cmt = new \stdClass();
         $cmt->context = $context;
         $cmt->course = $course;
         $cmt->cm = $cm;
@@ -168,7 +226,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         $cmt->itemid = $recordid;
         $cmt->showcount = true;
         $cmt->component = 'mod_data';
-        $comment = new comment($cmt);
+        $comment = new \comment($cmt);
 
         // Triggering and capturing the event.
         $sink = $this->redirectEvents();
@@ -180,7 +238,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         // Checking that the event contains the expected values.
         $this->assertInstanceOf('\mod_data\event\comment_created', $event);
         $this->assertEquals($context, $event->get_context());
-        $url = new moodle_url('/mod/data/view.php', array('id' => $cm->id));
+        $url = new \moodle_url('/mod/data/view.php', array('id' => $cm->id));
         $this->assertEquals($url, $event->get_url());
         $this->assertEventContextNotUsed($event);
     }
@@ -188,7 +246,7 @@ class mod_data_lib_testcase extends advanced_testcase {
     /**
      * Test comment_deleted event.
      */
-    public function test_data_comment_deleted_event() {
+    public function test_data_comment_deleted_event(): void {
         global $CFG, $DB;
         require_once($CFG->dirroot . '/comment/lib.php');
 
@@ -197,7 +255,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         // Create a record for deleting.
         $this->setAdminUser();
         $course = $this->getDataGenerator()->create_course();
-        $record = new stdClass();
+        $record = new \stdClass();
         $record->course = $course->id;
         $record->name = "Mod data delete test";
         $record->intro = "Some intro of some sort";
@@ -206,7 +264,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         $module = $this->getDataGenerator()->create_module('data', $record);
         $field = data_get_field_new('text', $module);
 
-        $fielddetail = new stdClass();
+        $fielddetail = new \stdClass();
         $fielddetail->name = 'Name';
         $fielddetail->description = 'Some name';
 
@@ -222,8 +280,8 @@ class mod_data_lib_testcase extends advanced_testcase {
         $contentid = $DB->insert_record('data_content', $datacontent);
         $cm = get_coursemodule_from_instance('data', $module->id, $course->id);
 
-        $context = context_module::instance($module->cmid);
-        $cmt = new stdClass();
+        $context = \context_module::instance($module->cmid);
+        $cmt = new \stdClass();
         $cmt->context = $context;
         $cmt->course = $course;
         $cmt->cm = $cm;
@@ -231,7 +289,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         $cmt->itemid = $recordid;
         $cmt->showcount = true;
         $cmt->component = 'mod_data';
-        $comment = new comment($cmt);
+        $comment = new \comment($cmt);
         $newcomment = $comment->add('New comment 1');
 
         // Triggering and capturing the event.
@@ -244,7 +302,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         // Checking that the event contains the expected values.
         $this->assertInstanceOf('\mod_data\event\comment_deleted', $event);
         $this->assertEquals($context, $event->get_context());
-        $url = new moodle_url('/mod/data/view.php', array('id' => $module->cmid));
+        $url = new \moodle_url('/mod/data/view.php', array('id' => $module->cmid));
         $this->assertEquals($url, $event->get_url());
         $this->assertEventContextNotUsed($event);
     }
@@ -253,7 +311,7 @@ class mod_data_lib_testcase extends advanced_testcase {
      * Checks that data_user_can_manage_entry will return true if the user
      * has the mod/data:manageentries capability.
      */
-    public function test_data_user_can_manage_entry_return_true_with_capability() {
+    public function test_data_user_can_manage_entry_return_true_with_capability(): void {
 
         $this->resetAfterTest();
         $testdata = $this->create_user_test_data();
@@ -263,7 +321,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         $roleid = $testdata['roleid'];
         $context = $testdata['context'];
         $record = $testdata['record'];
-        $data = new stdClass();
+        $data = new \stdClass();
 
         $this->setUser($user);
 
@@ -277,7 +335,7 @@ class mod_data_lib_testcase extends advanced_testcase {
      * Checks that data_user_can_manage_entry will return false if the data
      * is set to readonly.
      */
-    public function test_data_user_can_manage_entry_return_false_readonly() {
+    public function test_data_user_can_manage_entry_return_false_readonly(): void {
 
         $this->resetAfterTest();
         $testdata = $this->create_user_test_data();
@@ -295,7 +353,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         assign_capability('mod/data:manageentries', CAP_PROHIBIT, $roleid, $context);
 
         // Causes readonly mode to be enabled.
-        $data = new stdClass();
+        $data = new \stdClass();
         $now = time();
         // Add a small margin around the periods to prevent errors with slow tests.
         $data->timeviewfrom = $now - 1;
@@ -309,7 +367,7 @@ class mod_data_lib_testcase extends advanced_testcase {
      * Checks that data_user_can_manage_entry will return false if the record
      * can't be found in the database.
      */
-    public function test_data_user_can_manage_entry_return_false_no_record() {
+    public function test_data_user_can_manage_entry_return_false_no_record(): void {
 
         $this->resetAfterTest();
         $testdata = $this->create_user_test_data();
@@ -319,7 +377,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         $roleid = $testdata['roleid'];
         $context = $testdata['context'];
         $record = $testdata['record'];
-        $data = new stdClass();
+        $data = new \stdClass();
         // Causes readonly mode to be disabled.
         $now = time();
         $data->timeviewfrom = $now + 100;
@@ -340,7 +398,7 @@ class mod_data_lib_testcase extends advanced_testcase {
      * Checks that data_user_can_manage_entry will return false if the record
      * isn't owned by the user.
      */
-    public function test_data_user_can_manage_entry_return_false_not_owned_record() {
+    public function test_data_user_can_manage_entry_return_false_not_owned_record(): void {
 
         $this->resetAfterTest();
         $testdata = $this->create_user_test_data();
@@ -350,7 +408,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         $roleid = $testdata['roleid'];
         $context = $testdata['context'];
         $record = $testdata['record'];
-        $data = new stdClass();
+        $data = new \stdClass();
         // Causes readonly mode to be disabled.
         $now = time();
         $data->timeviewfrom = $now + 100;
@@ -372,7 +430,7 @@ class mod_data_lib_testcase extends advanced_testcase {
      * Checks that data_user_can_manage_entry will return true if the data
      * doesn't require approval.
      */
-    public function test_data_user_can_manage_entry_return_true_data_no_approval() {
+    public function test_data_user_can_manage_entry_return_true_data_no_approval(): void {
 
         $this->resetAfterTest();
         $testdata = $this->create_user_test_data();
@@ -382,7 +440,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         $roleid = $testdata['roleid'];
         $context = $testdata['context'];
         $record = $testdata['record'];
-        $data = new stdClass();
+        $data = new \stdClass();
         // Causes readonly mode to be disabled.
         $now = time();
         $data->timeviewfrom = $now + 100;
@@ -406,7 +464,7 @@ class mod_data_lib_testcase extends advanced_testcase {
      * Checks that data_user_can_manage_entry will return true if the record
      * isn't yet approved.
      */
-    public function test_data_user_can_manage_entry_return_true_record_unapproved() {
+    public function test_data_user_can_manage_entry_return_true_record_unapproved(): void {
 
         $this->resetAfterTest();
         $testdata = $this->create_user_test_data();
@@ -416,7 +474,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         $roleid = $testdata['roleid'];
         $context = $testdata['context'];
         $record = $testdata['record'];
-        $data = new stdClass();
+        $data = new \stdClass();
         // Causes readonly mode to be disabled.
         $now = time();
         $data->timeviewfrom = $now + 100;
@@ -442,7 +500,7 @@ class mod_data_lib_testcase extends advanced_testcase {
      * Checks that data_user_can_manage_entry will return the 'manageapproved'
      * value if the record has already been approved.
      */
-    public function test_data_user_can_manage_entry_return_manageapproved() {
+    public function test_data_user_can_manage_entry_return_manageapproved(): void {
 
         $this->resetAfterTest();
         $testdata = $this->create_user_test_data();
@@ -452,7 +510,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         $roleid = $testdata['roleid'];
         $context = $testdata['context'];
         $record = $testdata['record'];
-        $data = new stdClass();
+        $data = new \stdClass();
         // Causes readonly mode to be disabled.
         $now = time();
         $data->timeviewfrom = $now + 100;
@@ -489,7 +547,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         $user = $this->getDataGenerator()->create_user();
         $course = $this->getDataGenerator()->create_course();
         $roleid = $this->getDataGenerator()->create_role();
-        $record = new stdClass();
+        $record = new \stdClass();
         $record->name = "test name";
         $record->intro = "test intro";
         $record->comments = 1;
@@ -498,7 +556,7 @@ class mod_data_lib_testcase extends advanced_testcase {
 
         $module = $this->getDataGenerator()->create_module('data', $record);
         $cm = get_coursemodule_from_instance('data', $module->id, $course->id);
-        $context = context_module::instance($module->cmid);
+        $context = \context_module::instance($module->cmid);
 
         $this->getDataGenerator()->role_assign($roleid, $user->id, $context->id);
 
@@ -518,19 +576,19 @@ class mod_data_lib_testcase extends advanced_testcase {
      * @throws coding_exception
      * @throws rating_exception
      */
-    public function test_mod_data_rating_can_see_item_ratings() {
+    public function test_mod_data_rating_can_see_item_ratings(): void {
         global $DB;
 
         $this->resetAfterTest();
 
         // Setup test data.
-        $course = new stdClass();
+        $course = new \stdClass();
         $course->groupmode = SEPARATEGROUPS;
         $course->groupmodeforce = true;
         $course = $this->getDataGenerator()->create_course($course);
         $data = $this->getDataGenerator()->create_module('data', array('course' => $course->id));
         $cm = get_coursemodule_from_instance('data', $data->id);
-        $context = context_module::instance($cm->id);
+        $context = \context_module::instance($cm->id);
 
         // Create users.
         $user1 = $this->getDataGenerator()->create_user();
@@ -555,7 +613,7 @@ class mod_data_lib_testcase extends advanced_testcase {
         // Add data.
         $field = data_get_field_new('text', $data);
 
-        $fielddetail = new stdClass();
+        $fielddetail = new \stdClass();
         $fielddetail->name = 'Name';
         $fielddetail->description = 'Some name';
 
@@ -644,7 +702,7 @@ class mod_data_lib_testcase extends advanced_testcase {
     /**
      * Tests for mod_data_refresh_events.
      */
-    public function test_data_refresh_events() {
+    public function test_data_refresh_events(): void {
         global $DB;
         $this->resetAfterTest();
         $this->setAdminUser();
@@ -689,7 +747,7 @@ class mod_data_lib_testcase extends advanced_testcase {
      *
      * @return array
      */
-    public function data_get_config_provider() {
+    public static function data_get_config_provider(): array {
         $initialdata = (object) [
             'template_foo' => true,
             'template_bar' => false,
@@ -771,7 +829,7 @@ class mod_data_lib_testcase extends advanced_testcase {
      * @param   array   $funcargs       The args to pass to data_get_config
      * @param   mixed   $expectation    The expected value
      */
-    public function test_data_get_config($funcargs, $expectation) {
+    public function test_data_get_config($funcargs, $expectation): void {
         $this->assertEquals($expectation, call_user_func_array('data_get_config', $funcargs));
     }
 
@@ -780,7 +838,7 @@ class mod_data_lib_testcase extends advanced_testcase {
      *
      * @return array
      */
-    public function data_set_config_provider() {
+    public static function data_set_config_provider(): array {
         $basevalue = (object) ['id' => rand(1, 1000)];
         $config = [
             'template_foo'  => true,
@@ -853,14 +911,14 @@ class mod_data_lib_testcase extends advanced_testcase {
      * @param   bool    $expectupdate   Whether we expected an update
      * @param   mixed   $newconfigvalue The expected value
      */
-    public function test_data_set_config($database, $key, $value, $expectupdate, $newconfigvalue) {
+    public function test_data_set_config($database, $key, $value, $expectupdate, $newconfigvalue): void {
         global $DB;
 
         // Mock the database.
         // Note: Use the actual test class here rather than the abstract because are testing concrete methods.
         $this->DB = $DB;
         $DB = $this->getMockBuilder(get_class($DB))
-            ->setMethods(['set_field'])
+            ->onlyMethods(['set_field'])
             ->getMock();
 
         $DB->expects($this->exactly((int) $expectupdate))
@@ -878,5 +936,1278 @@ class mod_data_lib_testcase extends advanced_testcase {
         // Ensure that the value was updated by reference in $database.
         $config = json_decode($database->config);
         $this->assertEquals($value, $config->$key);
+    }
+
+    public function test_mod_data_get_tagged_records(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // Setup test data.
+        $datagenerator = $this->getDataGenerator()->get_plugin_generator('mod_data');
+        $course1 = $this->getDataGenerator()->create_course();
+
+        $fieldrecord = new \stdClass();
+        $fieldrecord->name = 'field-1';
+        $fieldrecord->type = 'text';
+
+        $data1 = $this->getDataGenerator()->create_module('data', array('course' => $course1->id, 'approval' => true));
+        $field1 = $datagenerator->create_field($fieldrecord, $data1);
+
+        $datagenerator->create_entry($data1, [$field1->field->id => 'value11'], 0, ['Cats', 'Dogs']);
+        $datagenerator->create_entry($data1, [$field1->field->id => 'value12'], 0, ['Cats', 'mice']);
+        $datagenerator->create_entry($data1, [$field1->field->id => 'value13'], 0, ['Cats']);
+        $datagenerator->create_entry($data1, [$field1->field->id => 'value14'], 0);
+
+        $tag = \core_tag_tag::get_by_name(0, 'Cats');
+
+        // Admin can see everything.
+        $res = mod_data_get_tagged_records($tag, false, 0, 0, 1, 0);
+        $this->assertStringContainsString('value11', $res->content);
+        $this->assertStringContainsString('value12', $res->content);
+        $this->assertStringContainsString('value13', $res->content);
+        $this->assertStringNotContainsString('value14', $res->content);
+    }
+
+    public function test_mod_data_get_tagged_records_approval(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // Setup test data.
+        $datagenerator = $this->getDataGenerator()->get_plugin_generator('mod_data');
+        $course2 = $this->getDataGenerator()->create_course();
+        $course1 = $this->getDataGenerator()->create_course();
+
+        $fieldrecord = new \stdClass();
+        $fieldrecord->name = 'field-1';
+        $fieldrecord->type = 'text';
+
+        $data1 = $this->getDataGenerator()->create_module('data', array('course' => $course1->id));
+        $field1 = $datagenerator->create_field($fieldrecord, $data1);
+        $data2 = $this->getDataGenerator()->create_module('data', array('course' => $course2->id, 'approval' => true));
+        $field2 = $datagenerator->create_field($fieldrecord, $data2);
+
+        $record11 = $datagenerator->create_entry($data1, [$field1->field->id => 'value11'], 0, ['Cats', 'Dogs']);
+        $record21 = $datagenerator->create_entry($data2, [$field2->field->id => 'value21'], 0, ['Cats'], ['approved' => false]);
+        $tag = \core_tag_tag::get_by_name(0, 'Cats');
+
+        // Admin can see everything.
+        $res = mod_data_get_tagged_records($tag, false, 0, 0, 1, 0);
+        $this->assertStringContainsString('value11', $res->content);
+        $this->assertStringContainsString('value21', $res->content);
+        $this->assertEmpty($res->prevpageurl);
+        $this->assertEmpty($res->nextpageurl);
+
+        // Create and enrol a user.
+        $student = self::getDataGenerator()->create_user();
+        $studentrole = $DB->get_record('role', array('shortname' => 'student'));
+        $this->getDataGenerator()->enrol_user($student->id, $course1->id, $studentrole->id, 'manual');
+        $this->getDataGenerator()->enrol_user($student->id, $course2->id, $studentrole->id, 'manual');
+        $this->setUser($student);
+
+        // User can search data records inside a course.
+        \core_tag_index_builder::reset_caches();
+        $res = mod_data_get_tagged_records($tag, false, 0, 0, 1, 0);
+
+        $this->assertStringContainsString('value11', $res->content);
+        $this->assertStringNotContainsString('value21', $res->content);
+
+        $recordtoupdate = new \stdClass();
+        $recordtoupdate->id = $record21;
+        $recordtoupdate->approved = true;
+        $DB->update_record('data_records', $recordtoupdate);
+
+        \core_tag_index_builder::reset_caches();
+        $res = mod_data_get_tagged_records($tag, false, 0, 0, 1, 0);
+
+        $this->assertStringContainsString('value11', $res->content);
+        $this->assertStringContainsString('value21', $res->content);
+    }
+
+    public function test_mod_data_get_tagged_records_time(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // Setup test data.
+        $datagenerator = $this->getDataGenerator()->get_plugin_generator('mod_data');
+        $course2 = $this->getDataGenerator()->create_course();
+        $course1 = $this->getDataGenerator()->create_course();
+
+        $fieldrecord = new \stdClass();
+        $fieldrecord->name = 'field-1';
+        $fieldrecord->type = 'text';
+
+        $timefrom = time() - YEARSECS;
+        $timeto = time() - WEEKSECS;
+
+        $data1 = $this->getDataGenerator()->create_module('data', array('course' => $course1->id, 'approval' => true));
+        $field1 = $datagenerator->create_field($fieldrecord, $data1);
+        $data2 = $this->getDataGenerator()->create_module('data', array('course' => $course2->id,
+                                                                        'timeviewfrom' => $timefrom,
+                                                                        'timeviewto'   => $timeto));
+        $field2 = $datagenerator->create_field($fieldrecord, $data2);
+        $record11 = $datagenerator->create_entry($data1, [$field1->field->id => 'value11'], 0, ['Cats', 'Dogs']);
+        $record21 = $datagenerator->create_entry($data2, [$field2->field->id => 'value21'], 0, ['Cats']);
+        $tag = \core_tag_tag::get_by_name(0, 'Cats');
+
+        // Admin can see everything.
+        $res = mod_data_get_tagged_records($tag, false, 0, 0, 1, 0);
+        $this->assertStringContainsString('value11', $res->content);
+        $this->assertStringContainsString('value21', $res->content);
+        $this->assertEmpty($res->prevpageurl);
+        $this->assertEmpty($res->nextpageurl);
+
+        // Create and enrol a user.
+        $student = self::getDataGenerator()->create_user();
+        $studentrole = $DB->get_record('role', array('shortname' => 'student'));
+        $this->getDataGenerator()->enrol_user($student->id, $course1->id, $studentrole->id, 'manual');
+        $this->getDataGenerator()->enrol_user($student->id, $course2->id, $studentrole->id, 'manual');
+        $this->setUser($student);
+
+        // User can search data records inside a course.
+        \core_tag_index_builder::reset_caches();
+        $res = mod_data_get_tagged_records($tag, false, 0, 0, 1, 0);
+
+        $this->assertStringContainsString('value11', $res->content);
+        $this->assertStringNotContainsString('value21', $res->content);
+
+        $data2->timeviewto = time() + YEARSECS;
+        $DB->update_record('data', $data2);
+
+        \core_tag_index_builder::reset_caches();
+        $res = mod_data_get_tagged_records($tag, false, 0, 0, 1, 0);
+
+        $this->assertStringContainsString('value11', $res->content);
+        $this->assertStringContainsString('value21', $res->content);
+    }
+
+    public function test_mod_data_get_tagged_records_course_enrolment(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // Setup test data.
+        $datagenerator = $this->getDataGenerator()->get_plugin_generator('mod_data');
+        $course2 = $this->getDataGenerator()->create_course();
+        $course1 = $this->getDataGenerator()->create_course();
+
+        $fieldrecord = new \stdClass();
+        $fieldrecord->name = 'field-1';
+        $fieldrecord->type = 'text';
+
+        $data1 = $this->getDataGenerator()->create_module('data', array('course' => $course1->id, 'approval' => true));
+        $field1 = $datagenerator->create_field($fieldrecord, $data1);
+        $data2 = $this->getDataGenerator()->create_module('data', array('course' => $course2->id));
+        $field2 = $datagenerator->create_field($fieldrecord, $data2);
+
+        $record11 = $datagenerator->create_entry($data1, [$field1->field->id => 'value11'], 0, ['Cats', 'Dogs']);
+        $record21 = $datagenerator->create_entry($data2, [$field2->field->id => 'value21'], 0, ['Cats']);
+        $tag = \core_tag_tag::get_by_name(0, 'Cats');
+
+        // Admin can see everything.
+        $res = mod_data_get_tagged_records($tag, false, 0, 0, 1, 0);
+        $this->assertStringContainsString('value11', $res->content);
+        $this->assertStringContainsString('value21', $res->content);
+        $this->assertEmpty($res->prevpageurl);
+        $this->assertEmpty($res->nextpageurl);
+
+        // Create and enrol a user.
+        $student = self::getDataGenerator()->create_user();
+        $studentrole = $DB->get_record('role', array('shortname' => 'student'));
+        $this->getDataGenerator()->enrol_user($student->id, $course1->id, $studentrole->id, 'manual');
+        $this->setUser($student);
+        \core_tag_index_builder::reset_caches();
+
+        // User can search data records inside a course.
+        $coursecontext = \context_course::instance($course1->id);
+        $res = mod_data_get_tagged_records($tag, false, 0, 0, 1, 0);
+
+        $this->assertStringContainsString('value11', $res->content);
+        $this->assertStringNotContainsString('value21', $res->content);
+
+        $this->getDataGenerator()->enrol_user($student->id, $course2->id, $studentrole->id, 'manual');
+
+        \core_tag_index_builder::reset_caches();
+        $res = mod_data_get_tagged_records($tag, false, 0, 0, 1, 0);
+
+        $this->assertStringContainsString('value11', $res->content);
+        $this->assertStringContainsString('value21', $res->content);
+    }
+
+    public function test_mod_data_get_tagged_records_course_groups(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // Setup test data.
+        $datagenerator = $this->getDataGenerator()->get_plugin_generator('mod_data');
+        $course2 = $this->getDataGenerator()->create_course();
+        $course1 = $this->getDataGenerator()->create_course();
+
+        $groupa = $this->getDataGenerator()->create_group(array('courseid' => $course2->id, 'name' => 'groupA'));
+        $groupb = $this->getDataGenerator()->create_group(array('courseid' => $course2->id, 'name' => 'groupB'));
+
+        $fieldrecord = new \stdClass();
+        $fieldrecord->name = 'field-1';
+        $fieldrecord->type = 'text';
+
+        $data1 = $this->getDataGenerator()->create_module('data', array('course' => $course1->id, 'approval' => true));
+        $field1 = $datagenerator->create_field($fieldrecord, $data1);
+        $data2 = $this->getDataGenerator()->create_module('data', array('course' => $course2->id));
+        $field2 = $datagenerator->create_field($fieldrecord, $data2);
+        set_coursemodule_groupmode($data2->cmid, SEPARATEGROUPS);
+
+        $record11 = $datagenerator->create_entry($data1, [$field1->field->id => 'value11'],
+                0, ['Cats', 'Dogs']);
+        $record21 = $datagenerator->create_entry($data2, [$field2->field->id => 'value21'],
+                $groupa->id, ['Cats']);
+        $record22 = $datagenerator->create_entry($data2, [$field2->field->id => 'value22'],
+                $groupb->id, ['Cats']);
+        $tag = \core_tag_tag::get_by_name(0, 'Cats');
+
+        // Admin can see everything.
+        $res = mod_data_get_tagged_records($tag, false, 0, 0, 1, 0);
+        $this->assertStringContainsString('value11', $res->content);
+        $this->assertStringContainsString('value21', $res->content);
+        $this->assertStringContainsString('value22', $res->content);
+        $this->assertEmpty($res->prevpageurl);
+        $this->assertEmpty($res->nextpageurl);
+
+        // Create and enrol a user.
+        $student = self::getDataGenerator()->create_user();
+        $studentrole = $DB->get_record('role', array('shortname' => 'student'));
+        $this->getDataGenerator()->enrol_user($student->id, $course1->id, $studentrole->id, 'manual');
+        $this->getDataGenerator()->enrol_user($student->id, $course2->id, $studentrole->id, 'manual');
+        groups_add_member($groupa, $student);
+        $this->setUser($student);
+        \core_tag_index_builder::reset_caches();
+
+        // User can search data records inside a course.
+        $res = mod_data_get_tagged_records($tag, false, 0, 0, 1, 0);
+
+        $this->assertStringContainsString('value11', $res->content);
+        $this->assertStringContainsString('value21', $res->content);
+        $this->assertStringNotContainsString('value22', $res->content);
+
+        groups_add_member($groupb, $student);
+        \core_tag_index_builder::reset_caches();
+        $res = mod_data_get_tagged_records($tag, false, 0, 0, 1, 0);
+
+        $this->assertStringContainsString('value11', $res->content);
+        $this->assertStringContainsString('value21', $res->content);
+        $this->assertStringContainsString('value22', $res->content);
+    }
+
+    /**
+     * Test check_updates_since callback.
+     */
+    public function test_check_updates_since(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $course = $this->getDataGenerator()->create_course();
+        // Create user.
+        $student = self::getDataGenerator()->create_user();
+        // User enrolment.
+        $studentrole = $DB->get_record('role', array('shortname' => 'student'));
+        $this->getDataGenerator()->enrol_user($student->id, $course->id, $studentrole->id, 'manual');
+        $this->setCurrentTimeStart();
+        $record = array(
+            'course' => $course->id,
+        );
+        $data = $this->getDataGenerator()->create_module('data', $record);
+        $cm = get_coursemodule_from_instance('data', $data->id, $course->id);
+        $cm = \cm_info::create($cm);
+        $this->setUser($student);
+
+        // Check that upon creation, the updates are only about the new configuration created.
+        $onehourago = time() - HOURSECS;
+        $updates = data_check_updates_since($cm, $onehourago);
+        foreach ($updates as $el => $val) {
+            if ($el == 'configuration') {
+                $this->assertTrue($val->updated);
+                $this->assertTimeCurrent($val->timeupdated);
+            } else {
+                $this->assertFalse($val->updated);
+            }
+        }
+
+        // Add a couple of entries.
+        $datagenerator = $this->getDataGenerator()->get_plugin_generator('mod_data');
+        $fieldtypes = array('checkbox', 'date');
+
+        $count = 1;
+        // Creating test Fields with default parameter values.
+        foreach ($fieldtypes as $fieldtype) {
+            // Creating variables dynamically.
+            $fieldname = 'field-' . $count;
+            $record = new \stdClass();
+            $record->name = $fieldname;
+            $record->type = $fieldtype;
+            $record->required = 1;
+
+            ${$fieldname} = $datagenerator->create_field($record, $data);
+            $count++;
+        }
+
+        $fields = $DB->get_records('data_fields', array('dataid' => $data->id), 'id');
+
+        $contents = array();
+        $contents[] = array('opt1', 'opt2', 'opt3', 'opt4');
+        $contents[] = '01-01-2037'; // It should be lower than 2038, to avoid failing on 32-bit windows.
+        $count = 0;
+        $fieldcontents = array();
+        foreach ($fields as $fieldrecord) {
+            $fieldcontents[$fieldrecord->id] = $contents[$count++];
+        }
+
+        $datarecor1did = $datagenerator->create_entry($data, $fieldcontents);
+        $datarecor2did = $datagenerator->create_entry($data, $fieldcontents);
+        $records = $DB->get_records('data_records', array('dataid' => $data->id));
+        $this->assertCount(2, $records);
+        // Check we received the entries updated.
+        $updates = data_check_updates_since($cm, $onehourago);
+        $this->assertTrue($updates->entries->updated);
+        $this->assertEqualsCanonicalizing([$datarecor1did, $datarecor2did], $updates->entries->itemids);
+    }
+
+    public function test_data_core_calendar_provide_event_action_in_hidden_section(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a student.
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        // Create a database activity.
+        $data = $this->getDataGenerator()->create_module('data', array('course' => $course->id,
+                'timeavailablefrom' => time() - DAYSECS, 'timeavailableto' => time() + DAYSECS));
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $data->id, DATA_EVENT_TYPE_OPEN);
+
+        // Set sections 0 as hidden.
+        set_section_visible($course->id, 0, 0);
+
+        // Now, log out.
+        $CFG->forcelogin = true; // We don't want to be logged in as guest, as guest users might still have some capabilities.
+        $this->setUser();
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event for the student.
+        $actionevent = mod_data_core_calendar_provide_event_action($event, $factory, $student->id);
+
+        // Confirm the event is not shown at all.
+        $this->assertNull($actionevent);
+    }
+
+    public function test_data_core_calendar_provide_event_action_for_non_user(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a database activity.
+        $data = $this->getDataGenerator()->create_module('data', array('course' => $course->id,
+            'timeavailablefrom' => time() - DAYSECS, 'timeavailableto' => time() + DAYSECS));
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $data->id, DATA_EVENT_TYPE_OPEN);
+
+        // Now, log out.
+        $CFG->forcelogin = true; // We don't want to be logged in as guest, as guest users might still have some capabilities.
+        $this->setUser();
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event.
+        $actionevent = mod_data_core_calendar_provide_event_action($event, $factory);
+
+        // Confirm the event is not shown at all.
+        $this->assertNull($actionevent);
+    }
+
+    public function test_data_core_calendar_provide_event_action_open(): void {
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a database activity.
+        $data = $this->getDataGenerator()->create_module('data', array('course' => $course->id,
+            'timeavailablefrom' => time() - DAYSECS, 'timeavailableto' => time() + DAYSECS));
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $data->id, DATA_EVENT_TYPE_OPEN);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event.
+        $actionevent = mod_data_core_calendar_provide_event_action($event, $factory);
+
+        // Confirm the event was decorated.
+        $this->assertInstanceOf('\core_calendar\local\event\value_objects\action', $actionevent);
+        $this->assertEquals(get_string('add', 'data'), $actionevent->get_name());
+        $this->assertInstanceOf('moodle_url', $actionevent->get_url());
+        $this->assertEquals(1, $actionevent->get_item_count());
+        $this->assertTrue($actionevent->is_actionable());
+    }
+
+    public function test_data_core_calendar_provide_event_action_open_for_user(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a student.
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        // Create a database activity.
+        $data = $this->getDataGenerator()->create_module('data', array('course' => $course->id,
+            'timeavailablefrom' => time() - DAYSECS, 'timeavailableto' => time() + DAYSECS));
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $data->id, DATA_EVENT_TYPE_OPEN);
+
+        // Now log out.
+        $CFG->forcelogin = true; // We don't want to be logged in as guest, as guest users might still have some capabilities.
+        $this->setUser();
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event for the student.
+        $actionevent = mod_data_core_calendar_provide_event_action($event, $factory, $student->id);
+
+        // Confirm the event was decorated.
+        $this->assertInstanceOf('\core_calendar\local\event\value_objects\action', $actionevent);
+        $this->assertEquals(get_string('add', 'data'), $actionevent->get_name());
+        $this->assertInstanceOf('moodle_url', $actionevent->get_url());
+        $this->assertEquals(1, $actionevent->get_item_count());
+        $this->assertTrue($actionevent->is_actionable());
+    }
+
+    public function test_data_core_calendar_provide_event_action_closed(): void {
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a database activity.
+        $data = $this->getDataGenerator()->create_module('data', array('course' => $course->id,
+            'timeavailableto' => time() - DAYSECS));
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $data->id, DATA_EVENT_TYPE_OPEN);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event.
+        $actionevent = mod_data_core_calendar_provide_event_action($event, $factory);
+
+        // No event on the dashboard if module is closed.
+        $this->assertNull($actionevent);
+    }
+
+    public function test_data_core_calendar_provide_event_action_closed_for_user(): void {
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a student.
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        // Create a database activity.
+        $data = $this->getDataGenerator()->create_module('data', array('course' => $course->id,
+            'timeavailableto' => time() - DAYSECS));
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $data->id, DATA_EVENT_TYPE_OPEN);
+
+        // Now log out.
+        $this->setUser();
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event for the student.
+        $actionevent = mod_data_core_calendar_provide_event_action($event, $factory, $student->id);
+
+        // No event on the dashboard if module is closed.
+        $this->assertNull($actionevent);
+    }
+
+    public function test_data_core_calendar_provide_event_action_open_in_future(): void {
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a database activity.
+        $data = $this->getDataGenerator()->create_module('data', array('course' => $course->id,
+            'timeavailablefrom' => time() + DAYSECS));
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $data->id, DATA_EVENT_TYPE_OPEN);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event.
+        $actionevent = mod_data_core_calendar_provide_event_action($event, $factory);
+
+        // Confirm the event was decorated.
+        $this->assertInstanceOf('\core_calendar\local\event\value_objects\action', $actionevent);
+        $this->assertEquals(get_string('add', 'data'), $actionevent->get_name());
+        $this->assertInstanceOf('moodle_url', $actionevent->get_url());
+        $this->assertEquals(1, $actionevent->get_item_count());
+        $this->assertFalse($actionevent->is_actionable());
+    }
+
+    public function test_data_core_calendar_provide_event_action_open_in_future_for_user(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a student.
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        // Create a database activity.
+        $data = $this->getDataGenerator()->create_module('data', array('course' => $course->id,
+            'timeavailablefrom' => time() + DAYSECS));
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $data->id, DATA_EVENT_TYPE_OPEN);
+
+        // Now log out.
+        $CFG->forcelogin = true; // We don't want to be logged in as guest, as guest users might still have some capabilities.
+        $this->setUser();
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event for the student.
+        $actionevent = mod_data_core_calendar_provide_event_action($event, $factory, $student->id);
+
+        // Confirm the event was decorated.
+        $this->assertInstanceOf('\core_calendar\local\event\value_objects\action', $actionevent);
+        $this->assertEquals(get_string('add', 'data'), $actionevent->get_name());
+        $this->assertInstanceOf('moodle_url', $actionevent->get_url());
+        $this->assertEquals(1, $actionevent->get_item_count());
+        $this->assertFalse($actionevent->is_actionable());
+    }
+
+    public function test_data_core_calendar_provide_event_action_no_time_specified(): void {
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a database activity.
+        $data = $this->getDataGenerator()->create_module('data', array('course' => $course->id));
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $data->id, DATA_EVENT_TYPE_OPEN);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event.
+        $actionevent = mod_data_core_calendar_provide_event_action($event, $factory);
+
+        // Confirm the event was decorated.
+        $this->assertInstanceOf('\core_calendar\local\event\value_objects\action', $actionevent);
+        $this->assertEquals(get_string('add', 'data'), $actionevent->get_name());
+        $this->assertInstanceOf('moodle_url', $actionevent->get_url());
+        $this->assertEquals(1, $actionevent->get_item_count());
+        $this->assertTrue($actionevent->is_actionable());
+    }
+
+    public function test_data_core_calendar_provide_event_action_no_time_specified_for_user(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a student.
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        // Create a database activity.
+        $data = $this->getDataGenerator()->create_module('data', array('course' => $course->id));
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $data->id, DATA_EVENT_TYPE_OPEN);
+
+        // Now log out.
+        $CFG->forcelogin = true; // We don't want to be logged in as guest, as guest users might still have some capabilities.
+        $this->setUser();
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event for the student.
+        $actionevent = mod_data_core_calendar_provide_event_action($event, $factory, $student->id);
+
+        // Confirm the event was decorated.
+        $this->assertInstanceOf('\core_calendar\local\event\value_objects\action', $actionevent);
+        $this->assertEquals(get_string('add', 'data'), $actionevent->get_name());
+        $this->assertInstanceOf('moodle_url', $actionevent->get_url());
+        $this->assertEquals(1, $actionevent->get_item_count());
+        $this->assertTrue($actionevent->is_actionable());
+    }
+
+    /**
+     * Creates an action event.
+     *
+     * @param int $courseid
+     * @param int $instanceid The data id.
+     * @param string $eventtype The event type. eg. DATA_EVENT_TYPE_OPEN.
+     * @param int|null $timestart The start timestamp for the event
+     * @return bool|calendar_event
+     */
+    private function create_action_event($courseid, $instanceid, $eventtype, $timestart = null) {
+        $event = new \stdClass();
+        $event->name = 'Calendar event';
+        $event->modulename  = 'data';
+        $event->courseid = $courseid;
+        $event->instance = $instanceid;
+        $event->type = CALENDAR_EVENT_TYPE_ACTION;
+        $event->eventtype = $eventtype;
+        if ($timestart) {
+            $event->timestart = $timestart;
+        } else {
+            $event->timestart = time();
+        }
+
+        return \calendar_event::create($event);
+    }
+
+    /**
+     * Test the callback responsible for returning the completion rule descriptions.
+     * This function should work given either an instance of the module (cm_info), such as when checking the active rules,
+     * or if passed a stdClass of similar structure, such as when checking the the default completion settings for a mod type.
+     */
+    public function test_mod_data_completion_get_active_rule_descriptions(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // Two activities, both with automatic completion. One has the 'completionentries' rule, one doesn't.
+        $course = $this->getDataGenerator()->create_course(['enablecompletion' => 2]);
+        $data1 = $this->getDataGenerator()->create_module('data', [
+            'course' => $course->id,
+            'completion' => 2,
+            'completionentries' => 3
+        ]);
+        $data2 = $this->getDataGenerator()->create_module('data', [
+            'course' => $course->id,
+            'completion' => 2,
+            'completionentries' => 0
+        ]);
+        $cm1 = \cm_info::create(get_coursemodule_from_instance('data', $data1->id));
+        $cm2 = \cm_info::create(get_coursemodule_from_instance('data', $data2->id));
+
+        // Data for the stdClass input type.
+        // This type of input would occur when checking the default completion rules for an activity type, where we don't have
+        // any access to cm_info, rather the input is a stdClass containing completion and customdata attributes, just like cm_info.
+        $moddefaults = new \stdClass();
+        $moddefaults->customdata = ['customcompletionrules' => ['completionentries' => 3]];
+        $moddefaults->completion = 2;
+
+        $activeruledescriptions = [get_string('completionentriesdesc', 'data', 3)];
+        $this->assertEquals(mod_data_get_completion_active_rule_descriptions($cm1), $activeruledescriptions);
+        $this->assertEquals(mod_data_get_completion_active_rule_descriptions($cm2), []);
+        $this->assertEquals(mod_data_get_completion_active_rule_descriptions($moddefaults), $activeruledescriptions);
+        $this->assertEquals(mod_data_get_completion_active_rule_descriptions(new \stdClass()), []);
+    }
+
+    /**
+     * An unknown event type should not change the data instance.
+     */
+    public function test_mod_data_core_calendar_event_timestart_updated_unknown_event(): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $datagenerator = $generator->get_plugin_generator('mod_data');
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $data = $datagenerator->create_instance(['course' => $course->id]);
+        $data->timeavailablefrom = $timeopen;
+        $data->timeavailableto = $timeclose;
+        $DB->update_record('data', $data);
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'data',
+            'instance' => $data->id,
+            'eventtype' => DATA_EVENT_TYPE_OPEN . "SOMETHING ELSE",
+            'timestart' => 1,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        mod_data_core_calendar_event_timestart_updated($event, $data);
+        $data = $DB->get_record('data', ['id' => $data->id]);
+        $this->assertEquals($timeopen, $data->timeavailablefrom);
+        $this->assertEquals($timeclose, $data->timeavailableto);
+    }
+
+    /**
+     * A DATA_EVENT_TYPE_OPEN event should update the timeavailablefrom property of the data activity.
+     */
+    public function test_mod_data_core_calendar_event_timestart_updated_open_event(): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $datagenerator = $generator->get_plugin_generator('mod_data');
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $timemodified = 1;
+        $newtimeopen = $timeopen - DAYSECS;
+        $data = $datagenerator->create_instance(['course' => $course->id]);
+        $data->timeavailablefrom = $timeopen;
+        $data->timeavailableto = $timeclose;
+        $data->timemodified = $timemodified;
+        $DB->update_record('data', $data);
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'data',
+            'instance' => $data->id,
+            'eventtype' => DATA_EVENT_TYPE_OPEN,
+            'timestart' => $newtimeopen,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        // Trigger and capture the event when adding a contact.
+        $sink = $this->redirectEvents();
+        mod_data_core_calendar_event_timestart_updated($event, $data);
+        $triggeredevents = $sink->get_events();
+        $moduleupdatedevents = array_filter($triggeredevents, function($e) {
+            return is_a($e, 'core\event\course_module_updated');
+        });
+        $data = $DB->get_record('data', ['id' => $data->id]);
+
+        // Ensure the timeavailablefrom property matches the event timestart.
+        $this->assertEquals($newtimeopen, $data->timeavailablefrom);
+        // Ensure the timeavailableto isn't changed.
+        $this->assertEquals($timeclose, $data->timeavailableto);
+        // Ensure the timemodified property has been changed.
+        $this->assertNotEquals($timemodified, $data->timemodified);
+        // Confirm that a module updated event is fired when the module is changed.
+        $this->assertNotEmpty($moduleupdatedevents);
+    }
+
+    /**
+     * A DATA_EVENT_TYPE_CLOSE event should update the timeavailableto property of the data activity.
+     */
+    public function test_mod_data_core_calendar_event_timestart_updated_close_event(): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $datagenerator = $generator->get_plugin_generator('mod_data');
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $timemodified = 1;
+        $newtimeclose = $timeclose + DAYSECS;
+        $data = $datagenerator->create_instance(['course' => $course->id]);
+        $data->timeavailablefrom = $timeopen;
+        $data->timeavailableto = $timeclose;
+        $data->timemodified = $timemodified;
+        $DB->update_record('data', $data);
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'data',
+            'instance' => $data->id,
+            'eventtype' => DATA_EVENT_TYPE_CLOSE,
+            'timestart' => $newtimeclose,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        // Trigger and capture the event when adding a contact.
+        $sink = $this->redirectEvents();
+        mod_data_core_calendar_event_timestart_updated($event, $data);
+        $triggeredevents = $sink->get_events();
+        $moduleupdatedevents = array_filter($triggeredevents, function($e) {
+            return is_a($e, 'core\event\course_module_updated');
+        });
+        $data = $DB->get_record('data', ['id' => $data->id]);
+
+        // Ensure the timeavailableto property matches the event timestart.
+        $this->assertEquals($newtimeclose, $data->timeavailableto);
+        // Ensure the timeavailablefrom isn't changed.
+        $this->assertEquals($timeopen, $data->timeavailablefrom);
+        // Ensure the timemodified property has been changed.
+        $this->assertNotEquals($timemodified, $data->timemodified);
+        // Confirm that a module updated event is fired when the module is changed.
+        $this->assertNotEmpty($moduleupdatedevents);
+    }
+
+    /**
+     * An unknown event type should not have any limits.
+     */
+    public function test_mod_data_core_calendar_get_valid_event_timestart_range_unknown_event(): void {
+        global $CFG;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $data = new \stdClass();
+        $data->timeavailablefrom = $timeopen;
+        $data->timeavailableto = $timeclose;
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'data',
+            'instance' => 1,
+            'eventtype' => DATA_EVENT_TYPE_OPEN . "SOMETHING ELSE",
+            'timestart' => 1,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        list ($min, $max) = mod_data_core_calendar_get_valid_event_timestart_range($event, $data);
+        $this->assertNull($min);
+        $this->assertNull($max);
+    }
+
+    /**
+     * The open event should be limited by the data's timeclose property, if it's set.
+     */
+    public function test_mod_data_core_calendar_get_valid_event_timestart_range_open_event(): void {
+        global $CFG;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $data = new \stdClass();
+        $data->timeavailablefrom = $timeopen;
+        $data->timeavailableto = $timeclose;
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'data',
+            'instance' => 1,
+            'eventtype' => DATA_EVENT_TYPE_OPEN,
+            'timestart' => 1,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        // The max limit should be bounded by the timeclose value.
+        list ($min, $max) = mod_data_core_calendar_get_valid_event_timestart_range($event, $data);
+        $this->assertNull($min);
+        $this->assertEquals($timeclose, $max[0]);
+
+        // No timeclose value should result in no upper limit.
+        $data->timeavailableto = 0;
+        list ($min, $max) = mod_data_core_calendar_get_valid_event_timestart_range($event, $data);
+        $this->assertNull($min);
+        $this->assertNull($max);
+    }
+
+    /**
+     * The close event should be limited by the data's timeavailablefrom property, if it's set.
+     */
+    public function test_mod_data_core_calendar_get_valid_event_timestart_range_close_event(): void {
+        global $CFG;
+
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $data = new \stdClass();
+        $data->timeavailablefrom = $timeopen;
+        $data->timeavailableto = $timeclose;
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'data',
+            'instance' => 1,
+            'eventtype' => DATA_EVENT_TYPE_CLOSE,
+            'timestart' => 1,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        // The max limit should be bounded by the timeclose value.
+        list ($min, $max) = mod_data_core_calendar_get_valid_event_timestart_range($event, $data);
+        $this->assertEquals($timeopen, $min[0]);
+        $this->assertNull($max);
+
+        // No timeavailableto value should result in no upper limit.
+        $data->timeavailablefrom = 0;
+        list ($min, $max) = mod_data_core_calendar_get_valid_event_timestart_range($event, $data);
+        $this->assertNull($min);
+        $this->assertNull($max);
+    }
+
+    /**
+     * A user who does not have capabilities to add events to the calendar should be able to create an database.
+     */
+    public function test_creation_with_no_calendar_capabilities(): void {
+        $this->resetAfterTest();
+        $course = self::getDataGenerator()->create_course();
+        $context = \context_course::instance($course->id);
+        $user = self::getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        $roleid = self::getDataGenerator()->create_role();
+        self::getDataGenerator()->role_assign($roleid, $user->id, $context->id);
+        assign_capability('moodle/calendar:manageentries', CAP_PROHIBIT, $roleid, $context, true);
+        $generator = self::getDataGenerator()->get_plugin_generator('mod_data');
+        // Create an instance as a user without the calendar capabilities.
+        $this->setUser($user);
+        $time = time();
+        $params = array(
+            'course' => $course->id,
+            'timeavailablefrom' => $time + 200,
+            'timeavailableto' => $time + 2000,
+            'timeviewfrom' => $time + 400,
+            'timeviewto' => $time + 2000,
+        );
+        $generator->create_instance($params);
+    }
+
+    /**
+     * Test for data_generate_default_template(). This method covers different scenarios for checking when the returned value
+     * is empty or not, but doesn't check if the content has the expected value when it's not empty.
+     *
+     * @covers ::data_generate_default_template
+     */
+    public function test_data_generate_default_template(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $course = $this->getDataGenerator()->create_course();
+        $activity = $this->getDataGenerator()->create_module(manager::MODULE, ['course' => $course]);
+
+        // Check the result is empty when $data and/or $template are null.
+        $nullactivity = null;
+        $result = data_generate_default_template($nullactivity, 'listtemplate', 0, false, false);
+        $this->assertEmpty($result);
+        $result = data_generate_default_template($activity, null, 0, false, false);
+        $this->assertEmpty($result);
+        $result = data_generate_default_template($nullactivity, null, 0, false, false);
+        $this->assertEmpty($result);
+
+        // Check the result is empty when any of the templates that are empty are given.
+        $emptytemplates = [
+            'csstemplate',
+            'jstemplate',
+            'listtemplateheader',
+            'listtemplatefooter',
+            'rsstitletemplate',
+        ];
+        foreach ($emptytemplates as $emptytemplate) {
+            $result = data_generate_default_template($activity, $emptytemplate, 0, false, false);
+            $this->assertEmpty($result);
+        }
+
+        $templates = [
+            'listtemplate',
+            'singletemplate',
+            'asearchtemplate',
+        ];
+        // Check the result is empty when the database has no fields.
+        foreach ($templates as $template) {
+            $result = data_generate_default_template($activity, $template, 0, false, false);
+            $this->assertEmpty($result);
+            $this->assertEmpty($activity->{$template});
+        }
+
+        // Add a field to the activity.
+        $fieldrecord = new stdClass();
+        $fieldrecord->name = 'field-1';
+        $fieldrecord->type = 'text';
+        $datagenerator = $this->getDataGenerator()->get_plugin_generator('mod_data');
+        $datagenerator->create_field($fieldrecord, $activity);
+
+        // Check the result is not empty when the database has no entries.
+        foreach ($templates as $template) {
+            $result = data_generate_default_template($activity, $template, 0, false, false);
+            $this->assertNotEmpty($result);
+            $this->assertEmpty($activity->{$template});
+        }
+
+        // Check the result is not empty when the database has no entries and the result is saved when $update = true.
+        foreach ($templates as $template) {
+            $result = data_generate_default_template($activity, $template, 0, false, true);
+            $this->assertNotEmpty($result);
+            $this->assertNotEmpty($activity->{$template});
+        }
+    }
+
+    /**
+     * Test for data_replace_field_in_templates().
+     *
+     * @covers ::data_replace_field_in_templates
+     */
+    public function test_data_replace_field_in_templates(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $course = $this->getDataGenerator()->create_course();
+        $templatecontent = "Field [[myfield]], [[myfield#id]], [[myfield#name]], [[myfield#description]], ";
+
+        $params = ['course' => $course];
+        foreach (manager::TEMPLATES_LIST as $templatename => $templatefile) {
+            $params[$templatename] = $templatecontent;
+        }
+        $activity = $this->getDataGenerator()->create_module(manager::MODULE, $params);
+
+        $generator = $this->getDataGenerator()->get_plugin_generator(manager::PLUGINNAME);
+        $fieldrecord = (object)['name' => 'myfield', 'type' => 'text', 'description' => 'This is a field'];
+        $generator->create_field($fieldrecord, $activity);
+
+        data_replace_field_in_templates($activity, 'myfield', 'newfieldname');
+        $dbactivity = $DB->get_record(manager::MODULE, ['id' => $activity->id]);
+
+        $newcontent = "Field [[newfieldname]], [[newfieldname#id]], [[newfieldname#name]], [[newfieldname#description]], ";
+        // Field compatible templates.
+        $this->assertEquals($newcontent, $dbactivity->listtemplate);
+        $this->assertEquals($newcontent, $dbactivity->singletemplate);
+        $this->assertEquals($newcontent, $dbactivity->asearchtemplate);
+        $this->assertEquals($newcontent, $dbactivity->addtemplate);
+        $this->assertEquals($newcontent, $dbactivity->rsstemplate);
+        // Other templates.
+        $this->assertEquals($templatecontent, $dbactivity->listtemplateheader);
+        $this->assertEquals($templatecontent, $dbactivity->listtemplatefooter);
+        $this->assertEquals($templatecontent, $dbactivity->csstemplate);
+        $this->assertEquals($templatecontent, $dbactivity->jstemplate);
+        $this->assertEquals($templatecontent, $dbactivity->rsstitletemplate);
+    }
+
+    /**
+     * Test for data_append_new_field_to_templates().
+     *
+     * @covers ::data_append_new_field_to_templates
+     * @dataProvider data_append_new_field_to_templates_provider
+     * @param bool $hasfield if the field is present in the templates
+     * @param bool $hasotherfields if the field is not present in the templates
+     * @param bool $expected the expected return
+     */
+    public function test_data_append_new_field_to_templates(bool $hasfield, bool $hasotherfields, bool $expected): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $templatecontent = "Template content";
+        if ($hasfield) {
+            $templatecontent .= "Has [[myfield]].";
+        }
+        if ($hasotherfields) {
+            $templatecontent .= "And also ##otherfields##.";
+        }
+
+        $course = $this->getDataGenerator()->create_course();
+        $params = ['course' => $course];
+        foreach (manager::TEMPLATES_LIST as $templatename => $templatefile) {
+            $params[$templatename] = $templatecontent;
+        }
+        $activity = $this->getDataGenerator()->create_module(manager::MODULE, $params);
+
+        $result = data_append_new_field_to_templates($activity, 'myfield');
+        $this->assertEquals($expected, $result);
+
+        // Check fields with auto add fields.
+        $dbactivity = $DB->get_record(manager::MODULE, ['id' => $activity->id]);
+        if ($hasfield || $hasotherfields) {
+            $this->assertEquals($dbactivity->singletemplate, $templatecontent);
+            $this->assertEquals($dbactivity->addtemplate, $templatecontent);
+            $this->assertEquals($dbactivity->rsstemplate, $templatecontent);
+        } else {
+            $regexp = '|Template content.*\[\[myfield\]\]|';
+            // We don't want line breaks for the validations.
+            $this->assertMatchesRegularExpression($regexp, str_replace("\n", '', $dbactivity->singletemplate));
+            $this->assertMatchesRegularExpression($regexp, str_replace("\n", '', $dbactivity->addtemplate));
+            $this->assertMatchesRegularExpression($regexp, str_replace("\n", '', $dbactivity->rsstemplate));
+        }
+        // No auto add field templates.
+        $this->assertEquals($dbactivity->asearchtemplate, $templatecontent);
+        $this->assertEquals($dbactivity->listtemplate, $templatecontent);
+        $this->assertEquals($dbactivity->listtemplateheader, $templatecontent);
+        $this->assertEquals($dbactivity->listtemplatefooter, $templatecontent);
+        $this->assertEquals($dbactivity->csstemplate, $templatecontent);
+        $this->assertEquals($dbactivity->jstemplate, $templatecontent);
+        $this->assertEquals($dbactivity->rsstitletemplate, $templatecontent);
+    }
+
+    /**
+     * Data provider for test_data_append_new_field_to_templates().
+     *
+     * @return array of scenarios
+     */
+    public static function data_append_new_field_to_templates_provider(): array {
+        return [
+            'Plain template' => [
+                'hasfield' => false,
+                'hasotherfields' => false,
+                'expected' => true,
+            ],
+            'Field already present' => [
+                'hasfield' => true,
+                'hasotherfields' => false,
+                'expected' => false,
+            ],
+            '##otherfields## tag present' => [
+                'hasfield' => false,
+                'hasotherfields' => true,
+                'expected' => false,
+            ],
+            'Field already present and ##otherfields## tag present' => [
+                'hasfield' => true,
+                'hasotherfields' => true,
+                'expected' => false,
+            ],
+        ];
+    }
+
+    /**
+     * Test that format that are not supported are raising an exception
+     *
+     * @param string $type
+     * @param string $expected
+     * @covers \data_get_field_new
+     * @dataProvider format_parser_provider
+     */
+    public function test_create_field(string $type, string $expected): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+
+        $data = $this->getDataGenerator()->create_module('data', ['course' => $course->id]  );
+        if ($expected === 'exception') {
+            $this->expectException(\moodle_exception::class);
+        }
+        $field = data_get_field_new($type, $data);
+        $this->assertStringContainsString($expected, get_class($field));
+    }
+
+    /**
+     * Data provider for test_format_parser
+     *
+     * @return array[]
+     */
+    public static function format_parser_provider(): array {
+        return [
+            'text' => [
+                'type' => 'text',
+                'expected' => 'data_field_text',
+            ],
+            'picture' => [
+                'type' => 'picture',
+                'expected' => 'data_field_picture',
+            ],
+            'wrong type' => [
+                'type' => '../wrongformat123',
+                'expected' => 'exception',
+            ],
+        ];
     }
 }

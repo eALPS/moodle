@@ -40,6 +40,29 @@ abstract class adhoc_task extends task_base {
     /** @var integer|null $id - Adhoc tasks each have their own database record id. */
     private $id = null;
 
+    /** @var integer|null $userid - Adhoc tasks may choose to run as a specific user. */
+    private $userid = null;
+
+    /** @var \core\lock\lock The concurrency task lock for this task. */
+    private $concurrencylock = null;
+
+    /** @var int $attemptsavailable - The remaining attempts of the task. */
+    private $attemptsavailable = 12;
+
+    /**
+     * Provide default implementation of the task name for backward compatibility. Extending classes are expected to implement
+     * this method to provide a descriptive name for the task (shown to admins)
+     *
+     * @return string
+     */
+    public function get_name() {
+        $classparts = explode('\\', get_called_class());
+        $classname = end($classparts);
+
+        // Try to make human readable, capitalized and with spaces.
+        return ucfirst(str_replace('_', ' ', $classname));
+    }
+
     /**
      * Setter for $id.
      * @param int|null $id
@@ -49,11 +72,11 @@ abstract class adhoc_task extends task_base {
     }
 
     /**
-     * Getter for $id.
-     * @return int|null $id
+     * Getter for $userid.
+     * @return int|null $userid
      */
-    public function get_id() {
-        return $this->id;
+    public function get_userid() {
+        return $this->userid;
     }
 
     /**
@@ -88,5 +111,95 @@ abstract class adhoc_task extends task_base {
         return $this->customdata;
     }
 
+    /**
+     * Getter for $id.
+     * @return int|null $id
+     */
+    public function get_id() {
+        return $this->id;
+    }
 
+    /**
+     * Setter for $userid.
+     * @param int|null $userid
+     */
+    public function set_userid($userid) {
+        $this->userid = $userid;
+    }
+
+    /**
+     * Returns default concurrency limit for this task.
+     *
+     * @return int default concurrency limit
+     */
+    protected function get_default_concurrency_limit(): int {
+        global $CFG;
+
+        if (isset($CFG->task_concurrency_limit_default)) {
+            return (int) $CFG->task_concurrency_limit_default;
+        }
+        return 0;
+    }
+
+    /**
+     * Returns effective concurrency limit for this task.
+     *
+     * @return int effective concurrency limit for this task
+     */
+    final public function get_concurrency_limit(): int {
+        global $CFG;
+
+        $classname = get_class($this);
+
+        if (isset($CFG->task_concurrency_limit[$classname])) {
+            return (int) $CFG->task_concurrency_limit[$classname];
+        }
+        return $this->get_default_concurrency_limit();
+    }
+
+    /**
+     * Sets concurrency task lock.
+     *
+     * @param   \core\lock\lock $lock concurrency lock to be set
+     */
+    final public function set_concurrency_lock(\core\lock\lock $lock): void {
+        $this->concurrencylock = $lock;
+    }
+
+    /**
+     * Release the concurrency lock for this task type.
+     */
+    final public function release_concurrency_lock(): void {
+        if ($this->concurrencylock) {
+            $this->concurrencylock->release();
+        }
+    }
+
+    /**
+     * Set the remaining attempts of the task.
+     *
+     * @param int $attemptsavailable Number of the remaining attempts of the task.
+     */
+    public function set_attempts_available(int $attemptsavailable): void {
+        $this->attemptsavailable = $attemptsavailable;
+    }
+
+    /**
+     * Get the remaining attempts of the task.
+     *
+     * @return int Number of the remaining attempts of the task.
+     */
+    public function get_attempts_available(): int {
+        return $this->attemptsavailable;
+    }
+
+    /**
+     * Used to indicate if the task should be re-run if it fails.
+     * By default, tasks will be retried until they succeed, other tasks can override this method to change this behaviour.
+     *
+     * @return bool true if the task should be retried until it succeeds, false otherwise.
+     */
+    public function retry_until_success(): bool {
+        return true;
+    }
 }

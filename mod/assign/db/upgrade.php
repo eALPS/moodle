@@ -22,215 +22,94 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * upgrade this assignment instance - this function could be skipped but it will be needed later
  * @param int $oldversion The old version of the assign module
  * @return bool
  */
 function xmldb_assign_upgrade($oldversion) {
-    global $CFG, $DB;
+    global $DB;
 
-    $dbman = $DB->get_manager();
-
-    if ($oldversion < 2014051201) {
-
-        // Cleanup bad database records where assignid is missing.
-
-        $DB->delete_records('assign_user_mapping', array('assignment'=>0));
-        // Assign savepoint reached.
-        upgrade_mod_savepoint(true, 2014051201, 'assign');
-    }
-
-    if ($oldversion < 2014072400) {
-
-        // Add "latest" column to submissions table to mark the latest attempt.
-        $table = new xmldb_table('assign_submission');
-        $field = new xmldb_field('latest', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0', 'attemptnumber');
-
-        // Conditionally launch add field latest.
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
-
-        // Assign savepoint reached.
-        upgrade_mod_savepoint(true, 2014072400, 'assign');
-    }
-    if ($oldversion < 2014072401) {
-
-         // Define index latestattempt (not unique) to be added to assign_submission.
-        $table = new xmldb_table('assign_submission');
-        $index = new xmldb_index('latestattempt', XMLDB_INDEX_NOTUNIQUE, array('assignment', 'userid', 'groupid', 'latest'));
-
-        // Conditionally launch add index latestattempt.
-        if (!$dbman->index_exists($table, $index)) {
-            $dbman->add_index($table, $index);
-        }
-
-        // Assign savepoint reached.
-        upgrade_mod_savepoint(true, 2014072401, 'assign');
-    }
-    if ($oldversion < 2014072405) {
-
-        // Prevent running this multiple times.
-
-        $countsql = 'SELECT COUNT(id) FROM {assign_submission} WHERE latest = ?';
-
-        $count = $DB->count_records_sql($countsql, array(1));
-        if ($count == 0) {
-
-            // Mark the latest attempt for every submission in mod_assign.
-            $maxattemptsql = 'SELECT assignment, userid, groupid, max(attemptnumber) AS maxattempt
-                                FROM {assign_submission}
-                            GROUP BY assignment, groupid, userid';
-
-            $maxattemptidssql = 'SELECT souter.id
-                                   FROM {assign_submission} souter
-                                   JOIN (' . $maxattemptsql . ') sinner
-                                     ON souter.assignment = sinner.assignment
-                                    AND souter.userid = sinner.userid
-                                    AND souter.groupid = sinner.groupid
-                                    AND souter.attemptnumber = sinner.maxattempt';
-
-            // We need to avoid using "WHERE ... IN(SELECT ...)" clause with MySQL for performance reason.
-            // TODO MDL-29589 Remove this dbfamily exception when implemented.
-            if ($DB->get_dbfamily() === 'mysql') {
-                $params = array('latest' => 1);
-                $sql = 'UPDATE {assign_submission}
-                    INNER JOIN (' . $maxattemptidssql . ') souterouter ON souterouter.id = {assign_submission}.id
-                           SET latest = :latest';
-                $DB->execute($sql, $params);
-            } else {
-                $select = 'id IN(' . $maxattemptidssql . ')';
-                $DB->set_field_select('assign_submission', 'latest', 1, $select);
-            }
-
-            // Look for grade records with no submission record.
-            // This is when a teacher has marked a student before they submitted anything.
-            $records = $DB->get_records_sql('SELECT g.id, g.assignment, g.userid
-                                               FROM {assign_grades} g
-                                          LEFT JOIN {assign_submission} s
-                                                 ON s.assignment = g.assignment
-                                                AND s.userid = g.userid
-                                              WHERE s.id IS NULL');
-            $submissions = array();
-            foreach ($records as $record) {
-                $submission = new stdClass();
-                $submission->assignment = $record->assignment;
-                $submission->userid = $record->userid;
-                $submission->status = 'new';
-                $submission->groupid = 0;
-                $submission->latest = 1;
-                $submission->timecreated = time();
-                $submission->timemodified = time();
-                array_push($submissions, $submission);
-            }
-
-            $DB->insert_records('assign_submission', $submissions);
-        }
-
-        // Assign savepoint reached.
-        upgrade_mod_savepoint(true, 2014072405, 'assign');
-    }
-
-    // Moodle v2.8.0 release upgrade line.
+    // Automatically generated Moodle v4.1.0 release upgrade line.
     // Put any upgrade step following this.
 
-    if ($oldversion < 2014122600) {
-        // Delete any entries from the assign_user_flags and assign_user_mapping that are no longer required.
-        if ($DB->get_dbfamily() === 'mysql') {
-            $sql1 = "DELETE {assign_user_flags}
-                       FROM {assign_user_flags}
-                  LEFT JOIN {assign}
-                         ON {assign_user_flags}.assignment = {assign}.id
-                      WHERE {assign}.id IS NULL";
+    // Automatically generated Moodle v4.2.0 release upgrade line.
+    // Put any upgrade step following this.
 
-            $sql2 = "DELETE {assign_user_mapping}
-                       FROM {assign_user_mapping}
-                  LEFT JOIN {assign}
-                         ON {assign_user_mapping}.assignment = {assign}.id
-                      WHERE {assign}.id IS NULL";
-        } else {
-            $sql1 = "DELETE FROM {assign_user_flags}
-                WHERE NOT EXISTS (
-                          SELECT 'x' FROM {assign}
-                           WHERE {assign_user_flags}.assignment = {assign}.id)";
+    // Automatically generated Moodle v4.3.0 release upgrade line.
+    // Put any upgrade step following this.
 
-            $sql2 = "DELETE FROM {assign_user_mapping}
-                WHERE NOT EXISTS (
-                          SELECT 'x' FROM {assign}
-                           WHERE {assign_user_mapping}.assignment = {assign}.id)";
-        }
+    $dbman = $DB->get_manager(); // Loads ddl manager and xmldb classes.
 
-        $DB->execute($sql1);
-        $DB->execute($sql2);
-
-        upgrade_mod_savepoint(true, 2014122600, 'assign');
-    }
-
-    if ($oldversion < 2015022300) {
-
-        // Define field preventsubmissionnotingroup to be added to assign.
+    if ($oldversion < 2023103000) {
+        // Define field activity to be added to assign.
         $table = new xmldb_table('assign');
-        $field = new xmldb_field('preventsubmissionnotingroup',
+        $field = new xmldb_field(
+            'markinganonymous',
             XMLDB_TYPE_INTEGER,
             '2',
             null,
             XMLDB_NOTNULL,
             null,
             '0',
-            'sendstudentnotifications');
-
-        // Conditionally launch add field preventsubmissionnotingroup.
+            'markingallocation'
+        );
+        // Conditionally launch add field activity.
         if (!$dbman->field_exists($table, $field)) {
             $dbman->add_field($table, $field);
         }
 
         // Assign savepoint reached.
-        upgrade_mod_savepoint(true, 2015022300, 'assign');
+        upgrade_mod_savepoint(true, 2023103000, 'assign');
     }
 
-    // Moodle v2.9.0 release upgrade line.
+    // Automatically generated Moodle v4.4.0 release upgrade line.
     // Put any upgrade step following this.
 
-    // Moodle v3.0.0 release upgrade line.
-    // Put any upgrade step following this.
+    if ($oldversion < 2024042201) {
+        // The 'Never' ('none') option for the additional attempts (attemptreopenmethod) setting is no longer supported
+        // and needs to be updated in all relevant instances.
 
-    // Moodle v3.1.0 release upgrade line.
-    // Put any upgrade step following this.
+        // The default value for the 'attemptreopenmethod' field in the 'assign' database table is currently set to 'none',
+        // This needs to be updated to 'untilpass' to ensure the system functions correctly. Additionally, the default
+        // value for the 'maxattempts' field needs to be changed to '1' to prevent multiple attempts and maintain the
+        // original behavior.
+        $table = new xmldb_table('assign');
+        $attemptreopenmethodfield = new xmldb_field('attemptreopenmethod', XMLDB_TYPE_CHAR, '10', null, XMLDB_NOTNULL,
+            null, 'untilpass');
+        $maxattemptsfield = new xmldb_field('maxattempts', XMLDB_TYPE_INTEGER, '6', null, XMLDB_NOTNULL,
+            null, '1');
+        $dbman->change_field_default($table, $attemptreopenmethodfield);
+        $dbman->change_field_default($table, $maxattemptsfield);
 
-    if ($oldversion < 2016100301) {
-
-        // Define table assign_overrides to be created.
-        $table = new xmldb_table('assign_overrides');
-
-        // Adding fields to table assign_overrides.
-        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
-        $table->add_field('assignid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
-        $table->add_field('groupid', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
-        $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
-        $table->add_field('sortorder', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
-        $table->add_field('allowsubmissionsfromdate', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
-        $table->add_field('duedate', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
-        $table->add_field('cutoffdate', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
-
-        // Adding keys to table assign_overrides.
-        $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
-        $table->add_key('assignid', XMLDB_KEY_FOREIGN, array('assignid'), 'assign', array('id'));
-        $table->add_key('groupid', XMLDB_KEY_FOREIGN, array('groupid'), 'groups', array('id'));
-        $table->add_key('userid', XMLDB_KEY_FOREIGN, array('userid'), 'user', array('id'));
-
-        // Conditionally launch create table for assign_overrides.
-        if (!$dbman->table_exists($table)) {
-            $dbman->create_table($table);
+        // If the current value for the 'attemptreopenmethod' global configuration in the assignment is set to 'none'.
+        if (get_config('assign', 'attemptreopenmethod') == 'none') {
+            // Reset the value to 'untilpass'.
+            set_config('attemptreopenmethod', 'untilpass', 'assign');
+            // Also, setting the value for the 'maxattempts' global config in the assignment to '1' ensures that the
+            // original behaviour is preserved by disallowing any additional attempts by default.
+            set_config('maxattempts', 1, 'assign');
         }
 
+        // Update all the current assignment instances that have their 'attemptreopenmethod' set to 'none'.
+        // By setting 'maxattempts' to 1, additional attempts are disallowed, preserving the original behavior.
+        $DB->execute(
+            'UPDATE {assign}
+                    SET attemptreopenmethod = :newattemptreopenmethod,
+                        maxattempts = :maxattempts
+                  WHERE attemptreopenmethod = :oldattemptreopenmethod',
+            [
+                'newattemptreopenmethod' => 'untilpass',
+                'maxattempts' => 1,
+                'oldattemptreopenmethod' => 'none',
+            ]
+        );
+
         // Assign savepoint reached.
-        upgrade_mod_savepoint(true, 2016100301, 'assign');
+        upgrade_mod_savepoint(true, 2024042201, 'assign');
     }
 
-    // Automatically generated Moodle v3.2.0 release upgrade line.
+    // Automatically generated Moodle v4.5.0 release upgrade line.
     // Put any upgrade step following this.
 
     return true;

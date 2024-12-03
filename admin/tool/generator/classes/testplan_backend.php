@@ -72,25 +72,6 @@ class tool_generator_testplan_backend extends tool_generator_backend {
     }
 
     /**
-     * Gets the list of courses that can be used used to generate a test.
-     *
-     * @return array The list of options as courseid => name
-     */
-    public static function get_course_options() {
-        $courses = get_courses('all', 'c.sortorder ASC', 'c.id, c.shortname, c.fullname');
-        if (!$courses) {
-            print_error('error_nocourses', 'tool_generator');
-        }
-
-        $options = array();
-        unset($courses[1]);
-        foreach ($courses as $course) {
-            $options[$course->id] = $course->fullname . '(' . $course->shortname . ')';
-        }
-        return $options;
-    }
-
-    /**
      * Getter for moodle-performance-comparison project URL.
      *
      * @return string
@@ -119,10 +100,12 @@ class tool_generator_testplan_backend extends tool_generator_backend {
      *
      * @param int $courseid The target course id
      * @param bool $updateuserspassword Updates the course users password to $CFG->tool_generator_users_password
+     * @param int|null $size of the test plan. Used to limit the number of users exported
+     *                 to match the threads in the plan. For BC, defaults to null that means all enrolled users.
      * @return stored_file
      */
-    public static function create_users_file($courseid, $updateuserspassword) {
-        $csvcontents = self::generate_users_file($courseid, $updateuserspassword);
+    public static function create_users_file($courseid, $updateuserspassword, ?int $size = null) {
+        $csvcontents = self::generate_users_file($courseid, $updateuserspassword, $size);
 
         $fs = get_file_storage();
         $filerecord = self::get_file_record('users', 'csv');
@@ -190,16 +173,20 @@ class tool_generator_testplan_backend extends tool_generator_backend {
      *
      * @param int $targetcourseid
      * @param bool $updateuserspassword Updates the course users password to $CFG->tool_generator_users_password
+     * @param int|null $size of the test plan. Used to limit the number of users exported
+     *                 to match the threads in the plan. For BC, defaults to null that means all enrolled users.
      * @return string The users csv file contents.
      */
-    protected static function generate_users_file($targetcourseid, $updateuserspassword) {
+    protected static function generate_users_file($targetcourseid, $updateuserspassword, ?int $size = null) {
         global $CFG;
 
         $coursecontext = context_course::instance($targetcourseid);
 
-        $users = get_enrolled_users($coursecontext, '', 0, 'u.id, u.username, u.auth', 'u.username ASC');
+        // If requested, get the number of users (threads) to use in the plan. We only need those in the exported file.
+        $planusers = self::$users[$size] ?? 0;
+        $users = get_enrolled_users($coursecontext, '', 0, 'u.id, u.username, u.auth', 'u.username ASC', 0, $planusers);
         if (!$users) {
-            print_error('coursewithoutusers', 'tool_generator');
+            throw new \moodle_exception('coursewithoutusers', 'tool_generator');
         }
 
         $lines = array();
@@ -209,7 +196,7 @@ class tool_generator_testplan_backend extends tool_generator_backend {
             if ($updateuserspassword) {
                 $userauth = get_auth_plugin($user->auth);
                 if (!$userauth->user_update_password($user, $CFG->tool_generator_users_password)) {
-                    print_error('errorpasswordupdate', 'auth');
+                    throw new \moodle_exception('errorpasswordupdate', 'auth');
                 }
             }
 
@@ -262,19 +249,19 @@ class tool_generator_testplan_backend extends tool_generator_backend {
 
         // Getting the first page module instance.
         if (!$pages = $courseinfo->get_instances_of('page')) {
-            print_error('error_nopageinstances', 'tool_generator');
+            throw new \moodle_exception('error_nopageinstances', 'tool_generator');
         }
         $data->pageid = reset($pages)->id;
 
         // Getting the first forum module instance and it's first discussion and reply as well.
         if (!$forums = $courseinfo->get_instances_of('forum')) {
-            print_error('error_noforuminstances', 'tool_generator');
+            throw new \moodle_exception('error_noforuminstances', 'tool_generator');
         }
         $forum = reset($forums);
 
         // Getting the first discussion (and reply).
         if (!$discussions = forum_get_discussions($forum, 'd.timemodified ASC', false, -1, 1)) {
-            print_error('error_noforumdiscussions', 'tool_generator');
+            throw new \moodle_exception('error_noforumdiscussions', 'tool_generator');
         }
         $discussion = reset($discussions);
 

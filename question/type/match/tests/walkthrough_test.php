@@ -14,15 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * This file contains tests that walks a question through the interactive
- * behaviour.
- *
- * @package   qtype_match
- * @copyright 2010 The Open University
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace qtype_match;
 
+use question_hint_with_parts;
+use question_state;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -33,15 +28,16 @@ require_once($CFG->dirroot . '/question/engine/tests/helpers.php');
 /**
  * Unit tests for the matching question type.
  *
+ * @package   qtype_match
  * @copyright 2010 The Open University
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
+class walkthrough_test extends \qbehaviour_walkthrough_test_base {
 
-    public function test_deferred_feedback_unanswered() {
+    public function test_deferred_feedback_unanswered(): void {
 
         // Create a matching question.
-        $m = test_question_maker::make_a_matching_question();
+        $m = \test_question_maker::make_question('match');
         $m->shufflestems = false;
         $this->start_attempt_at_question($m, 'deferredfeedback', 4);
 
@@ -56,12 +52,13 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$todo);
         $this->check_current_mark(null);
         $this->check_current_output(
+                $this->get_contains_question_text_expectation($m),
+                $this->get_does_not_contain_feedback_expectation());
+        $this->check_output_contains_selectoptions(
                 $this->get_contains_select_expectation('sub0', $choices, null, true),
                 $this->get_contains_select_expectation('sub1', $choices, null, true),
                 $this->get_contains_select_expectation('sub2', $choices, null, true),
-                $this->get_contains_select_expectation('sub3', $choices, null, true),
-                $this->get_contains_question_text_expectation($m),
-                $this->get_does_not_contain_feedback_expectation());
+                $this->get_contains_select_expectation('sub3', $choices, null, true));
         $this->check_step_count(1);
 
         // Save a blank response.
@@ -72,12 +69,13 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$todo);
         $this->check_current_mark(null);
         $this->check_current_output(
+                $this->get_contains_question_text_expectation($m),
+                $this->get_does_not_contain_feedback_expectation());
+        $this->check_output_contains_selectoptions(
                 $this->get_contains_select_expectation('sub0', $choices, null, true),
                 $this->get_contains_select_expectation('sub1', $choices, null, true),
                 $this->get_contains_select_expectation('sub2', $choices, null, true),
-                $this->get_contains_select_expectation('sub3', $choices, null, true),
-                $this->get_contains_question_text_expectation($m),
-                $this->get_does_not_contain_feedback_expectation());
+                $this->get_contains_select_expectation('sub3', $choices, null, true));
         $this->check_step_count(1);
 
         // Finish the attempt.
@@ -86,17 +84,17 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         // Verify.
         $this->check_current_state(question_state::$gaveup);
         $this->check_current_mark(null);
-        $this->check_current_output(
+        $this->check_output_contains_selectoptions(
                 $this->get_contains_select_expectation('sub0', $choices, null, false),
                 $this->get_contains_select_expectation('sub1', $choices, null, false),
                 $this->get_contains_select_expectation('sub2', $choices, null, false),
                 $this->get_contains_select_expectation('sub3', $choices, null, false));
     }
 
-    public function test_deferred_feedback_partial_answer() {
+    public function test_deferred_feedback_partial_answer(): void {
 
         // Create a matching question.
-        $m = test_question_maker::make_a_matching_question();
+        $m = \test_question_maker::make_question('match');
         $m->shufflestems = false;
         $this->start_attempt_at_question($m, 'deferredfeedback', 4);
 
@@ -111,12 +109,13 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$todo);
         $this->check_current_mark(null);
         $this->check_current_output(
+                $this->get_contains_question_text_expectation($m),
+                $this->get_does_not_contain_feedback_expectation());
+        $this->check_output_contains_selectoptions(
                 $this->get_contains_select_expectation('sub0', $choices, null, true),
                 $this->get_contains_select_expectation('sub1', $choices, null, true),
                 $this->get_contains_select_expectation('sub2', $choices, null, true),
-                $this->get_contains_select_expectation('sub3', $choices, null, true),
-                $this->get_contains_question_text_expectation($m),
-                $this->get_does_not_contain_feedback_expectation());
+                $this->get_contains_select_expectation('sub3', $choices, null, true));
 
         // Save a partial response.
         $this->process_submission(array('sub0' => $orderforchoice[1],
@@ -126,12 +125,13 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$invalid);
         $this->check_current_mark(null);
         $this->check_current_output(
+                $this->get_contains_question_text_expectation($m),
+                $this->get_does_not_contain_feedback_expectation());
+        $this->check_output_contains_selectoptions(
                 $this->get_contains_select_expectation('sub0', $choices, $orderforchoice[1], true),
                 $this->get_contains_select_expectation('sub1', $choices, $orderforchoice[2], true),
                 $this->get_contains_select_expectation('sub2', $choices, null, true),
-                $this->get_contains_select_expectation('sub3', $choices, null, true),
-                $this->get_contains_question_text_expectation($m),
-                $this->get_does_not_contain_feedback_expectation());
+                $this->get_contains_select_expectation('sub3', $choices, null, true));
 
         // Finish the attempt.
         $this->quba->finish_all_questions();
@@ -140,17 +140,18 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$gradedpartial);
         $this->check_current_mark(2);
         $this->check_current_output(
+                $this->get_contains_partcorrect_expectation());
+        $this->check_output_contains_selectoptions(
                 $this->get_contains_select_expectation('sub0', $choices, $orderforchoice[1], false),
                 $this->get_contains_select_expectation('sub1', $choices, $orderforchoice[2], false),
                 $this->get_contains_select_expectation('sub2', $choices, null, false),
-                $this->get_contains_select_expectation('sub3', $choices, null, false),
-                $this->get_contains_partcorrect_expectation());
+                $this->get_contains_select_expectation('sub3', $choices, null, false));
     }
 
-    public function test_interactive_correct_no_submit() {
+    public function test_interactive_correct_no_submit(): void {
 
         // Create a matching question.
-        $m = test_question_maker::make_a_matching_question();
+        $m = \test_question_maker::make_question('match');
         $m->hints = array(
             new question_hint_with_parts(11, 'This is the first hint.', FORMAT_HTML, false, false),
             new question_hint_with_parts(12, 'This is the second hint.', FORMAT_HTML, true, true),
@@ -169,14 +170,15 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$todo);
         $this->check_current_mark(null);
         $this->check_current_output(
-                $this->get_contains_select_expectation('sub0', $choices, null, true),
-                $this->get_contains_select_expectation('sub1', $choices, null, true),
-                $this->get_contains_select_expectation('sub2', $choices, null, true),
-                $this->get_contains_select_expectation('sub3', $choices, null, true),
                 $this->get_contains_submit_button_expectation(true),
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_tries_remaining_expectation(3),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub0', $choices, null, true),
+                $this->get_contains_select_expectation('sub1', $choices, null, true),
+                $this->get_contains_select_expectation('sub2', $choices, null, true),
+                $this->get_contains_select_expectation('sub3', $choices, null, true));
 
         // Save the right answer.
         $this->process_submission(array('sub0' => $orderforchoice[1],
@@ -190,19 +192,39 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$gradedright);
         $this->check_current_mark(4);
         $this->check_current_output(
-                $this->get_contains_select_expectation('sub0', $choices, $orderforchoice[1], false),
-                $this->get_contains_select_expectation('sub1', $choices, $orderforchoice[2], false),
-                $this->get_contains_select_expectation('sub2', $choices, $orderforchoice[2], false),
-                $this->get_contains_select_expectation('sub3', $choices, $orderforchoice[1], false),
                 $this->get_does_not_contain_submit_button_expectation(),
                 $this->get_contains_correct_expectation(),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub0', $choices, $orderforchoice[1], false),
+                $this->get_contains_select_expectation('sub1', $choices, $orderforchoice[2], false),
+                $this->get_contains_select_expectation('sub2', $choices, $orderforchoice[2], false),
+                $this->get_contains_select_expectation('sub3', $choices, $orderforchoice[1], false));
+
+        // Regrade with a new version of the question.
+        /** @var \qtype_match_question $oldm */
+        $oldm = \test_question_maker::make_question('match');
+        $oldm->stems = [11 => 'Dog', 12 => 'Frog', 13 => 'Toad', 14 => 'Cat'];
+        $oldm->stemformat = [11 => FORMAT_HTML, 12 => FORMAT_HTML, 13 => FORMAT_HTML, 14 => FORMAT_HTML];
+        $oldm->choices = [11 => 'Mammal', 12 => 'Amphibian', 13 => 'Insect'];
+        $oldm->right = [11 => 11, 12 => 12, 13 => 12, 14 => 11];
+        $this->quba->regrade_question($this->slot, true, null, $oldm);
+
+        // Verify.
+        $this->check_current_mark(4);
+        $this->render();
+        $this->assertStringContainsString('Cat', $this->currentoutput);
+        $this->assertStringContainsString('Insect', $this->currentoutput);
+        $this->assertStringNotContainsString(
+                get_string('deletedsubquestion', 'qtype_match'), $this->currentoutput);
+        $this->assertStringNotContainsString(
+                get_string('deletedchoice', 'qtype_match'), $this->currentoutput);
     }
 
-    public function test_interactive_partial_no_submit() {
+    public function test_interactive_partial_no_submit(): void {
 
         // Create a matching question.
-        $m = test_question_maker::make_a_matching_question();
+        $m = \test_question_maker::make_question('match');
         $m->hints = array(
             new question_hint_with_parts(11, 'This is the first hint.', FORMAT_HTML, false, false),
             new question_hint_with_parts(12, 'This is the second hint.', FORMAT_HTML, true, true),
@@ -221,14 +243,15 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$todo);
         $this->check_current_mark(null);
         $this->check_current_output(
-                $this->get_contains_select_expectation('sub0', $choices, null, true),
-                $this->get_contains_select_expectation('sub1', $choices, null, true),
-                $this->get_contains_select_expectation('sub2', $choices, null, true),
-                $this->get_contains_select_expectation('sub3', $choices, null, true),
                 $this->get_contains_submit_button_expectation(true),
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_tries_remaining_expectation(3),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub0', $choices, null, true),
+                $this->get_contains_select_expectation('sub1', $choices, null, true),
+                $this->get_contains_select_expectation('sub2', $choices, null, true),
+                $this->get_contains_select_expectation('sub3', $choices, null, true));
 
         // Save the right answer.
         $this->process_submission(array('sub0' => $orderforchoice[1],
@@ -242,19 +265,20 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$gradedpartial);
         $this->check_current_mark(2);
         $this->check_current_output(
-                $this->get_contains_select_expectation('sub0', $choices, $orderforchoice[1], false),
-                $this->get_contains_select_expectation('sub1', $choices, $orderforchoice[2], false),
-                $this->get_contains_select_expectation('sub2', $choices, $orderforchoice[1], false),
-                $this->get_contains_select_expectation('sub3', $choices, null, false),
                 $this->get_does_not_contain_submit_button_expectation(),
                 $this->get_contains_partcorrect_expectation(),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub0', $choices, $orderforchoice[1], false),
+                $this->get_contains_select_expectation('sub1', $choices, $orderforchoice[2], false),
+                $this->get_contains_select_expectation('sub2', $choices, $orderforchoice[1], false),
+                $this->get_contains_select_expectation('sub3', $choices, null, false));
     }
 
-    public function test_interactive_with_invalid() {
+    public function test_interactive_with_invalid(): void {
 
         // Create a matching question.
-        $m = test_question_maker::make_a_matching_question();
+        $m = \test_question_maker::make_question('match');
         $m->hints = array(
             new question_hint_with_parts(11, 'This is the first hint.', FORMAT_HTML, false, false),
             new question_hint_with_parts(12, 'This is the second hint.', FORMAT_HTML, true, true),
@@ -273,14 +297,15 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$todo);
         $this->check_current_mark(null);
         $this->check_current_output(
-                $this->get_contains_select_expectation('sub0', $choices, null, true),
-                $this->get_contains_select_expectation('sub1', $choices, null, true),
-                $this->get_contains_select_expectation('sub2', $choices, null, true),
-                $this->get_contains_select_expectation('sub3', $choices, null, true),
                 $this->get_contains_submit_button_expectation(true),
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_tries_remaining_expectation(3),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub0', $choices, null, true),
+                $this->get_contains_select_expectation('sub1', $choices, null, true),
+                $this->get_contains_select_expectation('sub2', $choices, null, true),
+                $this->get_contains_select_expectation('sub3', $choices, null, true));
 
         // Try to submit an invalid answer.
         $this->process_submission(array('sub0' => '0',
@@ -291,14 +316,15 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$invalid);
         $this->check_current_mark(null);
         $this->check_current_output(
-                $this->get_contains_select_expectation('sub0', $choices, null, true),
-                $this->get_contains_select_expectation('sub1', $choices, null, true),
-                $this->get_contains_select_expectation('sub2', $choices, null, true),
-                $this->get_contains_select_expectation('sub3', $choices, null, true),
                 $this->get_contains_submit_button_expectation(true),
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_invalid_answer_expectation(),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub0', $choices, null, true),
+                $this->get_contains_select_expectation('sub1', $choices, null, true),
+                $this->get_contains_select_expectation('sub2', $choices, null, true),
+                $this->get_contains_select_expectation('sub3', $choices, null, true));
 
         // Now submit the right answer.
         $this->process_submission(array('sub0' => $orderforchoice[1],
@@ -309,19 +335,20 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$gradedright);
         $this->check_current_mark(4);
         $this->check_current_output(
-                $this->get_contains_select_expectation('sub0', $choices, $orderforchoice[1], false),
-                $this->get_contains_select_expectation('sub1', $choices, $orderforchoice[2], false),
-                $this->get_contains_select_expectation('sub2', $choices, $orderforchoice[2], false),
-                $this->get_contains_select_expectation('sub3', $choices, $orderforchoice[1], false),
                 $this->get_does_not_contain_submit_button_expectation(),
                 $this->get_contains_correct_expectation(),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub0', $choices, $orderforchoice[1], false),
+                $this->get_contains_select_expectation('sub1', $choices, $orderforchoice[2], false),
+                $this->get_contains_select_expectation('sub2', $choices, $orderforchoice[2], false),
+                $this->get_contains_select_expectation('sub3', $choices, $orderforchoice[1], false));
     }
 
-    public function test_match_with_tricky_html_choices() {
+    public function test_match_with_tricky_html_choices(): void {
 
         // Create a matching question.
-        $m = test_question_maker::make_a_matching_question();
+        $m = \test_question_maker::make_question('match');
         $m->stems = array(
             1 => '(1, 2]',
             2 => '[1, 2]',
@@ -346,6 +373,8 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         // Check the initial state.
         $this->check_current_state(question_state::$todo);
         $this->check_current_mark(null);
+        // Do not use check_output_contains_selectoptions as there are multibyte characters ('1 ≤ x ≤ 2') that
+        // seem to be read as ascii ('1 â¤ x â¤ 2') in this test.
         $this->check_current_output(
                 $this->get_contains_select_expectation('sub0', $choices, null, true),
                 $this->get_contains_select_expectation('sub1', $choices, null, true),
@@ -366,14 +395,14 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
 
         $this->displayoptions->history = 1;
         $this->check_current_output(
-                new question_pattern_expectation('/' .
-                        preg_quote(htmlspecialchars($rightresponsesummary), '/') . '/'));
+                new \question_pattern_expectation('/' .
+                        preg_quote(htmlspecialchars($rightresponsesummary, ENT_COMPAT), '/') . '/'));
     }
 
-    public function test_match_clear_wrong() {
+    public function test_match_clear_wrong(): void {
 
         // Create a matching question.
-        $m = test_question_maker::make_a_matching_question();
+        $m = \test_question_maker::make_question('match');
         $m->hints = array(
             new question_hint_with_parts(11, 'This is the first hint.', FORMAT_HTML, false, true),
             new question_hint_with_parts(12, 'This is the second hint.', FORMAT_HTML, true, true),
@@ -392,14 +421,15 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$todo);
         $this->check_current_mark(null);
         $this->check_current_output(
-                $this->get_contains_select_expectation('sub0', $choices, null, true),
-                $this->get_contains_select_expectation('sub1', $choices, null, true),
-                $this->get_contains_select_expectation('sub2', $choices, null, true),
-                $this->get_contains_select_expectation('sub3', $choices, null, true),
                 $this->get_contains_submit_button_expectation(true),
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_tries_remaining_expectation(3),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub0', $choices, null, true),
+                $this->get_contains_select_expectation('sub1', $choices, null, true),
+                $this->get_contains_select_expectation('sub2', $choices, null, true),
+                $this->get_contains_select_expectation('sub3', $choices, null, true));
 
         // Submit a completely wrong response.
         $this->process_submission(array('sub0' => $orderforchoice[3],
@@ -410,10 +440,6 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$todo);
         $this->check_current_mark(null);
         $this->check_current_output(
-                $this->get_contains_select_expectation('sub0', $choices, $orderforchoice[3], false),
-                $this->get_contains_select_expectation('sub1', $choices, $orderforchoice[3], false),
-                $this->get_contains_select_expectation('sub2', $choices, $orderforchoice[3], false),
-                $this->get_contains_select_expectation('sub3', $choices, $orderforchoice[3], false),
                 $this->get_contains_hidden_expectation(
                         $this->quba->get_field_prefix($this->slot) . 'sub0', '0'),
                 $this->get_contains_hidden_expectation(
@@ -424,6 +450,11 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
                         $this->quba->get_field_prefix($this->slot) . 'sub3', '0'),
                 $this->get_does_not_contain_submit_button_expectation(),
                 $this->get_contains_hint_expectation('This is the first hint.'));
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub0', $choices, $orderforchoice[3], false),
+                $this->get_contains_select_expectation('sub1', $choices, $orderforchoice[3], false),
+                $this->get_contains_select_expectation('sub2', $choices, $orderforchoice[3], false),
+                $this->get_contains_select_expectation('sub3', $choices, $orderforchoice[3], false));
 
         // Try again.
         $this->process_submission(array('sub0' => 0,
@@ -434,14 +465,15 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$todo);
         $this->check_current_mark(null);
         $this->check_current_output(
-                $this->get_contains_select_expectation('sub0', $choices, null, true),
-                $this->get_contains_select_expectation('sub1', $choices, null, true),
-                $this->get_contains_select_expectation('sub2', $choices, null, true),
-                $this->get_contains_select_expectation('sub3', $choices, null, true),
                 $this->get_contains_submit_button_expectation(true),
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_tries_remaining_expectation(2),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub0', $choices, null, true),
+                $this->get_contains_select_expectation('sub1', $choices, null, true),
+                $this->get_contains_select_expectation('sub2', $choices, null, true),
+                $this->get_contains_select_expectation('sub3', $choices, null, true));
 
         // Submit a partially wrong response.
         $this->process_submission(array('sub0' => $orderforchoice[3],
@@ -452,10 +484,6 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$todo);
         $this->check_current_mark(null);
         $this->check_current_output(
-                $this->get_contains_select_expectation('sub0', $choices, $orderforchoice[3], false),
-                $this->get_contains_select_expectation('sub1', $choices, $orderforchoice[3], false),
-                $this->get_contains_select_expectation('sub2', $choices, $orderforchoice[2], false),
-                $this->get_contains_select_expectation('sub3', $choices, $orderforchoice[1], false),
                 $this->get_contains_hidden_expectation(
                         $this->quba->get_field_prefix($this->slot) . 'sub0', '0'),
                 $this->get_contains_hidden_expectation(
@@ -466,6 +494,11 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
                         $this->quba->get_field_prefix($this->slot) . 'sub3', $orderforchoice[1]),
                 $this->get_does_not_contain_submit_button_expectation(),
                 $this->get_contains_hint_expectation('This is the second hint.'));
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub0', $choices, $orderforchoice[3], false),
+                $this->get_contains_select_expectation('sub1', $choices, $orderforchoice[3], false),
+                $this->get_contains_select_expectation('sub2', $choices, $orderforchoice[2], false),
+                $this->get_contains_select_expectation('sub3', $choices, $orderforchoice[1], false));
 
         // Try again.
         $this->process_submission(array('sub0' => 0,
@@ -476,13 +509,15 @@ class qtype_match_walkthrough_test extends qbehaviour_walkthrough_test_base {
         $this->check_current_state(question_state::$todo);
         $this->check_current_mark(null);
         $this->check_current_output(
-                $this->get_contains_select_expectation('sub0', $choices, null, true),
-                $this->get_contains_select_expectation('sub1', $choices, null, true),
-                $this->get_contains_select_expectation('sub2', $choices, $orderforchoice[2], true),
-                $this->get_contains_select_expectation('sub3', $choices, $orderforchoice[1], true),
                 $this->get_contains_submit_button_expectation(true),
                 $this->get_does_not_contain_feedback_expectation(),
                 $this->get_tries_remaining_expectation(1),
                 $this->get_no_hint_visible_expectation());
+        $this->check_output_contains_selectoptions(
+                $this->get_contains_select_expectation('sub0', $choices, null, true),
+                $this->get_contains_select_expectation('sub1', $choices, null, true),
+                $this->get_contains_select_expectation('sub2', $choices, $orderforchoice[2], true),
+                $this->get_contains_select_expectation('sub3', $choices, $orderforchoice[1], true));
+
     }
 }

@@ -22,6 +22,8 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+define('NO_OUTPUT_BUFFERING', true); // The progress bar may be used here.
+
 require_once '../../../config.php';
 require_once $CFG->dirroot.'/grade/lib.php';
 require_once $CFG->dirroot.'/grade/report/lib.php'; // for preferences
@@ -38,14 +40,21 @@ $PAGE->set_pagelayout('admin');
 
 /// Make sure they can even access this course
 if (!$course = $DB->get_record('course', array('id' => $courseid))) {
-    print_error('nocourseid');
+    throw new \moodle_exception('invalidcourseid');
 }
 
 require_login($course);
 $context = context_course::instance($course->id);
 require_capability('moodle/grade:manage', $context);
 
-$PAGE->requires->js_call_amd('core_grades/edittree_index', 'enhance');
+$PAGE->requires->js_call_amd('core_grades/edittree_index', 'init', [$courseid, $USER->id]);
+$PAGE->requires->js_call_amd('core_grades/gradebooksetup_forms', 'init');
+
+$decsep = get_string('decsep', 'langconfig');
+// This setting indicates if we should use algorithm prior to MDL-49257 fix for calculating extra credit weights.
+$gradebookcalculationfreeze = (int) get_config('core', 'gradebook_calculations_freeze_' . $courseid);
+$oldextracreditcalculation = $gradebookcalculationfreeze && ($gradebookcalculationfreeze <= 20150619);
+$PAGE->requires->js_call_amd('core_grades/edittree_weights', 'init', [$decsep, $oldextracreditcalculation]);
 
 /// return tracking object
 $gpr = new grade_plugin_return(array('type'=>'edit', 'plugin'=>'tree', 'courseid'=>$courseid));
@@ -61,7 +70,7 @@ if (empty($eid)) {
 
 } else {
     if (!$element = $gtree->locate_element($eid)) {
-        print_error('invalidelementid', '', $returnurl);
+        throw new \moodle_exception('invalidelementid', '', $returnurl);
     }
     $object = $element['object'];
 }
@@ -81,12 +90,23 @@ if ($action == 'moveselect') {
     }
 }
 
-$grade_edit_tree = new grade_edit_tree($gtree, $movingeid, $gpr);
+$gradeedittree = new grade_edit_tree($gtree, $movingeid, $gpr);
 
 switch ($action) {
+    case 'duplicate':
+        if ($eid and confirm_sesskey()) {
+            if (!$el = $gtree->locate_element($eid)) {
+                throw new \moodle_exception('invalidelementid', '', $returnurl);
+            }
+
+            $object->duplicate();
+            redirect($returnurl);
+        }
+        break;
+
     case 'delete':
         if ($eid && confirm_sesskey()) {
-            if (!$grade_edit_tree->element_deletable($element)) {
+            if (!$gradeedittree->element_deletable($element)) {
                 // no deleting of external activities - they would be recreated anyway!
                 // exception is activity without grading or misconfigured activities
                 break;
@@ -97,18 +117,6 @@ switch ($action) {
                 $object->delete('grade/report/grader/category');
                 redirect($returnurl);
 
-            } else {
-                $PAGE->set_title($strgrades . ': ' . $strgraderreport);
-                $PAGE->set_heading($course->fullname);
-                echo $OUTPUT->header();
-                $strdeletecheckfull = get_string('deletecheck', '', $object->get_name());
-                $optionsyes = array('eid'=>$eid, 'confirm'=>1, 'sesskey'=>sesskey(), 'id'=>$course->id, 'action'=>'delete');
-                $optionsno  = array('id'=>$course->id);
-                $formcontinue = new single_button(new moodle_url('index.php', $optionsyes), get_string('yes'));
-                $formcancel = new single_button(new moodle_url('index.php', $optionsno), get_string('no'), 'get');
-                echo $OUTPUT->confirm($strdeletecheckfull, $formcontinue, $formcancel);
-                echo $OUTPUT->footer();
-                die;
             }
         }
         break;
@@ -123,7 +131,7 @@ switch ($action) {
             $first = optional_param('first', false,  PARAM_BOOL); // If First is set to 1, it means the target is the first child of the category $moveafter
 
             if(!$after_el = $gtree->locate_element($moveafter)) {
-                print_error('invalidelementid', '', $returnurl);
+                throw new \moodle_exception('invalidelementid', '', $returnurl);
             }
 
             $after = $after_el['object'];
@@ -146,9 +154,9 @@ switch ($action) {
         break;
 }
 
-//if we go straight to the db to update an element we need to recreate the tree as
-// $grade_edit_tree has already been constructed.
-//Ideally we could do the updates through $grade_edit_tree to avoid recreating it
+// If we go straight to the db to update an element we need to recreate the tree as
+// $gradeedittree has already been constructed.
+// Ideally we could do the updates through $gradeedittree to avoid recreating it.
 $recreatetree = false;
 
 if ($data = data_submitted() and confirm_sesskey()) {
@@ -162,7 +170,7 @@ if ($data = data_submitted() and confirm_sesskey()) {
             }
         }
 
-        $grade_edit_tree->move_elements($elements, $returnurl);
+        $gradeedittree->move_elements($elements, $returnurl);
     }
 
     // Update weights (extra credits) on categories and items.
@@ -232,28 +240,23 @@ if (grade_regrade_final_grades_if_required($course, $grade_edit_tree_index_check
     $recreatetree = true;
 }
 
-print_grade_page_head($courseid, 'settings', 'setup', get_string('gradebooksetup', 'grades'));
+$actionbar = new \core_grades\output\gradebook_setup_action_bar($context);
+print_grade_page_head($courseid, 'settings', 'setup', false,
+    false, false, true, null, null, null, $actionbar);
 
 // Print Table of categories and items
 echo $OUTPUT->box_start('gradetreebox generalbox');
 
-//did we update something in the db and thus invalidate $grade_edit_tree?
+// Did we update something in the db and thus invalidate $gradeedittree?
 if ($recreatetree) {
-    $grade_edit_tree = new grade_edit_tree($gtree, $movingeid, $gpr);
+    $gradeedittree = new grade_edit_tree($gtree, $movingeid, $gpr);
 }
 
-$bulkmoveoptions = ['' => get_string('choosedots')] + $grade_edit_tree->categories;
 $tpldata = (object) [
     'actionurl' => $returnurl,
     'sesskey' => sesskey(),
-    'showsave' => !$moving,
-    'showbulkmove' => !$moving && count($grade_edit_tree->categories) > 1,
-    'bulkmoveoptions' => array_map(function($option) use ($bulkmoveoptions) {
-        return [
-            'name' => $bulkmoveoptions[$option],
-            'value' => $option
-        ];
-    }, array_keys($bulkmoveoptions))
+    'movingmodeenabled' => $moving,
+    'courseid' => $courseid
 ];
 
 // Check to see if we have a normalisation message to send.
@@ -262,39 +265,22 @@ if ($weightsadjusted) {
     $tpldata->notification = $notification->export_for_template($OUTPUT);
 }
 
-$tpldata->table = html_writer::table($grade_edit_tree->table);
+$tpldata->table = html_writer::table($gradeedittree->table);
+
+// If not in moving mode and there is more than one grade category, then initialise the bulk action module.
+if (!$moving && count($gradeedittree->categories) > 1) {
+    $PAGE->requires->js_call_amd('core_grades/bulkactions/edit/tree/bulk_actions', 'init', [$courseid]);
+}
+
+$footercontent = $OUTPUT->render_from_template('core_grades/edit_tree_sticky_footer', $tpldata);
+$stickyfooter = new core\output\sticky_footer($footercontent);
+$tpldata->stickyfooter = $OUTPUT->render($stickyfooter);
 
 echo $OUTPUT->render_from_template('core_grades/edit_tree', $tpldata);
 
 echo $OUTPUT->box_end();
 
-// Print action buttons
-echo $OUTPUT->container_start('buttons mdl-align');
-
-if ($moving) {
-    echo $OUTPUT->single_button(new moodle_url('index.php', array('id'=>$course->id)), get_string('cancel'), 'get');
-} else {
-    echo $OUTPUT->single_button(new moodle_url('category.php', array('courseid'=>$course->id)), get_string('addcategory', 'grades'), 'get');
-    echo $OUTPUT->single_button(new moodle_url('item.php', array('courseid'=>$course->id)), get_string('additem', 'grades'), 'get');
-
-    if (!empty($CFG->enableoutcomes)) {
-        echo $OUTPUT->single_button(new moodle_url('outcomeitem.php', array('courseid'=>$course->id)), get_string('addoutcomeitem', 'grades'), 'get');
-    }
-
-    //echo $OUTPUT->(new moodle_url('index.php', array('id'=>$course->id, 'action'=>'autosort')), get_string('autosort', 'grades'), 'get');
-}
-
-echo $OUTPUT->container_end();
-
-$PAGE->requires->yui_module('moodle-core-formchangechecker',
-    'M.core_formchangechecker.init',
-    array(array(
-        'formid' => 'gradetreeform'
-    ))
-);
-$PAGE->requires->string_for_js('changesmadereallygoaway', 'moodle');
+$PAGE->requires->js_call_amd('core_form/changechecker', 'watchFormById', ['gradetreeform']);
 
 echo $OUTPUT->footer();
 die;
-
-

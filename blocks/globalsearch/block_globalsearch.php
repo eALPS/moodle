@@ -64,26 +64,30 @@ class block_globalsearch extends block_base {
             return $this->content;
         }
 
-        $url = new moodle_url('/search/index.php');
-        $this->content->footer .= html_writer::link($url, get_string('advancedsearch', 'search'));
+        $data = [
+            'action' => new moodle_url('/search/index.php'),
+            'inputname' => 'q',
+            'searchstring' => get_string('search'),
+        ];
 
-        $this->content->text  = html_writer::start_tag('div', array('class' => 'searchform'));
-        $this->content->text .= html_writer::start_tag('form', array('action' => $url->out()));
-        $this->content->text .= html_writer::start_tag('fieldset', array('action' => 'invisiblefieldset'));
+        if ($this->page->context && $this->page->context->contextlevel !== CONTEXT_SYSTEM) {
+            $data['hiddenfields'] = (object) ['name' => 'context', 'value' => $this->page->context->id];
+        }
 
-        // Input.
-        $this->content->text .= html_writer::tag('label', get_string('search', 'search'),
-            array('for' => 'searchform_search', 'class' => 'accesshide'));
-        $inputoptions = array('id' => 'searchform_search', 'name' => 'q', 'type' => 'text', 'size' => '15');
-        $this->content->text .= html_writer::empty_tag('input', $inputoptions);
-
-        // Search button.
-        $this->content->text .= html_writer::tag('button', get_string('search', 'search'),
-            array('id' => 'searchform_button', 'type' => 'submit', 'title' => 'globalsearch'));
-        $this->content->text .= html_writer::end_tag('fieldset');
-        $this->content->text .= html_writer::end_tag('form');
-        $this->content->text .= html_writer::end_tag('div');
+        $this->content->text = $OUTPUT->render_from_template('core/search_input', $data);
 
         return $this->content;
+    }
+
+    /**
+     * This block shouldn't be added to a page if the global search advanced feature is disabled.
+     *
+     * @param moodle_page $page
+     * @return bool
+     */
+    public function can_block_be_added(moodle_page $page): bool {
+        global $CFG;
+
+        return $CFG->enableglobalsearch;
     }
 }

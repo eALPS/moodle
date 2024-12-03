@@ -24,7 +24,7 @@
 
 namespace dataformat_json;
 
-defined('MOODLE_INTERNAL') || die();
+use core_text;
 
 /**
  * JSON data format writer
@@ -41,12 +41,38 @@ class writer extends \core\dataformat\base {
     /** @var $extension */
     public $extension = ".json";
 
+    /** @var $sheetstarted */
+    public $sheetstarted = false;
+
+    /** @var $sheetdatadded */
+    public $sheetdatadded = false;
+
+    /** @var string[] $columns */
+    protected $columns = [];
+
     /**
-     * Write the start of the format
+     * Write the start of the file.
+     */
+    public function start_output() {
+        echo "[";
+    }
+
+    /**
+     * Write the start of the sheet we will be adding data to.
      *
      * @param array $columns
      */
-    public function write_header($columns) {
+    public function start_sheet($columns) {
+        $this->columns = array_map(function($column) {
+            return core_text::strtolower(clean_param($column, PARAM_ALPHANUMEXT));
+        }, $columns);
+
+        if ($this->sheetstarted) {
+            echo ",";
+        } else {
+            $this->sheetstarted = true;
+        }
+        $this->sheetdatadded = false;
         echo "[";
     }
 
@@ -57,19 +83,30 @@ class writer extends \core\dataformat\base {
      * @param int $rownum
      */
     public function write_record($record, $rownum) {
-        if ($rownum) {
+        if ($this->sheetdatadded) {
             echo ",";
         }
-        echo json_encode($record);
+
+        // Ensure our record is keyed by column names, rather than numerically.
+        $record = array_combine($this->columns, (array) $record);
+        echo json_encode($this->format_record($record), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
+        $this->sheetdatadded = true;
     }
 
     /**
-     * Write the end of the format
+     * Write the end of the sheet containing the data.
      *
      * @param array $columns
      */
-    public function write_footer($columns) {
+    public function close_sheet($columns) {
         echo "]";
     }
 
+    /**
+     * Write the end of the file.
+     */
+    public function close_output() {
+        echo "]";
+    }
 }

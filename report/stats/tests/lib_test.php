@@ -21,6 +21,7 @@
  * @copyright  2014 onwards Ankit agarwal <ankit.agrr@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later.
  */
+namespace report_stats;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -31,7 +32,7 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright  2014 onwards Ankit agarwal <ankit.agrr@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later.
  */
-class report_stats_lib_testcase extends advanced_testcase {
+class lib_test extends \advanced_testcase {
 
     /**
      * @var stdClass The user.
@@ -48,7 +49,8 @@ class report_stats_lib_testcase extends advanced_testcase {
      */
     private $tree;
 
-    public function setUp() {
+    public function setUp(): void {
+        parent::setUp();
         $this->user = $this->getDataGenerator()->create_user();
         $this->course = $this->getDataGenerator()->create_course();
         $this->tree = new \core_user\output\myprofile\tree();
@@ -58,12 +60,11 @@ class report_stats_lib_testcase extends advanced_testcase {
     /**
      * Test report_log_supports_logstore.
      */
-    public function test_report_participation_supports_logstore() {
+    public function test_report_participation_supports_logstore(): void {
         $logmanager = get_log_manager();
         $allstores = \core_component::get_plugin_list_with_class('logstore', 'log\store');
 
         $supportedstores = array(
-            'logstore_legacy' => '\logstore_legacy\log\store',
             'logstore_standard' => '\logstore_standard\log\store'
         );
 
@@ -79,7 +80,7 @@ class report_stats_lib_testcase extends advanced_testcase {
     /**
      * Tests the report_stats_myprofile_navigation() function.
      */
-    public function test_report_stats_myprofile_navigation() {
+    public function test_report_stats_myprofile_navigation(): void {
         $this->setAdminUser();
         $iscurrentuser = false;
 
@@ -87,16 +88,15 @@ class report_stats_lib_testcase extends advanced_testcase {
         set_config('enablestats', true);
 
         report_stats_myprofile_navigation($this->tree, $this->user, $iscurrentuser, $this->course);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayHasKey('stats', $nodes->getValue($this->tree));
     }
 
     /**
      * Tests the report_stats_myprofile_navigation() function when stats are disabled.
      */
-    public function test_report_stats_myprofile_navigation_stats_disabled() {
+    public function test_report_stats_myprofile_navigation_stats_disabled(): void {
         $this->setAdminUser();
         $iscurrentuser = false;
 
@@ -104,16 +104,15 @@ class report_stats_lib_testcase extends advanced_testcase {
         set_config('enablestats', false);
 
         report_stats_myprofile_navigation($this->tree, $this->user, $iscurrentuser, $this->course);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayNotHasKey('stats', $nodes->getValue($this->tree));
     }
 
     /**
      * Tests the report_stats_myprofile_navigation() function without permission.
      */
-    public function test_report_stats_myprofile_navigation_without_permission() {
+    public function test_report_stats_myprofile_navigation_without_permission(): void {
         // Try to see as a user without permission.
         $this->setUser($this->user);
         $iscurrentuser = true;
@@ -122,9 +121,8 @@ class report_stats_lib_testcase extends advanced_testcase {
         set_config('enablestats', true);
 
         report_stats_myprofile_navigation($this->tree, $this->user, $iscurrentuser, $this->course);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayNotHasKey('stats', $nodes->getValue($this->tree));
     }
 }

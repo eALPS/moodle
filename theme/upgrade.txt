@@ -1,5 +1,140 @@
+=== 4.5 Onwards ===
+
+This file has been replaced by UPGRADING.md. See MDL-81125 for further information.
+
+===
 This files describes API changes in /theme/* themes,
 information provided here is intended especially for theme designer.
+
+=== 4.4 ===
+* Theme selection is now performed using cards and modals.
+* The 'choosereadme' string for each theme is expected to be plain text. HTML content will not render when displayed in the modal.
+* Theme selector page has been moved to admin/themeselector.php (previously theme/index.php)
+* Moodleforms no longer use tag 'fieldset' for groups without labels (legends). Avoid targeting tag 'fieldset' in the theme CSS.
+
+=== 4.3 ===
+* The core_renderer::htmllize_file_tree method has been deprecated. This was missed before Moodle 2.0.
+* CSS selectors using #categoryquestions have been changed to use .question-bank-table, see question/upgrade.txt
+
+=== 4.2 ===
+* The moodle-core-popuphelp YUI modal has been removed. It has not been actively used in Moodle since 3.3. It should be replaced with appropriate ESM/AMD JavaScript.
+* The moodle-core-tooltip YUI modal has been removed. It should be replaced with appropriate ESM/AMD JavaScript.
+* The Font Awesome library has been upgraded from 4.7 to 6.3.0. The free version included in Moodle supports the solid and regular styles.
+* Device specific themes are no longer configurable in theme selection.
+
+=== 4.1 ===
+* The function core_course_renderer::course_modchooser() has been finally deprecated and can not be used anymore.
+  Please use core_course_renderer::course_activitychooser() instead.
+* $OUTPUT->favicon() now returns the URL of the configurable favicon if present.
+* The body tag include a class with module name specific for each activity E.g.: cm-type-page
+
+=== 4.0 ===
+* A new theme config 'removedprimarynavitems' allows a theme to customise primary navigation by specifying the list of items to remove.
+* A new theme config 'usescourseindex' allows a theme to specify whether it implements and uses course index.
+* A new theme setting 'unaddableblocks' allows admins to define the blocks that won't be displayed in the "Add a block" list.
+
+=== 3.11 ===
+* The classname 'viewmode-cobmined' in course/management.php has been changed to 'viewmode-combined'
+
+=== 3.10 ===
+* The Bootstrap legacy css utilities from Bootstrap 2 and 4alpha have been removed.
+The syntax for the new Bootstrap 4.5 utility classes is {property}{sides}-{breakpoint}-{size} for sm, md, lg, and xl.
+The size values are:
+1: 0.25rem
+2: 0.5rem
+3: 1rem
+4: 1.5rem
+5: 2rem
+6: 3rem
+
+In Bootstrap 4alpa a spacing utility class '.m-l-1' would mean margin-left 1rem. With the new spacing classes it should now be '.ml-3'
+
+These class names have changed:
+.row-fluid is now .row
+.text-error is now .text-danger
+
+These classes should no longer be used:
+.label .label-{type}, use .badge .badge-{type} instead
+.tag .tag-{type}, use .badge .badge-{type} instead
+.well, just set a border with .border and a background with .bg-light
+
+=== 3.9 ===
+
+* Add class .d-print-block to #page, #page-wrapper and #page content to fix Firefox printing problems
+* A function to core_renderer has been added, secure_layout_login_info. This allows the boost and classic templates to
+  display the users full name in a secure layout.
+* Secure layout in themes boost and classic have been modified to allow language selection as they now call the
+  output.secure_layout_language_menu function.
+
+=== 3.8 ===
+
+* Moodle does not produce chunked CSS anymore, instead an unique css fils is generated and served (MDL-55751). This implies:
+  * css_chunk_by_selector_count() has been removed.
+  * css_store_css(), theme_styles_get_filename() and theme_styles_get_etag() don't accept any chunk-related param anymore.
+* The PHP Less compilier has now been removed from the core library.
+  Please consider migrating your theme to use SCSS.
+* It is now possible to use sub-directories when creating mustache templates.
+  The standard rules for Level 2 namespaces also apply to templates.
+  The sub-directory used must be either an valid component, or placed inside a 'local' directory to ensure that it does not conflict with other components.
+
+    The following are all valid template names and locations in your theme:
+      theme_themename/columns2: theme/[themename]/templates/columns2.mustache
+      theme_themename/local/layouts/columns2: theme/[themename]/templates/local/layouts/columns2.mustache
+
+    The following are core templates, locations, and override locations in your theme:
+      core/modal: lib/templates/modal.mustache => theme/[themename]/templates/core/modal.mustache
+      mod_forum/forum_post: mod/forum/templates/forum_post.mustache => theme/[themename]/templates/mod_forum/forum_post.mustache
+      mod_forum/local/post/user: mod/forum/templates/local/post/user.mustache => theme/[themename]/templates/mod_forum/local/post/user.mustache
+
+    The following are _invalid_ template names and locations:
+      theme_themename/layouts/columns2: theme/[themename]/layouts/columns2.mustache
+
+=== 3.7 ===
+* The core/form_autocompelte_input template now has a `data-tags` attribute.
+* Boost theme renderer overrides have now been migrated to core.
+* Renderers that were overridden by Boost are now in Bootstrapbase
+* Core templates in Boost have now moved into core
+* Templates that were overridden by boost are now located in Bootstrapbase
+* Themes bootstrapbase, clean & more have now been removed.
+
+=== 3.6 ===
+
+* A new callback has been added to the theme layout files allowing plugins to inject their content
+  into the page. For Boost it was added as a mustache variable "{{{ output.standard_after_main_region_html }}}" in
+  templates/columns1.mustache and templates/columns2.mustache. In bootstrapbase it was added as a
+  function call "$OUTPUT->standard_after_main_region_html()" in layout/columns1.php, layout/columns2.php.
+  and layout/columns3.php. Child themes not inheriting these templates should add the function call
+  after the div containing the main content region. Please refer to the messaging drawer UI for an example of
+  making use of this new feature.
+* The body tag has various browser-specific classes for those cases where some
+  browser-sniffing is unavoidable. This used not to recognised Microsoft Edge,
+  but now it does (class 'edge'). Also, both Safari and Chrome used to be
+  class 'safari', but now there are separate classes 'safari' and 'chrome'.
+  The body's class should change to match the browser:
+  - Google Chrome (Mac & Window): The body class should change from safari to chrome.
+  - Google Chrome (Android) : The body class should change from safari, android to chrome, android.
+  - Microsoft Edge: The body class should change from safari to edge.
+  - Mobile safari: The class ios should exist, safari class should be removed.
+* Remove class .safari styling from activity chooser dialog for theme boost and bootstrapbase.
+* The following functions and classes have been finally deprecated and can not be used anymore:
+  * css_is_colour()
+  * css_is_width()
+  * css_sort_by_count()
+  * core_course_renderer::add_modchoosertoggle()
+  * class css_optimiser
+
+=== 3.4 ===
+
+* There was a mustache template login.mustache in /lib/templates/ rendering the login form
+  and a template with the same name in /theme/boost/templates/ rendering the pagelayout "login".
+  To prevent misunderstanding when overriding one of these templates in a Boost child theme,
+  the first one was renamed to loginform.mustache - see MDL-58970.
+* The Boost flat navigation nodes now have several data-attributes which let plugin developers
+  access properties from the underlying navigation nodes in the browser - see MDL-59425.
+* Navigation between activities via a previous and next link was added to Boost, Clean and Bootstrapbase. This
+  is made possible by a new function core_renderer->activity_navigation().
+* Theme designers may now place the Reset tour on this page link where required by adding an empty
+  container (e.g. <div class="tool_usertours-resettourcontainer"></div>) to their layouts.
 
 === 3.3 ===
 
@@ -124,8 +259,8 @@ information provided here is intended especially for theme designer.
 * Themes with non-fixed headers must have the .navbar class in their navbar in order for floating headers in the grader report to work - see MDL-46658.
 * To accomodate the new gradebook, use of overflow: hidden or overflow-x: hidden CSS rules on DOM elements containing the
   #user-grades table, visible at [Course administration -> Grades] is not recommended. Please use overflow: auto or
-  overflow: scroll instead, as this will handle medium to large courses with multiple activities better (more information available at https://docs.moodle.org/dev/Theme_upgrade_notes ).
-* The new user menu can be added to themes by calling $OUTPUT->user_menu(); we recommend doing so in a backwards-compatible way (see https://docs.moodle.org/dev/Theme_upgrade_notes for more information).
+  overflow: scroll instead, as this will handle medium to large courses with multiple activities better.
+* The new user menu can be added to themes by calling $OUTPUT->user_menu(); we recommend doing so in a backwards-compatible way.
 
 === 2.7 ===
 
@@ -248,7 +383,6 @@ required changes:
 * Significant changes in rendering of courses and categories listings, lots of CSS classes changed,
   several functions such as print_courses(), print_whole_category_list(), print_category_info()
   are moved to course renderer.
-  See http://docs.moodle.org/dev/Courses_lists_upgrade_to_2.5
 
 DOM changes:
 * changed the h1 title in the help popup to a h2.

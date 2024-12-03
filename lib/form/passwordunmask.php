@@ -52,16 +52,6 @@ class MoodleQuickForm_passwordunmask extends MoodleQuickForm_password {
      *              or an associative array
      */
     public function __construct($elementName=null, $elementLabel=null, $attributes=null) {
-        // no standard mform in moodle should allow autocomplete of passwords
-        if (empty($attributes)) {
-            $attributes = array('autocomplete'=>'off');
-        } else if (is_array($attributes)) {
-            $attributes['autocomplete'] = 'off';
-        } else {
-            if (strpos($attributes, 'autocomplete') === false) {
-                $attributes .= ' autocomplete="off" ';
-            }
-        }
         $this->_persistantFreeze = true;
 
         parent::__construct($elementName, $elementLabel, $attributes);
@@ -86,8 +76,25 @@ class MoodleQuickForm_passwordunmask extends MoodleQuickForm_password {
      */
     public function export_for_template(renderer_base $output) {
         $context = parent::export_for_template($output);
-        $context['valuechars'] = array_fill(0, strlen($context['value']), 'x');
+        $context['valuechars'] = array_fill(0, strlen($context['value'] ?? ''), 'x');
 
         return $context;
+    }
+
+    /**
+     * Check that there is no whitespace at the beginning and end of the password.
+     *
+     * It turned out that wrapping whitespace can easily be pasted by accident when copying the text from elsewhere.
+     * Such a mistake is very hard to debug as the whitespace is not displayed.
+     *
+     * @param string $value Submitted value.
+     * @return string|null Validation error message or null.
+     */
+    public function validateSubmitValue($value) {
+        if ($value !== null && $value !== trim($value)) {
+            return get_string('err_wrappingwhitespace', 'core_form');
+        }
+
+        return;
     }
 }

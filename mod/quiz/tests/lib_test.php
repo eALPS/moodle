@@ -22,20 +22,27 @@
  * @copyright  2008 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU Public License
  */
+namespace mod_quiz;
 
+use context_module;
+use core_external\external_api;
+use mod_quiz\quiz_settings;
 
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/mod/quiz/lib.php');
+require_once($CFG->dirroot . '/mod/quiz/tests/quiz_question_helper_test_trait.php');
 
 /**
  * @copyright  2008 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU Public License
  */
-class mod_quiz_lib_testcase extends advanced_testcase {
-    public function test_quiz_has_grades() {
-        $quiz = new stdClass();
+class lib_test extends \advanced_testcase {
+    use \quiz_question_helper_test_trait;
+
+    public function test_quiz_has_grades(): void {
+        $quiz = new \stdClass();
         $quiz->grade = '100.0000';
         $quiz->sumgrades = '100.0000';
         $this->assertTrue(quiz_has_grades($quiz));
@@ -47,8 +54,8 @@ class mod_quiz_lib_testcase extends advanced_testcase {
         $this->assertFalse(quiz_has_grades($quiz));
     }
 
-    public function test_quiz_format_grade() {
-        $quiz = new stdClass();
+    public function test_quiz_format_grade(): void {
+        $quiz = new \stdClass();
         $quiz->decimalpoints = 2;
         $this->assertEquals(quiz_format_grade($quiz, 0.12345678), format_float(0.12, 2));
         $this->assertEquals(quiz_format_grade($quiz, 0), format_float(0, 2));
@@ -57,8 +64,8 @@ class mod_quiz_lib_testcase extends advanced_testcase {
         $this->assertEquals(quiz_format_grade($quiz, 0.12345678), '0');
     }
 
-    public function test_quiz_get_grade_format() {
-        $quiz = new stdClass();
+    public function test_quiz_get_grade_format(): void {
+        $quiz = new \stdClass();
         $quiz->decimalpoints = 2;
         $this->assertEquals(quiz_get_grade_format($quiz), 2);
         $this->assertEquals($quiz->questiondecimalpoints, -1);
@@ -71,8 +78,8 @@ class mod_quiz_lib_testcase extends advanced_testcase {
         $this->assertEquals(quiz_get_grade_format($quiz), 4);
     }
 
-    public function test_quiz_format_question_grade() {
-        $quiz = new stdClass();
+    public function test_quiz_format_question_grade(): void {
+        $quiz = new \stdClass();
         $quiz->decimalpoints = 2;
         $quiz->questiondecimalpoints = 2;
         $this->assertEquals(quiz_format_question_grade($quiz, 0.12345678), format_float(0.12, 2));
@@ -92,143 +99,47 @@ class mod_quiz_lib_testcase extends advanced_testcase {
     /**
      * Test deleting a quiz instance.
      */
-    public function test_quiz_delete_instance() {
+    public function test_quiz_delete_instance(): void {
         global $SITE, $DB;
         $this->resetAfterTest(true);
         $this->setAdminUser();
 
         // Setup a quiz with 1 standard and 1 random question.
         $quizgenerator = $this->getDataGenerator()->get_plugin_generator('mod_quiz');
-        $quiz = $quizgenerator->create_instance(array('course' => $SITE->id, 'questionsperpage' => 3, 'grade' => 100.0));
+        $quiz = $quizgenerator->create_instance(['course' => $SITE->id, 'questionsperpage' => 3, 'grade' => 100.0]);
+        $context = context_module::instance($quiz->cmid);
 
         $questiongenerator = $this->getDataGenerator()->get_plugin_generator('core_question');
         $cat = $questiongenerator->create_question_category();
-        $standardq = $questiongenerator->create_question('shortanswer', null, array('category' => $cat->id));
+        $standardq = $questiongenerator->create_question('shortanswer', null, ['category' => $cat->id]);
 
         quiz_add_quiz_question($standardq->id, $quiz);
-        quiz_add_random_questions($quiz, 0, $cat->id, 1, false);
+        $this->add_random_questions($quiz->id, 0, $cat->id, 1);
 
         // Get the random question.
-        $randomq = $DB->get_record('question', array('qtype' => 'random'));
+        $randomq = $DB->get_record('question', ['qtype' => 'random']);
 
         quiz_delete_instance($quiz->id);
 
         // Check that the random question was deleted.
-        $count = $DB->count_records('question', array('id' => $randomq->id));
-        $this->assertEquals(0, $count);
+        if ($randomq) {
+            $this->assertEquals(0, $DB->count_records('question', ['id' => $randomq->id]));
+        }
         // Check that the standard question was not deleted.
-        $count = $DB->count_records('question', array('id' => $standardq->id));
-        $this->assertEquals(1, $count);
+        $this->assertEquals(1, $DB->count_records('question', ['id' => $standardq->id]));
 
         // Check that all the slots were removed.
-        $count = $DB->count_records('quiz_slots', array('quizid' => $quiz->id));
-        $this->assertEquals(0, $count);
+        $this->assertEquals(0, $DB->count_records('quiz_slots', ['quizid' => $quiz->id]));
 
         // Check that the quiz was removed.
-        $count = $DB->count_records('quiz', array('id' => $quiz->id));
-        $this->assertEquals(0, $count);
+        $this->assertEquals(0, $DB->count_records('quiz', ['id' => $quiz->id]));
+
+        // Check that any question references linked to this quiz are gone.
+        $this->assertEquals(0, $DB->count_records('question_references', ['usingcontextid' => $context->id]));
+        $this->assertEquals(0, $DB->count_records('question_set_references', ['usingcontextid' => $context->id]));
     }
 
-    /**
-     * Test checking the completion state of a quiz.
-     */
-    public function test_quiz_get_completion_state() {
-        global $CFG, $DB;
-        $this->resetAfterTest(true);
-
-        // Enable completion before creating modules, otherwise the completion data is not written in DB.
-        $CFG->enablecompletion = true;
-
-        // Create a course and student.
-        $course = $this->getDataGenerator()->create_course(array('enablecompletion' => true));
-        $passstudent = $this->getDataGenerator()->create_user();
-        $failstudent = $this->getDataGenerator()->create_user();
-        $studentrole = $DB->get_record('role', array('shortname' => 'student'));
-        $this->assertNotEmpty($studentrole);
-
-        // Enrol students.
-        $this->assertTrue($this->getDataGenerator()->enrol_user($passstudent->id, $course->id, $studentrole->id));
-        $this->assertTrue($this->getDataGenerator()->enrol_user($failstudent->id, $course->id, $studentrole->id));
-
-        // Make a scale and an outcome.
-        $scale = $this->getDataGenerator()->create_scale();
-        $data = array('courseid' => $course->id,
-                      'fullname' => 'Team work',
-                      'shortname' => 'Team work',
-                      'scaleid' => $scale->id);
-        $outcome = $this->getDataGenerator()->create_grade_outcome($data);
-
-        // Make a quiz with the outcome on.
-        $quizgenerator = $this->getDataGenerator()->get_plugin_generator('mod_quiz');
-        $data = array('course' => $course->id,
-                      'outcome_'.$outcome->id => 1,
-                      'grade' => 100.0,
-                      'questionsperpage' => 0,
-                      'sumgrades' => 1,
-                      'completion' => COMPLETION_TRACKING_AUTOMATIC,
-                      'completionpass' => 1);
-        $quiz = $quizgenerator->create_instance($data);
-        $cm = get_coursemodule_from_id('quiz', $quiz->cmid);
-
-        // Create a couple of questions.
-        $questiongenerator = $this->getDataGenerator()->get_plugin_generator('core_question');
-
-        $cat = $questiongenerator->create_question_category();
-        $question = $questiongenerator->create_question('numerical', null, array('category' => $cat->id));
-        quiz_add_quiz_question($question->id, $quiz);
-
-        $quizobj = quiz::create($quiz->id, $passstudent->id);
-
-        // Set grade to pass.
-        $item = grade_item::fetch(array('courseid' => $course->id, 'itemtype' => 'mod',
-                                        'itemmodule' => 'quiz', 'iteminstance' => $quiz->id, 'outcomeid' => null));
-        $item->gradepass = 80;
-        $item->update();
-
-        // Start the passing attempt.
-        $quba = question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj->get_context());
-        $quba->set_preferred_behaviour($quizobj->get_quiz()->preferredbehaviour);
-
-        $timenow = time();
-        $attempt = quiz_create_attempt($quizobj, 1, false, $timenow, false, $passstudent->id);
-        quiz_start_new_attempt($quizobj, $quba, $attempt, 1, $timenow);
-        quiz_attempt_save_started($quizobj, $quba, $attempt);
-
-        // Process some responses from the student.
-        $attemptobj = quiz_attempt::create($attempt->id);
-        $tosubmit = array(1 => array('answer' => '3.14'));
-        $attemptobj->process_submitted_actions($timenow, false, $tosubmit);
-
-        // Finish the attempt.
-        $attemptobj = quiz_attempt::create($attempt->id);
-        $this->assertTrue($attemptobj->has_response_to_at_least_one_graded_question());
-        $attemptobj->process_finish($timenow, false);
-
-        // Start the failing attempt.
-        $quba = question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj->get_context());
-        $quba->set_preferred_behaviour($quizobj->get_quiz()->preferredbehaviour);
-
-        $timenow = time();
-        $attempt = quiz_create_attempt($quizobj, 1, false, $timenow, false, $failstudent->id);
-        quiz_start_new_attempt($quizobj, $quba, $attempt, 1, $timenow);
-        quiz_attempt_save_started($quizobj, $quba, $attempt);
-
-        // Process some responses from the student.
-        $attemptobj = quiz_attempt::create($attempt->id);
-        $tosubmit = array(1 => array('answer' => '0'));
-        $attemptobj->process_submitted_actions($timenow, false, $tosubmit);
-
-        // Finish the attempt.
-        $attemptobj = quiz_attempt::create($attempt->id);
-        $this->assertTrue($attemptobj->has_response_to_at_least_one_graded_question());
-        $attemptobj->process_finish($timenow, false);
-
-        // Check the results.
-        $this->assertTrue(quiz_get_completion_state($course, $cm, $passstudent->id, 'return'));
-        $this->assertFalse(quiz_get_completion_state($course, $cm, $failstudent->id, 'return'));
-    }
-
-    public function test_quiz_get_user_attempts() {
+    public function test_quiz_get_user_attempts(): void {
         global $DB;
         $this->resetAfterTest();
 
@@ -256,22 +167,22 @@ class mod_quiz_lib_testcase extends advanced_testcase {
         quiz_add_quiz_question($question->id, $quiz1);
         quiz_add_quiz_question($question->id, $quiz2);
 
-        $quizobj1a = quiz::create($quiz1->id, $u1->id);
-        $quizobj1b = quiz::create($quiz1->id, $u2->id);
-        $quizobj1c = quiz::create($quiz1->id, $u3->id);
-        $quizobj1d = quiz::create($quiz1->id, $u4->id);
-        $quizobj2a = quiz::create($quiz2->id, $u1->id);
+        $quizobj1a = quiz_settings::create($quiz1->id, $u1->id);
+        $quizobj1b = quiz_settings::create($quiz1->id, $u2->id);
+        $quizobj1c = quiz_settings::create($quiz1->id, $u3->id);
+        $quizobj1d = quiz_settings::create($quiz1->id, $u4->id);
+        $quizobj2a = quiz_settings::create($quiz2->id, $u1->id);
 
         // Set attempts.
-        $quba1a = question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj1a->get_context());
+        $quba1a = \question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj1a->get_context());
         $quba1a->set_preferred_behaviour($quizobj1a->get_quiz()->preferredbehaviour);
-        $quba1b = question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj1b->get_context());
+        $quba1b = \question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj1b->get_context());
         $quba1b->set_preferred_behaviour($quizobj1b->get_quiz()->preferredbehaviour);
-        $quba1c = question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj1c->get_context());
+        $quba1c = \question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj1c->get_context());
         $quba1c->set_preferred_behaviour($quizobj1c->get_quiz()->preferredbehaviour);
-        $quba1d = question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj1d->get_context());
+        $quba1d = \question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj1d->get_context());
         $quba1d->set_preferred_behaviour($quizobj1d->get_quiz()->preferredbehaviour);
-        $quba2a = question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj2a->get_context());
+        $quba2a = \question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj2a->get_context());
         $quba2a->set_preferred_behaviour($quizobj2a->get_quiz()->preferredbehaviour);
 
         $timenow = time();
@@ -304,7 +215,7 @@ class mod_quiz_lib_testcase extends advanced_testcase {
         $attemptobj->process_abandon($timenow, true);
 
         // User 1 attempts the quiz three times (abandon, finish, in progress).
-        $quba2a = question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj2a->get_context());
+        $quba2a = \question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj2a->get_context());
         $quba2a->set_preferred_behaviour($quizobj2a->get_quiz()->preferredbehaviour);
 
         $attempt = quiz_create_attempt($quizobj2a, 1, false, $timenow, false, $u1->id);
@@ -313,7 +224,7 @@ class mod_quiz_lib_testcase extends advanced_testcase {
         $attemptobj = quiz_attempt::create($attempt->id);
         $attemptobj->process_abandon($timenow, true);
 
-        $quba2a = question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj2a->get_context());
+        $quba2a = \question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj2a->get_context());
         $quba2a->set_preferred_behaviour($quizobj2a->get_quiz()->preferredbehaviour);
 
         $attempt = quiz_create_attempt($quizobj2a, 2, false, $timenow, false, $u1->id);
@@ -322,7 +233,7 @@ class mod_quiz_lib_testcase extends advanced_testcase {
         $attemptobj = quiz_attempt::create($attempt->id);
         $attemptobj->process_finish($timenow, false);
 
-        $quba2a = question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj2a->get_context());
+        $quba2a = \question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj2a->get_context());
         $quba2a->set_preferred_behaviour($quizobj2a->get_quiz()->preferredbehaviour);
 
         $attempt = quiz_create_attempt($quizobj2a, 3, false, $timenow, false, $u1->id);
@@ -449,4 +360,628 @@ class mod_quiz_lib_testcase extends advanced_testcase {
         $this->assertEquals($quiz2->id, $attempt->quiz);
     }
 
+    /**
+     * Test for quiz_get_group_override_priorities().
+     */
+    public function test_quiz_get_group_override_priorities(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $dg = $this->getDataGenerator();
+        $quizgen = $dg->get_plugin_generator('mod_quiz');
+        $course = $dg->create_course();
+
+        $quiz = $quizgen->create_instance(['course' => $course->id, 'sumgrades' => 2]);
+
+        $this->assertNull(quiz_get_group_override_priorities($quiz->id));
+
+        $group1 = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $group2 = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+
+        $now = 100;
+        $override1 = (object)[
+            'quiz' => $quiz->id,
+            'groupid' => $group1->id,
+            'timeopen' => $now,
+            'timeclose' => $now + 20
+        ];
+        $DB->insert_record('quiz_overrides', $override1);
+
+        $override2 = (object)[
+            'quiz' => $quiz->id,
+            'groupid' => $group2->id,
+            'timeopen' => $now - 10,
+            'timeclose' => $now + 10
+        ];
+        $DB->insert_record('quiz_overrides', $override2);
+
+        $priorities = quiz_get_group_override_priorities($quiz->id);
+        $this->assertNotEmpty($priorities);
+
+        $openpriorities = $priorities['open'];
+        // Override 2's time open has higher priority since it is sooner than override 1's.
+        $this->assertEquals(2, $openpriorities[$override1->timeopen]);
+        $this->assertEquals(1, $openpriorities[$override2->timeopen]);
+
+        $closepriorities = $priorities['close'];
+        // Override 1's time close has higher priority since it is later than override 2's.
+        $this->assertEquals(1, $closepriorities[$override1->timeclose]);
+        $this->assertEquals(2, $closepriorities[$override2->timeclose]);
+    }
+
+    public function test_quiz_core_calendar_provide_event_action_open(): void {
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+        // Create a student and enrol into the course.
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        // Create a quiz.
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id,
+            'timeopen' => time() - DAYSECS, 'timeclose' => time() + DAYSECS]);
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $quiz->id, QUIZ_EVENT_TYPE_OPEN);
+        // Now, log in as student.
+        $this->setUser($student);
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event.
+        $actionevent = mod_quiz_core_calendar_provide_event_action($event, $factory);
+
+        // Confirm the event was decorated.
+        $this->assertInstanceOf('\core_calendar\local\event\value_objects\action', $actionevent);
+        $this->assertEquals(get_string('attemptquiznow', 'quiz'), $actionevent->get_name());
+        $this->assertInstanceOf('moodle_url', $actionevent->get_url());
+        $this->assertEquals(1, $actionevent->get_item_count());
+        $this->assertTrue($actionevent->is_actionable());
+    }
+
+    public function test_quiz_core_calendar_provide_event_action_open_for_user(): void {
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+        // Create a student and enrol into the course.
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        // Create a quiz.
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id,
+            'timeopen' => time() - DAYSECS, 'timeclose' => time() + DAYSECS]);
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $quiz->id, QUIZ_EVENT_TYPE_OPEN);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event for the student.
+        $actionevent = mod_quiz_core_calendar_provide_event_action($event, $factory, $student->id);
+
+        // Confirm the event was decorated.
+        $this->assertInstanceOf('\core_calendar\local\event\value_objects\action', $actionevent);
+        $this->assertEquals(get_string('attemptquiznow', 'quiz'), $actionevent->get_name());
+        $this->assertInstanceOf('moodle_url', $actionevent->get_url());
+        $this->assertEquals(1, $actionevent->get_item_count());
+        $this->assertTrue($actionevent->is_actionable());
+    }
+
+    public function test_quiz_core_calendar_provide_event_action_closed(): void {
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a quiz.
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id,
+            'timeclose' => time() - DAYSECS]);
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $quiz->id, QUIZ_EVENT_TYPE_CLOSE);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Confirm the result was null.
+        $this->assertNull(mod_quiz_core_calendar_provide_event_action($event, $factory));
+    }
+
+    public function test_quiz_core_calendar_provide_event_action_closed_for_user(): void {
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a student.
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        // Create a quiz.
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id,
+            'timeclose' => time() - DAYSECS]);
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $quiz->id, QUIZ_EVENT_TYPE_CLOSE);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Confirm the result was null.
+        $this->assertNull(mod_quiz_core_calendar_provide_event_action($event, $factory, $student->id));
+    }
+
+    public function test_quiz_core_calendar_provide_event_action_open_in_future(): void {
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+        // Create a student and enrol into the course.
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        // Create a quiz.
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id,
+            'timeopen' => time() + DAYSECS]);
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $quiz->id, QUIZ_EVENT_TYPE_CLOSE);
+        // Now, log in as student.
+        $this->setUser($student);
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event.
+        $actionevent = mod_quiz_core_calendar_provide_event_action($event, $factory);
+
+        // Confirm the event was decorated.
+        $this->assertInstanceOf('\core_calendar\local\event\value_objects\action', $actionevent);
+        $this->assertEquals(get_string('attemptquiznow', 'quiz'), $actionevent->get_name());
+        $this->assertInstanceOf('moodle_url', $actionevent->get_url());
+        $this->assertEquals(1, $actionevent->get_item_count());
+        $this->assertFalse($actionevent->is_actionable());
+    }
+
+    public function test_quiz_core_calendar_provide_event_action_open_in_future_for_user(): void {
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+        // Create a student and enrol into the course.
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        // Create a quiz.
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id,
+            'timeopen' => time() + DAYSECS]);
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $quiz->id, QUIZ_EVENT_TYPE_CLOSE);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event for the student.
+        $actionevent = mod_quiz_core_calendar_provide_event_action($event, $factory, $student->id);
+
+        // Confirm the event was decorated.
+        $this->assertInstanceOf('\core_calendar\local\event\value_objects\action', $actionevent);
+        $this->assertEquals(get_string('attemptquiznow', 'quiz'), $actionevent->get_name());
+        $this->assertInstanceOf('moodle_url', $actionevent->get_url());
+        $this->assertEquals(1, $actionevent->get_item_count());
+        $this->assertFalse($actionevent->is_actionable());
+    }
+
+    public function test_quiz_core_calendar_provide_event_action_no_capability(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a student.
+        $student = $this->getDataGenerator()->create_user();
+        $studentrole = $DB->get_record('role', ['shortname' => 'student']);
+
+        // Enrol student.
+        $this->assertTrue($this->getDataGenerator()->enrol_user($student->id, $course->id, $studentrole->id));
+
+        // Create a quiz.
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id]);
+
+        // Remove the permission to attempt or review the quiz for the student role.
+        $coursecontext = \context_course::instance($course->id);
+        assign_capability('mod/quiz:reviewmyattempts', CAP_PROHIBIT, $studentrole->id, $coursecontext);
+        assign_capability('mod/quiz:attempt', CAP_PROHIBIT, $studentrole->id, $coursecontext);
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $quiz->id, QUIZ_EVENT_TYPE_OPEN);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Set current user to the student.
+        $this->setUser($student);
+
+        // Confirm null is returned.
+        $this->assertNull(mod_quiz_core_calendar_provide_event_action($event, $factory));
+    }
+
+    public function test_quiz_core_calendar_provide_event_action_no_capability_for_user(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a student.
+        $student = $this->getDataGenerator()->create_user();
+        $studentrole = $DB->get_record('role', ['shortname' => 'student']);
+
+        // Enrol student.
+        $this->assertTrue($this->getDataGenerator()->enrol_user($student->id, $course->id, $studentrole->id));
+
+        // Create a quiz.
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id]);
+
+        // Remove the permission to attempt or review the quiz for the student role.
+        $coursecontext = \context_course::instance($course->id);
+        assign_capability('mod/quiz:reviewmyattempts', CAP_PROHIBIT, $studentrole->id, $coursecontext);
+        assign_capability('mod/quiz:attempt', CAP_PROHIBIT, $studentrole->id, $coursecontext);
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $quiz->id, QUIZ_EVENT_TYPE_OPEN);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Confirm null is returned.
+        $this->assertNull(mod_quiz_core_calendar_provide_event_action($event, $factory, $student->id));
+    }
+
+    public function test_quiz_core_calendar_provide_event_action_already_finished(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a student.
+        $student = $this->getDataGenerator()->create_user();
+        $studentrole = $DB->get_record('role', ['shortname' => 'student']);
+
+        // Enrol student.
+        $this->assertTrue($this->getDataGenerator()->enrol_user($student->id, $course->id, $studentrole->id));
+
+        // Create a quiz.
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id,
+            'sumgrades' => 1]);
+
+        // Add a question to the quiz.
+        $questiongenerator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $cat = $questiongenerator->create_question_category();
+        $question = $questiongenerator->create_question('numerical', null, ['category' => $cat->id]);
+        quiz_add_quiz_question($question->id, $quiz);
+
+        // Get the quiz object.
+        $quizobj = quiz_settings::create($quiz->id, $student->id);
+
+        // Create an attempt for the student in the quiz.
+        $timenow = time();
+        $attempt = quiz_create_attempt($quizobj, 1, false, $timenow, false, $student->id);
+        $quba = \question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj->get_context());
+        $quba->set_preferred_behaviour($quizobj->get_quiz()->preferredbehaviour);
+        quiz_start_new_attempt($quizobj, $quba, $attempt, 1, $timenow);
+        quiz_attempt_save_started($quizobj, $quba, $attempt);
+
+        // Finish the attempt.
+        $attemptobj = quiz_attempt::create($attempt->id);
+        $attemptobj->process_finish($timenow, false);
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $quiz->id, QUIZ_EVENT_TYPE_OPEN);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Set current user to the student.
+        $this->setUser($student);
+
+        // Confirm null is returned.
+        $this->assertNull(mod_quiz_core_calendar_provide_event_action($event, $factory));
+    }
+
+    public function test_quiz_core_calendar_provide_event_action_already_finished_for_user(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create a student.
+        $student = $this->getDataGenerator()->create_user();
+        $studentrole = $DB->get_record('role', ['shortname' => 'student']);
+
+        // Enrol student.
+        $this->assertTrue($this->getDataGenerator()->enrol_user($student->id, $course->id, $studentrole->id));
+
+        // Create a quiz.
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id,
+            'sumgrades' => 1]);
+
+        // Add a question to the quiz.
+        $questiongenerator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $cat = $questiongenerator->create_question_category();
+        $question = $questiongenerator->create_question('numerical', null, ['category' => $cat->id]);
+        quiz_add_quiz_question($question->id, $quiz);
+
+        // Get the quiz object.
+        $quizobj = quiz_settings::create($quiz->id, $student->id);
+
+        // Create an attempt for the student in the quiz.
+        $timenow = time();
+        $attempt = quiz_create_attempt($quizobj, 1, false, $timenow, false, $student->id);
+        $quba = \question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj->get_context());
+        $quba->set_preferred_behaviour($quizobj->get_quiz()->preferredbehaviour);
+        quiz_start_new_attempt($quizobj, $quba, $attempt, 1, $timenow);
+        quiz_attempt_save_started($quizobj, $quba, $attempt);
+
+        // Finish the attempt.
+        $attemptobj = quiz_attempt::create($attempt->id);
+        $attemptobj->process_finish($timenow, false);
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $quiz->id, QUIZ_EVENT_TYPE_OPEN);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Confirm null is returned.
+        $this->assertNull(mod_quiz_core_calendar_provide_event_action($event, $factory, $student->id));
+    }
+
+    public function test_quiz_core_calendar_provide_event_action_already_completed(): void {
+        $this->resetAfterTest();
+        set_config('enablecompletion', 1);
+        $this->setAdminUser();
+
+        // Create the activity.
+        $course = $this->getDataGenerator()->create_course(['enablecompletion' => 1]);
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id],
+            ['completion' => 2, 'completionview' => 1, 'completionexpected' => time() + DAYSECS]);
+
+        // Get some additional data.
+        $cm = get_coursemodule_from_instance('quiz', $quiz->id);
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $quiz->id,
+            \core_completion\api::COMPLETION_EVENT_TYPE_DATE_COMPLETION_EXPECTED);
+
+        // Mark the activity as completed.
+        $completion = new \completion_info($course);
+        $completion->set_module_viewed($cm);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event.
+        $actionevent = mod_quiz_core_calendar_provide_event_action($event, $factory);
+
+        // Ensure result was null.
+        $this->assertNull($actionevent);
+    }
+
+    public function test_quiz_core_calendar_provide_event_action_already_completed_for_user(): void {
+        $this->resetAfterTest();
+        set_config('enablecompletion', 1);
+        $this->setAdminUser();
+
+        // Create the activity.
+        $course = $this->getDataGenerator()->create_course(['enablecompletion' => 1]);
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id],
+            ['completion' => 2, 'completionview' => 1, 'completionexpected' => time() + DAYSECS]);
+
+        // Enrol a student in the course.
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        // Get some additional data.
+        $cm = get_coursemodule_from_instance('quiz', $quiz->id);
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $quiz->id,
+            \core_completion\api::COMPLETION_EVENT_TYPE_DATE_COMPLETION_EXPECTED);
+
+        // Mark the activity as completed for the student.
+        $completion = new \completion_info($course);
+        $completion->set_module_viewed($cm, $student->id);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event for the student.
+        $actionevent = mod_quiz_core_calendar_provide_event_action($event, $factory, $student->id);
+
+        // Ensure result was null.
+        $this->assertNull($actionevent);
+    }
+
+    /**
+     * Creates an action event.
+     *
+     * @param int $courseid
+     * @param int $instanceid The quiz id.
+     * @param string $eventtype The event type. eg. QUIZ_EVENT_TYPE_OPEN.
+     * @return bool|calendar_event
+     */
+    private function create_action_event($courseid, $instanceid, $eventtype) {
+        $event = new \stdClass();
+        $event->name = 'Calendar event';
+        $event->modulename  = 'quiz';
+        $event->courseid = $courseid;
+        $event->instance = $instanceid;
+        $event->type = CALENDAR_EVENT_TYPE_ACTION;
+        $event->eventtype = $eventtype;
+        $event->timestart = time();
+
+        return \calendar_event::create($event);
+    }
+
+    /**
+     * Test the callback responsible for returning the completion rule descriptions.
+     * This function should work given either an instance of the module (cm_info), such as when checking the active rules,
+     * or if passed a stdClass of similar structure, such as when checking the the default completion settings for a mod type.
+     */
+    public function test_mod_quiz_completion_get_active_rule_descriptions(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // Two activities, both with automatic completion. One has the 'completionsubmit' rule, one doesn't.
+        $course = $this->getDataGenerator()->create_course(['enablecompletion' => 2]);
+        $quiz1 = $this->getDataGenerator()->create_module('quiz', [
+            'course' => $course->id,
+            'completion' => 2,
+            'completionusegrade' => 1,
+            'completionpassgrade' => 1,
+            'completionattemptsexhausted' => 1,
+        ]);
+        $quiz2 = $this->getDataGenerator()->create_module('quiz', [
+            'course' => $course->id,
+            'completion' => 2,
+            'completionusegrade' => 0
+        ]);
+        $cm1 = \cm_info::create(get_coursemodule_from_instance('quiz', $quiz1->id));
+        $cm2 = \cm_info::create(get_coursemodule_from_instance('quiz', $quiz2->id));
+
+        // Data for the stdClass input type.
+        // This type of input would occur when checking the default completion rules for an activity type, where we don't have
+        // any access to cm_info, rather the input is a stdClass containing completion and customdata attributes, just like cm_info.
+        $moddefaults = new \stdClass();
+        $moddefaults->customdata = ['customcompletionrules' => [
+            'completionattemptsexhausted' => 1,
+        ]];
+        $moddefaults->completion = 2;
+
+        $activeruledescriptions = [
+            get_string('completionpassorattemptsexhausteddesc', 'quiz'),
+        ];
+        $this->assertEquals(mod_quiz_get_completion_active_rule_descriptions($cm1), $activeruledescriptions);
+        $this->assertEquals(mod_quiz_get_completion_active_rule_descriptions($cm2), []);
+        $this->assertEquals(mod_quiz_get_completion_active_rule_descriptions($moddefaults), $activeruledescriptions);
+        $this->assertEquals(mod_quiz_get_completion_active_rule_descriptions(new \stdClass()), []);
+    }
+
+    /**
+     * A user who does not have capabilities to add events to the calendar should be able to create a quiz.
+     */
+    public function test_creation_with_no_calendar_capabilities(): void {
+        $this->resetAfterTest();
+        $course = self::getDataGenerator()->create_course();
+        $context = \context_course::instance($course->id);
+        $user = self::getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        $roleid = self::getDataGenerator()->create_role();
+        self::getDataGenerator()->role_assign($roleid, $user->id, $context->id);
+        assign_capability('moodle/calendar:manageentries', CAP_PROHIBIT, $roleid, $context, true);
+        $generator = self::getDataGenerator()->get_plugin_generator('mod_quiz');
+        // Create an instance as a user without the calendar capabilities.
+        $this->setUser($user);
+        $time = time();
+        $params = [
+            'course' => $course->id,
+            'timeopen' => $time + 200,
+            'timeclose' => $time + 2000,
+        ];
+        $generator->create_instance($params);
+    }
+
+    /**
+     * Data provider for summarise_response() test cases.
+     *
+     * @return array List of data sets (test cases)
+     */
+    public static function mod_quiz_inplace_editable_provider(): array {
+        return [
+            'set to A1' => [1, 'A1'],
+            'set with HTML characters' => [2, 'A & &amp; <-:'],
+            'set to integer' => [3, '3'],
+            'set to blank' => [4, ''],
+            'set with Unicode characters' => [1, 'L\'Aina Lluís^'],
+            'set with Unicode at the truncation point' => [1, '123456789012345碁'],
+            'set with HTML Char at the truncation point' => [1, '123456789012345>'],
+        ];
+    }
+
+    /**
+     * Test customised and automated question numbering for a given slot number and customised value.
+     *
+     * @dataProvider mod_quiz_inplace_editable_provider
+     * @param int $slotnumber
+     * @param string $newvalue
+     * @covers ::mod_quiz_inplace_editable
+     */
+    public function test_mod_quiz_inplace_editable(int $slotnumber, string $newvalue): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/lib/external/externallib.php');
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+        $course = self::getDataGenerator()->create_course();
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id, 'sumgrades' => 1]);
+        $cm = get_coursemodule_from_id('quiz', $quiz->cmid);
+
+        // Add few questions to the quiz.
+        $questiongenerator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $cat = $questiongenerator->create_question_category();
+
+        $question = $questiongenerator->create_question('truefalse', null, ['category' => $cat->id]);
+        quiz_add_quiz_question($question->id, $quiz);
+
+        $question = $questiongenerator->create_question('shortanswer', null, ['category' => $cat->id]);
+        quiz_add_quiz_question($question->id, $quiz);
+
+        $question = $questiongenerator->create_question('multichoice', null, ['category' => $cat->id]);
+        quiz_add_quiz_question($question->id, $quiz);
+
+        $question = $questiongenerator->create_question('numerical', null, ['category' => $cat->id]);
+        quiz_add_quiz_question($question->id, $quiz);
+
+        // Create the quiz object.
+        $quizobj = new quiz_settings($quiz, $cm, $course);
+        $structure = $quizobj->get_structure();
+
+        $slots = $structure->get_slots();
+        $this->assertEquals(4, count($slots));
+
+        $slotid = $structure->get_slot_id_for_slot($slotnumber);
+        $inplaceeditable = mod_quiz_inplace_editable('slotdisplaynumber', $slotid, $newvalue);
+        $result = \core_external::update_inplace_editable('mod_quiz', 'slotdisplaynumber', $slotid, $newvalue);
+        $result = external_api::clean_returnvalue(\core_external::update_inplace_editable_returns(), $result);
+
+        $this->assertEquals(count((array) $inplaceeditable), count($result));
+        $this->assertEquals($slotid, $result['itemid']);
+        if ($newvalue === '' || is_null($newvalue)) {
+            // Check against default.
+            $this->assertEquals($slotnumber, $result['displayvalue']);
+            $this->assertEquals($slotnumber, $result['value']);
+        } else {
+            // Check against the custom number.
+            $this->assertEquals(s($newvalue), $result['displayvalue']);
+            $this->assertEquals($newvalue, $result['value']);
+        }
+    }
 }

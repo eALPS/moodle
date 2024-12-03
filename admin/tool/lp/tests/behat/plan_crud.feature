@@ -25,11 +25,12 @@ Feature: Manage plearning plan
     Given the following lp "templates" exist:
       | shortname | description |
       | Science template | science template description |
-    And I follow "Home"
+    And I am on homepage
     And I navigate to "Competencies > Learning plan templates" in site administration
     And I click on ".template-userplans" "css_element" in the "Science template" "table_row"
-    And I click on ".form-autocomplete-downarrow" "css_element"
-    And I click on "Admin" item in the autocomplete list
+    And I open the autocomplete suggestions list
+    And I click on "Admin User" item in the autocomplete list
+    And I press the escape key
     When I click on "Create learning plans" "button"
     Then I should see "A learning plan was created"
     And I should see "Admin User" in the "Science template" "table_row"
@@ -49,14 +50,13 @@ Feature: Manage plearning plan
       | user     | cohort |
       | student-plan1 | COHORTPLAN |
       | student-plan2 | COHORTPLAN |
-    And I follow "Home"
+    And I am on homepage
     And I navigate to "Competencies > Learning plan templates" in site administration
     And I click on ".template-cohorts" "css_element" in the "Science template cohort" "table_row"
-    And I click on ".form-autocomplete-downarrow" "css_element"
-    And I click on "cohort plan" item in the autocomplete list
+    And I set the field "Select cohorts to sync" to "cohort plan"
     When I click on "Add cohorts" "button"
     Then I should see "2 learning plans were created."
-    And I follow "Learning plan templates"
+    And I navigate to "Competencies > Learning plan templates" in site administration
     And I click on ".template-userplans" "css_element" in the "Science template cohort" "table_row"
     And I should see "Student 1"
     And I should see "Student 2"
@@ -94,6 +94,7 @@ Feature: Manage plearning plan
     And I click on "Delete" of edit menu in the "comp1" row
     And "Confirm" "dialogue" should be visible
     And I click on "Confirm" "button"
+    And I wait until the page is ready
     And "comp1" "table_row" should not exist
 
   Scenario: Edit a learning plan
@@ -121,8 +122,40 @@ Feature: Manage plearning plan
     And "Confirm" "dialogue" should be visible
     And "Delete" "button" should exist in the "Confirm" "dialogue"
     And "Cancel" "button" should exist in the "Confirm" "dialogue"
-    And I click on "Cancel" "button"
+    And I click on "Cancel" "button" in the "Confirm" "dialogue"
     And I click on "Delete" of edit menu in the "Science plan Year-4" row
     And "Confirm" "dialogue" should be visible
-    When I click on "Delete" "button"
+    When I click on "Delete" "button" in the "Confirm" "dialogue"
+    And I wait until the page is ready
     Then I should not see "Science plan Year-4"
+
+  Scenario: See a learning plan from a course
+    Given the following lp "plans" exist:
+      | name | user | description |
+      | Science plan Year-manage | admin | science plan description |
+    And the following lp "frameworks" exist:
+      | shortname | idnumber |
+      | Framework 1 | sc-y-2 |
+    And the following lp "competencies" exist:
+      | shortname | framework |
+      | comp1 | sc-y-2 |
+      | comp2 | sc-y-2 |
+    And I follow "Learning plans"
+    And I should see "Science plan Year-manage"
+    And I follow "Science plan Year-manage"
+    And I should see "Add competency"
+    And I press "Add competency"
+    And "Competency picker" "dialogue" should be visible
+    And I select "comp1" of the competency tree
+    When I click on "Add" "button" in the "Competency picker" "dialogue"
+    Then "comp1" "table_row" should exist
+    And I create a course with:
+      | Course full name | New course fullname |
+      | Course short name | New course shortname |
+    And I navigate to "Competencies" in current page administration
+    And I press "Add competencies to course"
+    And "Competency picker" "dialogue" should be visible
+    And I select "comp1" of the competency tree
+    And I click on "Add" "button" in the "Competency picker" "dialogue"
+    And I should see "Learning plans"
+    And I should see "Science plan Year-manage"

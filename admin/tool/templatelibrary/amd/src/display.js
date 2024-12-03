@@ -17,7 +17,6 @@
  * This module adds ajax display functions to the template library page.
  *
  * @module     tool_templatelibrary/display
- * @package    tool_templatelibrary
  * @copyright  2015 Damyon Wiese <damyon@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -119,14 +118,15 @@ define(['jquery', 'core/ajax', 'core/log', 'core/notification', 'core/templates'
     var loadTemplate = function(templateName) {
         var parts = templateName.split('/');
         var component = parts.shift();
-        var name = parts.shift();
+        var name = parts.join('/');
 
         var promises = ajax.call([{
             methodname: 'core_output_load_template',
             args: {
                     component: component,
                     template: name,
-                    themename: config.theme
+                    themename: config.theme,
+                    includecomments: true
             }
         }, {
             methodname: 'tool_templatelibrary_load_canonical_template',

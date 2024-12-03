@@ -29,6 +29,9 @@ class admin_setting_configtext_trim_lower extends admin_setting_configtext {
     /* @var boolean whether to lowercase the value or not before writing in to the db */
     private $lowercase;
 
+    /**  @var bool To store enable/disabled status of the input field. */
+    protected $enabled;
+
     /**
      * Constructor: uses parent::__construct
      *
@@ -200,7 +203,7 @@ class enrol_ldap_admin_setting_category extends admin_setting_configselect {
             return true;
         }
 
-        $this->choices = make_categories_options();
+        $this->choices = core_course_category::make_categories_list('', 0, ' / ');
         return true;
     }
 }

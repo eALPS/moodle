@@ -101,9 +101,10 @@ function tool_lp_extend_navigation_category_settings($navigation, $coursecategor
                                                 $path,
                                                 navigation_node::TYPE_SETTING,
                                                 null,
-                                                null,
+                                                'learningplantemplates',
                                                 new pix_icon('i/competencies', ''));
         if (isset($settingsnode)) {
+            $settingsnode->set_force_into_more_menu(true);
             $navigation->add_node($settingsnode);
         }
     }
@@ -116,9 +117,10 @@ function tool_lp_extend_navigation_category_settings($navigation, $coursecategor
                                                 $path,
                                                 navigation_node::TYPE_SETTING,
                                                 null,
-                                                null,
+                                                'competencyframeworks',
                                                 new pix_icon('i/competencies', ''));
         if (isset($settingsnode)) {
+            $settingsnode->set_force_into_more_menu(true);
             $navigation->add_node($settingsnode);
         }
     }
@@ -159,6 +161,12 @@ function tool_lp_coursemodule_standard_elements($formwrapper, $mform) {
                                          'tool_lp_course_competency_rule_form_element');
     // Reuse the same options.
     $mform->addElement('course_competency_rule', 'competency_rule', get_string('uponcoursemodulecompletion', 'tool_lp'), $options);
+
+    $overrideelementfile = "$CFG->dirroot/$CFG->admin/tool/lp/classes/course_competency_overridegrade_form_element.php";
+    MoodleQuickForm::registerElementType('course_competency_overridegrade', $overrideelementfile,
+                                         'tool_lp_course_competency_overridegrade_form_element');
+    $mform->addElement('course_competency_overridegrade', 'override_grade', get_string('overridegrade', 'tool_lp'), $options);
+    $mform->hideIf('override_grade', 'competency_rule', 'noteq', \core_competency\competency::OUTCOME_COMPLETE + 1);
 }
 
 /**
@@ -199,12 +207,92 @@ function tool_lp_coursemodule_edit_post_actions($data, $course) {
     }
 
     if (isset($data->competency_rule)) {
+        $overridegrade = isset($data->override_grade) ? $data->override_grade : false;
+
         // Now update the rules for each course_module_competency.
         $current = \core_competency\api::list_course_module_competencies_in_course_module($data->coursemodule);
         foreach ($current as $coursemodulecompetency) {
-            \core_competency\api::set_course_module_competency_ruleoutcome($coursemodulecompetency, $data->competency_rule);
+            \core_competency\api::set_course_module_competency_ruleoutcome($coursemodulecompetency, $data->competency_rule,
+                $overridegrade);
         }
     }
 
     return $data;
+}
+
+/**
+ * Map icons for font-awesome themes.
+ */
+function tool_lp_get_fontawesome_icon_map() {
+    return [
+        'tool_lp:url' => 'fa-arrow-up-right-from-square',
+    ];
+}
+
+/**
+ * Render a short bit of information about a competency.
+ *
+ * @param \core_competency\competency $competency The competency to show.
+ * @param \core_competency\competency_framework $framework The competency framework.
+ * @param boolean $includerelated If true, show related competencies.
+ * @param boolean $includecourses If true, show courses using this competency.
+ * @param boolean $skipenabled If true, show this competency even if competencies are disabled.
+ * @return string The html summary for the competency.
+ */
+function tool_lp_render_competency_summary(\core_competency\competency $competency,
+                                           \core_competency\competency_framework $framework,
+                                           $includerelated,
+                                           $includecourses,
+                                           $skipenabled = false) {
+    global $PAGE;
+
+    if (!$skipenabled && !get_config('core_competency', 'enabled')) {
+        return;
+    }
+
+    $summary = new \tool_lp\output\competency_summary($competency, $framework, $includerelated, $includecourses);
+
+    $output = $PAGE->get_renderer('tool_lp');
+
+    return $output->render($summary);
+}
+
+/**
+ * Inject a course competency picker into the form.
+ *
+ * @param MoodleQuickForm $mform The actual form object (required to modify the form).
+ * @param integer $courseid - SITEID or a course id
+ * @param context $context - The page context
+ * @param string $elementname - The name of the form element to create
+ */
+function tool_lp_competency_picker($mform, $courseid, $context, $elementname) {
+    global $CFG, $COURSE;
+
+    if (!get_config('core_competency', 'enabled')) {
+        return;
+    }
+
+    if ($courseid == SITEID) {
+        if (!has_capability('moodle/competency:competencymanage', $context)) {
+            return;
+        }
+
+        MoodleQuickForm::registerElementType('site_competencies',
+                                             "$CFG->dirroot/$CFG->admin/tool/lp/classes/site_competencies_form_element.php",
+                                             'tool_lp_site_competencies_form_element');
+        $mform->addElement('site_competencies', $elementname);
+    } else {
+        if (!has_capability('moodle/competency:coursecompetencymanage', $context)) {
+            return;
+        }
+
+        MoodleQuickForm::registerElementType('course_competencies',
+                                             "$CFG->dirroot/$CFG->admin/tool/lp/classes/course_competencies_form_element.php",
+                                             'tool_lp_course_competencies_form_element');
+        $options = array(
+            'courseid' => $COURSE->id
+        );
+        $mform->addElement('course_competencies', $elementname, get_string('modcompetencies', 'tool_lp'), $options);
+    }
+    $mform->setType($elementname, PARAM_SEQUENCE);
 }

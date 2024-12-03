@@ -62,8 +62,10 @@ class media_youtube_plugin extends core_media_player_external {
     }
 
     protected function embed_external(moodle_url $url, $name, $width, $height, $options) {
+        global $OUTPUT;
+        $nocookie = get_config('media_youtube', 'nocookie');
 
-        $info = trim($name);
+        $info = trim($name ?? '');
         if (empty($info) or strpos($info, 'http') === 0) {
             $info = get_string('pluginname', 'media_youtube');
         }
@@ -71,38 +73,60 @@ class media_youtube_plugin extends core_media_player_external {
 
         self::pick_video_size($width, $height);
 
-        if ($this->isplaylist) {
+        // Template context.
+        $context = [
+                'width' => $width,
+                'height' => $height,
+                'title' => $info
+        ];
 
+        if ($this->isplaylist) {
             $site = $this->matches[1];
             $playlist = $this->matches[3];
 
-            return <<<OET
-<span class="mediaplugin mediaplugin_youtube">
-<iframe width="$width" height="$height" src="https://$site/embed/videoseries?list=$playlist" frameborder="0" allowfullscreen="1"></iframe>
-</span>
-OET;
-        } else {
+            $params = ['list' => $playlist];
 
+            // Handle no cookie option.
+            if (!$nocookie) {
+                $embedurl = new moodle_url("https://$site/embed/videoseries", $params);
+            } else {
+                $embedurl = new moodle_url('https://www.youtube-nocookie.com/embed/videoseries', $params );
+            }
+            $context['embedurl'] = $embedurl->out(false);
+
+            // Return the rendered template.
+            return $OUTPUT->render_from_template('media_youtube/embed', $context);
+
+        } else {
             $videoid = end($this->matches);
-            $params = '';
+            $params = [];
             $start = self::get_start_time($url);
             if ($start > 0) {
-                $params .= "start=$start&amp;";
+                $params['start'] = $start;
             }
 
             $listid = $url->param('list');
             // Check for non-empty but valid playlist ID.
             if (!empty($listid) && !preg_match('/[^a-zA-Z0-9\-_]/', $listid)) {
                 // This video is part of a playlist, and we want to embed it as such.
-                $params .= "list=$listid&amp;";
+                $params['list'] = $listid;
             }
 
-            return <<<OET
-<span class="mediaplugin mediaplugin_youtube">
-<iframe title="$info" width="$width" height="$height"
-  src="https://www.youtube.com/embed/$videoid?{$params}rel=0&amp;wmode=transparent" frameborder="0" allowfullscreen="1"></iframe>
-</span>
-OET;
+            // Add parameters to object to be passed to the mustache template.
+            $params['rel'] = 0;
+            $params['wmode'] = 'transparent';
+
+            // Handle no cookie option.
+            if (!$nocookie) {
+                $embedurl = new moodle_url('https://www.youtube.com/embed/' . $videoid, $params );
+            } else {
+                $embedurl = new moodle_url('https://www.youtube-nocookie.com/embed/' . $videoid, $params );
+            }
+
+            $context['embedurl'] = $embedurl->out(false);
+
+            // Return the rendered template.
+            return $OUTPUT->render_from_template('media_youtube/embed', $context);
         }
 
     }
@@ -125,7 +149,7 @@ OET;
         if (is_numeric($rawtime)) {
             // Start time already specified as a number of seconds; ensure it's an integer.
             $seconds = $rawtime;
-        } else if (preg_match('/(\d+?h)?(\d+?m)?(\d+?s)?/i', $rawtime, $matches)) {
+        } else if (preg_match('/(\d+?h)?(\d+?m)?(\d+?s)?/i', $rawtime ?? '', $matches)) {
             // Convert into a raw number of seconds, as that's all embedded players accept.
             for ($i = 1; $i < count($matches); $i++) {
                 if (empty($matches[$i])) {
@@ -159,7 +183,7 @@ OET;
         $shortlink = '((youtu|y2u)\.be/)';
 
         // Initial part of link.
-        $start = '~^https?://(www\.)?(' . $link . '|' . $shortlink . ')';
+        $start = '~^https?://((www|m)\.)?(' . $link . '|' . $shortlink . ')';
         // Middle bit: Video key value.
         $middle = '([a-z0-9\-_]+)';
         return $start . $middle . core_media_player_external::END_LINK_REGEX_PART;

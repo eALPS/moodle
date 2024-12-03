@@ -75,37 +75,7 @@ class user_enrolment_created extends base {
      * @return \moodle_url
      */
     public function get_url() {
-        return new \moodle_url('/enrol/users.php', array('id' => $this->courseid));
-    }
-
-    /**
-     * Return name of the legacy event, which is replaced by this event.
-     *
-     * @return string legacy event name
-     */
-    public static function get_legacy_eventname() {
-        return 'user_enrolled';
-    }
-
-    /**
-     * Return user_enrolled legacy event data.
-     *
-     * @return \stdClass
-     */
-    protected function get_legacy_eventdata() {
-        $legacyeventdata = $this->get_record_snapshot('user_enrolments', $this->objectid);
-        $legacyeventdata->enrol = $this->other['enrol'];
-        $legacyeventdata->courseid = $this->courseid;
-        return $legacyeventdata;
-    }
-
-    /**
-     * Return legacy data for add_to_log().
-     *
-     * @return array
-     */
-    protected function get_legacy_logdata() {
-        return array($this->courseid, 'course', 'enrol', '../enrol/users.php?id=' . $this->courseid, $this->courseid);
+        return new \moodle_url('/user/index.php', array('id' => $this->courseid));
     }
 
     /**

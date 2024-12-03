@@ -41,16 +41,26 @@ class behat_qtype_ddwtos extends behat_base {
      * @return string the xpath expression.
      */
     protected function drag_xpath($dragitem) {
-        return '//span[contains(@class, " drag ") and contains(., "' . $this->escape($dragitem) . '")]';
+        return '//div[@class="answercontainer"]//span[contains(@class, "draghome") and contains(., "' .
+                $this->escape($dragitem) . '") and not(contains(@class, "dragplaceholder"))]';
     }
 
     /**
      * Get the xpath for a given drop box.
-     * @param string $dragitem the number of the drop box.
+     * @param string $spacenumber the number of the drop box.
      * @return string the xpath expression.
      */
     protected function drop_xpath($spacenumber) {
         return '//span[contains(@class, " drop ") and contains(@class, "place' . $spacenumber . ' ")]';
+    }
+
+    /**
+     * Get the xpath for a given drop box contain a placed drag.
+     * @param string $placeddragnumber the number of the placed drag.
+     * @return string the xpath expression.
+     */
+    protected function inplace_xpath(string $placeddragnumber): string {
+        return '//span[contains(@class, "inplace' . $placeddragnumber . '")]';
     }
 
     /**
@@ -68,6 +78,21 @@ class behat_qtype_ddwtos extends behat_base {
     }
 
     /**
+     * Drag the drag item with the given text to the given placed drag number.
+     *
+     * @param string $dragitem the text of the item to drag.
+     * @param int $placeddragnumber the number of the placed drag to drop into.
+     *
+     * @Given /^I drag "(?P<drag_item>[^"]*)" to placed drag "(?P<number>\d+)" in the drag and drop into text question$/
+     */
+    public function i_drag_to_placed_drag_number_in_the_drag_and_drop_into_text_question(string $dragitem,
+        int $placeddragnumber): void {
+        $generalcontext = behat_context_helper::get('behat_general');
+        $generalcontext->i_drag_and_i_drop_it_in($this->drag_xpath($dragitem),
+            'xpath_element', $this->inplace_xpath($placeddragnumber), 'xpath_element');
+    }
+
+    /**
      * Type some characters while focussed on a given space.
      *
      * @param string $keys the characters to type.
@@ -78,10 +103,21 @@ class behat_qtype_ddwtos extends behat_base {
     public function i_type_into_space_in_the_drag_and_drop_into_text_question($keys, $spacenumber) {
         $node = $this->get_selected_node('xpath_element', $this->drop_xpath($spacenumber));
         $this->ensure_node_is_visible($node);
+        $node->focus();
         foreach (str_split($keys) as $key) {
-            $node->keyDown($key);
-            $node->keyPress($key);
-            $node->keyUp($key);
+            behat_base::type_keys($this->getSession(), [$key]);
+            $this->wait_for_pending_js();
         }
+    }
+
+    /**
+     * Check that the given drag exist in drag home area
+     *
+     * @param string $dragitem the text of the drag item.
+     *
+     * @Given /^I should see "(?P<drag_item>[^"]*)" in the home area of drag and drop into text question$/
+     */
+    public function i_should_see_drag_in_the_home_area($dragitem) {
+        $this->ensure_element_exists($this->drag_xpath($dragitem), 'xpath_element');
     }
 }

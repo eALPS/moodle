@@ -56,10 +56,7 @@ class calc_formula {
             return;
         }
         $formula = substr($formula, 1);
-        if (strpos($formula, '=') !== false) {
-            $this->_error = "too many '='";
-            return;
-        }
+
         $this->_nfx = $this->_em->nfx($formula);
         if ($this->_nfx == false) {
             $this->_error = $this->_em->last_error;
@@ -126,7 +123,7 @@ class calc_formula {
      * @return string localised formula
      */
     public static function localize($formula) {
-        $formula = str_replace('.', '$', $formula); // temp placeholder
+        $formula = str_replace('.', '$', $formula ?? ''); // Temp placeholder.
         $formula = str_replace(',', get_string('listsep', 'langconfig'), $formula);
         $formula = str_replace('$', get_string('decsep', 'langconfig'), $formula);
         return $formula;

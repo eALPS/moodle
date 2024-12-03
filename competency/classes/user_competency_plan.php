@@ -66,7 +66,7 @@ class user_competency_plan extends persistent {
             ),
             'sortorder' => array(
                 'type' => PARAM_INT,
-                'default' => null,
+                'default' => 0,
             ),
         );
     }
@@ -235,7 +235,7 @@ class user_competency_plan extends persistent {
      * @param array  $competenciesorids Limit search to those competencies, or competency IDs.
      * @return \core_competency\user_competency_plan[]
      */
-    public static function get_multiple($userid, $planid, array $competenciesorids = null) {
+    public static function get_multiple($userid, $planid, ?array $competenciesorids = null) {
         global $DB;
 
         $params = array();

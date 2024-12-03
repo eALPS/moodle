@@ -14,16 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * PHPUnit data generator tests.
- *
- * @package    tool_monitor
- * @category   test
- * @copyright  2014 onwards Simey Lameze <simey@moodle.com>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
+namespace tool_monitor;
 
 /**
  * PHPUnit data generator test case.
@@ -34,12 +25,13 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright  2014 onwards Simey Lameze <simey@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class tool_monitor_generator_testcase extends advanced_testcase {
+class generator_test extends \advanced_testcase {
 
     /**
      * Set up method.
      */
-    public function setUp() {
+    public function setUp(): void {
+        parent::setUp();
         // Enable monitor.
         set_config('enablemonitor', 1, 'tool_monitor');
     }
@@ -47,7 +39,7 @@ class tool_monitor_generator_testcase extends advanced_testcase {
     /**
      * Test create_rule data generator.
      */
-    public function test_create_rule() {
+    public function test_create_rule(): void {
         $this->setAdminUser();
         $this->resetAfterTest(true);
         $course = $this->getDataGenerator()->create_course();
@@ -55,7 +47,7 @@ class tool_monitor_generator_testcase extends advanced_testcase {
 
         $rulegenerator = $this->getDataGenerator()->get_plugin_generator('tool_monitor');
 
-        $record = new stdClass();
+        $record = new \stdClass();
         $record->courseid = $course->id;
         $record->userid = $user->id;
 
@@ -68,7 +60,7 @@ class tool_monitor_generator_testcase extends advanced_testcase {
     /**
      * Test create_subscription data generator.
      */
-    public function test_create_subscription() {
+    public function test_create_subscription(): void {
         $this->setAdminUser();
         $this->resetAfterTest(true);
 
@@ -77,7 +69,7 @@ class tool_monitor_generator_testcase extends advanced_testcase {
         $monitorgenerator = $this->getDataGenerator()->get_plugin_generator('tool_monitor');
         $rule = $monitorgenerator->create_rule();
 
-        $record = new stdClass();
+        $record = new \stdClass();
         $record->courseid = $course->id;
         $record->userid = $user->id;
         $record->ruleid = $rule->id;
@@ -97,7 +89,7 @@ class tool_monitor_generator_testcase extends advanced_testcase {
     /**
      * Test create_event data generator.
      */
-    public function test_create_event_entries() {
+    public function test_create_event_entries(): void {
         $this->setAdminUser();
         $this->resetAfterTest(true);
         $context = \context_system::instance();
@@ -115,7 +107,7 @@ class tool_monitor_generator_testcase extends advanced_testcase {
     /**
      * Test create_history data generator.
      */
-    public function test_create_history() {
+    public function test_create_history(): void {
         $this->setAdminUser();
         $this->resetAfterTest(true);
         $user = $this->getDataGenerator()->create_user();

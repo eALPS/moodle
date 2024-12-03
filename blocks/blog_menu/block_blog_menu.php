@@ -50,7 +50,7 @@ class block_blog_menu extends block_base {
     }
 
     function get_content() {
-        global $CFG;
+        global $CFG, $OUTPUT;
 
         // detect if blog enabled
         if ($this->content !== NULL) {
@@ -98,11 +98,14 @@ class block_blog_menu extends block_base {
 
         // Prepare the footer for this block
         if (has_capability('moodle/blog:search', context_system::instance())) {
-            // Full-text search field
-            $form  = html_writer::tag('label', get_string('search', 'admin'), array('for'=>'blogsearchquery', 'class'=>'accesshide'));
-            $form .= html_writer::empty_tag('input', array('id'=>'blogsearchquery', 'type'=>'text', 'name'=>'search'));
-            $form .= html_writer::empty_tag('input', array('type'=>'submit', 'value'=>get_string('search')));
-            $this->content->footer = html_writer::tag('form', html_writer::tag('div', $form), array('class'=>'blogsearchform', 'method'=>'get', 'action'=>new moodle_url('/blog/index.php')));
+
+            $data = [
+                'action' => new moodle_url('/blog/index.php'),
+                'inputname' => 'search',
+                'searchstring' => get_string('search', 'admin'),
+                'extraclasses' => 'mt-3'
+            ];
+            $this->content->footer = $OUTPUT->render_from_template('core/search_input', $data);
         } else {
             // No footer to display
             $this->content->footer = '';
@@ -119,5 +122,17 @@ class block_blog_menu extends block_base {
      */
     public function get_aria_role() {
         return 'navigation';
+    }
+
+    /**
+     * This block shouldn't be added to a page if the blogs advanced feature is disabled.
+     *
+     * @param moodle_page $page
+     * @return bool
+     */
+    public function can_block_be_added(moodle_page $page): bool {
+        global $CFG;
+
+        return $CFG->enableblogs;
     }
 }

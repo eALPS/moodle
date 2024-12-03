@@ -9,15 +9,26 @@
 #
 # See gitignore(5) man page for more details
 #
-/config.php
-/lib/editor/tinymce/extra/tools/temp/
+
+# Swap files (vim)
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+# Temporary files including undo
 *~
-*.swp
+#
+/config.php
 /tags
 /TAGS
 /cscope.*
 /.patches/
 /.idea/
+.phpstorm.*
+!/.phpstorm.meta.php/
+/.phpstorm.meta.php/*
+!/.phpstorm.meta.php/di.php
 /nbproject/
 CVS
 .DS_Store
@@ -25,6 +36,7 @@ CVS
 /.project
 /.buildpath
 /.cache
+.phpunit.result.cache
 phpunit.xml
 # Composer support. Do not ignore composer.json, or composer.lock. These should be shipped by us.
 composer.phar
@@ -36,3 +48,14 @@ composer.phar
 /lib/yuilib/*/*/*-coverage.js
 atlassian-ide-plugin.xml
 /node_modules/
+/.vscode/
+moodle-plugin-ci.phar
+.eslintignore
+.stylelintignore
+/jsdoc
+/admin/tool/componentlibrary/docs
+/admin/tool/componentlibrary/hugo/site/data/my-index.json
+.hugo_build.lock
+phpcs.xml
+jsconfig.json
+UPGRADING-CURRENT.md

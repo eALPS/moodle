@@ -22,6 +22,8 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use core\report_helper;
+
 require_once(__DIR__ . '/../../../config.php');
 require_once($CFG->libdir.'/adminlib.php');
 
@@ -33,10 +35,11 @@ $status = optional_param('status', 0, PARAM_BOOL);
 
 // Validate course id.
 if (empty($courseid)) {
-    require_login();
+    admin_externalpage_setup('toolmonitorrules', '', null, '', array('pagelayout' => 'report'));
     $context = context_system::instance();
     $coursename = format_string($SITE->fullname, true, array('context' => $context));
     $PAGE->set_context($context);
+    $PAGE->set_primary_active_tab('siteadminnode');
 } else {
     $course = get_course($courseid);
     require_login($course);
@@ -53,11 +56,6 @@ $PAGE->set_url($manageurl);
 $PAGE->set_pagelayout('report');
 $PAGE->set_title($coursename);
 $PAGE->set_heading($coursename);
-
-// Site level report.
-if (empty($courseid)) {
-    admin_externalpage_setup('toolmonitorrules', '', null, '', array('pagelayout' => 'report'));
-}
 
 if (!empty($action) && $action == 'changestatus') {
     require_sesskey();
@@ -76,6 +74,9 @@ if (!empty($action) && $ruleid) {
         redirect(new moodle_url('/admin/tool/monitor/managerules.php', array('courseid' => $courseid)));
     }
 
+    if ($action === 'delete') {
+        $PAGE->navbar->add(get_string('deleterule', 'tool_monitor'), $PAGE->url);
+    }
     echo $OUTPUT->header();
     $rule = \tool_monitor\rule_manager::get_rule($rule);
     switch ($action) {
@@ -115,7 +116,10 @@ if (!empty($action) && $ruleid) {
     echo $OUTPUT->header();
 }
 
-echo $OUTPUT->heading(get_string('managerules', 'tool_monitor'));
+// Print the selected dropdown.
+$managerules = get_string('managerules', 'tool_monitor');
+report_helper::print_report_selector($managerules);
+
 $status = get_config('tool_monitor', 'enablemonitor');
 $help = new help_icon('enablehelp', 'tool_monitor');
 

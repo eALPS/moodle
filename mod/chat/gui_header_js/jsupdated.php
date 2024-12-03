@@ -34,7 +34,7 @@ define('NO_MOODLE_COOKIES', true); // Session not used here.
 define('NO_OUTPUT_BUFFERING', true);
 
 require('../../../config.php');
-require('../lib.php');
+require_once('../lib.php');
 
 // We are going to run for a long time.
 // Avoid being terminated by php.
@@ -58,19 +58,19 @@ if ($chatlastid !== 1) {
 $PAGE->set_url($url);
 
 if (!$chatuser = $DB->get_record('chat_users', array('sid' => $chatsid))) {
-    print_error('notlogged', 'chat');
+    throw new \moodle_exception('notlogged', 'chat');
 }
 
 // Get the minimal course.
 if (!$course = $DB->get_record('course', array('id' => $chatuser->course))) {
-    print_error('invalidcourseid');
+    throw new \moodle_exception('invalidcourseid');
 }
 
 // Get the user theme and enough info to be used in chat_format_message() which passes it along to
 // chat_format_message_manually() -- and only id and timezone are used.
 // No optimisation here, it would break again in future!
 if (!$user = $DB->get_record('user', array('id' => $chatuser->userid, 'deleted' => 0, 'suspended' => 0))) {
-    print_error('invaliduser');
+    throw new \moodle_exception('invaliduser');
 }
 \core\session\manager::set_user($user);
 
@@ -223,7 +223,11 @@ EOD;
     print "//]]>\n";
     print '</script>' . "\n\n";
     if ($beep) {
-        print '<embed src="../beep.wav" autostart="true" hidden="true" name="beep" />';
+        print '<script> (function() {';
+        print 'var audioElement = document.createElement("audio");';
+        print 'audioElement.setAttribute("src", "../beep.mp3");';
+        print 'audioElement.play(); })();';
+        print '</script>';
     }
     print $CHAT_DUMMY_DATA;
     sleep($CFG->chat_refresh_room);

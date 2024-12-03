@@ -32,6 +32,26 @@ class data_field_radiobutton extends data_field_base {
      */
     protected static $priority = self::HIGH_PRIORITY;
 
+    public function supports_preview(): bool {
+        return true;
+    }
+
+    public function get_data_content_preview(int $recordid): stdClass {
+        $options = explode("\n", $this->field->param1);
+        $options = array_map('trim', $options);
+        $selected = $options[$recordid % count($options)];
+        return (object)[
+            'id' => 0,
+            'fieldid' => $this->field->id,
+            'recordid' => $recordid,
+            'content' => $selected,
+            'content1' => null,
+            'content2' => null,
+            'content3' => null,
+            'content4' => null,
+        ];
+    }
+
     function display_add_field($recordid = 0, $formdata = null) {
         global $CFG, $DB, $OUTPUT;
 
@@ -43,18 +63,18 @@ class data_field_radiobutton extends data_field_base {
                 $content = '';
             }
         } else if ($recordid) {
-            $content = trim($DB->get_field('data_content', 'content', array('fieldid'=>$this->field->id, 'recordid'=>$recordid)));
+            $contentfield = $DB->get_field('data_content', 'content', ['fieldid' => $this->field->id, 'recordid' => $recordid]);
+            $content = trim($contentfield ?? '');
         } else {
             $content = '';
         }
 
         $str = '<div title="' . s($this->field->description) . '">';
-        $str .= '<fieldset><legend><span class="accesshide">' . $this->field->name;
+        $str .= '<fieldset><legend><span class="accesshide">' . s($this->field->name);
 
         if ($this->field->required) {
             $str .= '&nbsp;' . get_string('requiredelement', 'form') . '</span></legend>';
-            $image = html_writer::img($OUTPUT->pix_url('req'), get_string('requiredelement', 'form'),
-                                      array('class' => 'req', 'title' => get_string('requiredelement', 'form')));
+            $image = $OUTPUT->pix_icon('req', get_string('requiredelement', 'form'));
             $str .= html_writer::div($image, 'inline-req');
         } else {
             $str .= '</span></legend>';
@@ -69,7 +89,7 @@ class data_field_radiobutton extends data_field_base {
                 continue; // skip empty lines
             }
             $str .= '<input type="radio" id="field_'.$this->field->id.'_'.$i.'" name="field_' . $this->field->id . '" ';
-            $str .= 'value="' . s($radio) . '" class="mod-data-input m-r-1" ';
+            $str .= 'value="' . s($radio) . '" class="mod-data-input me-1" ';
 
             if ($content == $radio) {
                 // Selected by user.
@@ -86,7 +106,7 @@ class data_field_radiobutton extends data_field_base {
         return $str;
     }
 
-     function display_search_field($value = '') {
+    function display_search_field($value = '') {
         global $CFG, $DB;
 
         $varcharcontent = $DB->sql_compare_text('content', 255);
@@ -104,12 +124,17 @@ class data_field_radiobutton extends data_field_base {
         }
         $return = html_writer::label(get_string('fieldtypelabel', "datafield_" . $this->type),
             'menuf_' . $this->field->id, false, array('class' => 'accesshide'));
-        $return .= html_writer::select($options, 'f_'.$this->field->id, $value, null, array('class' => 'custom-select'));
+        $return .= html_writer::select($options, 'f_'.$this->field->id, $value,
+            array('' => 'choosedots'), array('class' => 'custom-select'));
         return $return;
     }
 
-    function parse_search_field() {
-        return optional_param('f_'.$this->field->id, '', PARAM_NOTAGS);
+    public function parse_search_field($defaults = null) {
+        $param = 'f_'.$this->field->id;
+        if (empty($defaults[$param])) {
+            $defaults = array($param => '');
+        }
+        return optional_param($param, $defaults[$param], PARAM_NOTAGS);
     }
 
     function generate_sql($tablealias, $value) {
@@ -133,5 +158,19 @@ class data_field_radiobutton extends data_field_base {
     function notemptyfield($value, $name) {
         return strval($value) !== '';
     }
-}
 
+    /**
+     * Return the plugin configs for external functions.
+     *
+     * @return array the list of config parameters
+     * @since Moodle 3.3
+     */
+    public function get_config_for_external() {
+        // Return all the config parameters.
+        $configs = [];
+        for ($i = 1; $i <= 10; $i++) {
+            $configs["param$i"] = $this->field->{"param$i"};
+        }
+        return $configs;
+    }
+}

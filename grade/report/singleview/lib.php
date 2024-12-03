@@ -15,99 +15,66 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Base lib class for singleview functionality.
+ * Singleview report generic functions
  *
- * @package   gradereport_singleview
- * @copyright 2014 Moodle Pty Ltd (http://moodle.com)
+ * @package gradereport_singleview
+ * @copyright 2023 Ilya Tregubov
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-defined('MOODLE_INTERNAL') || die;
-
-require_once($CFG->dirroot . '/grade/report/lib.php');
 
 /**
- * This class is the main class that must be implemented by a grade report plugin.
+ * Returns link to singleview report for the current element
  *
- * @package   gradereport_singleview
- * @copyright 2014 Moodle Pty Ltd (http://moodle.com)
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @param context_course $context Course context
+ * @param int $courseid Course ID
+ * @param array  $element An array representing an element in the grade_tree
+ * @param grade_plugin_return $gpr A grade_plugin_return object
+ * @param string $mode Mode - gradeitem or user
+ * @param ?stdClass $templatecontext Template context
+ * @return stdClass|null
  */
-class gradereport_singleview extends grade_report {
+function gradereport_singleview_get_report_link(context_course $context, int $courseid,
+        array $element, grade_plugin_return $gpr, string $mode, ?stdClass $templatecontext): ?stdClass {
 
-    /**
-     * Return the list of valid screens, used to validate the input.
-     *
-     * @return array List of screens.
-     */
-    public static function valid_screens() {
-        // This is a list of all the known classes representing a screen in this plugin.
-        return array('user', 'select', 'grade');
+    $reportstring = get_string('singleviewreport_' . $mode, 'gradereport_singleview');
+    if (!isset($templatecontext)) {
+        $templatecontext = new stdClass();
     }
 
-    /**
-     * Process data from a form submission. Delegated to the current screen.
-     *
-     * @param array $data The data from the form
-     * @return array List of warnings
-     */
-    public function process_data($data) {
-        if (has_capability('moodle/grade:edit', $this->context)) {
-            return $this->screen->process($data);
+    if ($mode == 'gradeitem') {
+        // View all grades items.
+        // FIXME: MDL-52678 This is extremely hacky we should have an API for inserting grade column links.
+        if (get_capability_info('gradereport/singleview:view')) {
+            if (has_all_capabilities(['gradereport/singleview:view', 'moodle/grade:viewall',
+                'moodle/grade:edit'], $context)) {
+
+                $url = new moodle_url('/grade/report/singleview/index.php', [
+                    'id' => $courseid,
+                    'item' => 'grade',
+                    'itemid' => $element['object']->id
+                ]);
+                $gpr->add_url_params($url);
+                $templatecontext->reporturl0 = html_writer::link($url, $reportstring,
+                    ['class' => 'dropdown-item', 'aria-label' => $reportstring, 'role' => 'menuitem']);
+                return $templatecontext;
+            }
+        }
+    } else if ($mode == 'user') {
+        // FIXME: MDL-52678 This get_capability_info is hacky and we should have an API for inserting grade row links instead.
+        $canseesingleview = false;
+        if (get_capability_info('gradereport/singleview:view')) {
+            $canseesingleview = has_all_capabilities(['gradereport/singleview:view',
+                'moodle/grade:viewall', 'moodle/grade:edit'], $context);
+        }
+
+        if ($canseesingleview) {
+            $url = new moodle_url('/grade/report/singleview/index.php',
+                ['id' => $courseid, 'itemid' => $element['userid'], 'item' => 'user']);
+            $gpr->add_url_params($url);
+            $templatecontext->reporturl0 = html_writer::link($url, $reportstring,
+                ['class' => 'dropdown-item', 'aria-label' => $reportstring, 'role' => 'menuitem']);
+            return $templatecontext;
         }
     }
-
-    /**
-     * Unused - abstract function declared in the parent class.
-     *
-     * @param string $target
-     * @param string $action
-     */
-    public function process_action($target, $action) {
-    }
-
-    /**
-     * Constructor for this report. Creates the appropriate screen class based on itemtype.
-     *
-     * @param int $courseid The course id.
-     * @param object $gpr grade plugin return tracking object
-     * @param context_course $context
-     * @param string $itemtype Should be user, select or grade
-     * @param int $itemid The id of the user or grade item
-     * @param string $unused Used to be group id but that was removed and this is now unused.
-     */
-    public function __construct($courseid, $gpr, $context, $itemtype, $itemid, $unused = null) {
-        parent::__construct($courseid, $gpr, $context);
-
-        $base = '/grade/report/singleview/index.php';
-
-        $idparams = array('id' => $courseid);
-
-        $this->baseurl = new moodle_url($base, $idparams);
-
-        $this->pbarurl = new moodle_url($base, $idparams + array(
-                'item' => $itemtype,
-                'itemid' => $itemid
-            ));
-
-        //  The setup_group method is used to validate group mode and permissions and define the currentgroup value.
-        $this->setup_groups();
-
-        $screenclass = "\\gradereport_singleview\\local\\screen\\${itemtype}";
-
-        $this->screen = new $screenclass($courseid, $itemid, $this->currentgroup);
-
-        // Load custom or predifined js.
-        $this->screen->js();
-    }
-
-    /**
-     * Build the html for the screen.
-     * @return string HTML to display
-     */
-    public function output() {
-        global $OUTPUT;
-        return $OUTPUT->container($this->screen->html(), 'reporttable');
-    }
+    return null;
 }
-

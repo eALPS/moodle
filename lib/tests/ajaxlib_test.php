@@ -14,22 +14,23 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace core;
+
 /**
  * Code quality unit tests that are fast enough to run each time.
  *
  * @package    core
- * @category   phpunit
+ * @category   test
  * @copyright  2013 Andrew Nicols
  * @license    http://www.gnu.org/copyleft/gpl.html GNU Public License
+ * @covers ::ajax_capture_output
+ * @covers ::ajax_check_captured_output
  */
-
-defined('MOODLE_INTERNAL') || die();
-
-class core_ajaxlib_testcase extends advanced_testcase {
+class ajaxlib_test extends \advanced_testcase {
     /** @var string Original error log */
     protected $oldlog;
 
-    protected function setUp() {
+    protected function setUp(): void {
         global $CFG;
 
         parent::setUp();
@@ -38,7 +39,7 @@ class core_ajaxlib_testcase extends advanced_testcase {
         ini_set('error_log', "$CFG->dataroot/testlog.log");
     }
 
-    protected function tearDown() {
+    protected function tearDown(): void {
         ini_set('error_log', $this->oldlog);
         parent::tearDown();
     }
@@ -78,49 +79,49 @@ class core_ajaxlib_testcase extends advanced_testcase {
         }
     }
 
-    public function test_output_capture_normal_debug_none() {
+    public function test_output_capture_normal_debug_none(): void {
         // In normal conditions, and with DEBUG_NONE set, we should not receive any output or throw any exceptions.
         set_debugging(DEBUG_NONE);
         $this->helper_test_clean_output();
     }
 
-    public function test_output_capture_normal_debug_normal() {
+    public function test_output_capture_normal_debug_normal(): void {
         // In normal conditions, and with DEBUG_NORMAL set, we should not receive any output or throw any exceptions.
         set_debugging(DEBUG_NORMAL);
         $this->helper_test_clean_output();
     }
 
-    public function test_output_capture_normal_debug_all() {
+    public function test_output_capture_normal_debug_all(): void {
         // In normal conditions, and with DEBUG_ALL set, we should not receive any output or throw any exceptions.
         set_debugging(DEBUG_ALL);
         $this->helper_test_clean_output();
     }
 
-    public function test_output_capture_normal_debugdeveloper() {
+    public function test_output_capture_normal_debugdeveloper(): void {
         // In normal conditions, and with DEBUG_DEVELOPER set, we should not receive any output or throw any exceptions.
         set_debugging(DEBUG_DEVELOPER);
         $this->helper_test_clean_output();
     }
 
-    public function test_output_capture_error_debug_none() {
+    public function test_output_capture_error_debug_none(): void {
         // With DEBUG_NONE set, we should not throw any exception, but the output will be returned.
         set_debugging(DEBUG_NONE);
         $this->helper_test_dirty_output();
     }
 
-    public function test_output_capture_error_debug_normal() {
+    public function test_output_capture_error_debug_normal(): void {
         // With DEBUG_NORMAL set, we should not throw any exception, but the output will be returned.
         set_debugging(DEBUG_NORMAL);
         $this->helper_test_dirty_output();
     }
 
-    public function test_output_capture_error_debug_all() {
+    public function test_output_capture_error_debug_all(): void {
         // In error conditions, and with DEBUG_ALL set, we should not receive any output or throw any exceptions.
         set_debugging(DEBUG_ALL);
         $this->helper_test_dirty_output();
     }
 
-    public function test_output_capture_error_debugdeveloper() {
+    public function test_output_capture_error_debugdeveloper(): void {
         // With DEBUG_DEVELOPER set, we should throw an exception.
         set_debugging(DEBUG_DEVELOPER);
         $this->helper_test_dirty_output(true);

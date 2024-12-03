@@ -45,7 +45,7 @@ class block_tags extends block_base {
         if (empty($this->config->title)) {
             $this->title = get_string('pluginname', 'block_tags');
         } else {
-            $this->title = $this->config->title;
+            $this->title = format_string($this->config->title, true, ['context' => $this->context]);
         }
     }
 
@@ -108,5 +108,33 @@ class block_tags extends block_base {
         $this->content->text = $OUTPUT->render_from_template('core_tag/tagcloud', $tagcloud->export_for_template($OUTPUT));
 
         return $this->content;
+    }
+
+    /**
+     * Return the plugin config settings for external functions.
+     *
+     * @return stdClass the configs for both the block instance and plugin
+     * @since Moodle 3.8
+     */
+    public function get_config_for_external() {
+        // Return all settings for all users since it is safe (no private keys, etc..).
+        $configs = !empty($this->config) ? $this->config : new stdClass();
+
+        return (object) [
+            'instance' => $configs,
+            'plugin' => new stdClass(),
+        ];
+    }
+
+    /**
+     * This block shouldn't be added to a page if the tags advanced feature is disabled.
+     *
+     * @param moodle_page $page
+     * @return bool
+     */
+    public function can_block_be_added(moodle_page $page): bool {
+        global $CFG;
+
+        return $CFG->usetags;
     }
 }

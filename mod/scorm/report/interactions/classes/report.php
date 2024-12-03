@@ -44,6 +44,13 @@ class report extends \mod_scorm\report {
         $attemptsmode = optional_param('attemptsmode', SCORM_REPORT_ATTEMPTS_ALL_STUDENTS, PARAM_INT);
         $PAGE->set_url(new \moodle_url($PAGE->url, array('attemptsmode' => $attemptsmode)));
 
+        // Scorm action bar for report.
+        if ($download === '') {
+            $actionbar = new \mod_scorm\output\actionbar($cm->id, true, $attemptsmode);
+            $renderer = $PAGE->get_renderer('mod_scorm');
+            echo $renderer->report_actionbar($actionbar);
+        }
+
         if ($action == 'delete' && has_capability('mod/scorm:deleteresponses', $contextmodule) && confirm_sesskey()) {
             if (scorm_delete_responses($attemptids, $scorm)) { // Delete responses.
                 echo $OUTPUT->notification(get_string('scormresponsedeleted', 'scorm'), 'notifysuccess');
@@ -98,28 +105,19 @@ class report extends \mod_scorm\report {
                 && ($attemptsmode != SCORM_REPORT_ATTEMPTS_STUDENTS_WITH_NO);
         // Select the students.
         $nostudents = false;
-
+        list($allowedlistsql, $params) = get_enrolled_sql($contextmodule, 'mod/scorm:savetrack', (int) $currentgroup);
         if (empty($currentgroup)) {
             // All users who can attempt scoes.
-            if (!$students = get_users_by_capability($contextmodule, 'mod/scorm:savetrack', 'u.id', '', '', '', '', '', false)) {
+            if (!$DB->record_exists_sql($allowedlistsql, $params)) {
                 echo $OUTPUT->notification(get_string('nostudentsyet'));
                 $nostudents = true;
-                $allowedlist = '';
-            } else {
-                $allowedlist = array_keys($students);
             }
-            unset($students);
         } else {
             // All users who can attempt scoes and who are in the currently selected group.
-            if (!$groupstudents = get_users_by_capability($contextmodule,
-                                                            'mod/scorm:savetrack', 'u.id', '', '', '',
-                                                            $currentgroup, '', false)) {
+            if (!$DB->record_exists_sql($allowedlistsql, $params)) {
                 echo $OUTPUT->notification(get_string('nostudentsingroup'));
                 $nostudents = true;
-                $groupstudents = array();
             }
-            $allowedlist = array_keys($groupstudents);
-            unset($groupstudents);
         }
         if ( !$nostudents ) {
             // Now check if asked download of data.
@@ -133,7 +131,7 @@ class report extends \mod_scorm\report {
             $headers = array();
             if (!$download && $candelete) {
                 $columns[] = 'checkbox';
-                $headers[] = null;
+                $headers[] = $this->generate_master_checkbox();
             }
             if (!$download && $CFG->grade_report_showuserimage) {
                 $columns[] = 'picture';
@@ -142,10 +140,11 @@ class report extends \mod_scorm\report {
             $columns[] = 'fullname';
             $headers[] = get_string('name');
 
-            $extrafields = get_extra_user_fields($coursecontext);
+            // TODO Does not support custom user profile fields (MDL-70456).
+            $extrafields = \core_user\fields::get_identity_fields($coursecontext, false);
             foreach ($extrafields as $field) {
                 $columns[] = $field;
-                $headers[] = get_user_field_name($field);
+                $headers[] = \core_user\fields::get_display_name($field);
             }
             $columns[] = 'attempt';
             $headers[] = get_string('attempt', 'scorm');
@@ -163,34 +162,33 @@ class report extends \mod_scorm\report {
                 }
             }
 
-            $params = array();
-            list($usql, $params) = $DB->get_in_or_equal($allowedlist, SQL_PARAMS_NAMED);
             // Construct the SQL.
-            $select = 'SELECT DISTINCT '.$DB->sql_concat('u.id', '\'#\'', 'COALESCE(st.attempt, 0)').' AS uniqueid, ';
-            $select .= 'st.scormid AS scormid, st.attempt AS attempt, ' .
-                    \user_picture::fields('u', array('idnumber'), 'userid') .
-                    get_extra_user_fields_sql($coursecontext, 'u', '', array('email', 'idnumber')) . ' ';
+            $select = 'SELECT DISTINCT '.$DB->sql_concat('u.id', '\'#\'', 'COALESCE(sa.attempt, 0)').' AS uniqueid, ';
+            // TODO Does not support custom user profile fields (MDL-70456).
+            $userfields = \core_user\fields::for_identity($coursecontext, false)->with_userpic()->including('idnumber');
+            $selectfields = $userfields->get_sql('u', false, '', 'userid')->selects;
+            $select .= 'sa.scormid AS scormid, sa.attempt AS attempt ' . $selectfields . ' ';
 
-            // This part is the same for all cases - join users and scorm_scoes_track tables.
+            // This part is the same for all cases - join users and user tracking tables.
             $from = 'FROM {user} u ';
-            $from .= 'LEFT JOIN {scorm_scoes_track} st ON st.userid = u.id AND st.scormid = '.$scorm->id;
+            $from .= 'LEFT JOIN {scorm_attempt} sa ON sa.userid = u.id AND sa.scormid = '.$scorm->id;
             switch ($attemptsmode) {
                 case SCORM_REPORT_ATTEMPTS_STUDENTS_WITH:
                     // Show only students with attempts.
-                    $where = ' WHERE u.id ' .$usql. ' AND st.userid IS NOT NULL';
+                    $where = " WHERE u.id IN ({$allowedlistsql}) AND sa.userid IS NOT NULL";
                     break;
                 case SCORM_REPORT_ATTEMPTS_STUDENTS_WITH_NO:
                     // Show only students without attempts.
-                    $where = ' WHERE u.id ' .$usql. ' AND st.userid IS NULL';
+                    $where = " WHERE u.id IN ({$allowedlistsql}) AND sa.userid IS NULL";
                     break;
                 case SCORM_REPORT_ATTEMPTS_ALL_STUDENTS:
                     // Show all students with or without attempts.
-                    $where = ' WHERE u.id ' .$usql. ' AND (st.userid IS NOT NULL OR st.userid IS NULL)';
+                    $where = " WHERE u.id IN ({$allowedlistsql}) AND (sa.userid IS NOT NULL OR sa.userid IS NULL)";
                     break;
             }
 
-            $countsql = 'SELECT COUNT(DISTINCT('.$DB->sql_concat('u.id', '\'#\'', 'COALESCE(st.attempt, 0)').')) AS nbresults, ';
-            $countsql .= 'COUNT(DISTINCT('.$DB->sql_concat('u.id', '\'#\'', 'st.attempt').')) AS nbattempts, ';
+            $countsql = 'SELECT COUNT(DISTINCT('.$DB->sql_concat('u.id', '\'#\'', 'COALESCE(sa.attempt, 0)').')) AS nbresults, ';
+            $countsql .= 'COUNT(DISTINCT('.$DB->sql_concat('u.id', '\'#\'', 'sa.attempt').')) AS nbattempts, ';
             $countsql .= 'COUNT(DISTINCT(u.id)) AS nbusers ';
             $countsql .= $from.$where;
             $questioncount = get_scorm_question_count($scorm->id);
@@ -426,14 +424,14 @@ class report extends \mod_scorm\report {
                     }
                     if (in_array('checkbox', $columns)) {
                         if ($candelete && !empty($timetracks->start)) {
-                            $row[] = \html_writer::checkbox('attemptid[]', $scouser->userid . ':' . $scouser->attempt, false);
+                            $row[] = $this->generate_row_checkbox('attemptid[]', "{$scouser->userid}:{$scouser->attempt}");
                         } else if ($candelete) {
                             $row[] = '';
                         }
                     }
                     if (in_array('picture', $columns)) {
                         $user = new \stdClass();
-                        $additionalfields = explode(',', \user_picture::fields());
+                        $additionalfields = explode(',', implode(',', \core_user\fields::get_picture_fields()));
                         $user = username_load_fields_from_object($user, $scouser, null, $additionalfields);
                         $user->id = $scouser->userid;
                         $row[] = $OUTPUT->user_picture($user, array('courseid' => $course->id));
@@ -455,9 +453,10 @@ class report extends \mod_scorm\report {
                     } else {
                         if (!$download) {
                             $url = new \moodle_url('/mod/scorm/report/userreport.php',
-                                                    array('id' => $cm->id,
-                                                        'user' => $scouser->userid,
-                                                        'attempt' => $scouser->attempt));
+                                array('id' => $cm->id,
+                                    'user' => $scouser->userid,
+                                    'attempt' => $scouser->attempt,
+                                    'mode' => 'interactions'));
                             $row[] = \html_writer::link($url, $scouser->attempt);
                         } else {
                             $row[] = $scouser->attempt;
@@ -475,6 +474,7 @@ class report extends \mod_scorm\report {
                         $row[] = scorm_grade_user_attempt($scorm, $scouser->userid, $scouser->attempt);
                     }
                     // Print out all scores of attempt.
+                    $emptyrow = $download ? '' : '&nbsp;';
                     foreach ($scoes as $sco) {
                         if ($sco->launch != '') {
                             if ($trackdata = scorm_get_tracks($sco->id, $scouser->userid, $scouser->attempt)) {
@@ -494,9 +494,9 @@ class report extends \mod_scorm\report {
                                 }
                                 if (!$download) {
                                     $url = new \moodle_url('/mod/scorm/report/userreporttracks.php', array('id' => $cm->id,
-                                        'scoid' => $sco->id, 'user' => $scouser->userid, 'attempt' => $scouser->attempt));
-                                    $row[] = \html_writer::img($OUTPUT->pix_url($trackdata->status, 'scorm'), $strstatus,
-                                        array('title' => $strstatus)) . \html_writer::empty_tag('br') .
+                                        'scoid' => $sco->id, 'user' => $scouser->userid, 'attempt' => $scouser->attempt,
+                                        'mode' => 'interactions'));
+                                    $row[] = $OUTPUT->pix_icon($trackdata->status, $strstatus, 'scorm') . '<br>' .
                                         \html_writer::link($url, $score, array('title' => get_string('details', 'scorm')));
                                 } else {
                                     $row[] = $score;
@@ -508,7 +508,7 @@ class report extends \mod_scorm\report {
                                         if (isset($trackdata->$element)) {
                                             $row[] = s($trackdata->$element);
                                         } else {
-                                            $row[] = '&nbsp;';
+                                            $row[] = $emptyrow;
                                         }
                                     }
                                     if ($displayoptions['resp']) {
@@ -516,7 +516,7 @@ class report extends \mod_scorm\report {
                                         if (isset($trackdata->$element)) {
                                             $row[] = s($trackdata->$element);
                                         } else {
-                                            $row[] = '&nbsp;';
+                                            $row[] = $emptyrow;
                                         }
                                     }
                                     if ($displayoptions['right']) {
@@ -534,7 +534,7 @@ class report extends \mod_scorm\report {
                                             }
                                             $row[] = $rightans;
                                         } else {
-                                            $row[] = '&nbsp;';
+                                            $row[] = $emptyrow;
                                         }
                                     }
                                     if ($displayoptions['result']) {
@@ -542,7 +542,7 @@ class report extends \mod_scorm\report {
                                         if (isset($trackdata->$element)) {
                                             $row[] = s($trackdata->$element);
                                         } else {
-                                            $row[] = '&nbsp;';
+                                            $row[] = $emptyrow;
                                         }
                                     }
                                 }
@@ -551,14 +551,13 @@ class report extends \mod_scorm\report {
                                 // If we don't have track data, we haven't attempted yet.
                                 $strstatus = get_string('notattempted', 'scorm');
                                 if (!$download) {
-                                    $row[] = \html_writer::img($OUTPUT->pix_url('notattempted', 'scorm'), $strstatus,
-                                                array('title' => $strstatus)).\html_writer::empty_tag('br').$strstatus;
+                                    $row[] = $OUTPUT->pix_icon('notattempted', $strstatus, 'scorm') . '<br>' . $strstatus;
                                 } else {
                                     $row[] = $strstatus;
                                 }
                                 // Complete the empty cells.
                                 for ($i = 0; $i < count($columns) - $nbmaincolumns; $i++) {
-                                    $row[] = '&nbsp;';
+                                    $row[] = $emptyrow;
                                 }
                             }
                         }
@@ -582,56 +581,11 @@ class report extends \mod_scorm\report {
                     if ($candelete) {
                         echo \html_writer::start_tag('table', array('id' => 'commands'));
                         echo \html_writer::start_tag('tr').\html_writer::start_tag('td');
-                        echo \html_writer::link('#', get_string('selectall', 'scorm'), array('id' => 'checkattempts'));
-                        echo ' / ';
-                        echo \html_writer::link('#', get_string('selectnone', 'scorm'), array('id' => 'uncheckattempts'));
-                        $PAGE->requires->js_amd_inline("
-                        require(['jquery'], function($) {
-                            $('#checkattempts').click(function(e) {
-                                $('#attemptsform').find('input:checkbox').prop('checked', true);
-                                e.preventDefault();
-                            });
-                            $('#uncheckattempts').click(function(e) {
-                                $('#attemptsform').find('input:checkbox').prop('checked', false);
-                                e.preventDefault();
-                            });
-                        });");
-                        echo '&nbsp;&nbsp;';
-                        echo \html_writer::empty_tag('input', array('type' => 'submit',
-                                                                    'value' => get_string('deleteselected', 'scorm'),
-                                                                    'class' => 'btn btn-secondary'));
+                        echo $this->generate_delete_selected_button();
                         echo \html_writer::end_tag('td').\html_writer::end_tag('tr').\html_writer::end_tag('table');
                         // Close form.
                         echo \html_writer::end_tag('div');
                         echo \html_writer::end_tag('form');
-                    }
-                    echo \html_writer::end_div();
-                    if (!empty($attempts)) {
-                        echo \html_writer::start_tag('table', array('class' => 'boxaligncenter')).\html_writer::start_tag('tr');
-                        echo \html_writer::start_tag('td');
-                        echo $OUTPUT->single_button(new \moodle_url($PAGE->url,
-                                                                   array('download' => 'ODS') + $displayoptions),
-                                                                   get_string('downloadods'),
-                                                                   'post',
-                                                                   ['class' => 'm-t-1']);
-                        echo \html_writer::end_tag('td');
-                        echo \html_writer::start_tag('td');
-                        echo $OUTPUT->single_button(new \moodle_url($PAGE->url,
-                                                                   array('download' => 'Excel') + $displayoptions),
-                                                                   get_string('downloadexcel'),
-                                                                   'post',
-                                                                   ['class' => 'm-t-1']);
-                        echo \html_writer::end_tag('td');
-                        echo \html_writer::start_tag('td');
-                        echo $OUTPUT->single_button(new \moodle_url($PAGE->url,
-                                                                   array('download' => 'CSV') + $displayoptions),
-                                                                   get_string('downloadtext'),
-                                                                   'post',
-                                                                   ['class' => 'm-t-1']);
-                        echo \html_writer::end_tag('td');
-                        echo \html_writer::start_tag('td');
-                        echo \html_writer::end_tag('td');
-                        echo \html_writer::end_tag('tr').\html_writer::end_tag('table');
                     }
                 }
             } else {
@@ -644,7 +598,7 @@ class report extends \mod_scorm\report {
             }
             // Show preferences form irrespective of attempts are there to report or not.
             if (!$download) {
-                $mform->set_data(compact('detailedrep', 'pagesize', 'attemptsmode'));
+                $mform->set_data(compact('pagesize', 'attemptsmode'));
                 $mform->display();
             }
             if ($download == 'Excel' or $download == 'ODS') {

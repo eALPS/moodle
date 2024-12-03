@@ -84,7 +84,7 @@ abstract class core_role_capability_table_with_risks extends core_role_capabilit
         }
     }
 
-    protected abstract function load_parent_permissions();
+    abstract protected function load_parent_permissions();
 
     /**
      * Update $this->permissions based on submitted data, while making a list of
@@ -123,9 +123,6 @@ abstract class core_role_capability_table_with_risks extends core_role_capabilit
             assign_capability($changedcap, $this->permissions[$changedcap],
                 $this->roleid, $this->context->id, true);
         }
-
-        // Force accessinfo refresh for users visiting this context.
-        $this->context->mark_dirty();
     }
 
     public function display() {
@@ -159,7 +156,7 @@ abstract class core_role_capability_table_with_risks extends core_role_capabilit
         return $rowclasses;
     }
 
-    protected abstract function add_permission_cells($capability);
+    abstract protected function add_permission_cells($capability);
 
     protected function add_row_cells($capability) {
         $cells = $this->add_permission_cells($capability);
@@ -183,10 +180,14 @@ abstract class core_role_capability_table_with_risks extends core_role_capabilit
     public function get_risk_icon($type) {
         global $OUTPUT;
 
-        $iconurl = $OUTPUT->pix_url('i/' . str_replace('risk', 'risk_', $type));
-        $text = '<img src="' . $iconurl . '" alt="' . get_string($type . 'short', 'admin') . '" />';
+        $alt = get_string("{$type}short", "admin");
+        $title = get_string($type, "admin");
+
+        $text = $OUTPUT->pix_icon('i/' . str_replace('risk', 'risk_', $type), $alt, 'moodle', [
+                'title' => $title,
+            ]);
         $action = new popup_action('click', $this->risksurl, 'docspopup');
-        $riskicon = $OUTPUT->action_link($this->risksurl, $text, $action, array('title'=>get_string($type, 'admin')));
+        $riskicon = $OUTPUT->action_link($this->risksurl, $text, $action);
 
         return $riskicon;
     }

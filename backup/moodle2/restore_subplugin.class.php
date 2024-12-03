@@ -36,10 +36,15 @@ defined('MOODLE_INTERNAL') || die();
  */
 abstract class restore_subplugin {
 
+    /** @var string */
     protected $subplugintype;
+    /** @var string */
     protected $subpluginname;
+    /** @var restore_path_element */
     protected $connectionpoint;
+    /** @var restore_step */
     protected $step;
+    /** @var restore_task */
     protected $task;
 
     public function __construct($subplugintype, $subpluginname, $step) {
@@ -84,6 +89,23 @@ abstract class restore_subplugin {
         $afterexecute = 'after_execute_' . basename($this->connectionpoint->get_path());
         if (method_exists($this, $afterexecute)) {
             $this->$afterexecute();
+        }
+    }
+
+    /**
+     * The after_restore dispatcher for any restore_subplugin class.
+     *
+     * This method will dispatch execution to the corresponding
+     * after_restore_xxx() method when available, with xxx
+     * being the connection point of the instance, so subplugin
+     * classes with multiple connection points will support
+     * multiple after_restore methods, one for each connection point.
+     */
+    public function launch_after_restore_methods() {
+        // Check if the after_restore method exists and launch it.
+        $afterestore = 'after_restore_' . basename($this->connectionpoint->get_path());
+        if (method_exists($this, $afterestore)) {
+            $this->$afterestore();
         }
     }
 

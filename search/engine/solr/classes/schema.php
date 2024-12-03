@@ -60,10 +60,11 @@ class schema {
     /**
      * Constructor.
      *
+     * @param engine $engine Optional engine parameter, if not specified then one will be created
      * @throws \moodle_exception
      * @return void
      */
-    public function __construct() {
+    public function __construct(?engine $engine = null) {
         if (!$this->config = get_config('search_solr')) {
             throw new \moodle_exception('missingconfig', 'search_solr');
         }
@@ -72,7 +73,7 @@ class schema {
             throw new \moodle_exception('missingconfig', 'search_solr');
         }
 
-        $this->engine = new engine();
+        $this->engine = $engine ?? new engine();
         $this->curl = $this->engine->get_curl_object();
 
         // HTTP headers.
@@ -86,8 +87,7 @@ class schema {
      */
     public function can_setup_server() {
 
-        $engine = new \search_solr\engine();
-        $status = $engine->is_server_configured();
+        $status = $this->engine->is_server_configured();
         if ($status !== true) {
             return $status;
         }
@@ -95,7 +95,7 @@ class schema {
         // At this stage we know that the server is properly configured with a valid host:port and indexname.
         // We're not too concerned about repeating the SolrClient::system() call (already called in
         // is_server_configured) because this is just a setup script.
-        if ($engine->get_solr_major_version() < 5) {
+        if ($this->engine->get_solr_major_version() < 5) {
             // Schema setup script only available for 5.0 onwards.
             return get_string('schemasetupfromsolr5', 'search_solr');
         }
@@ -117,7 +117,12 @@ class schema {
 
         $this->check_index();
 
-        return $this->add_fields($fields, $checkexisting);
+        $return = $this->add_fields($fields, $checkexisting);
+
+        // Tell the engine we are now using the latest schema version.
+        $this->engine->record_applied_schema_version(document::SCHEMA_VERSION);
+
+        return $return;
     }
 
     /**
@@ -182,11 +187,13 @@ class schema {
             if (!isset($data['type']) || !isset($data['stored']) || !isset($data['indexed'])) {
                 throw new \coding_exception($fieldname . ' does not define all required field params: type, stored and indexed.');
             }
+            $type = $this->doc_field_to_solr_field($data['type']);
+
             // Changing default multiValued value to false as we want to match values easily.
             $params = array(
                 'add-field' => array(
                     'name' => $fieldname,
-                    'type' => ($data['type'] === 'text' ? 'text_general' : $data['type']),
+                    'type' => $type,
                     'stored' => $data['stored'],
                     'multiValued' => false,
                     'indexed' => $data['indexed']
@@ -245,6 +252,7 @@ class schema {
                     // All these field attributes are set when fields are added through this script and should
                     // be returned and match the defined field's values.
 
+                    $expectedsolrfield = $this->doc_field_to_solr_field($data['type']);
                     if (empty($results->field) || !isset($results->field->type) ||
                             !isset($results->field->multiValued) || !isset($results->field->indexed) ||
                             !isset($results->field->stored)) {
@@ -252,14 +260,13 @@ class schema {
                         throw new \moodle_exception('errorcreatingschema', 'search_solr', '',
                             get_string('schemafieldautocreated', 'search_solr', $fieldname));
 
-                    } else if (($results->field->type !== $data['type'] &&
-                                ($data['type'] !== 'text' || $results->field->type !== 'text_general')) ||
-                                $results->field->multiValued !== false ||
-                                $results->field->indexed !== $data['indexed'] ||
-                                $results->field->stored !== $data['stored']) {
+                    } else if ($results->field->type !== $expectedsolrfield ||
+                            $results->field->multiValued !== false ||
+                            $results->field->indexed !== $data['indexed'] ||
+                            $results->field->stored !== $data['stored']) {
 
-                            throw new \moodle_exception('errorcreatingschema', 'search_solr', '',
-                                get_string('schemafieldautocreated', 'search_solr', $fieldname));
+                        throw new \moodle_exception('errorcreatingschema', 'search_solr', '',
+                            get_string('schemafieldautocreated', 'search_solr', $fieldname));
                     } else {
                         // The field already exists and it is properly defined, no need to create it.
                         unset($fields[$fieldname]);
@@ -308,5 +315,35 @@ class schema {
             throw new \moodle_exception('errorcreatingschema', 'search_solr', '', $errorstr);
         }
 
+    }
+
+    /**
+     * Returns the solr field type from the document field type string.
+     *
+     * @param string $datatype
+     * @return string
+     */
+    private function doc_field_to_solr_field($datatype) {
+        $type = $datatype;
+
+        $solrversion = $this->engine->get_solr_major_version();
+
+        switch($datatype) {
+            case 'text':
+                $type = 'text_general';
+                break;
+            case 'int':
+                if ($solrversion >= 7) {
+                    $type = 'pint';
+                }
+                break;
+            case 'tdate':
+                if ($solrversion >= 7) {
+                    $type = 'pdate';
+                }
+                break;
+        }
+
+        return $type;
     }
 }

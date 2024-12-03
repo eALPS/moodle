@@ -206,6 +206,34 @@ class block_blog_tags extends block_base {
         }
         return $this->content;
     }
+
+    /**
+     * Return the plugin config settings for external functions.
+     *
+     * @return stdClass the configs for both the block instance and plugin
+     * @since Moodle 3.8
+     */
+    public function get_config_for_external() {
+        // Return all settings for all users since it is safe (no private keys, etc..).
+        $configs = !empty($this->config) ? $this->config : new stdClass();
+
+        return (object) [
+            'instance' => $configs,
+            'plugin' => new stdClass(),
+        ];
+    }
+
+    /**
+     * This block shouldn't be added to a page if the blogs and the tags advanced features are disabled.
+     *
+     * @param moodle_page $page
+     * @return bool
+     */
+    public function can_block_be_added(moodle_page $page): bool {
+        global $CFG;
+
+        return $CFG->enableblogs && $CFG->usetags;
+    }
 }
 
 function block_blog_tags_sort($a, $b) {
@@ -218,12 +246,10 @@ function block_blog_tags_sort($a, $b) {
     }
 
     if (is_numeric($a->$tagsort)) {
-        return ($a->$tagsort == $b->$tagsort) ? 0 : ($a->$tagsort > $b->$tagsort) ? 1 : -1;
+        return (($a->$tagsort == $b->$tagsort) ? 0 : ($a->$tagsort > $b->$tagsort)) ? 1 : -1;
     } elseif (is_string($a->$tagsort)) {
         return strcmp($a->$tagsort, $b->$tagsort); //TODO: this is not compatible with UTF-8!!
     } else {
         return 0;
     }
 }
-
-

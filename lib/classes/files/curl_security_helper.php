@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Contains a class providing functions used to check the host/port black/whitelists for curl.
+ * Contains a class providing functions used to check the allowed/blocked host/ports for curl.
  *
  * @package   core
  * @copyright 2016 Jake Dallimore
@@ -32,7 +32,7 @@ defined('MOODLE_INTERNAL') || exit();
  * Host and port checking for curl.
  *
  * This class provides a means to check URL/host/port against the system-level cURL security entries.
- * It does not provide a means to add URLs, hosts or ports to the black/white lists; this is configured manually
+ * It does not provide a means to add URLs, hosts or ports to the allowed/blocked lists; this is configured manually
  * via the site admin section of Moodle (See: 'Site admin' > 'Security' > 'HTTP Security').
  *
  * This class is currently used by the 'curl' wrapper class in lib/filelib.php.
@@ -55,14 +55,20 @@ class curl_security_helper extends curl_security_helper_base {
     ];
 
     /**
-     * Checks whether the given URL is blacklisted by checking its address and port number against the black/white lists.
+     * Checks whether the given URL is blocked by checking its address and port number against the allow/block lists.
      * The behaviour of this function can be classified as strict, as it returns true for URLs which are invalid or
-     * could not be parsed, as well as those valid URLs which were found in the blacklist.
+     * could not be parsed, as well as those valid URLs which were found in the blocklist.
      *
      * @param string $urlstring the URL to check.
-     * @return bool true if the URL is blacklisted or invalid and false if the URL is not blacklisted.
+     * @param int $notused There used to be an optional parameter $maxredirects for a short while here, not used any more.
+     * @return bool true if the URL is blocked or invalid and false if the URL is not blocked.
      */
-    public function url_is_blocked($urlstring) {
+    public function url_is_blocked($urlstring, $notused = null) {
+
+        if ($notused !== null) {
+            debugging('The $maxredirects parameter of curl_security_helper::url_is_blocked() has been dropped!', DEBUG_DEVELOPER);
+        }
+
         // If no config data is present, then all hosts/ports are allowed.
         if (!$this->is_enabled()) {
             return false;
@@ -85,7 +91,7 @@ class curl_security_helper extends curl_security_helper_base {
         }
 
         if ($parsed['port'] && $parsed['host']) {
-            // Check the host and port against the blacklist/whitelist entries.
+            // Check the host and port against the allow/block entries.
             return $this->host_is_blocked($parsed['host']) || $this->port_is_blocked($parsed['port']);
         }
         return true;
@@ -113,7 +119,10 @@ class curl_security_helper extends curl_security_helper_base {
      * 2. Check the host component against the list of domain names and wildcard domain names.
      *  - This will perform a DNS reverse lookup if required.
      *
-     * @param string $host the host component of the URL to check against the blacklist.
+     * The behaviour of this function can be classified as strict, as it returns true for hosts which are invalid or
+     * could not be parsed, as well as those valid URLs which were found in the blocklist.
+     *
+     * @param string $host the host component of the URL to check against the blocklist.
      * @return bool true if the host is both valid and blocked, false otherwise.
      */
     protected function host_is_blocked($host) {
@@ -123,7 +132,7 @@ class curl_security_helper extends curl_security_helper_base {
 
         // Fix for square brackets in the 'host' portion of the URL (only occurs if an IPv6 address is specified).
         $host = str_replace(array('[', ']'), '', $host); // RFC3986, section 3.2.2.
-        $blacklistedhosts = $this->get_blacklisted_hosts_by_category();
+        $blockedhosts = $this->get_blocked_hosts_by_category();
 
         if (ip_utils::is_ip_address($host)) {
             if ($this->address_explicitly_blocked($host)) {
@@ -131,8 +140,9 @@ class curl_security_helper extends curl_security_helper_base {
             }
 
             // Only perform a reverse lookup if there is a point to it (i.e. we have rules to check against).
-            if ($blacklistedhosts['domain'] || $blacklistedhosts['domainwildcard']) {
-                $hostname = gethostbyaddr($host); // DNS reverse lookup - supports both IPv4 and IPv6 address formats.
+            if ($blockedhosts['domain'] || $blockedhosts['domainwildcard']) {
+                // DNS reverse lookup - supports both IPv4 and IPv6 address formats.
+                $hostname = gethostbyaddr($host);
                 if ($hostname !== $host && $this->host_explicitly_blocked($hostname)) {
                     return true;
                 }
@@ -143,21 +153,45 @@ class curl_security_helper extends curl_security_helper_base {
             }
 
             // Only perform a forward lookup if there are IP rules to check against.
-            if ($blacklistedhosts['ipv4'] || $blacklistedhosts['ipv6']) {
-                $hostip = gethostbyname($host); // DNS forward lookup - only returns IPv4 addresses!
-                if ($hostip !== $host && $this->address_explicitly_blocked($hostip)) {
+            if ($blockedhosts['ipv4'] || $blockedhosts['ipv6']) {
+                // DNS forward lookup - returns a list of only IPv4 addresses!
+                $hostips = $this->get_host_list_by_name($host);
+
+                // If we don't get a valid record, bail (so cURL is never called).
+                if (!$hostips) {
                     return true;
                 }
+
+                // If any of the returned IPs are in the blocklist, block the request.
+                foreach ($hostips as $hostip) {
+                    if ($this->address_explicitly_blocked($hostip)) {
+                        return true;
+                    }
+                }
             }
+        } else {
+            // Was not something we consider to be a valid IP or domain name, block it.
+            return true;
         }
+
         return false;
     }
 
     /**
-     * Checks whether the given port is blocked, as determined by its absence on the ports whitelist.
-     * Ports are assumed to be blocked unless found in the whitelist.
+     * Retrieve all hosts for a domain name.
      *
-     * @param integer|string $port the port to check against the ports whitelist.
+     * @param string $param
+     * @return array An array of IPs associated with the host name.
+     */
+    protected function get_host_list_by_name($host) {
+        return ($hostips = gethostbynamel($host)) ? $hostips : [];
+    }
+
+    /**
+     * Checks whether the given port is blocked, as determined by its absence on the ports allowlist.
+     * Ports are assumed to be blocked unless found in the allowlist.
+     *
+     * @param integer|string $port the port to check against the ports allowlist.
      * @return bool true if the port is blocked, false otherwise.
      */
     protected function port_is_blocked($port) {
@@ -166,40 +200,40 @@ class curl_security_helper extends curl_security_helper_base {
         if (empty($port) || (string)$portnum !== (string)$port || $port < 0) {
             return true;
         }
-        $allowedports = $this->get_whitelisted_ports();
+        $allowedports = $this->get_allowed_ports();
         return !empty($allowedports) && !in_array($portnum, $allowedports);
     }
 
     /**
-     * Convenience method to check whether we have any entries in the host blacklist or ports whitelist admin settings.
-     * If no entries are found at all, the assumption is that the blacklist is disabled entirely.
+     * Convenience method to check whether we have any entries in the host blocklist or ports allowlist admin settings.
+     * If no entries are found at all, the assumption is that the blocklist is disabled entirely.
      *
      * @return bool true if one or more entries exist, false otherwise.
      */
     public function is_enabled() {
-        return (!empty($this->get_whitelisted_ports()) || !empty($this->get_blacklisted_hosts()));
+        return (!empty($this->get_allowed_ports()) || !empty($this->get_blocked_hosts()));
     }
 
     /**
      * Checks whether the input address is blocked by at any of the IPv4 or IPv6 address rules.
      *
      * @param string $addr the ip address to check.
-     * @return bool true if the address is covered by an entry in the blacklist, false otherwise.
+     * @return bool true if the address is covered by an entry in the blocklist, false otherwise.
      */
     protected function address_explicitly_blocked($addr) {
-        $blockedhosts = $this->get_blacklisted_hosts_by_category();
+        $blockedhosts = $this->get_blocked_hosts_by_category();
         $iphostsblocked = array_merge($blockedhosts['ipv4'], $blockedhosts['ipv6']);
-        return address_in_subnet($addr, implode(',', $iphostsblocked));
+        return address_in_subnet($addr, implode(',', $iphostsblocked), true);
     }
 
     /**
      * Checks whether the input hostname is blocked by any of the domain/wildcard rules.
      *
      * @param string $host the hostname to check
-     * @return bool true if the host is covered by an entry in the blacklist, false otherwise.
+     * @return bool true if the host is covered by an entry in the blocklist, false otherwise.
      */
     protected function host_explicitly_blocked($host) {
-        $blockedhosts = $this->get_blacklisted_hosts_by_category();
+        $blockedhosts = $this->get_blocked_hosts_by_category();
         $domainhostsblocked = array_merge($blockedhosts['domain'], $blockedhosts['domainwildcard']);
         return ip_utils::is_domain_in_allowed_list($host, $domainhostsblocked);
     }
@@ -210,10 +244,10 @@ class curl_security_helper extends curl_security_helper_base {
      *
      * @return array of host/domain/ip entries from the 'curlsecurityblockedhosts' config.
      */
-    protected function get_blacklisted_hosts_by_category() {
+    protected function get_blocked_hosts_by_category() {
         // For each of the admin setting entries, check and place in the correct section of the config array.
         $config = ['ipv6' => [], 'ipv4' => [], 'domain' => [], 'domainwildcard' => []];
-        $entries = $this->get_blacklisted_hosts();
+        $entries = $this->get_blocked_hosts();
         foreach ($entries as $entry) {
             if (ip_utils::is_ipv6_address($entry) || ip_utils::is_ipv6_range($entry)) {
                 $config['ipv6'][] = $entry;
@@ -229,26 +263,26 @@ class curl_security_helper extends curl_security_helper_base {
     }
 
     /**
-     * Helper that returns the whitelisted ports, as defined in the 'curlsecurityallowedport' setting.
+     * Helper that returns the allowed ports, as defined in the 'curlsecurityallowedport' setting.
      *
-     * @return array the array of whitelisted ports.
+     * @return array the array of allowed ports.
      */
-    protected function get_whitelisted_ports() {
+    protected function get_allowed_ports() {
         global $CFG;
         if (!isset($CFG->curlsecurityallowedport)) {
             return [];
         }
-        return array_filter(explode("\n", $CFG->curlsecurityallowedport), function($entry) {
+        return array_filter(array_map('trim', explode("\n", $CFG->curlsecurityallowedport)), function($entry) {
             return !empty($entry);
         });
     }
 
     /**
-     * Helper that returns the blacklisted hosts, as defined in the 'curlsecurityblockedhosts' setting.
+     * Helper that returns the blocked hosts, as defined in the 'curlsecurityblockedhosts' setting.
      *
-     * @return array the array of blacklisted host entries.
+     * @return array the array of blocked host entries.
      */
-    protected function get_blacklisted_hosts() {
+    protected function get_blocked_hosts() {
         global $CFG;
         if (!isset($CFG->curlsecurityblockedhosts)) {
             return [];

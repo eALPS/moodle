@@ -42,11 +42,49 @@ $url = new moodle_url('/backup/backupfilesedit.php', array('currentcontext'=>$cu
 
 require_login($course, false, $cm);
 require_capability('moodle/restore:uploadfile', $context);
+if ($filearea == 'automated' && !can_download_from_backup_filearea($filearea, $context)) {
+    throw new required_capability_exception($context, 'moodle/backup:downloadfile', 'nopermissions', '');
+}
 
 $PAGE->set_url($url);
 $PAGE->set_context($context);
-$PAGE->set_title(get_string('managefiles', 'backup'));
-$PAGE->set_heading(get_string('managefiles', 'backup'));
+
+if ($context->contextlevel == CONTEXT_COURSECAT) {
+    core_course_category::page_setup();
+    $PAGE->set_secondary_active_tab('restorecourse');
+} else if ($context->contextlevel == CONTEXT_COURSE) {
+    $course = get_course($context->instanceid);
+    $PAGE->set_heading($course->fullname);
+    $PAGE->set_secondary_active_tab('coursereuse');
+} else if ($context->contextlevel == CONTEXT_SYSTEM) {
+    $PAGE->set_heading($SITE->fullname);
+    $PAGE->set_primary_active_tab('siteadminnode');
+    $PAGE->set_secondary_active_tab('courses');
+} else {
+    $PAGE->set_heading($SITE->fullname);
+}
+// Set the restore course node active in the settings navigation block.
+navigation_node::override_active_url(new moodle_url('/backup/restorefile.php', ['contextid' => $contextid]));
+
+switch($filearea) {
+    case 'activity':
+        $title = get_string('managefiles_activity', 'backup');
+        break;
+    case 'course':
+        $title = get_string('managefiles_course', 'backup');
+        break;
+    case 'backup':
+        $title = get_string('managefiles_backup', 'backup');
+        break;
+    case 'automated':
+        $title = get_string('managefiles_automated', 'backup');
+        break;
+    default:
+        $title = get_string('managefiles', 'backup');
+}
+
+$PAGE->navbar->add($title);
+$PAGE->set_title($title);
 $PAGE->set_pagelayout('admin');
 $browser = get_file_browser();
 
@@ -66,8 +104,10 @@ if ($data) {
 }
 
 echo $OUTPUT->header();
+\backup_helper::print_coursereuse_selector('restore');
 
 echo $OUTPUT->container_start();
+echo $OUTPUT->heading($title, 2, 'mt-4');
 $form->display();
 echo $OUTPUT->container_end();
 

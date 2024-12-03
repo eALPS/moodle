@@ -29,7 +29,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot.'/auth/ldap/auth.php');
-require_once($CFG->dirroot.'/auth/cas/CAS/CAS.php');
+require_once($CFG->dirroot.'/auth/cas/CAS/vendor/autoload.php');
 
 /**
  * CAS authentication plugin.
@@ -69,7 +69,7 @@ class auth_plugin_cas extends auth_plugin_ldap {
      * @param string $password The password (with system magic quotes)
      * @return bool Authentication success or failure.
      */
-    function user_login ($username, $password) {
+    function user_login($username, $password) {
         $this->connectCAS();
         return phpCAS::isAuthenticated() && (trim(core_text::strtolower(phpCAS::getUser())) == $username);
     }
@@ -130,21 +130,10 @@ class auth_plugin_cas extends auth_plugin_ldap {
             }
 
             $authCAS = optional_param('authCAS', '', PARAM_RAW);
-            if ($authCAS == 'NOCAS') {
+            if ($authCAS != 'CAS') {
                 return;
             }
-            // Show authentication form for multi-authentication.
-            // Test pgtIou parameter for proxy mode (https connection in background from CAS server to the php server).
-            if ($authCAS != 'CAS' && !isset($_GET['pgtIou'])) {
-                $PAGE->set_url('/login/index.php');
-                $PAGE->navbar->add($CASform);
-                $PAGE->set_title("$site->fullname: $CASform");
-                $PAGE->set_heading($site->fullname);
-                echo $OUTPUT->header();
-                include($CFG->dirroot.'/auth/cas/cas_form.html');
-                echo $OUTPUT->footer();
-                exit();
-            }
+
         }
 
         // Connection to CAS server
@@ -154,6 +143,7 @@ class auth_plugin_cas extends auth_plugin_ldap {
             $frm = new stdClass();
             $frm->username = phpCAS::getUser();
             $frm->password = 'passwdCas';
+            $frm->logintoken = \core\session\manager::get_login_token();
 
             // Redirect to a course if multi-auth is activated, authCAS is set to CAS and the courseid is specified.
             if ($this->config->multiauth && !empty($courseid)) {
@@ -167,6 +157,7 @@ class auth_plugin_cas extends auth_plugin_ldap {
             $frm = new stdClass();
             $frm->username = 'guest';
             $frm->password = 'guest';
+            $frm->logintoken = \core\session\manager::get_login_token();
             return;
         }
 
@@ -187,11 +178,20 @@ class auth_plugin_cas extends auth_plugin_ldap {
         static $connected = false;
 
         if (!$connected) {
+            // Form the base URL of the server with just the protocol and hostname.
+            $serverurl = new moodle_url("/");
+            $servicebaseurl = $serverurl->get_scheme() ? $serverurl->get_scheme() . "://" : '';
+            $servicebaseurl .= $serverurl->get_host();
+            // Add the port if set.
+            $servicebaseurl .= $serverurl->get_port() ? ':' . $serverurl->get_port() : '';
+
             // Make sure phpCAS doesn't try to start a new PHP session when connecting to the CAS server.
             if ($this->config->proxycas) {
-                phpCAS::proxy($this->config->casversion, $this->config->hostname, (int) $this->config->port, $this->config->baseuri, false);
+                phpCAS::proxy($this->config->casversion, $this->config->hostname, (int) $this->config->port, $this->config->baseuri,
+                    $servicebaseurl, false);
             } else {
-                phpCAS::client($this->config->casversion, $this->config->hostname, (int) $this->config->port, $this->config->baseuri, false);
+                phpCAS::client($this->config->casversion, $this->config->hostname, (int) $this->config->port,
+                    $this->config->baseuri, $servicebaseurl, false);
             }
             // Some CAS installs require SSLv3 that should be explicitly set.
             if (!empty($this->config->curl_ssl_version)) {
@@ -231,47 +231,6 @@ class auth_plugin_cas extends auth_plugin_ldap {
     }
 
     /**
-     * Prints a form for configuring this authentication plugin.
-     *
-     * This function is called from admin/auth.php, and outputs a full page with
-     * a form for configuring this plugin.
-     *
-     * @param array $page An object containing all the data for this page.
-     */
-    function config_form($config, $err, $user_fields) {
-        global $CFG, $OUTPUT;
-
-        if (!function_exists('ldap_connect')) { // Is php-ldap really there?
-            echo $OUTPUT->notification(get_string('auth_ldap_noextension', 'auth_ldap'));
-
-            // Don't return here, like we do in auth/ldap. We cas use CAS without LDAP.
-            // So just warn the user (done above) and define the LDAP constants we use
-            // in config.html, to silence the warnings.
-            if (!defined('LDAP_DEREF_NEVER')) {
-                define ('LDAP_DEREF_NEVER', 0);
-            }
-            if (!defined('LDAP_DEREF_ALWAYS')) {
-                define ('LDAP_DEREF_ALWAYS', 3);
-            }
-        }
-
-        include($CFG->dirroot.'/auth/cas/config.html');
-    }
-
-    /**
-     * A chance to validate form data, and last chance to
-     * do stuff before it is inserted in config_plugin
-     * @param object object with submitted configuration settings (without system magic quotes)
-     * @param array $err array of error messages
-     */
-    function validate_form($form, &$err) {
-        $certificate_path = trim($form->certificate_path);
-        if ($form->certificate_check && empty($certificate_path)) {
-            $err['certificate_path'] = get_string('auth_cas_certificate_path_empty', 'auth_cas');
-        }
-    }
-
-    /**
      * Returns the URL for changing the user's pw, or empty if the default can
      * be used.
      *
@@ -279,143 +238,6 @@ class auth_plugin_cas extends auth_plugin_ldap {
      */
     function change_password_url() {
         return null;
-    }
-
-    /**
-     * Processes and stores configuration data for this authentication plugin.
-     */
-    function process_config($config) {
-
-        // CAS settings
-        if (!isset($config->hostname)) {
-            $config->hostname = '';
-        }
-        if (!isset($config->port)) {
-            $config->port = '';
-        }
-        if (!isset($config->casversion)) {
-            $config->casversion = '';
-        }
-        if (!isset($config->baseuri)) {
-            $config->baseuri = '';
-        }
-        if (!isset($config->language)) {
-            $config->language = '';
-        }
-        if (!isset($config->proxycas)) {
-            $config->proxycas = '';
-        }
-        if (!isset($config->logoutcas)) {
-            $config->logoutcas = '';
-        }
-        if (!isset($config->multiauth)) {
-            $config->multiauth = '';
-        }
-        if (!isset($config->certificate_check)) {
-            $config->certificate_check = '';
-        }
-        if (!isset($config->certificate_path)) {
-            $config->certificate_path = '';
-        }
-        if (!isset($config->curl_ssl_version)) {
-            $config->curl_ssl_version = '';
-        }
-        if (!isset($config->logout_return_url)) {
-            $config->logout_return_url = '';
-        }
-
-        // LDAP settings
-        if (!isset($config->host_url)) {
-            $config->host_url = '';
-        }
-        if (!isset($config->start_tls)) {
-             $config->start_tls = false;
-        }
-        if (empty($config->ldapencoding)) {
-            $config->ldapencoding = 'utf-8';
-        }
-        if (!isset($config->pagesize)) {
-            $config->pagesize = LDAP_DEFAULT_PAGESIZE;
-        }
-        if (!isset($config->contexts)) {
-            $config->contexts = '';
-        }
-        if (!isset($config->user_type)) {
-            $config->user_type = 'default';
-        }
-        if (!isset($config->user_attribute)) {
-            $config->user_attribute = '';
-        }
-        if (!isset($config->search_sub)) {
-            $config->search_sub = '';
-        }
-        if (!isset($config->opt_deref)) {
-            $config->opt_deref = LDAP_DEREF_NEVER;
-        }
-        if (!isset($config->bind_dn)) {
-            $config->bind_dn = '';
-        }
-        if (!isset($config->bind_pw)) {
-            $config->bind_pw = '';
-        }
-        if (!isset($config->ldap_version)) {
-            $config->ldap_version = '3';
-        }
-        if (!isset($config->objectclass)) {
-            $config->objectclass = '';
-        }
-        if (!isset($config->memberattribute)) {
-            $config->memberattribute = '';
-        }
-
-        if (!isset($config->memberattribute_isdn)) {
-            $config->memberattribute_isdn = '';
-        }
-        if (!isset($config->attrcreators)) {
-            $config->attrcreators = '';
-        }
-        if (!isset($config->groupecreators)) {
-            $config->groupecreators = '';
-        }
-        if (!isset($config->removeuser)) {
-            $config->removeuser = AUTH_REMOVEUSER_KEEP;
-        }
-
-        // save CAS settings
-        set_config('hostname', trim($config->hostname), $this->pluginconfig);
-        set_config('port', trim($config->port), $this->pluginconfig);
-        set_config('casversion', $config->casversion, $this->pluginconfig);
-        set_config('baseuri', trim($config->baseuri), $this->pluginconfig);
-        set_config('language', $config->language, $this->pluginconfig);
-        set_config('proxycas', $config->proxycas, $this->pluginconfig);
-        set_config('logoutcas', $config->logoutcas, $this->pluginconfig);
-        set_config('multiauth', $config->multiauth, $this->pluginconfig);
-        set_config('certificate_check', $config->certificate_check, $this->pluginconfig);
-        set_config('certificate_path', $config->certificate_path, $this->pluginconfig);
-        set_config('curl_ssl_version', $config->curl_ssl_version, $this->pluginconfig);
-        set_config('logout_return_url', $config->logout_return_url, $this->pluginconfig);
-
-        // save LDAP settings
-        set_config('host_url', trim($config->host_url), $this->pluginconfig);
-        set_config('start_tls', $config->start_tls, $this->pluginconfig);
-        set_config('ldapencoding', trim($config->ldapencoding), $this->pluginconfig);
-        set_config('pagesize', (int)trim($config->pagesize), $this->pluginconfig);
-        set_config('contexts', trim($config->contexts), $this->pluginconfig);
-        set_config('user_type', core_text::strtolower(trim($config->user_type)), $this->pluginconfig);
-        set_config('user_attribute', core_text::strtolower(trim($config->user_attribute)), $this->pluginconfig);
-        set_config('search_sub', $config->search_sub, $this->pluginconfig);
-        set_config('opt_deref', $config->opt_deref, $this->pluginconfig);
-        set_config('bind_dn', trim($config->bind_dn), $this->pluginconfig);
-        set_config('bind_pw', $config->bind_pw, $this->pluginconfig);
-        set_config('ldap_version', $config->ldap_version, $this->pluginconfig);
-        set_config('objectclass', trim($config->objectclass), $this->pluginconfig);
-        set_config('memberattribute', core_text::strtolower(trim($config->memberattribute)), $this->pluginconfig);
-        set_config('memberattribute_isdn', $config->memberattribute_isdn, $this->pluginconfig);
-        set_config('attrcreators', trim($config->attrcreators), $this->pluginconfig);
-        set_config('groupecreators', trim($config->groupecreators), $this->pluginconfig);
-        set_config('removeuser', $config->removeuser, $this->pluginconfig);
-
-        return true;
     }
 
     /**
@@ -538,5 +360,40 @@ class auth_plugin_cas extends auth_plugin_ldap {
             $this->connectCAS();
             phpCAS::logoutWithRedirectService($backurl);
         }
+    }
+
+    /**
+     * Return a list of identity providers to display on the login page.
+     *
+     * @param string|moodle_url $wantsurl The requested URL.
+     * @return array List of arrays with keys url, iconurl and name.
+     */
+    public function loginpage_idp_list($wantsurl) {
+        if (empty($this->config->hostname)) {
+            // CAS is not configured.
+            return [];
+        }
+
+        if ($this->config->auth_logo) {
+            $iconurl = moodle_url::make_pluginfile_url(
+                context_system::instance()->id,
+                'auth_cas',
+                'logo',
+                null,
+                null,
+                $this->config->auth_logo);
+        } else {
+            $iconurl = null;
+        }
+
+        return [
+            [
+                'url' => new moodle_url(get_login_url(), [
+                        'authCAS' => 'CAS',
+                    ]),
+                'iconurl' => $iconurl,
+                'name' => format_string($this->config->auth_name),
+            ],
+        ];
     }
 }

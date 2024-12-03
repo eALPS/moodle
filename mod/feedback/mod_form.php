@@ -160,23 +160,30 @@ class mod_feedback_mod_form extends moodleform_mod {
 
     }
 
-    public function get_data() {
-        $data = parent::get_data();
-        if ($data) {
+    /**
+     * Allows module to modify the data returned by form get_data().
+     * This method is also called in the bulk activity completion form.
+     *
+     * Only available on moodleform_mod.
+     *
+     * @param stdClass $data the form data to be modified.
+     */
+    public function data_postprocessing($data) {
+        parent::data_postprocessing($data);
+        if (isset($data->page_after_submit_editor)) {
             $data->page_after_submitformat = $data->page_after_submit_editor['format'];
             $data->page_after_submit = $data->page_after_submit_editor['text'];
 
             if (!empty($data->completionunlocked)) {
-                // Turn off completion settings if the checkboxes aren't ticked
-                $autocompletion = !empty($data->completion) &&
-                    $data->completion == COMPLETION_TRACKING_AUTOMATIC;
-                if (!$autocompletion || empty($data->completionsubmit)) {
-                    $data->completionsubmit=0;
+                // Turn off completion settings if the checkboxes aren't ticked.
+                $suffix = $this->get_suffix();
+                $completion = $data->{'completion' . $suffix};
+                $autocompletion = !empty($completion) && $completion == COMPLETION_TRACKING_AUTOMATIC;
+                if (!$autocompletion || empty($data->{'completionsubmit' . $suffix})) {
+                    $data->{'completionsubmit' . $suffix} = 0;
                 }
             }
         }
-
-        return $data;
     }
 
     /**
@@ -200,14 +207,20 @@ class mod_feedback_mod_form extends moodleform_mod {
     public function add_completion_rules() {
         $mform =& $this->_form;
 
+        $suffix = $this->get_suffix();
+        $completionsubmitel = 'completionsubmit' . $suffix;
         $mform->addElement('checkbox',
-                           'completionsubmit',
-                           '',
-                           get_string('completionsubmit', 'feedback'));
-        return array('completionsubmit');
+            $completionsubmitel,
+            '',
+            get_string('completionsubmit', 'feedback')
+        );
+        // Enable this completion rule by default.
+        $mform->setDefault($completionsubmitel, 1);
+        return [$completionsubmitel];
     }
 
     public function completion_rule_enabled($data) {
-        return !empty($data['completionsubmit']);
+        $suffix = $this->get_suffix();
+        return !empty($data['completionsubmit' . $suffix]);
     }
 }

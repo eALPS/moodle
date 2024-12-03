@@ -13,65 +13,87 @@ Feature: Attempt a quiz where some questions require that the previous question 
       | fullname | shortname | category |
       | Course 1 | C1        | 0        |
     And the following "course enrolments" exist:
-      | user     | course | role    |
-      | student  | C1     | student |
-      | teacher  | C1     | teacher |
+      | user     | course | role           |
+      | student  | C1     | student        |
+      | teacher  | C1     | editingteacher |
     And the following "question categories" exist:
       | contextlevel | reference | name           |
       | Course       | C1        | Test questions |
 
   @javascript
-  Scenario: A question that requires the previous one is initally blocked
+  Scenario Outline: A question that requires the previous one is initially blocked
     Given the following "questions" exist:
       | questioncategory | qtype       | name  | questiontext    |
       | Test questions   | truefalse   | TF1   | First question  |
       | Test questions   | truefalse   | TF2   | Second question |
     And the following "activities" exist:
       | activity   | name   | intro              | course | idnumber | preferredbehaviour |
-      | quiz       | Quiz 1 | Quiz 1 description | C1     | quiz1    | immediatefeedback  |
+      | quiz       | Quiz 1 | Quiz 1 description | C1     | quiz1    | <quizbehaviour>    |
     And quiz "Quiz 1" contains the following questions:
       | question | page | requireprevious |
       | TF1      | 1    | 0               |
       | TF2      | 1    | 1               |
 
-    When I log in as "student"
-    And I follow "Course 1"
-    And I follow "Quiz 1"
-    And I press "Attempt quiz now"
+    When I am on the "Quiz 1" "mod_quiz > View" page logged in as "student"
+    And I press "Attempt quiz"
 
     Then I should see "First question"
     And I should see "This question cannot be attempted until the previous question has been completed."
     And I should not see "Second question"
-    And I log out
-    And I log in as "teacher"
-    And I follow "Course 1"
-    And I follow "Quiz 1"
-    And I follow "Attempts: 1"
-    And I follow "Review attempt"
+    And I am on the "Quiz 1 > student > Attempt 1" "mod_quiz > Attempt review" page logged in as "teacher"
     And I should see "First question"
     And I should see "This question cannot be attempted until the previous question has been completed."
     And I should not see "Second question"
     And "Question 1" "link" should exist
     And "Question 2" "link" should not exist
 
+    Examples:
+      | quizbehaviour     |
+      | immediatefeedback |
+      | interactive       |
+
   @javascript
-  Scenario: A question requires the previous one becomes available when the first one is answered
+  Scenario Outline: A question is shown as blocked when previewing a quiz
     Given the following "questions" exist:
       | questioncategory | qtype       | name  | questiontext    |
       | Test questions   | truefalse   | TF1   | First question  |
       | Test questions   | truefalse   | TF2   | Second question |
     And the following "activities" exist:
       | activity   | name   | intro              | course | idnumber | preferredbehaviour |
-      | quiz       | Quiz 1 | Quiz 1 description | C1     | quiz1    | immediatefeedback  |
+      | quiz       | Quiz 1 | Quiz 1 description | C1     | quiz1    | <quizbehaviour>    |
     And quiz "Quiz 1" contains the following questions:
       | question | page | requireprevious |
       | TF1      | 1    | 0               |
       | TF2      | 1    | 1               |
 
-    When I log in as "student"
-    And I follow "Course 1"
-    And I follow "Quiz 1"
-    And I press "Attempt quiz now"
+    When I am on the "Quiz 1" "mod_quiz > View" page logged in as "teacher"
+    And I press "Preview quiz"
+
+    Then I should see "First question"
+    And I should see "This question cannot be attempted until the previous question has been completed."
+    And I should not see "Second question"
+
+    Examples:
+      | quizbehaviour     |
+      | immediatefeedback |
+      | interactive       |
+
+  @javascript
+  Scenario Outline: A question requires the previous one becomes available when the first one is answered
+    Given the following "questions" exist:
+      | questioncategory | qtype       | name  | questiontext    |
+      | Test questions   | truefalse   | TF1   | First question  |
+      | Test questions   | truefalse   | TF2   | Second question |
+    And the following "activities" exist:
+      | activity   | name   | intro              | course | idnumber | preferredbehaviour |
+      | quiz       | Quiz 1 | Quiz 1 description | C1     | quiz1    | <quizbehaviour>    |
+    And quiz "Quiz 1" contains the following questions:
+      | question | page | requireprevious |
+      | TF1      | 1    | 0               |
+      | TF2      | 1    | 1               |
+
+    When I am on the "Quiz 1" "mod_quiz > View" page logged in as "student"
+    And I press "Attempt quiz"
     And I click on "True" "radio" in the "First question" "question"
     And I press "Check"
 
@@ -80,6 +102,11 @@ Feature: Attempt a quiz where some questions require that the previous question 
     And I should see "Second question"
     And "Question 1" "link" should exist
     And "Question 2" "link" should exist
+
+    Examples:
+      | quizbehaviour     |
+      | immediatefeedback |
+      | interactive       |
 
   @javascript
   Scenario: After quiz submitted, all questions show on the review page
@@ -95,13 +122,11 @@ Feature: Attempt a quiz where some questions require that the previous question 
       | TF1      | 1    | 0               |
       | TF2      | 1    | 1               |
 
-    When I log in as "student"
-    And I follow "Course 1"
-    And I follow "Quiz 1"
-    And I press "Attempt quiz now"
+    When I am on the "Quiz 1" "mod_quiz > View" page logged in as "student"
+    And I press "Attempt quiz"
     And I press "Finish attempt ..."
     And I press "Submit all and finish"
-    And I click on "Submit all and finish" "button" in the "Confirmation" "dialogue"
+    And I click on "Submit all and finish" "button" in the "Submit all your answers and finish?" "dialogue"
 
     Then the state of "First question" question is shown as "Not answered"
     And the state of "Second question" question is shown as "Not answered"
@@ -120,10 +145,8 @@ Feature: Attempt a quiz where some questions require that the previous question 
       | TF1      | 1    | 0               |
       | TF2      | 1    | 1               |
 
-    When I log in as "student"
-    And I follow "Course 1"
-    And I follow "Quiz 1"
-    And I press "Attempt quiz now"
+    When I am on the "Quiz 1" "mod_quiz > View" page logged in as "student"
+    And I press "Attempt quiz"
 
     Then I should see "First question"
     And I should see "Second question"
@@ -146,10 +169,8 @@ Feature: Attempt a quiz where some questions require that the previous question 
       | heading   | firstslot | shuffle |
       | Section 1 | 1         | 1       |
 
-    When I log in as "student"
-    And I follow "Course 1"
-    And I follow "Quiz 1"
-    And I press "Attempt quiz now"
+    When I am on the "Quiz 1" "mod_quiz > View" page logged in as "student"
+    And I press "Attempt quiz"
 
     Then I should see "First question"
     And I should see "Second question"
@@ -173,10 +194,8 @@ Feature: Attempt a quiz where some questions require that the previous question 
       | Section 1 | 1         | 1       |
       | Section 2 | 2         | 0       |
 
-    When I log in as "student"
-    And I follow "Course 1"
-    And I follow "Quiz 1"
-    And I press "Attempt quiz now"
+    When I am on the "Quiz 1" "mod_quiz > View" page logged in as "student"
+    And I press "Attempt quiz"
     And I press "Next page"
 
     Then I should see "Second question"
@@ -196,10 +215,8 @@ Feature: Attempt a quiz where some questions require that the previous question 
       | TF1      | 1    | 1               |
       | TF2      | 1    | 1               |
 
-    When I log in as "student"
-    And I follow "Course 1"
-    And I follow "Quiz 1"
-    And I press "Attempt quiz now"
+    When I am on the "Quiz 1" "mod_quiz > View" page logged in as "student"
+    And I press "Attempt quiz"
 
     Then I should see "First question"
     And I should see "Second question"
@@ -219,10 +236,8 @@ Feature: Attempt a quiz where some questions require that the previous question 
       | Story    | 1    | 0               |
       | TF2      | 1    | 1               |
 
-    When I log in as "student"
-    And I follow "Course 1"
-    And I follow "Quiz 1"
-    And I press "Attempt quiz now"
+    When I am on the "Quiz 1" "mod_quiz > View" page logged in as "student"
+    And I press "Attempt quiz"
 
     Then I should see "First question"
     And I should see "Second question"
@@ -242,10 +257,8 @@ Feature: Attempt a quiz where some questions require that the previous question 
       | Info     | 1    | 0               |
       | TF1      | 1    | 1               |
 
-    When I log in as "student"
-    And I follow "Course 1"
-    And I follow "Quiz 1"
-    And I press "Attempt quiz now"
+    When I am on the "Quiz 1" "mod_quiz > View" page logged in as "student"
+    And I press "Attempt quiz"
 
     Then I should see "Read me"
     And I should see "First question"

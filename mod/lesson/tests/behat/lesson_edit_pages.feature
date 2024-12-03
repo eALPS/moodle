@@ -16,48 +16,27 @@ Feature: In a lesson activity, teacher can edit lesson's pages
       | user | course | role |
       | teacher1 | C1 | editingteacher |
       | student1 | C1 | student |
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Lesson" to section "1" and I fill the form with:
-      | Name | Test lesson name |
-      | Description | Test lesson description |
-    And I follow "Test lesson name"
-    And I follow "Add a content page"
-    And I set the following fields to these values:
-      | Page title | First page name |
-      | Page contents | First page contents |
-      | id_answer_editor_0 | Next page |
-      | id_jumpto_0 | Next page |
-    And I press "Save page"
-    And I select "Add a content page" from the "qtype" singleselect
-    And I set the following fields to these values:
-      | Page title | Second page name |
-      | Page contents | Second page contents |
-      | id_answer_editor_0 | Previous page |
-      | id_jumpto_0 | Previous page |
-      | id_answer_editor_1 | Next page |
-      | id_jumpto_1 | Next page |
-    And I press "Save page"
-    And I follow "Expanded"
-    And I click on "Add a question page here" "link" in the "//div[contains(concat(' ', normalize-space(@class), ' '), ' addlinks ')][3]" "xpath_element"
-    And I set the field "Select a question type" to "Numerical"
-    And I press "Add a question page"
-    And I set the following fields to these values:
-      | Page title | Hardest question ever |
-      | Page contents | 1 + 1? |
-      | id_answer_editor_0 | 2 |
-      | id_response_editor_0 | Correct answer |
-      | id_jumpto_0 | End of lesson |
-      | id_score_0 | 1 |
-      | id_answer_editor_1 | 1 |
-      | id_response_editor_1 | Incorrect answer |
-      | id_jumpto_1 | Second page name |
-      | id_score_1 | 0 |
-    And I press "Save page"
+    And the following "activities" exist:
+      | activity | name             | course | idnumber |
+      | lesson   | Test lesson name | C1     | lesson1  |
+    And the following "mod_lesson > pages" exist:
+      | lesson           | qtype   | title                 | content              |
+      | Test lesson name | content | First page name       | First page contents  |
+      | Test lesson name | content | Second page name      | Second page contents |
+      | Test lesson name | numeric | Hardest question ever | 1 + 1?              |
+    And the following "mod_lesson > answers" exist:
+      | page                  | answer        | response         | jumpto           | score |
+      | First page name       | Next page     |                  | Next page        | 0     |
+      | Second page name      | Previous page |                  | Previous page    | 0     |
+      | Second page name      | Next page     |                  | Next page        | 0     |
+      | Hardest question ever | 2             | Correct answer   | End of lesson    | 1     |
+      | Hardest question ever | 1             | Incorrect answer | Second page name | 0     |
+    And I am on the "Test lesson name" "lesson activity" page logged in as teacher1
+    And I press "Edit lesson"
+    And I select edit type "Expanded"
 
   Scenario: Edit lesson content page
-    Given I click on "//th[normalize-space(.)='Second page name']/descendant::a[2]" "xpath_element"
+    Given I click on "//th[normalize-space(.)='Second page name']/descendant::a[3]" "xpath_element"
     When I set the following fields to these values:
       | Page title | Modified second page |
       | Page contents | Modified contents |
@@ -68,10 +47,7 @@ Feature: In a lesson activity, teacher can edit lesson's pages
     And I press "Save page"
     Then I should see "Modified second page"
     And I should not see "Second page name"
-    And I log out
-    And I log in as "student1"
-    And I follow "Course 1"
-    And I follow "Test lesson name"
+    And I am on the "Test lesson name" "lesson activity" page logged in as student1
     And I should see "First page contents"
     And I press "Next page"
     And I should see "Modified contents"
@@ -92,7 +68,7 @@ Feature: In a lesson activity, teacher can edit lesson's pages
     And I should see "Your score is 1 (out of 1)."
 
   Scenario: Edit lesson question page
-    Given I click on "//th[normalize-space(.)='Hardest question ever']/descendant::a[2]" "xpath_element"
+    Given I click on "//th[normalize-space(.)='Hardest question ever']/descendant::a[3]" "xpath_element"
     When I set the following fields to these values:
       | Page title | New hardest question |
       | Page contents | 1 + 2? |
@@ -107,10 +83,7 @@ Feature: In a lesson activity, teacher can edit lesson's pages
     And I press "Save page"
     Then I should see "New hardest question"
     And I should not see "Hardest question ever"
-    And I log out
-    And I log in as "student1"
-    And I follow "Course 1"
-    And I follow "Test lesson name"
+    And I am on the "Test lesson name" "lesson activity" page logged in as student1
     And I should see "First page contents"
     And I press "Next page"
     And I should see "Second page contents"

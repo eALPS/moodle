@@ -14,6 +14,13 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace qtype_calculated;
+
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+require_once($CFG->dirroot . '/question/type/calculated/questiontype.php');
+
 /**
  * Unit tests for formula validation code.
  *
@@ -21,34 +28,28 @@
  * @copyright  2014 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-
-defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
-require_once($CFG->dirroot . '/question/type/calculated/questiontype.php');
-
-
-/**
- * Unit tests for formula validation code.
- *
- * @copyright  2014 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class qtype_calculated_formula_validation_testcase extends basic_testcase {
+class formula_validation_test extends \basic_testcase {
     protected function assert_nonempty_string($actual) {
-        $this->assertInternalType('string', $actual);
+        $this->assertIsString($actual);
         $this->assertNotEquals('', $actual);
     }
 
-    public function test_simple_equations_ok() {
+    public function test_simple_equations_ok(): void {
         $this->assertFalse(qtype_calculated_find_formula_errors(1));
         $this->assertFalse(qtype_calculated_find_formula_errors('1 + 1'));
         $this->assertFalse(qtype_calculated_find_formula_errors('{x} + {y}'));
         $this->assertFalse(qtype_calculated_find_formula_errors('{x}*{y}'));
+        $this->assertFalse(qtype_calculated_find_formula_errors('{x}*({y}+1)'));
     }
 
-    public function test_safe_functions_ok() {
+    public function test_simple_equations_errors(): void {
+        $this->assert_nonempty_string(qtype_calculated_find_formula_errors('{a{b}}'));
+        $this->assert_nonempty_string(qtype_calculated_find_formula_errors('{a{b}}'));
+        $this->assert_nonempty_string(qtype_calculated_find_formula_errors('{a}({b})'));
+        $this->assert_nonempty_string(qtype_calculated_find_formula_errors('2({b})'));
+    }
+
+    public function test_safe_functions_ok(): void {
         $this->assertFalse(qtype_calculated_find_formula_errors('abs(-1)'));
         $this->assertFalse(qtype_calculated_find_formula_errors('tan(pi())'));
         $this->assertFalse(qtype_calculated_find_formula_errors('log(10)'));
@@ -59,7 +60,16 @@ class qtype_calculated_formula_validation_testcase extends basic_testcase {
         $this->assertFalse(qtype_calculated_find_formula_errors('max(1.0, 1.0, 2, 3)'));
     }
 
-    public function test_dangerous_functions_blocked() {
+    public function test_php_comments_blocked(): void {
+        $this->assert_nonempty_string(qtype_calculated_find_formula_errors('# No need for this.'));
+        $this->assert_nonempty_string(qtype_calculated_find_formula_errors('/* Also blocked. */'));
+        $this->assert_nonempty_string(qtype_calculated_find_formula_errors('1 + 1 /* Blocked too. */'));
+        $this->assert_nonempty_string(qtype_calculated_find_formula_errors('// As is this.'));
+        $this->assert_nonempty_string(qtype_calculated_find_formula_errors('1/*2'));
+        $this->assert_nonempty_string(qtype_calculated_find_formula_errors('/*{a*///{x}}'));
+    }
+
+    public function test_dangerous_functions_blocked(): void {
         $this->assert_nonempty_string(qtype_calculated_find_formula_errors('eval(1)'));
         $this->assert_nonempty_string(qtype_calculated_find_formula_errors('system(1)'));
         $this->assert_nonempty_string(qtype_calculated_find_formula_errors('base64_decode(1)'));
@@ -73,7 +83,7 @@ class qtype_calculated_formula_validation_testcase extends basic_testcase {
         $this->assert_nonempty_string(qtype_calculated_find_formula_errors('?><?php+1'));
     }
 
-    public function test_functions_with_wrong_num_args_caught() {
+    public function test_functions_with_wrong_num_args_caught(): void {
         $this->assert_nonempty_string(qtype_calculated_find_formula_errors('abs(-1, 1)'));
         $this->assert_nonempty_string(qtype_calculated_find_formula_errors('abs()'));
         $this->assert_nonempty_string(qtype_calculated_find_formula_errors('pi(1)'));
@@ -84,7 +94,7 @@ class qtype_calculated_formula_validation_testcase extends basic_testcase {
         $this->assert_nonempty_string(qtype_calculated_find_formula_errors('max(1.0)'));
     }
 
-    public function test_validation_of_formulas_in_text_ok() {
+    public function test_validation_of_formulas_in_text_ok(): void {
         $this->assertFalse(qtype_calculated_find_formula_errors_in_text(
                 '<p>Look no equations.</p>'));
         $this->assertFalse(qtype_calculated_find_formula_errors_in_text(
@@ -94,7 +104,7 @@ class qtype_calculated_formula_validation_testcase extends basic_testcase {
                 '<p>Here is a more complex one: {=sin(2*pi()*{theta})}.</p>'));
     }
 
-    public function test_validation_of_formulas_in_text_bad_function() {
+    public function test_validation_of_formulas_in_text_bad_function(): void {
         $this->assert_nonempty_string(qtype_calculated_find_formula_errors_in_text(
                 '<p>This is an equation: {=eval(1)}.</p>'));
         $this->assert_nonempty_string(qtype_calculated_find_formula_errors_in_text(

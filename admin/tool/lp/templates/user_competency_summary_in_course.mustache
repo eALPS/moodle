@@ -49,7 +49,7 @@
         <p>
         <ul class="inline list-inline">
         {{#coursemodules}}
-            <li class="list-inline-item"><a href="{{url}}"><img src="{{iconurl}}"> {{name}} </a></li>
+            <li class="list-inline-item"><a href="{{url}}"><img class="icon" src="{{iconurl}}" alt=""> {{name}} </a></li>
         {{/coursemodules}}
         {{^coursemodules}}
             <li class="list-inline-item"><span class="alert">{{#str}}noactivities, tool_lp{{/str}}</span></li>
@@ -65,10 +65,23 @@
         </dd>
         {{/user}}
         {{/displayuser}}
+        <dt>{{#str}}userplans, competency{{/str}}</dt>
+        <dd>
+        <p>
+        <ul class="inline list-inline">
+        {{#plans}}
+            <li class="list-inline-item"><a href="{{pluginbaseurl}}/plan.php?id={{id}}">{{{name}}}</a></li>
+        {{/plans}}
+        {{^plans}}
+            <li>{{#str}}nouserplanswithcompetency, competency{{/str}}</li>
+        {{/plans}}
+        </ul>
+        </p>
+        </dd>
         {{#usercompetencycourse}}
         <dt>{{#str}}proficient, tool_lp{{/str}}</dt>
         <dd>
-            <span class="label{{^proficiency}} label-important{{/proficiency}} pull-left">
+            <span class="badge {{#proficiency}}bg-success{{/proficiency}}{{^proficiency}}bg-danger{{/proficiency}} text-white float-start">
                 {{proficiencyname}}
             </span>
         </dd>
@@ -82,13 +95,14 @@
         {{#js}}
         require(['jquery', 'tool_lp/grade_user_competency_inline', 'tool_lp/user_competency_info'], function($, mod, info) {
 
-            var inlineGrader = new mod('#rate_{{uniqid}}', '{{competency.scaleid}}', '{{competency.competency.id}}', '{{user.id}}', '', '{{course.id}}', '{{#str}}chooserating, tool_lp{{/str}}');
             var competencyElement = $('[data-region-id="{{uniqid}}"]');
 
             var displayuser = ('{{displayuser}}' == 'true') ? true : false;
             var infoReloader = new info(competencyElement, '{{competency.competency.id}}', '{{user.id}}', '', '{{course.id}}', displayuser);
-
-            inlineGrader.on('competencyupdated', infoReloader.reload.bind(infoReloader));
+            {{#cangrade}}
+                var inlineGrader = new mod('#rate_{{uniqid}}', '{{competency.scaleid}}', '{{competency.competency.id}}', '{{user.id}}', '', '{{course.id}}', '{{#str}}chooserating, tool_lp{{/str}}');
+                inlineGrader.on('competencyupdated', infoReloader.reload.bind(infoReloader));
+            {{/cangrade}}
         });
 
         {{/js}}

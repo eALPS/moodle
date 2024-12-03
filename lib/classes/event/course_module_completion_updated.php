@@ -66,8 +66,13 @@ class course_module_completion_updated extends base {
      * @return string
      */
     public function get_description() {
-        return "The user with id '$this->userid' updated the completion state for the course module with id '$this->contextinstanceid' " .
-            "for the user with id '$this->relateduserid'.";
+        if (isset($this->other['overrideby']) && $this->other['overrideby']) {
+            return "The user with id '{$this->userid}' overrode the completion state to '{$this->other['completionstate']}' ".
+                "for the course module with id '{$this->contextinstanceid}' for the user with id '{$this->relateduserid}'.";
+        } else {
+            return "The user with id '{$this->userid}' updated the completion state for the course module with id " .
+                "'{$this->contextinstanceid}' for the user with id '{$this->relateduserid}'.";
+        }
     }
 
     /**
@@ -76,25 +81,7 @@ class course_module_completion_updated extends base {
      * @return \moodle_url
      */
     public function get_url() {
-        return new \moodle_url('/report/completion/index.php', array('course' => $this->courseid));
-    }
-
-    /**
-     * Return name of the legacy event, which is replaced by this event.
-     *
-     * @return string legacy event name
-     */
-    public static function get_legacy_eventname() {
-        return 'activity_completion_changed';
-    }
-
-    /**
-     * Return course module completion legacy event data.
-     *
-     * @return \stdClass completion data.
-     */
-    protected function get_legacy_eventdata() {
-        return $this->get_record_snapshot('course_modules_completion', $this->objectid);
+        return new \moodle_url('/report/progress/index.php', array('course' => $this->courseid));
     }
 
     /**
@@ -122,6 +109,7 @@ class course_module_completion_updated extends base {
     public static function get_other_mapping() {
         $othermapped = array();
         $othermapped['relateduserid'] = array('db' => 'user', 'restore' => 'user');
+        $othermapped['overrideby'] = array('db' => 'user', 'restore' => 'user');
 
         return $othermapped;
     }

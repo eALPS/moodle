@@ -32,10 +32,6 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class qtype_gapselect_edit_form_base extends question_edit_form {
-    /**
-     * Maximum number of different groups of drag items there can be in a question.
-     */
-    const MAX_GROUPS = 8;
 
     /** @var array of HTML tags allowed in choices / drag boxes. */
     protected $allowedhtmltags = array(
@@ -44,7 +40,8 @@ class qtype_gapselect_edit_form_base extends question_edit_form {
         'b',
         'i',
         'em',
-        'strong'
+        'strong',
+        'span',
     );
 
     /** @var string regex to match HTML open tags. */
@@ -59,7 +56,7 @@ class qtype_gapselect_edit_form_base extends question_edit_form {
     /**
      * Vaidate some input to make sure it does not contain any tags other than
      * $this->allowedhtmltags.
-     * @param unknown_type $text the input to validate.
+     * @param string $text the input to validate.
      * @return string any validation errors.
      */
     protected function get_illegal_tag_error($text) {
@@ -92,7 +89,7 @@ class qtype_gapselect_edit_form_base extends question_edit_form {
      */
     private function allowed_tags_message($badtag) {
         $a = new stdClass();
-        $a->tag = htmlspecialchars($badtag);
+        $a->tag = htmlspecialchars($badtag, ENT_COMPAT);
         $a->allowed = $this->get_list_of_printable_allowed_tags($this->allowedhtmltags);
         if ($a->allowed) {
             return get_string('tagsnotallowed', 'qtype_gapselect', $a);
@@ -110,7 +107,7 @@ class qtype_gapselect_edit_form_base extends question_edit_form {
     private function get_list_of_printable_allowed_tags($allowedhtmltags) {
         $allowedtaglist = array();
         foreach ($allowedhtmltags as $htmltag) {
-            $allowedtaglist[] = htmlspecialchars('<' . $htmltag . '>');
+            $allowedtaglist[] = htmlspecialchars('<' . $htmltag . '>', ENT_COMPAT);
         }
         return implode(', ', $allowedtaglist);
     }
@@ -139,24 +136,16 @@ class qtype_gapselect_edit_form_base extends question_edit_form {
         $mform->setExpanded('choicehdr', 1);
 
         $mform->addElement('checkbox', 'shuffleanswers', get_string('shuffle', 'qtype_gapselect'));
-        $mform->setDefault('shuffleanswers', 0);
+        $mform->setDefault('shuffleanswers', $this->get_default_value('shuffleanswers', 0));
 
         $textboxgroup = array();
         $textboxgroup[] = $mform->createElement('group', 'choices',
                 get_string('choicex', 'qtype_gapselect'), $this->choice_group($mform));
 
-        if (isset($this->question->options)) {
-            $countanswers = count($this->question->options->answers);
+        if (!empty($this->question->options->answers)) {
+            $repeatsatstart = count($this->question->options->answers);
         } else {
-            $countanswers = 0;
-        }
-
-        if ($this->question->formoptions->repeatelements) {
-            $defaultstartnumbers = QUESTION_NUMANS_START * 2;
-            $repeatsatstart = max($defaultstartnumbers, QUESTION_NUMANS_START,
-                    $countanswers + QUESTION_NUMANS_ADD);
-        } else {
-            $repeatsatstart = $countanswers;
+            $repeatsatstart = QUESTION_NUMANS_ADD * 2;
         }
 
         $repeatedoptions = $this->repeated_options();
@@ -167,15 +156,25 @@ class qtype_gapselect_edit_form_base extends question_edit_form {
     }
 
     /**
+     * Return how many different groups of choices there should be.
+     *
+     * @return int the maximum group number.
+     */
+    function get_maximum_choice_group_number() {
+        return 8;
+    }
+
+    /**
      * Creates an array with elements for a choice group.
      *
      * @param object $mform The Moodle form we are working with
+     * @param int $maxgroup The number of max group generate element select.
      * @return array Array for form elements
      */
     protected function choice_group($mform) {
         $options = array();
-        for ($i = 1; $i <= self::MAX_GROUPS; $i += 1) {
-            $options[$i] = $i;
+        for ($i = 1; $i <= $this->get_maximum_choice_group_number(); $i += 1) {
+            $options[$i] = question_utils::int_to_letter($i);
         }
         $grouparray = array();
         $grouparray[] = $mform->createElement('text', 'answer',
@@ -219,8 +218,6 @@ class qtype_gapselect_edit_form_base extends question_edit_form {
     }
 
     protected function data_preprocessing_choice($question, $answer, $key) {
-        // See comment in data_preprocessing_answers.
-        unset($this->_form->_defaultValues['choices[$key][choicegroup]']);
         $question->choices[$key]['answer'] = $answer->answer;
         $question->choices[$key]['choicegroup'] = $answer->feedback;
         return $question;
@@ -276,7 +273,6 @@ class qtype_gapselect_edit_form_base extends question_edit_form {
         }
         $slots = $cleanedslots;
 
-        $found = false;
         foreach ($slots as $slot) {
             $found = false;
             foreach ($choices as $key => $choice) {
@@ -294,10 +290,21 @@ class qtype_gapselect_edit_form_base extends question_edit_form {
                         html_writer::tag('b', $slot));
             }
         }
-        return false;
+        return $this->extra_slot_validation($slots, $choices) ?? false;
     }
 
     public function qtype() {
         return '';
+    }
+
+    /**
+     * Finds more errors in question slots.
+     *
+     * @param array $slots The question text
+     * @param array $choices Question choices
+     * @return string|null Error message or false if no errors
+     */
+    protected function extra_slot_validation(array $slots, array $choices): ?string {
+        return null;
     }
 }

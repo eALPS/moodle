@@ -48,8 +48,8 @@ class qtype_numerical_renderer extends qtype_renderer {
             'name' => $inputname,
             'value' => $currentanswer,
             'id' => $inputname,
-            'size' => 80,
-            'class' => 'form-control',
+            'size' => 30,
+            'class' => 'form-control d-inline',
         );
 
         if ($options->readonly) {
@@ -62,7 +62,8 @@ class qtype_numerical_renderer extends qtype_renderer {
                     $currentanswer, $selectedunit);
             $answer = $question->get_matching_answer($value, $multiplier);
             if ($answer) {
-                $fraction = $question->apply_unit_penalty($answer->fraction, $answer->unitisright);
+                $unitisright = $question->is_unit_right($answer, $value, $multiplier);
+                $fraction = $question->apply_unit_penalty($answer->fraction, $unitisright);
             } else {
                 $fraction = 0;
             }
@@ -114,8 +115,8 @@ class qtype_numerical_renderer extends qtype_renderer {
         }
 
         if ($placeholder) {
-            $inputinplace = html_writer::tag('label', get_string('answer'),
-                    array('for' => $inputattributes['id'], 'class' => 'accesshide'));
+            $inputinplace = html_writer::tag('label', $options->add_question_identifier_to_label(get_string('answer')),
+                    array('for' => $inputattributes['id'], 'class' => 'sr-only'));
             $inputinplace .= $input;
             $questiontext = substr_replace($questiontext, $inputinplace,
                     strpos($questiontext, $placeholder), strlen($placeholder));
@@ -124,8 +125,10 @@ class qtype_numerical_renderer extends qtype_renderer {
         $result = html_writer::tag('div', $questiontext, array('class' => 'qtext'));
 
         if (!$placeholder) {
-            $result .= html_writer::start_tag('div', array('class' => 'ablock form-inline'));
-            $result .= html_writer::tag('label', get_string('answercolon', 'qtype_numerical'), array('for' => $inputattributes['id']));
+            $result .= html_writer::start_tag('div', ['class' => 'ablock d-flex flex-wrap align-items-center']);
+            $label = $options->add_question_identifier_to_label(get_string('answercolon', 'qtype_numerical'), true);
+            $result .= html_writer::tag('label', $label,
+                array('for' => $inputattributes['id']));
             $result .= html_writer::tag('span', $input, array('class' => 'answer'));
             $result .= html_writer::end_tag('div');
         }

@@ -32,7 +32,7 @@
  */
 class restore_controller extends base_controller {
 
-    protected $tempdir;   // Directory under tempdir/backup awaiting restore
+    protected $tempdir;   // Directory under $CFG->backuptempdir awaiting restore
     protected $restoreid; // Unique identificator for this restore
 
     protected $courseid; // courseid where restore is going to happen
@@ -53,7 +53,11 @@ class restore_controller extends base_controller {
     /** @var restore_plan */
     protected $plan;   // Restore execution plan
 
-    protected $execution;     // inmediate/delayed
+    /**
+     * Immediate/delayed execution type.
+     * @var integer
+     */
+    protected $execution;
     protected $executiontime; // epoch time when we want the restore to be executed (requires cron to run)
 
     protected $checksum; // Cache @checksumable results for lighter @is_checksum_correct() uses
@@ -62,33 +66,48 @@ class restore_controller extends base_controller {
     protected static $executing = 0;
 
     /**
+     * Holds the relevant destination information for course copy operations.
+     *
+     * @var \stdClass.
+     */
+    protected $copy;
+
+    /**
      * Constructor.
      *
      * If you specify a progress monitor, this will be used to report progress
      * while loading the plan, as well as for future use. (You can change it
      * for a different one later using set_progress.)
      *
-     * @param string $tempdir Directory under tempdir/backup awaiting restore
+     * @param string $tempdir Directory under $CFG->backuptempdir awaiting restore
      * @param int $courseid Course id where restore is going to happen
      * @param bool $interactive backup::INTERACTIVE_YES[true] or backup::INTERACTIVE_NO[false]
      * @param int $mode backup::MODE_[ GENERAL | HUB | IMPORT | SAMESITE ]
      * @param int $userid
      * @param int $target backup::TARGET_[ NEW_COURSE | CURRENT_ADDING | CURRENT_DELETING | EXISTING_ADDING | EXISTING_DELETING ]
      * @param \core\progress\base $progress Optional progress monitor
+     * @param \stdClass $copydata Course copy data, required when in MODE_COPY
+     * @param bool $releasesession Should release the session? backup::RELEASESESSION_YES or backup::RELEASESESSION_NO
      */
     public function __construct($tempdir, $courseid, $interactive, $mode, $userid, $target,
-            \core\progress\base $progress = null) {
+            ?\core\progress\base $progress = null, $releasesession = backup::RELEASESESSION_NO, ?\stdClass $copydata = null) {
+
+        if ($mode == backup::MODE_COPY && is_null($copydata)) {
+            throw new restore_controller_exception('cannot_instantiate_missing_copydata');
+        }
+
+        $this->copy = $copydata;
         $this->tempdir = $tempdir;
         $this->courseid = $courseid;
         $this->interactive = $interactive;
         $this->mode = $mode;
         $this->userid = $userid;
         $this->target = $target;
+        $this->releasesession = $releasesession;
 
         // Apply some defaults
         $this->type = '';
         $this->format = backup::FORMAT_UNKNOWN;
-        $this->execution = backup::EXECUTION_INMEDIATE;
         $this->operation = backup::OPERATION_RESTORE;
         $this->executiontime = 0;
         $this->samesite = false;
@@ -110,6 +129,13 @@ class restore_controller extends base_controller {
         // Default logger chain (based on interactive/execution)
         $this->logger = backup_factory::get_logger_chain($this->interactive, $this->execution, $this->restoreid);
 
+        // Set execution based on backup mode.
+        if ($mode == backup::MODE_ASYNC || $mode == backup::MODE_COPY) {
+            $this->execution = backup::EXECUTION_DELAYED;
+        } else {
+            $this->execution = backup::EXECUTION_INMEDIATE;
+        }
+
         // By default there is no progress reporter unless you specify one so it
         // can be used during loading of the plan.
         if ($progress) {
@@ -119,7 +145,7 @@ class restore_controller extends base_controller {
         }
         $this->progress->start_progress('Constructing restore_controller');
 
-        // Instantiate the output_controller singleton and active it if interactive and inmediate
+        // Instantiate the output_controller singleton and active it if interactive and immediate.
         $oc = output_controller::get_instance();
         if ($this->interactive == backup::INTERACTIVE_YES && $this->execution == backup::EXECUTION_INMEDIATE) {
             $oc->set_active(true);
@@ -141,6 +167,9 @@ class restore_controller extends base_controller {
         } else {
             // Load plan
             $this->load_plan();
+
+            // Apply all default settings (based on type/format/mode).
+            $this->apply_defaults();
 
             // Perform all initial security checks and apply (2nd param) them to settings automatically
             restore_check::check_security($this, true);
@@ -195,7 +224,8 @@ class restore_controller extends base_controller {
         // TODO: Check it's a correct status.
         $this->status = $status;
         // Ensure that, once set to backup::STATUS_AWAITING | STATUS_NEED_PRECHECK, controller is stored in DB.
-        if ($status == backup::STATUS_AWAITING || $status == backup::STATUS_NEED_PRECHECK) {
+        // Also save if executing so we can better track progress.
+        if ($status == backup::STATUS_AWAITING || $status == backup::STATUS_NEED_PRECHECK || $status == backup::STATUS_EXECUTING) {
             $this->save_controller();
             $tbc = self::load_controller($this->restoreid);
             $this->logger = $tbc->logger; // wakeup loggers
@@ -205,14 +235,18 @@ class restore_controller extends base_controller {
             // If the operation has ended without error (backup::STATUS_FINISHED_OK)
             // proceed by cleaning the object from database. MDL-29262.
             $this->save_controller(false, true);
+        } else if ($status == backup::STATUS_FINISHED_ERR) {
+            // If the operation has ended with an error save the controller
+            // preserving the object in the database. We may want it for debugging.
+            $this->save_controller();
         }
     }
 
     public function set_execution($execution, $executiontime = 0) {
         $this->log('setting controller execution', backup::LOG_DEBUG);
-        // TODO: Check valid execution mode
-        // TODO: Check time in future
-        // TODO: Check time = 0 if inmediate
+        // TODO: Check valid execution mode.
+        // TODO: Check time in future.
+        // TODO: Check time = 0 if immediate.
         $this->execution = $execution;
         $this->executiontime = $executiontime;
 
@@ -314,6 +348,30 @@ class restore_controller extends base_controller {
     public function get_plan() {
         return $this->plan;
     }
+    /**
+     * Gets the value for the requested setting
+     *
+     * @param string $name
+     * @param bool $default
+     * @return mixed
+     */
+    public function get_setting_value($name, $default = false) {
+        try {
+            return $this->get_plan()->get_setting($name)->get_value();
+        } catch (Exception $e) {
+            debugging('Failed to find the setting: '.$name, DEBUG_DEVELOPER);
+            return $default;
+        }
+    }
+
+    /**
+     * For debug only. Get a simple test display of all the settings.
+     *
+     * @return string
+     */
+    public function debug_display_all_settings_values(): string {
+        return $this->get_plan()->debug_display_all_settings_values();
+    }
 
     public function get_info() {
         return $this->info;
@@ -323,11 +381,28 @@ class restore_controller extends base_controller {
         // Basic/initial prevention against time/memory limits
         core_php_time_limit::raise(1 * 60 * 60); // 1 hour for 1 course initially granted
         raise_memory_limit(MEMORY_EXTRA);
-        // If this is not a course restore, inform the plan we are not
+
+        // Release the session so other tabs in the same session are not blocked.
+        if ($this->get_releasesession() === backup::RELEASESESSION_YES) {
+            // Preemptively reset the navcache before closing, so it remains the same on shutdown.
+            navigation_cache::destroy_volatile_caches();
+
+            \core\session\manager::write_close();
+        }
+
+        // Do course cleanup precheck, if required. This was originally in restore_ui. Moved to handle async backup/restore.
+        if ($this->get_target() == backup::TARGET_CURRENT_DELETING || $this->get_target() == backup::TARGET_EXISTING_DELETING) {
+            $options = array();
+            $options['keep_roles_and_enrolments'] = $this->get_setting_value('keep_roles_and_enrolments');
+            $options['keep_groups_and_groupings'] = $this->get_setting_value('keep_groups_and_groupings');
+            $options['userid'] = $this->userid;
+            restore_dbops::delete_course_content($this->get_courseid(), $options);
+        }
+        // If this is not a course restore or single activity restore (e.g. duplicate), inform the plan we are not
         // including all the activities for sure. This will affect any
         // task/step executed conditionally to stop processing information
         // for section and activity restore. MDL-28180.
-        if ($this->get_type() !== backup::TYPE_1COURSE) {
+        if ($this->get_type() !== backup::TYPE_1COURSE && $this->get_type() !== backup::TYPE_1ACTIVITY) {
             $this->log('notifying plan about excluded activities by type', backup::LOG_DEBUG);
             $this->plan->set_excluding_activities();
         }
@@ -481,6 +556,43 @@ class restore_controller extends base_controller {
         $this->progress->end_progress();
     }
 
+    /**
+     * Do the necessary copy preparation actions.
+     * This method should only be called once the backup of a copy operation is completed.
+     *
+     * @throws restore_controller_exception
+     */
+    public function prepare_copy(): void {
+        // Check that we are in the correct mode.
+        if ($this->mode != backup::MODE_COPY) {
+            throw new restore_controller_exception('cannot_prepare_copy_wrong_mode');
+        }
+
+        $this->progress->start_progress('Prepare Copy');
+
+        // If no exceptions were thrown, then we are in the proper format.
+        $this->format = backup::FORMAT_MOODLE;
+
+        // Load plan, apply security and set status based on interactivity.
+        $this->load_plan();
+
+        $this->set_status(backup::STATUS_NEED_PRECHECK);
+        $this->progress->end_progress();
+    }
+
+    /**
+     * Get the course copy data.
+     *
+     * @return \stdClass
+     */
+    public function get_copy(): \stdClass {
+        if ($this->mode != backup::MODE_COPY) {
+            throw new restore_controller_exception('cannot_get_copy_wrong_mode');
+        }
+
+        return $this->copy;
+    }
+
 // Protected API starts here
 
     protected function calculate_restoreid() {
@@ -509,6 +621,15 @@ class restore_controller extends base_controller {
         $this->plan = new restore_plan($this);
         $this->plan->build(); // Build plan for this controller
         $this->set_status(backup::STATUS_PLANNED);
+    }
+
+    /**
+     * Apply defaults from the global admin settings
+     */
+    protected function apply_defaults() {
+        $this->log('applying restore defaults', backup::LOG_DEBUG);
+        restore_controller_dbops::apply_config_defaults($this);
+        $this->set_status(backup::STATUS_CONFIGURED);
     }
 }
 

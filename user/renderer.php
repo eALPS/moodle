@@ -32,67 +32,6 @@ defined('MOODLE_INTERNAL') || die();
 class core_user_renderer extends plugin_renderer_base {
 
     /**
-     * Prints user files tree view
-     * @return string
-     */
-    public function user_files_tree() {
-        return $this->render(new user_files_tree);
-    }
-
-    /**
-     * Render user files tree
-     *
-     * @param user_files_tree $tree
-     * @return string HTML
-     */
-    public function render_user_files_tree(user_files_tree $tree) {
-        if (empty($tree->dir['subdirs']) && empty($tree->dir['files'])) {
-            $html = $this->output->box(get_string('nofilesavailable', 'repository'));
-        } else {
-            $htmlid = 'user_files_tree_'.uniqid();
-            $module = array('name' => 'core_user', 'fullpath' => '/user/module.js');
-            $this->page->requires->js_init_call('M.core_user.init_tree', array(false, $htmlid), false, $module);
-            $html = '<div id="'.$htmlid.'">';
-            $html .= $this->htmllize_tree($tree, $tree->dir);
-            $html .= '</div>';
-        }
-        return $html;
-    }
-
-    /**
-     * Internal function - creates htmls structure suitable for YUI tree.
-     * @param user_files_tree $tree
-     * @param array $dir
-     * @return string HTML
-     */
-    protected function htmllize_tree($tree, $dir) {
-        global $CFG;
-        $yuiconfig = array();
-        $yuiconfig['type'] = 'html';
-
-        if (empty($dir['subdirs']) and empty($dir['files'])) {
-            return '';
-        }
-        $result = '<ul>';
-        foreach ($dir['subdirs'] as $subdir) {
-            $image = $this->output->pix_icon(file_folder_icon(), $subdir['dirname'], 'moodle', array('class' => 'icon'));
-            $result .= '<li yuiConfig=\''.json_encode($yuiconfig).'\'><div>'.$image.' '.s($subdir['dirname']).'</div> '.
-                $this->htmllize_tree($tree, $subdir).'</li>';
-        }
-        foreach ($dir['files'] as $file) {
-            $url = file_encode_url("$CFG->wwwroot/pluginfile.php", '/'.$tree->context->id.'/user/private'.
-                $file->get_filepath().$file->get_filename(), true);
-            $filename = $file->get_filename();
-            $image = $this->output->pix_icon(file_file_icon($file), $filename, 'moodle', array('class' => 'icon'));
-            $result .= '<li yuiConfig=\''.json_encode($yuiconfig).'\'><div>'.$image.' '.html_writer::link($url, $filename).
-                '</div></li>';
-        }
-        $result .= '</ul>';
-
-        return $result;
-    }
-
-    /**
      * Prints user search utility that can search user by first initial of firstname and/or first initial of lastname
      * Prints a header with a title and the number of users found within that subset
      * @param string $url the url to return to, complete with any parameters needed for the return
@@ -104,10 +43,13 @@ class core_user_renderer extends plugin_renderer_base {
      * @return string html output
      */
     public function user_search($url, $firstinitial, $lastinitial, $usercount, $totalcount, $heading = null) {
-        global $OUTPUT;
 
-        $strall = get_string('all');
-        $alpha  = explode(',', get_string('alphabet', 'langconfig'));
+        if ($firstinitial !== 'all') {
+            set_user_preference('ifirst', $firstinitial);
+        }
+        if ($lastinitial !== 'all') {
+            set_user_preference('ilast', $lastinitial);
+        }
 
         if (!isset($heading)) {
             $heading = get_string('allparticipants');
@@ -117,49 +59,64 @@ class core_user_renderer extends plugin_renderer_base {
         $content .= html_writer::start_tag('div');
 
         // Search utility heading.
-        $content .= $OUTPUT->heading($heading.get_string('labelsep', 'langconfig').$usercount.'/'.$totalcount, 3);
+        $content .= $this->output->heading($heading.get_string('labelsep', 'langconfig').$usercount.'/'.$totalcount, 3);
 
-        // Bar of first initials.
-        $content .= html_writer::start_tag('div', array('class' => 'initialbar firstinitial'));
-        $content .= html_writer::label(get_string('firstname').' : ', null);
-
-        if (!empty($firstinitial)) {
-            $content .= html_writer::link($url.'&sifirst=', $strall);
-        } else {
-            $content .= html_writer::tag('strong', $strall);
-        }
-
-        foreach ($alpha as $letter) {
-            if ($letter == $firstinitial) {
-                $content .= html_writer::tag('strong', $letter);
-            } else {
-                $content .= html_writer::link($url.'&sifirst='.$letter, $letter);
-            }
-        }
-        $content .= html_writer::end_tag('div');
-
-         // Bar of last initials.
-        $content .= html_writer::start_tag('div', array('class' => 'initialbar lastinitial'));
-        $content .= html_writer::label(get_string('lastname').' : ', null);
-
-        if (!empty($lastinitial)) {
-            $content .= html_writer::link($url.'&silast=', $strall);
-        } else {
-            $content .= html_writer::tag('strong', $strall);
-        }
-
-        foreach ($alpha as $letter) {
-            if ($letter == $lastinitial) {
-                $content .= html_writer::tag('strong', $letter);
-            } else {
-                $content .= html_writer::link($url.'&silast='.$letter, $letter);
-            }
-        }
-        $content .= html_writer::end_tag('div');
+        // Initials bar.
+        $prefixfirst = 'sifirst';
+        $prefixlast = 'silast';
+        $content .= $this->output->initials_bar($firstinitial, 'firstinitial', get_string('firstname'), $prefixfirst, $url);
+        $content .= $this->output->initials_bar($lastinitial, 'lastinitial', get_string('lastname'), $prefixlast, $url);
 
         $content .= html_writer::end_tag('div');
         $content .= html_writer::tag('div', '&nbsp;');
         $content .= html_writer::end_tag('form');
+
+        return $content;
+    }
+
+    /**
+     * Construct a partial user search that'll require form handling implemented by the caller.
+     * This allows the developer to have an initials bar setup that does not automatically redirect.
+     *
+     * @param string $url the url to return to, complete with any parameters needed for the return
+     * @param string $firstinitial the first initial of the firstname
+     * @param string $lastinitial the first initial of the lastname
+     * @param bool $minirender Return a trimmed down view of the initials bar.
+     * @return string html output
+     * @throws coding_exception
+     */
+    public function partial_user_search(String $url, String $firstinitial, String $lastinitial, Bool $minirender = false): String {
+
+        $content = '';
+
+        if ($firstinitial !== 'all') {
+            set_user_preference('ifirst', $firstinitial);
+        }
+        if ($lastinitial !== 'all') {
+            set_user_preference('ilast', $lastinitial);
+        }
+
+        // Initials bar.
+        $prefixfirst = 'sifirst';
+        $prefixlast = 'silast';
+        $content .= $this->output->initials_bar(
+            $firstinitial,
+            'firstinitial',
+            get_string('firstname'),
+            $prefixfirst,
+            $url,
+            null,
+            $minirender
+        );
+        $content .= $this->output->initials_bar(
+            $lastinitial,
+            'lastinitial',
+            get_string('lastname'),
+            $prefixlast,
+            $url,
+            null,
+            $minirender
+        );
 
         return $content;
     }
@@ -198,32 +155,112 @@ class core_user_renderer extends plugin_renderer_base {
         return $this->output->render_from_template('core_tag/tagfeed', $items);
     }
 
-}
+    /**
+     * Renders the unified filter element for the course participants page.
+     * @deprecated since 3.9
+     * @throws coding_exception
+     */
+    public function unified_filter() {
+        throw new coding_exception('unified_filter cannot be used any more, please use participants_filter instead');
 
-/**
- * User files tree
- * @copyright  2010 Dongsheng Cai <dongsheng@moodle.com>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class user_files_tree implements renderable {
+    }
 
     /**
-     * @var context_user $context
+     * Render the data required for the participants filter on the course participants page.
+     *
+     * @param context $context The context of the course being displayed
+     * @param string $tableregionid Container of the table to be updated by this filter, is used to retrieve the table
+     * @return string
      */
-    public $context;
+    public function participants_filter(context $context, string $tableregionid): string {
+        $renderable = new \core_user\output\participants_filter($context, $tableregionid);
+        $templatecontext = $renderable->export_for_template($this->output);
+
+        return $this->output->render_from_template('core_user/participantsfilter', $templatecontext);
+    }
 
     /**
-     * @var array $dir
+     * Returns a formatted filter option.
+     *
+     * @param int $filtertype The filter type (e.g. status, role, group, enrolment, last access).
+     * @param string $criteria The string label of the filter type.
+     * @param int $value The value for the filter option.
+     * @param string $label The string representation of the filter option's value.
+     * @return array The formatted option with the ['filtertype:value' => 'criteria: label'] format.
      */
-    public $dir;
+    protected function format_filter_option($filtertype, $criteria, $value, $label) {
+        $optionlabel = get_string('filteroption', 'moodle', (object)['criteria' => $criteria, 'value' => $label]);
+        $optionvalue = "$filtertype:$value";
+        return [$optionvalue => $optionlabel];
+    }
 
     /**
-     * Create user files tree object
+     * Handles cases when after reloading the applied filters are missing in the filter options.
+     *
+     * @param array $filtersapplied The applied filters.
+     * @param array $filteroptions The filter options.
+     * @return array The formatted options with the ['filtertype:value' => 'criteria: label'] format.
      */
-    public function __construct() {
-        global $USER;
-        $this->context = context_user::instance($USER->id);
-        $fs = get_file_storage();
-        $this->dir = $fs->get_area_tree($this->context->id, 'user', 'private', 0);
+    private function handle_missing_applied_filters($filtersapplied, $filteroptions) {
+        global $DB;
+
+        foreach ($filtersapplied as $filter) {
+            if (!array_key_exists($filter, $filteroptions)) {
+                $filtervalue = explode(':', $filter);
+                if (count($filtervalue) !== 2) {
+                    continue;
+                }
+                $key = $filtervalue[0];
+                $value = $filtervalue[1];
+
+                switch($key) {
+                    case USER_FILTER_LAST_ACCESS:
+                        $now = usergetmidnight(time());
+                        $criteria = get_string('usersnoaccesssince');
+                        // Days.
+                        for ($i = 1; $i < 7; $i++) {
+                            $timestamp = strtotime('-' . $i . ' days', $now);
+                            if ($timestamp < $value) {
+                                break;
+                            }
+                            $val = get_string('numdays', 'moodle', $i);
+                            $filteroptions += $this->format_filter_option(USER_FILTER_LAST_ACCESS, $criteria, $timestamp, $val);
+                        }
+                        // Weeks.
+                        for ($i = 1; $i < 10; $i++) {
+                            $timestamp = strtotime('-'.$i.' weeks', $now);
+                            if ($timestamp < $value) {
+                                break;
+                            }
+                            $val = get_string('numweeks', 'moodle', $i);
+                            $filteroptions += $this->format_filter_option(USER_FILTER_LAST_ACCESS, $criteria, $timestamp, $val);
+                        }
+                        // Months.
+                        for ($i = 2; $i < 12; $i++) {
+                            $timestamp = strtotime('-'.$i.' months', $now);
+                            if ($timestamp < $value) {
+                                break;
+                            }
+                            $val = get_string('nummonths', 'moodle', $i);
+                            $filteroptions += $this->format_filter_option(USER_FILTER_LAST_ACCESS, $criteria, $timestamp, $val);
+                        }
+                        // Try a year.
+                        $timestamp = strtotime('-1 year', $now);
+                        if ($timestamp >= $value) {
+                            $val = get_string('numyear', 'moodle', 1);
+                            $filteroptions += $this->format_filter_option(USER_FILTER_LAST_ACCESS, $criteria, $timestamp, $val);
+                        }
+                        break;
+                    case USER_FILTER_ROLE:
+                        $criteria = get_string('role');
+                        if ($role = $DB->get_record('role', array('id' => $value))) {
+                            $role = role_get_name($role);
+                            $filteroptions += $this->format_filter_option(USER_FILTER_ROLE, $criteria, $value, $role);
+                        }
+                        break;
+                }
+            }
+        }
+        return $filteroptions;
     }
 }

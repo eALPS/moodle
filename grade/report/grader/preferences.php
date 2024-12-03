@@ -35,7 +35,7 @@ $PAGE->set_pagelayout('admin');
 /// Make sure they can even access this course
 
 if (!$course = $DB->get_record('course', array('id' => $courseid))) {
-    print_error('nocourseid');
+    throw new \moodle_exception('invalidcourseid');
 }
 
 require_login($course);
@@ -48,7 +48,7 @@ require('preferences_form.php');
 $mform = new grader_report_preferences_form('preferences.php', compact('course'));
 
 // If data submitted, then process and store.
-if (!$mform->is_cancelled() && $data = $mform->get_data()) {
+if ($data = $mform->get_data()) {
     foreach ($data as $preference => $value) {
         if (substr($preference, 0, 6) !== 'grade_') {
             continue;
@@ -60,16 +60,9 @@ if (!$mform->is_cancelled() && $data = $mform->get_data()) {
             set_user_preference($preference, $value);
         }
     }
-
-    redirect($CFG->wwwroot . '/grade/report/grader/index.php?id='.$courseid); // message here breaks accessability and is sloooowww
-    exit;
 }
 
-if ($mform->is_cancelled()){
-    redirect($CFG->wwwroot . '/grade/report/grader/index.php?id='.$courseid);
-}
-
-print_grade_page_head($courseid, 'settings', 'grader', get_string('preferences', 'gradereport_grader'));
+print_grade_page_head($courseid, 'settings', 'grader');
 
 // If USER has admin capability, print a link to the site config page for this report
 if (has_capability('moodle/site:config', $systemcontext)) {

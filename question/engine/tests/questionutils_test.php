@@ -14,30 +14,25 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * This file contains tests for the {@link question_utils} class.
- *
- * @package    moodlecore
- * @subpackage questionengine
- * @copyright  2010 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core_question;
 
+use question_utils;
 
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once(__DIR__ . '/../lib.php');
 
-
 /**
  * Unit tests for the {@link question_utils} class.
  *
+ * @package    core_question
+ * @category   test
  * @copyright  2010 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class question_utils_test extends advanced_testcase {
-    public function test_arrays_have_same_keys_and_values() {
+class questionutils_test extends \advanced_testcase {
+    public function test_arrays_have_same_keys_and_values(): void {
         $this->assertTrue(question_utils::arrays_have_same_keys_and_values(
                 array(),
                 array()));
@@ -58,7 +53,7 @@ class question_utils_test extends advanced_testcase {
                 array('sub0' => '1', 'sub1' => '2', 'sub2' => '3', 'sub3' => '1')));
     }
 
-    public function test_arrays_same_at_key() {
+    public function test_arrays_same_at_key(): void {
         $this->assertTrue(question_utils::arrays_same_at_key(
                 array(),
                 array(),
@@ -93,7 +88,7 @@ class question_utils_test extends advanced_testcase {
                 'key'));
     }
 
-    public function test_arrays_same_at_key_missing_is_blank() {
+    public function test_arrays_same_at_key_missing_is_blank(): void {
         $this->assertTrue(question_utils::arrays_same_at_key_missing_is_blank(
                 array(),
                 array(),
@@ -128,7 +123,7 @@ class question_utils_test extends advanced_testcase {
                 'key'));
     }
 
-    public function test_arrays_same_at_key_integer() {
+    public function test_arrays_same_at_key_integer(): void {
         $this->assertTrue(question_utils::arrays_same_at_key_integer(
                 array(),
                 array(),
@@ -163,7 +158,7 @@ class question_utils_test extends advanced_testcase {
                 'key'));
     }
 
-    public function test_int_to_roman() {
+    public function test_int_to_roman(): void {
         $this->assertSame('i', question_utils::int_to_roman(1));
         $this->assertSame('iv', question_utils::int_to_roman(4));
         $this->assertSame('v', question_utils::int_to_roman(5));
@@ -177,28 +172,51 @@ class question_utils_test extends advanced_testcase {
         $this->assertSame('mmmcmxcix', question_utils::int_to_roman(3999));
     }
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_int_to_roman_too_small() {
+    public function test_int_to_letter(): void {
+        $this->assertEquals('A', question_utils::int_to_letter(1));
+        $this->assertEquals('B', question_utils::int_to_letter(2));
+        $this->assertEquals('C', question_utils::int_to_letter(3));
+        $this->assertEquals('D', question_utils::int_to_letter(4));
+        $this->assertEquals('E', question_utils::int_to_letter(5));
+        $this->assertEquals('F', question_utils::int_to_letter(6));
+        $this->assertEquals('G', question_utils::int_to_letter(7));
+        $this->assertEquals('H', question_utils::int_to_letter(8));
+        $this->assertEquals('I', question_utils::int_to_letter(9));
+        $this->assertEquals('J', question_utils::int_to_letter(10));
+        $this->assertEquals('K', question_utils::int_to_letter(11));
+        $this->assertEquals('L', question_utils::int_to_letter(12));
+        $this->assertEquals('M', question_utils::int_to_letter(13));
+        $this->assertEquals('N', question_utils::int_to_letter(14));
+        $this->assertEquals('O', question_utils::int_to_letter(15));
+        $this->assertEquals('P', question_utils::int_to_letter(16));
+        $this->assertEquals('Q', question_utils::int_to_letter(17));
+        $this->assertEquals('R', question_utils::int_to_letter(18));
+        $this->assertEquals('S', question_utils::int_to_letter(19));
+        $this->assertEquals('T', question_utils::int_to_letter(20));
+        $this->assertEquals('U', question_utils::int_to_letter(21));
+        $this->assertEquals('V', question_utils::int_to_letter(22));
+        $this->assertEquals('W', question_utils::int_to_letter(23));
+        $this->assertEquals('X', question_utils::int_to_letter(24));
+        $this->assertEquals('Y', question_utils::int_to_letter(25));
+        $this->assertEquals('Z', question_utils::int_to_letter(26));
+    }
+
+    public function test_int_to_roman_too_small(): void {
+        $this->expectException(\moodle_exception::class);
         question_utils::int_to_roman(0);
     }
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_int_to_roman_too_big() {
+    public function test_int_to_roman_too_big(): void {
+        $this->expectException(\moodle_exception::class);
         question_utils::int_to_roman(4000);
     }
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_int_to_roman_not_int() {
+    public function test_int_to_roman_not_int(): void {
+        $this->expectException(\moodle_exception::class);
         question_utils::int_to_roman(1.5);
     }
 
-    public function test_clean_param_mark() {
+    public function test_clean_param_mark(): void {
         $this->assertNull(question_utils::clean_param_mark(null));
         $this->assertNull(question_utils::clean_param_mark('frog'));
         $this->assertSame('', question_utils::clean_param_mark(''));
@@ -207,5 +225,33 @@ class question_utils_test extends advanced_testcase {
         $this->assertSame(1.5, question_utils::clean_param_mark('1,5'));
         $this->assertSame(-1.5, question_utils::clean_param_mark('-1.5'));
         $this->assertSame(-1.5, question_utils::clean_param_mark('-1,5'));
+    }
+
+    /**
+     * Test the content is being filtered by filters.
+     *
+     * @covers ::format_question_fragment
+     */
+    public function test_format_question_fragment(): void {
+        global $CFG;
+        require_once($CFG->libdir . '/filterlib.php');
+        $this->resetAfterTest();
+        // Set few filters on.
+        filter_set_global_state('multilang', TEXTFILTER_ON);
+        filter_set_global_state('mathjaxloader', TEXTFILTER_ON);
+        filter_set_applies_to_strings('multilang', 1);
+        filter_set_applies_to_strings('mathjaxloader', 1);
+
+        $systemcontext = \context_system::instance();
+        $input = 'Some inline math \\( y = x^2 \\) and multi lang with html tag
+        <span lang="en" class="multilang"><b>English</b></span><span lang="fr" class="multilang">Français</span>';
+
+        $expected = question_utils::format_question_fragment($input, $systemcontext);
+
+        // The data should only be filtered by mathjax and multi lang filter. HTML tags should not be affeacted.
+        $this->assertStringContainsString('<span class="filter_mathjaxloader_equation">Some inline math', $expected);
+        $this->assertStringContainsString('<span class="nolink">\( y = x^2 \)</span>', $expected);
+        $this->assertStringNotContainsString('<span lang="en" class="multilang">', $expected);
+        $this->assertStringContainsString('<b>English</b>', $expected);
     }
 }

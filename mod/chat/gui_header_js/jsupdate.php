@@ -17,7 +17,7 @@
 define('NO_MOODLE_COOKIES', true); // Session not used here.
 
 require('../../../config.php');
-require('../lib.php');
+require_once('../lib.php');
 
 $chatsid      = required_param('chat_sid', PARAM_ALPHANUM);
 $chatlasttime = optional_param('chat_lasttime', 0, PARAM_INT);
@@ -34,18 +34,18 @@ $PAGE->set_url($url);
 
 
 if (!$chatuser = $DB->get_record('chat_users', array('sid' => $chatsid))) {
-    print_error('notlogged', 'chat');
+    throw new \moodle_exception('notlogged', 'chat');
 }
 
 // Get the minimal course.
 if (!$course = $DB->get_record('course', array('id' => $chatuser->course))) {
-    print_error('invalidcourseid');
+    throw new \moodle_exception('invalidcourseid');
 }
 
 // Get the user theme and enough info to be used in chat_format_message() which passes it along to.
 // No optimisation here, it would break again in future!
 if (!$user = $DB->get_record('user', array('id' => $chatuser->userid, 'deleted' => 0, 'suspended' => 0))) {
-    print_error('invaliduser');
+    throw new \moodle_exception('invaliduser');
 }
 \core\session\manager::set_user($user);
 
@@ -173,7 +173,11 @@ if ($refreshusers) {
     <body>
 <?php
 if ($beep) {
-    echo '<embed src="../beep.wav" autostart="true" hidden="true" name="beep" />';
+    echo '<script> (function() {';
+    echo 'var audioElement = document.createElement("audio");';
+    echo 'audioElement.setAttribute("src", "../beep.mp3");';
+    echo 'audioElement.play(); })();';
+    echo '</script>';
 }
 ?>
        <a href="<?php echo $refreshurlamp ?>" name="refreshLink">Refresh link</a>

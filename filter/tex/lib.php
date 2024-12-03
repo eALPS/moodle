@@ -29,15 +29,6 @@ defined('MOODLE_INTERNAL') || die();
 function filter_tex_get_executable($debug=false) {
     global $CFG;
 
-    $error_message1 = "Your system is not configured to run mimeTeX. You need to download the appropriate<br />"
-                     ."executable for you ".PHP_OS." platform from <a href=\"http://moodle.org/download/mimetex/\">"
-                     ."http://moodle.org/download/mimetex/</a>, or obtain the C source<br /> "
-                     ."from <a href=\"http://www.forkosh.com/mimetex.zip\">"
-                     ."http://www.forkosh.com/mimetex.zip</a>, compile it and "
-                     ."put the executable into your<br /> moodle/filter/tex/ directory.";
-
-    $error_message2 = "Custom mimetex is not executable!<br /><br />";
-
     if ((PHP_OS == "WINNT") || (PHP_OS == "WIN32") || (PHP_OS == "Windows")) {
         return "$CFG->dirroot/filter/tex/mimetex.exe";
     }
@@ -46,7 +37,7 @@ function filter_tex_get_executable($debug=false) {
         if (is_executable($pathmimetex)) {
             return $pathmimetex;
         } else {
-            print_error('mimetexnotexecutable', 'error');
+            throw new \moodle_exception('mimetexnotexecutable', 'error');
         }
     }
 
@@ -55,34 +46,76 @@ function filter_tex_get_executable($debug=false) {
         if (is_executable($custom_commandpath)) {
             return $custom_commandpath;
         } else {
-            print_error('mimetexnotexecutable', 'error');
+            throw new \moodle_exception('mimetexnotexecutable', 'error');
         }
     }
 
     switch (PHP_OS) {
-        case "Linux":   return "$CFG->dirroot/filter/tex/mimetex.linux";
         case "Darwin":  return "$CFG->dirroot/filter/tex/mimetex.darwin";
         case "FreeBSD": return "$CFG->dirroot/filter/tex/mimetex.freebsd";
+        case "Linux":
+            if (php_uname('m') == 'aarch64') {
+                return "$CFG->dirroot/filter/tex/mimetex.linux.aarch64";
+            }
+
+            return "$CFG->dirroot/filter/tex/mimetex.linux";
     }
 
-    print_error('mimetexisnotexist', 'error');
+    throw new \moodle_exception('mimetexisnotexist', 'error');
 }
 
-function filter_tex_sanitize_formula($texexp) {
-    /// Check $texexp against blacklist (whitelisting could be more complete but also harder to maintain)
-    $tex_blacklist = array(
-        'include','command','loop','repeat','open','toks','output',
-        'input','catcode','name','^^',
-        '\def','\edef','\gdef','\xdef',
-        '\every','\errhelp','\errorstopmode','\scrollmode','\nonstopmode',
-        '\batchmode','\read','\write','csname','\newhelp','\uppercase',
-        '\lowercase','\relax','\aftergroup',
-        '\afterassignment','\expandafter','\noexpand','\special',
-        '\let', '\futurelet','\else','\fi','\chardef','\makeatletter','\afterground',
-        '\noexpand','\line','\mathcode','\item','\section','\mbox','\declarerobustcommand'
+/**
+ * Check the formula expression against the list of denied keywords.
+ *
+ * List of allowed could be more complete but also harder to maintain.
+ *
+ * @param string $texexp Formula expression to check.
+ * @return string Formula expression with denied keywords replaced with 'forbiddenkeyword'.
+ */
+function filter_tex_sanitize_formula(string $texexp): string {
+
+    $denylist = [
+        'include', 'command', 'loop', 'repeat', 'open', 'toks', 'output',
+        'input', 'catcode', 'name', '^^',
+        '\def', '\edef', '\gdef', '\xdef',
+        '\every', '\errhelp', '\errorstopmode', '\scrollmode', '\nonstopmode',
+        '\batchmode', '\read', '\write', 'csname', '\newhelp', '\uppercase',
+        '\lowercase', '\relax', '\aftergroup',
+        '\afterassignment', '\expandafter', '\noexpand', '\special',
+        '\let', '\futurelet', '\else', '\fi', '\chardef', '\makeatletter', '\afterground',
+        '\noexpand', '\line', '\mathcode', '\item', '\section', '\mbox', '\declarerobustcommand',
+        '\ExplSyntaxOn', '\pdffiledump',
+    ];
+
+    $allowlist = ['inputenc'];
+
+    // Prepare the denylist for regular expression.
+    $denylist = array_map(function($value){
+        return '/' . preg_quote($value, '/') . '/i';
+    }, $denylist);
+
+    // Prepare the allowlist for regular expression.
+    $allowlist = array_map(function($value){
+        return '/\bforbiddenkeyword_(' . preg_quote($value, '/') . ')\b/i';
+    }, $allowlist);
+
+    // First, mangle all denied words.
+    $texexp = preg_replace_callback($denylist,
+        function($matches) {
+            return 'forbiddenkeyword_' . $matches[0];
+        },
+        $texexp
     );
 
-    return  str_ireplace($tex_blacklist, 'forbiddenkeyword', $texexp);
+    // Then, change back the allowed words.
+    $texexp = preg_replace_callback($allowlist,
+        function($matches) {
+            return $matches[1];
+        },
+        $texexp
+    );
+
+    return $texexp;
 }
 
 function filter_tex_get_cmd($pathname, $texexp) {

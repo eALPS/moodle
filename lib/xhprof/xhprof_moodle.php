@@ -64,13 +64,28 @@ function profiling_is_saved($value = null) {
 }
 
 /**
+ * Whether PHP profiling is available.
+ *
+ * This check ensures that one of the available PHP Profiling extensions is available.
+ *
+ * @return  bool
+ */
+function profiling_available() {
+    $hasextension = extension_loaded('tideways_xhprof');
+    $hasextension = $hasextension || extension_loaded('tideways');
+    $hasextension = $hasextension || extension_loaded('xhprof');
+
+    return $hasextension;
+}
+
+/**
  * Start profiling observing all the configuration
  */
 function profiling_start() {
     global $CFG, $SESSION, $SCRIPT;
 
     // If profiling isn't available, nothing to start
-    if (!extension_loaded('xhprof') && !extension_loaded('tideways')) {
+    if (!profiling_available()) {
         return false;
     }
 
@@ -88,18 +103,10 @@ function profiling_start() {
     $script = !empty($SCRIPT) ? $SCRIPT : profiling_get_script();
 
     // Get PGC variables
-    $check = 'PROFILEME';
-    $profileme = isset($_POST[$check]) || isset($_GET[$check]) || isset($_COOKIE[$check]) ? true : false;
-    $profileme = $profileme && !empty($CFG->profilingallowme);
-    $check = 'DONTPROFILEME';
-    $dontprofileme = isset($_POST[$check]) || isset($_GET[$check]) || isset($_COOKIE[$check]) ? true : false;
-    $dontprofileme = $dontprofileme && !empty($CFG->profilingallowme);
-    $check = 'PROFILEALL';
-    $profileall = isset($_POST[$check]) || isset($_GET[$check]) || isset($_COOKIE[$check]) ? true : false;
-    $profileall = $profileall && !empty($CFG->profilingallowall);
-    $check = 'PROFILEALLSTOP';
-    $profileallstop = isset($_POST[$check]) || isset($_GET[$check]) || isset($_COOKIE[$check]) ? true : false;
-    $profileallstop = $profileallstop && !empty($CFG->profilingallowall);
+    $profileme      = profiling_get_flag('PROFILEME')       && !empty($CFG->profilingallowme);
+    $dontprofileme  = profiling_get_flag('DONTPROFILEME')   && !empty($CFG->profilingallowme);
+    $profileall     = profiling_get_flag('PROFILEALL')      && !empty($CFG->profilingallowall);
+    $profileallstop = profiling_get_flag('PROFILEALLSTOP')  && !empty($CFG->profilingallowall);
 
     // DONTPROFILEME detected, nothing to start
     if ($dontprofileme) {
@@ -126,7 +133,13 @@ function profiling_start() {
         $profileauto = (mt_rand(1, $CFG->profilingautofrec) === 1);
     }
 
-    // See if the $script matches any of the included patterns
+    // Profile potentially slow pages.
+    $profileslow = false;
+    if (!empty($CFG->profilingslow) && !CLI_SCRIPT) {
+        $profileslow = true;
+    }
+
+    // See if the $script matches any of the included patterns.
     $included = empty($CFG->profilingincluded) ? '' : $CFG->profilingincluded;
     $profileincluded = profiling_string_matches($script, $included);
 
@@ -140,14 +153,24 @@ function profiling_start() {
     // Decide if profile by match must happen (only if profileauto is disabled)
     $profilematch = $profileincluded && !$profileexcluded && empty($CFG->profilingautofrec);
 
-    // If not auto, me, all, match have been detected, nothing to do
-    if (!$profileauto && !$profileme && !$profileall && !$profilematch) {
+    // Decide if slow profile has been excluded.
+    $profileslow = $profileslow && !$profileexcluded;
+
+    // If not auto, me, all, match have been detected, nothing to do.
+    if (!$profileauto && !$profileme && !$profileall && !$profilematch && !$profileslow) {
         return false;
+    }
+
+    // If we have only been triggered by a *potentially* slow page then remember this for later.
+    if ((!$profileauto && !$profileme && !$profileall && !$profilematch) && $profileslow) {
+        $CFG->profilepotentialslowpage = microtime(true); // Neither $PAGE or $SESSION are guaranteed here.
     }
 
     // Arrived here, the script is going to be profiled, let's do it
     $ignore = array('call_user_func', 'call_user_func_array');
-    if (extension_loaded('tideways')) {
+    if (extension_loaded('tideways_xhprof')) {
+        tideways_xhprof_enable(TIDEWAYS_XHPROF_FLAGS_CPU + TIDEWAYS_XHPROF_FLAGS_MEMORY);
+    } else if (extension_loaded('tideways')) {
         tideways_enable(TIDEWAYS_FLAGS_CPU + TIDEWAYS_FLAGS_MEMORY, array('ignored_functions' =>  $ignore));
     } else {
         xhprof_enable(XHPROF_FLAGS_CPU + XHPROF_FLAGS_MEMORY, array('ignored_functions' => $ignore));
@@ -159,13 +182,25 @@ function profiling_start() {
 }
 
 /**
+ * Check for profiling flags in all possible places
+ * @param string $flag name
+ * @return boolean
+ */
+function profiling_get_flag($flag) {
+    return !empty(getenv($flag)) ||
+        isset($_COOKIE[$flag]) ||
+        isset($_POST[$flag]) ||
+        isset($_GET[$flag]);
+}
+
+/**
  * Stop profiling, gathering results and storing them
  */
 function profiling_stop() {
     global $CFG, $DB, $SCRIPT;
 
     // If profiling isn't available, nothing to stop
-    if (!extension_loaded('xhprof') && !extension_loaded('tideways')) {
+    if (!profiling_available()) {
         return false;
     }
 
@@ -184,7 +219,9 @@ function profiling_stop() {
 
     // Arrived here, profiling is running, stop and save everything
     profiling_is_running(false);
-    if (extension_loaded('tideways')) {
+    if (extension_loaded('tideways_xhprof')) {
+        $data = tideways_xhprof_disable();
+    } else if (extension_loaded('tideways')) {
         $data = tideways_disable();
     } else {
         $data = xhprof_disable();
@@ -196,6 +233,24 @@ function profiling_stop() {
     $tables = $DB->get_tables();
     if (!in_array('profiling', $tables)) {
         return false;
+    }
+
+    // If we only profiled because it was potentially slow then...
+    if (!empty($CFG->profilepotentialslowpage)) {
+        $duration = microtime(true) - $CFG->profilepotentialslowpage;
+        if ($duration < $CFG->profilingslow) {
+            // Wasn't slow enough.
+            return false;
+        }
+
+        $sql = "SELECT max(totalexecutiontime)
+                  FROM {profiling}
+                 WHERE url = ?";
+        $slowest = $DB->get_field_sql($sql, array($script));
+        if (!empty($slowest) && $duration * 1000000 < $slowest) {
+            // Already have a worse profile stored.
+            return false;
+        }
     }
 
     $run = new moodle_xhprofrun();
@@ -414,7 +469,7 @@ function profiling_list_controls($listurl) {
  * against an array of * wildchar patterns
  */
 function profiling_string_matches($string, $patterns) {
-    $patterns = explode(',', $patterns);
+   $patterns = preg_split("/\n|,/", $patterns);
     foreach ($patterns as $pattern) {
         // Trim and prepare pattern
         $pattern = str_replace('\*', '.*', preg_quote(trim($pattern), '~'));
@@ -422,7 +477,7 @@ function profiling_string_matches($string, $patterns) {
         if (empty($pattern)) {
             continue;
         }
-        if (preg_match('~' . $pattern . '~', $string)) {
+        if (preg_match('~^' . $pattern . '$~', $string)) {
             return true;
         }
     }
@@ -772,10 +827,10 @@ function profiling_get_import_run_schema() {
         <xs:element type="xs:int" name="runreference"/>
         <xs:element type="xs:string" name="runcomment"/>
         <xs:element type="xs:int" name="timecreated"/>
-        <xs:element type="xs:int" name="totalexecutiontime"/>
-        <xs:element type="xs:int" name="totalcputime"/>
-        <xs:element type="xs:int" name="totalcalls"/>
-        <xs:element type="xs:int" name="totalmemory"/>
+        <xs:element type="xs:integer" name="totalexecutiontime"/>
+        <xs:element type="xs:integer" name="totalcputime"/>
+        <xs:element type="xs:integer" name="totalcalls"/>
+        <xs:element type="xs:integer" name="totalmemory"/>
         <xs:element type="xs:string" name="data"/>
       </xs:sequence>
     </xs:complexType>
@@ -803,6 +858,9 @@ class moodle_xhprofrun implements iXHProfRuns {
     protected $totalcalls = 0;
     protected $totalmemory = 0;
     protected $timecreated = 0;
+
+    /** @var bool Decide if we want to reduce profiling data or no */
+    protected bool $reducedata = false;
 
     public function __construct() {
         $this->timecreated = time();
@@ -833,7 +891,15 @@ class moodle_xhprofrun implements iXHProfRuns {
         if (@gzuncompress(base64_decode($rec->data)) === false) {
             return unserialize(base64_decode($rec->data));
         } else {
-            return unserialize(gzuncompress(base64_decode($rec->data)));
+            $info = unserialize(gzuncompress(base64_decode($rec->data)));
+            if (!$this->reducedata) {
+                // We want to return the full data.
+                return $info;
+            }
+
+            // We want to apply some transformations here, in order to reduce
+            // the information for some complex (too many levels) cases.
+            return $this->reduce_run_data($info);
         }
     }
 
@@ -863,14 +929,29 @@ class moodle_xhprofrun implements iXHProfRuns {
         $rec = new stdClass();
         $rec->runid = $this->runid;
         $rec->url = $this->url;
-        $rec->data = base64_encode(gzcompress(serialize($xhprof_data), 9));
         $rec->totalexecutiontime = $this->totalexecutiontime;
         $rec->totalcputime = $this->totalcputime;
         $rec->totalcalls = $this->totalcalls;
         $rec->totalmemory = $this->totalmemory;
         $rec->timecreated = $this->timecreated;
 
-        $DB->insert_record('profiling', $rec);
+        // Send to database with compressed and endoded data.
+        if (empty($CFG->disableprofilingtodatabase)) {
+            $rec->data = base64_encode(gzcompress(serialize($xhprof_data), 9));
+            $DB->insert_record('profiling', $rec);
+        }
+
+        // Send raw data to plugins.
+        $rec->data = $xhprof_data;
+
+        // Allow a plugin to take the trace data and process it.
+        if ($pluginsfunction = get_plugins_with_function('store_profiling_data')) {
+            foreach ($pluginsfunction as $plugintype => $plugins) {
+                foreach ($plugins as $pluginfunction) {
+                    $pluginfunction($rec);
+                }
+            }
+        }
 
         if (PHPUNIT_TEST) {
             // Calculate export variables.
@@ -893,10 +974,150 @@ class moodle_xhprofrun implements iXHProfRuns {
         $this->url = $url;
     }
 
-    // Private API starts here
+    /**
+     * Enable or disable reducing profiling data.
+     *
+     * @param bool $reducedata Decide if we want to reduce profiling data (true) or no (false).
+     */
+    public function set_reducedata(bool $reducedata): void {
+        $this->reducedata = $reducedata;
+    }
+
+    // Private API starts here.
 
     protected function sum_calls($sum, $data) {
         return $sum + $data['ct'];
+    }
+
+    /**
+     * Reduce the run data to a more manageable size.
+     *
+     * This removes from the run data all the entries that
+     * are matching a group of regular expressions.
+     *
+     * The main use is to remove all the calls between "__Mustache"
+     * functions, which don't provide any useful information and
+     * make the call-graph too complex to be handled.
+     *
+     * @param array $info The xhprof run data, original array.
+     * @return array The xhprof run data, reduced array.
+     */
+    protected function reduce_run_data(array $info): array {
+        // Define which (regular expressions) we want to remove. Already escaped if needed to, please.
+        $toremove = [
+            '__Mustache.*==>__Mustache.*', // All __Mustache to __Mustache calls.
+        ];
+        // Build the regular expression to be used.
+        $regexp = '/^(' . implode('|', $toremove) . ')$/';
+
+        // Given that the keys of the array have the format "parent==>child"
+        // we want to rebuild the array with the same structure but
+        // topologically sorted (parents always before children).
+        // Note that we do this exclusively to guarantee that the
+        // second pass (see below) works properly in all cases because,
+        // without it, we may need to perform N (while loop) second passes.
+        $sorted = $this->xhprof_topo_sort($info);
+
+        // To keep track of removed and remaining (child-parent) pairs.
+        $removed = [];
+        $remaining = [];
+
+        // First pass, we are going to remove all the elements which
+        // both parent and child are __Mustache function calls.
+        foreach ($sorted as $key => $value) {
+            if (!str_contains($key, '==>')) {
+                $parent = 'NULL';
+                $child = $key;
+            } else {
+                [$parent, $child] = explode('==>', $key); // TODO: Consider caching this in a property.
+            }
+
+            if (preg_match($regexp, $key)) {
+                unset($sorted[$key]);
+                $removed[$child][$parent] = true;
+            } else {
+                $remaining[$child][$parent] = true;
+            }
+        }
+
+        // Second pass, we are going to remove all the elements which
+        // parent was removed by first pass and doesn't appear anymore
+        // as a child of anything (aka, they have become orphaned).
+        // Note, that thanks to the topological sorting, we can be sure
+        // one unique pass is enough. Without it, we may need to perform
+        // N (while loop) second passes.
+        foreach ($sorted as $key => $value) {
+            if (!str_contains($key, '==>')) {
+                $parent = 'NULL';
+                $child = $key;
+            } else {
+                [$parent, $child] = explode('==>', $key); // TODO: Consider caching this in a property.
+            }
+
+            if (isset($removed[$parent]) && !isset($remaining[$parent])) {
+                unset($sorted[$key]);
+                $removed[$child][$parent] = true;
+                unset($remaining[$child][$parent]);
+                // If this was the last parent of this child, remove it completely from the remaining array.
+                if (empty($remaining[$child])) {
+                    unset($remaining[$child]);
+                }
+            }
+        }
+
+        // We are done, let's return the reduced array.
+        return $sorted;
+    }
+
+
+    /**
+     * Sort the xhprof run pseudo-topologically, so all parents are always before their children.
+     *
+     * Note that this is not a proper, complex, recursive topological sorting algorithm, returning
+     * nodes that later have to be converted back to xhprof "pairs" but, instead, does the specific
+     * work to get those parent==>child (2 levels only) "pairs" sorted (parents always before children).
+     *
+     * @param array $info The xhprof run data, original array.
+     *
+     * @return array The xhprof run data, sorted array.
+     */
+    protected function xhprof_topo_sort(array $info): array {
+        $sorted = [];
+        $visited = [];
+        $remaining = $info;
+        do {
+            $newremaining = [];
+            foreach ($remaining as $key => $value) {
+                // If we already have visited this element, we can skip it.
+                if (isset($visited[$key])) {
+                    continue;
+                }
+                if (!str_contains($key, '==>')) {
+                    // It's a root element, we can add it to the sorted array.
+                    $sorted[$key] = $info[$key];
+                    $visited[$key] = true;
+                } else {
+                    [$parent, $child] = explode('==>', $key); // TODO: Consider caching this in a property.
+                    if (isset($visited[$parent])) {
+                        // Parent already visited, we can add any children to the sorted array.
+                        $sorted[$key] = $info[$key];
+                        $visited[$child] = true;
+                    } else {
+                        // Cannot add this yet, we need to wait for the parent.
+                        $newremaining[$key] = $value;
+                    }
+                }
+            }
+            // Protection against infinite loops.
+            if (count($remaining) === count($newremaining)) {
+                $remaining = []; // So we exit the do...while loop.
+            } else {
+                $remaining = $newremaining; // There is still work to do.
+            }
+        } while (count($remaining) > 0);
+
+        // We are done, let's return the sorted array.
+        return $sorted;
     }
 }
 

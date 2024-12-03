@@ -29,7 +29,7 @@ M.availability_date.form.initInner = function(html, defaultTime) {
 };
 
 M.availability_date.form.getNode = function(json) {
-    var html = '<span class="col-form-label p-r-1">' +
+    var html = '<span class="col-form-label pe-3">' +
                     M.util.get_string('direction_before', 'availability_date') + '</span> <span class="availability-group">' +
             '<label><span class="accesshide">' + M.util.get_string('direction_label', 'availability_date') + ' </span>' +
             '<select name="direction" class="custom-select">' +
@@ -65,6 +65,11 @@ M.availability_date.form.getNode = function(json) {
         // Set default time that corresponds to the HTML selectors.
         node.setData('time', this.defaultTime);
     }
+    if (json.nodeUID === undefined) {
+        var miliTime = new Date();
+        json.nodeUID = miliTime.getTime();
+    }
+    node.setData('nodeUID', json.nodeUID);
     if (json.d !== undefined) {
         node.one('select[name=direction]').set('value', json.d);
     }
@@ -114,7 +119,7 @@ M.availability_date.form.getNode = function(json) {
  * gets an AJAX response.
  *
  * @method updateTime
- * @param {Y.Node} component Node for plugin controls
+ * @param {Y.Node} node Node for plugin controls
  */
 M.availability_date.form.updateTime = function(node) {
     // After a change to the date/time we need to recompute the
@@ -140,6 +145,96 @@ M.availability_date.form.updateTime = function(node) {
 M.availability_date.form.fillValue = function(value, node) {
     value.d = node.one('select[name=direction]').get('value');
     value.t = parseInt(node.getData('time'), 10);
+    value.nodeUID = node.getData('nodeUID');
+};
+
+/**
+ * List out Date node value in the same branch.
+ *
+ * This will go through all array node and list nodes that are sibling of the current node.
+ *
+ * @method findAllDateSiblings
+ * @param {Array} tree Tree items to convert
+ * @param {Number} nodeUIDToFind node UID to find.
+ * @return {Array|null} array of surrounding date avaiability values
+ */
+M.availability_date.form.findAllDateSiblings = function(tree, nodeUIDToFind) {
+    var itemValue = null;
+    var siblingsFinderRecursive = function(itemsTree) {
+        var dateSiblings = [];
+        var nodeFound = false;
+        var index;
+        var childDates;
+        var currentOp = itemsTree.op !== undefined ? itemsTree.op : null;
+        if (itemsTree.c !== undefined) {
+            var children = itemsTree.c;
+            for (index = 0; index < children.length; index++) {
+                itemValue = children.at(index);
+                if (itemValue.type === undefined) {
+                    childDates = siblingsFinderRecursive(itemValue);
+                    if (childDates) {
+                        return childDates;
+                    }
+                }
+                if (itemValue.type === 'date') {
+                    // We go through all tree node, if we meet the current node then we add all nodes in the current branch.
+                    if (nodeUIDToFind === itemValue.nodeUID) {
+                        nodeFound = true;
+                    } else if (currentOp === '&') {
+                        dateSiblings.push(itemValue);
+                    }
+                }
+            }
+            if (nodeFound) {
+                return dateSiblings;
+            }
+        }
+        return null;
+    };
+    return siblingsFinderRecursive(tree);
+};
+
+/**
+ * Check current node.
+ *
+ * This will check current date node with all date node in tree node.
+ *
+ * @method checkConditionDate
+ * @param {Y.Node} currentNode The curent node.
+ *
+ * @return {boolean} error Return true if the date is conflict.
+ */
+M.availability_date.form.checkConditionDate = function(currentNode) {
+    var error = false;
+    var currentNodeUID = currentNode.getData('nodeUID');
+    var currentNodeDirection = currentNode.one('select[name=direction]').get('value');
+    var currentNodeTime = parseInt(currentNode.getData('time'), 10);
+    var dateSiblings = M.availability_date.form.findAllDateSiblings(
+        M.core_availability.form.rootList.getValue(),
+        currentNodeUID);
+    if (dateSiblings) {
+        dateSiblings.forEach(function(dateSibling) {
+            // Validate if the date is conflict.
+            if (dateSibling.d === '<') {
+                if (currentNodeDirection === '>=' && currentNodeTime >= dateSibling.t) {
+                    error = true;
+                }
+            } else {
+                if (currentNodeDirection === '<' && currentNodeTime <= dateSibling.t) {
+                    error = true;
+                }
+            }
+            return error;
+        });
+    }
+    return error;
+};
+
+M.availability_date.form.fillErrors = function(errors, node) {
+    var error = M.availability_date.form.checkConditionDate(node);
+    if (error) {
+        errors.push('availability_date:error_dateconflict');
+    }
 };
 
 

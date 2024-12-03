@@ -28,23 +28,26 @@ defined('MOODLE_INTERNAL') || die();
 
 class xmldb_table extends xmldb_object {
 
-    /** @var array table columns */
+    /** @var xmldb_field[] table columns */
     protected $fields;
 
-    /** @var array keys */
+    /** @var xmldb_key[] keys */
     protected $keys;
 
-    /** @var array indexes */
+    /** @var xmldb_index[] indexes */
     protected $indexes;
+
+    /** @var int max length of table name prefixes */
+    const PREFIX_MAX_LENGTH = 10;
 
     /**
      * Note:
-     *  - Oracle has 30 chars limit for all names,
-     *    2 chars are reserved for prefix.
+     *  - PostgreSQL has a limit of 63 ascii chars (bytes) for table names. Others have greater limits.
+     *    Up to PREFIX_MAX_LENGTH ascii chars (bytes) are reserved for table prefixes.
      *
-     * @const maximum length of field names
+     * @var int max length of table names (without prefix).
      */
-    const NAME_MAX_LENGTH = 28;
+    const NAME_MAX_LENGTH = 63 - self::PREFIX_MAX_LENGTH;
 
     /**
      * Creates one new xmldb_table
@@ -239,7 +242,7 @@ class xmldb_table extends xmldb_object {
 
     /**
      * This function will return the array of fields in the table
-     * @return array
+     * @return xmldb_field[]
      */
     public function getFields() {
         return $this->fields;
@@ -247,7 +250,7 @@ class xmldb_table extends xmldb_object {
 
     /**
      * This function will return the array of keys in the table
-     * @return array
+     * @return xmldb_key[]
      */
     public function getKeys() {
         return $this->keys;
@@ -255,7 +258,7 @@ class xmldb_table extends xmldb_object {
 
     /**
      * This function will return the array of indexes in the table
-     * @return array
+     * @return xmldb_index[]
      */
     public function getIndexes() {
         return $this->indexes;
@@ -264,7 +267,7 @@ class xmldb_table extends xmldb_object {
     /**
      * Returns one xmldb_field
      * @param string $fieldname
-     * @return mixed
+     * @return xmldb_field|null
      */
     public function getField($fieldname) {
         $i = $this->findFieldInArray($fieldname);
@@ -277,7 +280,7 @@ class xmldb_table extends xmldb_object {
     /**
      * Returns the position of one field in the array.
      * @param string $fieldname
-     * @return mixed
+     * @return int|null index of the field, or null if not found.
      */
     public function findFieldInArray($fieldname) {
         foreach ($this->fields as $i => $field) {
@@ -290,7 +293,7 @@ class xmldb_table extends xmldb_object {
 
     /**
      * This function will reorder the array of fields
-     * @return bool
+     * @return bool whether the reordering succeeded.
      */
     public function orderFields() {
         $result = $this->orderElements($this->fields);
@@ -305,7 +308,7 @@ class xmldb_table extends xmldb_object {
     /**
      * Returns one xmldb_key
      * @param string $keyname
-     * @return mixed
+     * @return xmldb_key|null
      */
     public function getKey($keyname) {
         $i = $this->findKeyInArray($keyname);
@@ -318,7 +321,7 @@ class xmldb_table extends xmldb_object {
     /**
      * Returns the position of one key in the array.
      * @param string $keyname
-     * @return mixed
+     * @return int|null index of the key, or null if not found.
      */
     public function findKeyInArray($keyname) {
         foreach ($this->keys as $i => $key) {
@@ -331,7 +334,7 @@ class xmldb_table extends xmldb_object {
 
     /**
      * This function will reorder the array of keys
-     * @return bool
+     * @return bool whether the reordering succeeded.
      */
     public function orderKeys() {
         $result = $this->orderElements($this->keys);
@@ -346,7 +349,7 @@ class xmldb_table extends xmldb_object {
     /**
      * Returns one xmldb_index
      * @param string $indexname
-     * @return mixed
+     * @return xmldb_index|null
      */
     public function getIndex($indexname) {
         $i = $this->findIndexInArray($indexname);
@@ -359,7 +362,7 @@ class xmldb_table extends xmldb_object {
     /**
      * Returns the position of one index in the array.
      * @param string $indexname
-     * @return mixed
+     * @return int|null index of the index, or null if not found.
      */
     public function findIndexInArray($indexname) {
         foreach ($this->indexes as $i => $index) {
@@ -372,7 +375,7 @@ class xmldb_table extends xmldb_object {
 
     /**
      * This function will reorder the array of indexes
-     * @return bool
+     * @return bool whether the reordering succeeded.
      */
     public function orderIndexes() {
         $result = $this->orderElements($this->indexes);
@@ -386,7 +389,7 @@ class xmldb_table extends xmldb_object {
 
     /**
      * This function will set the array of fields in the table
-     * @param array $fields
+     * @param xmldb_field[] $fields
      */
     public function setFields($fields) {
         $this->fields = $fields;
@@ -394,7 +397,7 @@ class xmldb_table extends xmldb_object {
 
     /**
      * This function will set the array of keys in the table
-     * @param array $keys
+     * @param xmldb_key[] $keys
      */
     public function setKeys($keys) {
         $this->keys = $keys;
@@ -402,7 +405,7 @@ class xmldb_table extends xmldb_object {
 
     /**
      * This function will set the array of indexes in the table
-     * @param array $indexes
+     * @param xmldb_index[] $indexes
      */
     public function setIndexes($indexes) {
         $this->indexes = $indexes;
@@ -710,7 +713,7 @@ class xmldb_table extends xmldb_object {
      * @param xmldb_table $xmldb_table optional when object is table
      * @return string null if ok, error message if problem found
      */
-    public function validateDefinition(xmldb_table $xmldb_table=null) {
+    public function validateDefinition(?xmldb_table $xmldb_table=null) {
         // table parameter is ignored
         $name = $this->getName();
         if (strlen($name) > self::NAME_MAX_LENGTH) {
@@ -731,7 +734,7 @@ class xmldb_table extends xmldb_object {
         $o = '';
         $o.= '    <TABLE NAME="' . $this->name . '"';
         if ($this->comment) {
-            $o.= ' COMMENT="' . htmlspecialchars($this->comment) . '"';
+            $o.= ' COMMENT="' . htmlspecialchars($this->comment, ENT_COMPAT) . '"';
         }
         $o.= '>' . "\n";
         // Now the fields

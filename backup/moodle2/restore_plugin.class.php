@@ -34,12 +34,24 @@ defined('MOODLE_INTERNAL') || die();
  */
 abstract class restore_plugin {
 
+    /** @var string */
     protected $plugintype;
+    /** @var string */
     protected $pluginname;
+    /** @var restore_path_element */
     protected $connectionpoint;
+    /** @var restore_structure_step */
     protected $step;
+    /** @var restore_course_task|restore_activity_task */
     protected $task;
 
+    /**
+     * restore_plugin constructor.
+     *
+     * @param string $plugintype
+     * @param string $pluginname
+     * @param restore_structure_step $step
+     */
     public function __construct($plugintype, $pluginname, $step) {
         $this->plugintype = $plugintype;
         $this->pluginname = $pluginname;
@@ -58,9 +70,11 @@ abstract class restore_plugin {
         $methodname = 'define_' . basename($this->connectionpoint->get_path()) . '_plugin_structure';
 
         if (method_exists($this, $methodname)) {
-            if ($bluginpaths = $this->$methodname()) {
-                foreach ($bluginpaths as $path) {
-                    $path->set_processing_object($this);
+            if ($pluginpaths = $this->$methodname()) {
+                foreach ($pluginpaths as $path) {
+                    if ($path->get_processing_object() === null && !$this->step->grouped_parent_exists($path, $paths)) {
+                        $path->set_processing_object($this);
+                    }
                     $paths[] = $path;
                 }
             }
@@ -115,7 +129,7 @@ abstract class restore_plugin {
      * method (when available), first in the main restore_xxxx_plugin class
      * and later on each of the available subclasses
      */
-    static public function get_restore_decode_contents($plugintype) {
+    public static function get_restore_decode_contents($plugintype) {
         $decodecontents = array();
         // Check the requested plugintype is a valid one
         if (!array_key_exists($plugintype, core_component::get_plugin_types($plugintype))) {
@@ -151,7 +165,7 @@ abstract class restore_plugin {
      * Define the contents in the plugin that must be
      * processed by the link decoder
      */
-    static public function define_plugin_decode_contents() {
+    public static function define_plugin_decode_contents() {
         throw new coding_exception('define_plugin_decode_contents() method needs to be overridden in each subclass of restore_plugin');
     }
 
@@ -257,5 +271,14 @@ abstract class restore_plugin {
         return $this->connectionpoint->get_path() . '/' .
                'plugin_' . $this->plugintype . '_' .
                $this->pluginname . '_' . basename($this->connectionpoint->get_path()) . $path;
+    }
+
+    /**
+     * Get the task we are part of.
+     *
+     * @return restore_activity_task|restore_course_task the task.
+     */
+    protected function get_task() {
+        return $this->task;
     }
 }

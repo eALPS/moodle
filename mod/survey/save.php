@@ -31,17 +31,17 @@
 // Make sure this is a legitimate posting
 
     if (!$formdata = data_submitted() or !confirm_sesskey()) {
-        print_error('cannotcallscript');
+        throw new \moodle_exception('cannotcallscript');
     }
 
     $id = required_param('id', PARAM_INT);    // Course Module ID
 
     if (! $cm = get_coursemodule_from_id('survey', $id)) {
-        print_error('invalidcoursemodule');
+        throw new \moodle_exception('invalidcoursemodule');
     }
 
     if (! $course = $DB->get_record("course", array("id"=>$cm->course))) {
-        print_error('coursemisconf');
+        throw new \moodle_exception('coursemisconf');
     }
 
     $PAGE->set_url('/mod/survey/save.php', array('id'=>$id));
@@ -51,7 +51,7 @@
     require_capability('mod/survey:participate', $context);
 
     if (! $survey = $DB->get_record("survey", array("id"=>$cm->instance))) {
-        print_error('invalidsurveyid', 'survey');
+        throw new \moodle_exception('invalidsurveyid', 'survey');
     }
 
     $strsurveysaved = get_string('surveysaved', 'survey');
@@ -59,7 +59,7 @@
     $PAGE->set_title($strsurveysaved);
     $PAGE->set_heading($course->fullname);
     echo $OUTPUT->header();
-    echo $OUTPUT->heading($survey->name);
+    echo $OUTPUT->heading(format_string($survey->name));
 
     if (survey_already_done($survey->id, $USER->id)) {
         notice(get_string("alreadysubmitted", "survey"), get_local_referer(false));

@@ -25,42 +25,61 @@
         "width": "500"
     }
 }}
-<div class="progressbar_container" style="width: {{width}}px;" id="{{id}}">
-    <h2 id="{{id}}_status"></h2>
-    <div class="progress progress-striped active">
-        <div id="{{id}}_bar" class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">&nbsp;</div>
+<div id="{{idnumber}}" class="progressbar_container mb-3 {{class}}" data-recordid="{{id}}">
+    <div class="progress">
+        <div id="{{idnumber}}_bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" aria-value="{{value}}" aria-valuemin="0" aria-valuemax="100" style="width: {{value}}%"></div>
     </div>
-    <p id="{{id}}_estimate"></p>
+    <div class="d-flex">
+        <div style="flex: 1 1 0; min-width: 0;">
+            <div id="{{idnumber}}_status" class="text-truncate">&nbsp;</div>
+        </div>
+        <div class="text-end ps-3" style="flex: 0 0 content">
+            <span id="{{idnumber}}_estimate" class="">&nbsp;</span>
+            <span id="{{idnumber}}_percentage" class="d-inline-block" style="width: 3em">{{value}}%</span>
+        </div>
+    </div>
 </div>
 
 {{! We must not use the JS helper otherwise this gets executed too late. }}
-<script type="text/javascript">
+<script>
 (function() {
-    var el = document.getElementById('{{id}}'),
-        progressBar = document.getElementById('{{id}}_bar'),
-        statusIndicator = document.getElementById('{{id}}_status'),
-        estimateIndicator = document.getElementById('{{id}}_estimate');
+
+    let el = document.getElementById('{{idnumber}}');
+    let progressBar = document.getElementById('{{idnumber}}_bar');
+    let statusIndicator = document.getElementById('{{idnumber}}_status');
+    let estimateIndicator = document.getElementById('{{idnumber}}_estimate');
+    let percentageIndicator = document.getElementById('{{idnumber}}_percentage');
+
+    // Change background colour to red if there was an error.
+    if ({{error}} == 1) {
+        el.querySelector('.progress-bar').style.background = 'red';
+    }
 
     el.addEventListener('update', function(e) {
         var msg = e.detail.message,
             percent = e.detail.percent,
-            estimate = e.detail.estimate;
+            estimate = e.detail.estimate
+            error = e.detail.error;
 
         statusIndicator.textContent = msg;
-        progressBar.textContent = '' + percent + '%';
-        if (percent === 100) {
-            el.classList.add('progress-success');
+        progressBar.style.width = percent.toFixed(1) + '%';
+        progressBar.setAttribute('value', percent.toFixed(1));
+
+        if (error) {
+            progressBar.classList.add('bg-danger');
+            progressBar.classList.remove('bg-success');
+            estimateIndicator.textContent = '';
+        } else if (percent === 100) {
+            progressBar.classList.add('bg-success');
+            progressBar.classList.remove('progress-bar-striped');
+            progressBar.classList.remove('progress-bar-animated');
+            percentageIndicator.textContent = '100%';
             estimateIndicator.textContent = '';
         } else {
-            if (estimate) {
-                estimateIndicator.textContent = estimate;
-            } else {
-                estimateIndicator.textContent = '';
-            }
-            el.classList.remove('progress-success');
+            estimateIndicator.textContent = estimate;
+            percentageIndicator.textContent =  percent.toFixed(1) + '%';
+            progressBar.classList.remove('bg-success');
         }
-        progressBar.setAttribute('aria-valuenow', percent);
-        progressBar.setAttribute('style', 'width: ' + percent + '%');
     });
 })();
 </script>

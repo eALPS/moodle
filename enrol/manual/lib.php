@@ -114,8 +114,17 @@ class enrol_manual_plugin extends enrol_plugin {
             $managelink = new moodle_url("/enrol/manual/manage.php", array('enrolid'=>$instance->id));
             $icons[] = $OUTPUT->action_icon($managelink, new pix_icon('t/enrolusers', get_string('enrolusers', 'enrol_manual'), 'core', array('class'=>'iconsmall')));
         }
-        $parenticons = parent::get_action_icons($instance);
-        $icons = array_merge($icons, $parenticons);
+
+        if (has_any_capability(['enrol/manual:config', 'moodle/course:editcoursewelcomemessage'], $context)) {
+            $linkparams = [
+                'courseid' => $instance->courseid,
+                'id' => $instance->id,
+                'type' => $instance->enrol,
+            ];
+            $editlink = new moodle_url('/enrol/editinstance.php', $linkparams);
+            $icon = new pix_icon('t/edit', get_string('edit'), 'core', ['class' => 'iconsmall']);
+            $icons[] = $OUTPUT->action_icon($editlink, $icon);
+        }
 
         return $icons;
     }
@@ -127,19 +136,15 @@ class enrol_manual_plugin extends enrol_plugin {
      */
     public function add_default_instance($course) {
         $expirynotify = $this->get_config('expirynotify', 0);
-        if ($expirynotify == 2) {
-            $expirynotify = 1;
-            $notifyall = 1;
-        } else {
-            $notifyall = 0;
-        }
+
         $fields = array(
             'status'          => $this->get_config('status'),
             'roleid'          => $this->get_config('roleid', 0),
             'enrolperiod'     => $this->get_config('enrolperiod', 0),
             'expirynotify'    => $expirynotify,
-            'notifyall'       => $notifyall,
+            'notifyall'       => $expirynotify == 2 ? 1 : 0,
             'expirythreshold' => $this->get_config('expirythreshold', 86400),
+            'customint1' => $this->get_config('sendcoursewelcomemessage'),
         );
         return $this->add_instance($course, $fields);
     }
@@ -150,7 +155,7 @@ class enrol_manual_plugin extends enrol_plugin {
      * @param array instance fields
      * @return int id of new instance, null if can not be created
      */
-    public function add_instance($course, array $fields = NULL) {
+    public function add_instance($course, ?array $fields = NULL) {
         global $DB;
 
         if ($DB->record_exists('enrol', array('courseid'=>$course->id, 'enrol'=>'manual'))) {
@@ -178,6 +183,13 @@ class enrol_manual_plugin extends enrol_plugin {
                 }
             }
         }
+
+        // This method is used when configuring the enrolment method, and when only updating the welcome message.
+        // The 'expirynotify' property won't be set when updating the welcome message.
+        if (isset($data->expirynotify)) {
+            $data->notifyall = $data->expirynotify == 2 ? 1 : 0;
+        }
+
         return parent::update_instance($instance, $data);
     }
 
@@ -194,101 +206,42 @@ class enrol_manual_plugin extends enrol_plugin {
      * @return enrol_user_button
      */
     public function get_manual_enrol_button(course_enrolment_manager $manager) {
-        global $CFG;
+        global $CFG, $PAGE;
         require_once($CFG->dirroot.'/cohort/lib.php');
 
+        static $called = false;
+
         $instance = null;
-        $instances = array();
         foreach ($manager->get_enrolment_instances() as $tempinstance) {
             if ($tempinstance->enrol == 'manual') {
                 if ($instance === null) {
                     $instance = $tempinstance;
                 }
-                $instances[] = array('id' => $tempinstance->id, 'name' => $this->get_instance_name($tempinstance));
             }
         }
         if (empty($instance)) {
             return false;
         }
 
-        if (!$manuallink = $this->get_manual_enrol_link($instance)) {
+        $link = $this->get_manual_enrol_link($instance);
+        if (!$link) {
             return false;
         }
 
-        $button = new enrol_user_button($manuallink, get_string('enrolusers', 'enrol_manual'), 'get');
+        $button = new enrol_user_button($link, get_string('enrolusers', 'enrol_manual'), 'get');
         $button->class .= ' enrol_manual_plugin';
+        $button->type = single_button::BUTTON_PRIMARY;
 
-        $startdate = $manager->get_course()->startdate;
-        if (!$defaultstart = get_config('enrol_manual', 'enrolstart')) {
-            // Default to now if there is no system setting.
-            $defaultstart = 4;
+        $context = context_course::instance($instance->courseid);
+        $arguments = array('contextid' => $context->id);
+
+        if (!$called) {
+            $called = true;
+            // Calling the following more than once will cause unexpected results.
+            $PAGE->requires->js_call_amd('enrol_manual/quickenrolment', 'init', array($arguments));
         }
-        $startdateoptions = array();
-        $dateformat = get_string('strftimedatefullshort');
-        if ($startdate > 0) {
-            $startdateoptions[2] = get_string('coursestart') . ' (' . userdate($startdate, $dateformat) . ')';
-        }
-        $now = time();
-        $today = make_timestamp(date('Y', $now), date('m', $now), date('d', $now), 0, 0, 0);
-        $startdateoptions[3] = get_string('today') . ' (' . userdate($today, $dateformat) . ')';
-        $startdateoptions[4] = get_string('now', 'enrol_manual') . ' (' . userdate($now, get_string('strftimedatetimeshort')) . ')';
-        $defaultduration = $instance->enrolperiod > 0 ? $instance->enrolperiod / DAYSECS : '';
-
-        $modules = array('moodle-enrol_manual-quickenrolment', 'moodle-enrol_manual-quickenrolment-skin');
-        $arguments = array(
-            'instances'           => $instances,
-            'courseid'            => $instance->courseid,
-            'ajaxurl'             => '/enrol/manual/ajax.php',
-            'url'                 => $manager->get_moodlepage()->url->out(false),
-            'optionsStartDate'    => $startdateoptions,
-            'defaultRole'         => $instance->roleid,
-            'defaultDuration'     => $defaultduration,
-            'defaultStartDate'    => (int)$defaultstart,
-            'disableGradeHistory' => $CFG->disablegradehistory,
-            'recoverGradesDefault'=> '',
-            'cohortsAvailable'    => cohort_get_available_cohorts($manager->get_context(), COHORT_WITH_NOTENROLLED_MEMBERS_ONLY, 0, 1) ? true : false
-        );
-
-        if ($CFG->recovergradesdefault) {
-            $arguments['recoverGradesDefault'] = ' checked="checked"';
-        }
-
-        $function = 'M.enrol_manual.quickenrolment.init';
-        $button->require_yui_module($modules, $function, array($arguments));
-        $button->strings_for_js(array(
-            'ajaxoneuserfound',
-            'ajaxxusersfound',
-            'ajaxnext25',
-            'enrol',
-            'enrolmentoptions',
-            'enrolusers',
-            'enrolxusers',
-            'errajaxfailedenrol',
-            'errajaxsearch',
-            'foundxcohorts',
-            'none',
-            'usersearch',
-            'unlimitedduration',
-            'startdatetoday',
-            'durationdays',
-            'enrolperiod',
-            'finishenrollingusers',
-            'recovergrades'), 'enrol');
-        $button->strings_for_js(array('browseusers', 'browsecohorts'), 'enrol_manual');
-        $button->strings_for_js('assignroles', 'role');
-        $button->strings_for_js('startingfrom', 'moodle');
 
         return $button;
-    }
-
-    /**
-     * Enrol cron support.
-     * @return void
-     */
-    public function cron() {
-        $trace = new text_progress_trace();
-        $this->sync($trace, null);
-        $this->send_expiry_notifications($trace);
     }
 
     /**
@@ -413,30 +366,6 @@ class enrol_manual_plugin extends enrol_plugin {
         $this->lasternollerinstanceid = $instanceid;
 
         return $this->lasternoller;
-    }
-
-    /**
-     * Gets an array of the user enrolment actions.
-     *
-     * @param course_enrolment_manager $manager
-     * @param stdClass $ue A user enrolment object
-     * @return array An array of user_enrolment_actions
-     */
-    public function get_user_enrolment_actions(course_enrolment_manager $manager, $ue) {
-        $actions = array();
-        $context = $manager->get_context();
-        $instance = $ue->enrolmentinstance;
-        $params = $manager->get_moodlepage()->url->params();
-        $params['ue'] = $ue->id;
-        if ($this->allow_unenrol_user($instance, $ue) && has_capability("enrol/manual:unenrol", $context)) {
-            $url = new moodle_url('/enrol/unenroluser.php', $params);
-            $actions[] = new user_enrolment_action(new pix_icon('t/delete', ''), get_string('unenrol', 'enrol'), $url, array('class'=>'unenrollink', 'rel'=>$ue->id));
-        }
-        if ($this->allow_manage($instance) && has_capability("enrol/manual:manage", $context)) {
-            $url = new moodle_url('/enrol/editenrolment.php', $params);
-            $actions[] = new user_enrolment_action(new pix_icon('t/edit', ''), get_string('edit'), $url, array('class'=>'editenrollink', 'rel'=>$ue->id));
-        }
-        return $actions;
     }
 
     /**
@@ -590,6 +519,7 @@ class enrol_manual_plugin extends enrol_plugin {
      * @param int $timeend 0 means forever
      * @param int $status default to ENROL_USER_ACTIVE for new enrolments, no change by default in updates
      * @param bool $recovergrades restore grade history
+     * @return int The number of enrolled cohort users
      */
     public function enrol_cohort(stdClass $instance, $cohortid, $roleid = null, $timestart = 0, $timeend = 0, $status = null, $recovergrades = null) {
         global $DB;
@@ -602,6 +532,7 @@ class enrol_manual_plugin extends enrol_plugin {
         foreach ($members as $userid) {
             $this->enrol_user($instance, $userid, $roleid, $timestart, $timeend, $status, $recovergrades);
         }
+        return count($members);
     }
 
     /**
@@ -664,30 +595,92 @@ class enrol_manual_plugin extends enrol_plugin {
      */
     public function edit_instance_form($instance, MoodleQuickForm $mform, $context) {
 
-        $options = $this->get_status_options();
-        $mform->addElement('select', 'status', get_string('status', 'enrol_manual'), $options);
-        $mform->addHelpButton('status', 'status', 'enrol_manual');
-        $mform->setDefault('status', $this->get_config('status'));
+        // Main fields.
+        if (has_capability('enrol/manual:config', $context)) {
+            $options = $this->get_status_options();
+            $mform->addElement('select', 'status', get_string('status', 'enrol_manual'), $options);
+            $mform->addHelpButton('status', 'status', 'enrol_manual');
+            $mform->setDefault('status', $this->get_config('status'));
 
-        $roles = $this->get_roleid_options($instance, $context);
-        $mform->addElement('select', 'roleid', get_string('defaultrole', 'role'), $roles);
-        $mform->setDefault('roleid', $this->get_config('roleid'));
+            $roles = $this->get_roleid_options($instance, $context);
+            $mform->addElement('select', 'roleid', get_string('defaultrole', 'role'), $roles);
+            $mform->setDefault('roleid', $this->get_config('roleid'));
 
-        $options = array('optional' => true, 'defaultunit' => 86400);
-        $mform->addElement('duration', 'enrolperiod', get_string('defaultperiod', 'enrol_manual'), $options);
-        $mform->setDefault('enrolperiod', $this->get_config('enrolperiod'));
-        $mform->addHelpButton('enrolperiod', 'defaultperiod', 'enrol_manual');
+            $options = ['optional' => true, 'defaultunit' => 86400];
+            $mform->addElement('duration', 'enrolperiod', get_string('defaultperiod', 'enrol_manual'), $options);
+            $mform->setDefault('enrolperiod', $this->get_config('enrolperiod'));
+            $mform->addHelpButton('enrolperiod', 'defaultperiod', 'enrol_manual');
 
-        $options = $this->get_expirynotify_options();
-        $mform->addElement('select', 'expirynotify', get_string('expirynotify', 'core_enrol'), $options);
-        $mform->addHelpButton('expirynotify', 'expirynotify', 'core_enrol');
+            $options = $this->get_expirynotify_options();
+            $mform->addElement('select', 'expirynotify', get_string('expirynotify', 'core_enrol'), $options);
+            $mform->addHelpButton('expirynotify', 'expirynotify', 'core_enrol');
 
-        $options = array('optional' => false, 'defaultunit' => 86400);
-        $mform->addElement('duration', 'expirythreshold', get_string('expirythreshold', 'core_enrol'), $options);
-        $mform->addHelpButton('expirythreshold', 'expirythreshold', 'core_enrol');
-        $mform->disabledIf('expirythreshold', 'expirynotify', 'eq', 0);
+            $options = ['optional' => false, 'defaultunit' => 86400];
+            $mform->addElement('duration', 'expirythreshold', get_string('expirythreshold', 'core_enrol'), $options);
+            $mform->addHelpButton('expirythreshold', 'expirythreshold', 'core_enrol');
+            $mform->disabledIf('expirythreshold', 'expirynotify', 'eq', 0);
+        }
 
-        if (enrol_accessing_via_instance($instance)) {
+        // Course welcome message.
+        if (has_any_capability(['enrol/manual:config', 'moodle/course:editcoursewelcomemessage'], $context)) {
+            $mform->addElement(
+                'select',
+                'customint1',
+                get_string(
+                    identifier: 'sendcoursewelcomemessage',
+                    component: 'core_enrol',
+                ),
+                enrol_send_welcome_email_options(),
+            );
+            $mform->addHelpButton(
+                elementname: 'customint1',
+                identifier: 'sendcoursewelcomemessage',
+                component: 'core_enrol',
+            );
+
+            $options = [
+                'cols' => '60',
+                'rows' => '8',
+            ];
+            $mform->addElement(
+                'textarea',
+                'customtext1',
+                get_string(
+                    identifier: 'customwelcomemessage',
+                    component: 'core_enrol',
+                ),
+                $options,
+            );
+            $mform->setDefault('customtext1', get_string('customwelcomemessageplaceholder', 'core_enrol'));
+            $mform->hideIf(
+                elementname: 'customtext1',
+                dependenton: 'customint1',
+                condition: 'eq',
+                value: ENROL_DO_NOT_SEND_EMAIL,
+            );
+
+            // Static form elements cannot be hidden by hideIf() so we need to add a dummy group.
+            // See: https://tracker.moodle.org/browse/MDL-66251.
+            $group[] = $mform->createElement(
+                'static',
+                'customwelcomemessage_extra_help',
+                null,
+                get_string(
+                    identifier: 'customwelcomemessage_help',
+                    component: 'core_enrol',
+                ),
+            );
+            $mform->addGroup($group, 'group_customwelcomemessage_extra_help', '', ' ', false);
+            $mform->hideIf(
+                elementname: 'group_customwelcomemessage_extra_help',
+                dependenton: 'customint1',
+                condition: 'eq',
+                value: ENROL_DO_NOT_SEND_EMAIL,
+            );
+        }
+
+        // Enrolment changes warning.
+        if (has_capability('enrol/manual:config', $context) && enrol_accessing_via_instance($instance)) {
             $warntext = get_string('instanceeditselfwarningtext', 'core_enrol');
             $mform->addElement('static', 'selfwarn', get_string('instanceeditselfwarning', 'core_enrol'), $warntext);
         }
@@ -707,7 +700,9 @@ class enrol_manual_plugin extends enrol_plugin {
     public function edit_instance_validation($data, $files, $instance, $context) {
         $errors = array();
 
-        if ($data['expirynotify'] > 0 and $data['expirythreshold'] < 86400) {
+        // This method is used when configuring the enrolment method, and when only updating the welcome message.
+        // The 'expirynotify' key won't be set when updating the welcome message.
+        if (isset($data['expirynotify']) && $data['expirynotify'] > 0 && $data['expirythreshold'] < DAYSECS) {
             $errors['expirythreshold'] = get_string('errorthresholdlow', 'core_enrol');
         }
 
@@ -729,4 +724,79 @@ class enrol_manual_plugin extends enrol_plugin {
         return $errors;
     }
 
+    /**
+     * Check if enrolment plugin is supported in csv course upload.
+     *
+     * @return bool
+     */
+    public function is_csv_upload_supported(): bool {
+        return true;
+    }
+
+    /**
+     * Finds matching instances for a given course.
+     *
+     * @param array $enrolmentdata enrolment data.
+     * @param int $courseid Course ID.
+     * @return stdClass|null Matching instance
+     */
+    public function find_instance(array $enrolmentdata, int $courseid): ?stdClass {
+
+        $instances = enrol_get_instances($courseid, false);
+        $instance = null;
+        foreach ($instances as $i) {
+            if ($i->enrol == 'manual') {
+                // There can be only one manual enrol instance so find first available.
+                $instance = $i;
+                break;
+            }
+        }
+        return $instance;
+    }
+
+    /**
+     * Fill custom fields data for a given enrolment plugin.
+     *
+     * @param array $enrolmentdata enrolment data.
+     * @param int $courseid Course ID.
+     * @return array Updated enrolment data with custom fields info.
+     */
+    public function fill_enrol_custom_fields(array $enrolmentdata, int $courseid): array {
+        return $enrolmentdata + [
+            'expirynotify' => 0,
+            'expirythreshold' => 0,
+        ];
+    }
+
+    /**
+     * Returns defaults for new instances.
+     *
+     * @return array
+     */
+    public function get_instance_defaults(): array {
+        $fields['customint1'] = $this->get_config('sendcoursewelcomemessage');
+        return $fields;
+    }
+}
+
+/**
+ * Serve the manual enrol users form as a fragment.
+ *
+ * @param array $args List of named arguments for the fragment loader.
+ * @return string
+ */
+function enrol_manual_output_fragment_enrol_users_form($args) {
+    $args = (object) $args;
+    $context = $args->context;
+    $o = '';
+
+    require_capability('enrol/manual:enrol', $context);
+    $mform = new enrol_manual_enrol_users_form(null, $args);
+
+    ob_start();
+    $mform->display();
+    $o .= ob_get_contents();
+    ob_end_clean();
+
+    return $o;
 }

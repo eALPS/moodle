@@ -14,15 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Test classes for handling embedded media.
- *
- * @package media_youtube
- * @copyright 2016 Marina Glancy
- * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace media_youtube;
 
-defined('MOODLE_INTERNAL') || die();
+use core_media_manager;
 
 /**
  * Test script for media embedding.
@@ -31,12 +25,12 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright 2016 Marina Glancy
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class media_youtube_testcase extends advanced_testcase {
+class player_test extends \advanced_testcase {
 
     /**
      * Pre-test setup. Preserves $CFG.
      */
-    public function setUp() {
+    public function setUp(): void {
         parent::setUp();
 
         // Reset $CFG and $SERVER.
@@ -46,13 +40,13 @@ class media_youtube_testcase extends advanced_testcase {
         \core\plugininfo\media::set_enabled_plugins('youtube');
 
         // Pretend to be using Firefox browser (must support ogg for tests to work).
-        core_useragent::instance(true, 'Mozilla/5.0 (X11; Linux x86_64; rv:46.0) Gecko/20100101 Firefox/46.0 ');
+        \core_useragent::instance(true, 'Mozilla/5.0 (X11; Linux x86_64; rv:46.0) Gecko/20100101 Firefox/46.0 ');
     }
 
     /**
      * Test that plugin is returned as enabled media plugin.
      */
-    public function test_is_installed() {
+    public function test_is_installed(): void {
         $sortorder = \core\plugininfo\media::get_enabled_plugins();
         $this->assertEquals(['youtube' => 'youtube'], $sortorder);
     }
@@ -60,66 +54,69 @@ class media_youtube_testcase extends advanced_testcase {
     /**
      * Test supported link types
      */
-    public function test_supported() {
+    public function test_supported(): void {
         $manager = core_media_manager::instance();
 
         // Format: youtube.
-        $url = new moodle_url('http://www.youtube.com/watch?v=vyrwMmsufJc');
+        $url = new \moodle_url('http://www.youtube.com/watch?v=vyrwMmsufJc');
         $t = $manager->embed_url($url);
-        $this->assertContains('</iframe>', $t);
-        $url = new moodle_url('http://www.youtube.com/v/vyrwMmsufJc');
+        $this->assertStringContainsString('</iframe>', $t);
+        $url = new \moodle_url('http://www.youtube.com/v/vyrwMmsufJc');
         $t = $manager->embed_url($url);
-        $this->assertContains('</iframe>', $t);
+        $this->assertStringContainsString('</iframe>', $t);
+        $url = new \moodle_url('http://m.youtube.com/watch?v=vyrwMmsufJc');
+        $t = $manager->embed_url($url);
+        $this->assertStringContainsString('</iframe>', $t);
 
         // Format: youtube video within playlist.
-        $url = new moodle_url('https://www.youtube.com/watch?v=dv2f_xfmbD8&index=4&list=PLxcO_MFWQBDcyn9xpbmx601YSDlDcTcr0');
+        $url = new \moodle_url('https://www.youtube.com/watch?v=dv2f_xfmbD8&index=4&list=PLxcO_MFWQBDcyn9xpbmx601YSDlDcTcr0');
         $t = $manager->embed_url($url);
-        $this->assertContains('</iframe>', $t);
-        $this->assertContains('list=PLxcO_MFWQBDcyn9xpbmx601YSDlDcTcr0', $t);
+        $this->assertStringContainsString('</iframe>', $t);
+        $this->assertStringContainsString('list=PLxcO_MFWQBDcyn9xpbmx601YSDlDcTcr0', $t);
 
         // Format: youtube video with start time.
-        $url = new moodle_url('https://www.youtube.com/watch?v=JNJMF1l3udM&t=1h11s');
+        $url = new \moodle_url('https://www.youtube.com/watch?v=JNJMF1l3udM&t=1h11s');
         $t = $manager->embed_url($url);
-        $this->assertContains('</iframe>', $t);
-        $this->assertContains('start=3611', $t);
+        $this->assertStringContainsString('</iframe>', $t);
+        $this->assertStringContainsString('start=3611', $t);
 
         // Format: youtube video within playlist with start time.
-        $url = new moodle_url('https://www.youtube.com/watch?v=dv2f_xfmbD8&index=4&list=PLxcO_MFWQBDcyn9xpbmx601YSDlDcTcr0&t=1m5s');
+        $url = new \moodle_url('https://www.youtube.com/watch?v=dv2f_xfmbD8&index=4&list=PLxcO_MFWQBDcyn9xpbmx601YSDlDcTcr0&t=1m5s');
         $t = $manager->embed_url($url);
-        $this->assertContains('</iframe>', $t);
-        $this->assertContains('list=PLxcO_MFWQBDcyn9xpbmx601YSDlDcTcr0', $t);
-        $this->assertContains('start=65', $t);
+        $this->assertStringContainsString('</iframe>', $t);
+        $this->assertStringContainsString('list=PLxcO_MFWQBDcyn9xpbmx601YSDlDcTcr0', $t);
+        $this->assertStringContainsString('start=65', $t);
 
         // Format: youtube video with invalid parameter values (injection attempts).
-        $url = new moodle_url('https://www.youtube.com/watch?v=dv2f_xfmbD8&index=4&list=PLxcO_">');
+        $url = new \moodle_url('https://www.youtube.com/watch?v=dv2f_xfmbD8&index=4&list=PLxcO_">');
         $t = $manager->embed_url($url);
-        $this->assertContains('</iframe>', $t);
-        $this->assertNotContains('list=PLxcO_', $t); // We shouldn't get a list param as input was invalid.
-        $url = new moodle_url('https://www.youtube.com/watch?v=JNJMF1l3udM&t=">');
+        $this->assertStringContainsString('</iframe>', $t);
+        $this->assertStringNotContainsString('list=PLxcO_', $t); // We shouldn't get a list param as input was invalid.
+        $url = new \moodle_url('https://www.youtube.com/watch?v=JNJMF1l3udM&t=">');
         $t = $manager->embed_url($url);
-        $this->assertContains('</iframe>', $t);
-        $this->assertNotContains('start=', $t); // We shouldn't get a start param as input was invalid.
+        $this->assertStringContainsString('</iframe>', $t);
+        $this->assertStringNotContainsString('start=', $t); // We shouldn't get a start param as input was invalid.
 
         // Format: youtube playlist.
-        $url = new moodle_url('http://www.youtube.com/view_play_list?p=PL6E18E2927047B662');
+        $url = new \moodle_url('http://www.youtube.com/view_play_list?p=PL6E18E2927047B662');
         $t = $manager->embed_url($url);
-        $this->assertContains('</iframe>', $t);
-        $url = new moodle_url('http://www.youtube.com/playlist?list=PL6E18E2927047B662');
+        $this->assertStringContainsString('</iframe>', $t);
+        $url = new \moodle_url('http://www.youtube.com/playlist?list=PL6E18E2927047B662');
         $t = $manager->embed_url($url);
-        $this->assertContains('</iframe>', $t);
-        $url = new moodle_url('http://www.youtube.com/p/PL6E18E2927047B662');
+        $this->assertStringContainsString('</iframe>', $t);
+        $url = new \moodle_url('http://www.youtube.com/p/PL6E18E2927047B662');
         $t = $manager->embed_url($url);
-        $this->assertContains('</iframe>', $t);
+        $this->assertStringContainsString('</iframe>', $t);
 
     }
 
     /**
      * Test embedding without media filter (for example for displaying URL resorce).
      */
-    public function test_embed_url() {
+    public function test_embed_url(): void {
         global $CFG;
 
-        $url = new moodle_url('http://www.youtube.com/v/vyrwMmsufJc');
+        $url = new \moodle_url('http://www.youtube.com/v/vyrwMmsufJc');
 
         $manager = core_media_manager::instance();
         $embedoptions = array(
@@ -130,14 +127,14 @@ class media_youtube_testcase extends advanced_testcase {
         $this->assertTrue($manager->can_embed_url($url, $embedoptions));
         $content = $manager->embed_url($url, 'Test & file', 0, 0, $embedoptions);
 
-        $this->assertRegExp('~mediaplugin_youtube~', $content);
-        $this->assertRegExp('~</iframe>~', $content);
-        $this->assertRegExp('~width="' . $CFG->media_default_width . '" height="' .
+        $this->assertMatchesRegularExpression('~mediaplugin_youtube~', $content);
+        $this->assertMatchesRegularExpression('~</iframe>~', $content);
+        $this->assertMatchesRegularExpression('~width="' . $CFG->media_default_width . '" height="' .
             $CFG->media_default_height . '"~', $content);
 
         // Repeat sending the specific size to the manager.
         $content = $manager->embed_url($url, 'New file', 123, 50, $embedoptions);
-        $this->assertRegExp('~width="123" height="50"~', $content);
+        $this->assertMatchesRegularExpression('~width="123" height="50"~', $content);
     }
 
     /**
@@ -145,15 +142,15 @@ class media_youtube_testcase extends advanced_testcase {
      *
      * filter_mediaplugin is enabled by default.
      */
-    public function test_embed_link() {
+    public function test_embed_link(): void {
         global $CFG;
-        $url = new moodle_url('http://www.youtube.com/v/vyrwMmsufJc');
-        $text = html_writer::link($url, 'Watch this one');
+        $url = new \moodle_url('http://www.youtube.com/v/vyrwMmsufJc');
+        $text = \html_writer::link($url, 'Watch this one');
         $content = format_text($text, FORMAT_HTML);
 
-        $this->assertRegExp('~mediaplugin_youtube~', $content);
-        $this->assertRegExp('~</iframe>~', $content);
-        $this->assertRegExp('~width="' . $CFG->media_default_width . '" height="' .
+        $this->assertMatchesRegularExpression('~mediaplugin_youtube~', $content);
+        $this->assertMatchesRegularExpression('~</iframe>~', $content);
+        $this->assertMatchesRegularExpression('~width="' . $CFG->media_default_width . '" height="' .
             $CFG->media_default_height . '"~', $content);
     }
 
@@ -162,29 +159,52 @@ class media_youtube_testcase extends advanced_testcase {
      *
      * filter_mediaplugin is enabled by default.
      */
-    public function test_embed_media() {
+    public function test_embed_media(): void {
         global $CFG;
-        $url = new moodle_url('http://www.youtube.com/v/vyrwMmsufJc');
-        $trackurl = new moodle_url('http://example.org/some_filename.vtt');
+        $url = new \moodle_url('http://www.youtube.com/v/vyrwMmsufJc');
+        $trackurl = new \moodle_url('http://example.org/some_filename.vtt');
         $text = '<video controls="true"><source src="'.$url.'"/>' .
             '<track src="'.$trackurl.'">Unsupported text</video>';
         $content = format_text($text, FORMAT_HTML);
 
-        $this->assertRegExp('~mediaplugin_youtube~', $content);
-        $this->assertRegExp('~</iframe>~', $content);
-        $this->assertRegExp('~width="' . $CFG->media_default_width . '" height="' .
+        $this->assertMatchesRegularExpression('~mediaplugin_youtube~', $content);
+        $this->assertMatchesRegularExpression('~</iframe>~', $content);
+        $this->assertMatchesRegularExpression('~width="' . $CFG->media_default_width . '" height="' .
             $CFG->media_default_height . '"~', $content);
         // Video tag, unsupported text and tracks are removed.
-        $this->assertNotRegExp('~</video>~', $content);
-        $this->assertNotRegExp('~<source\b~', $content);
-        $this->assertNotRegExp('~Unsupported text~', $content);
-        $this->assertNotRegExp('~<track\b~i', $content);
+        $this->assertDoesNotMatchRegularExpression('~</video>~', $content);
+        $this->assertDoesNotMatchRegularExpression('~<source\b~', $content);
+        $this->assertDoesNotMatchRegularExpression('~Unsupported text~', $content);
+        $this->assertDoesNotMatchRegularExpression('~<track\b~i', $content);
 
         // Video with dimensions and source specified as src attribute without <source> tag.
         $text = '<video controls="true" width="123" height="35" src="'.$url.'">Unsupported text</video>';
         $content = format_text($text, FORMAT_HTML);
-        $this->assertRegExp('~mediaplugin_youtube~', $content);
-        $this->assertRegExp('~</iframe>~', $content);
-        $this->assertRegExp('~width="123" height="35"~', $content);
+        $this->assertMatchesRegularExpression('~mediaplugin_youtube~', $content);
+        $this->assertMatchesRegularExpression('~</iframe>~', $content);
+        $this->assertMatchesRegularExpression('~width="123" height="35"~', $content);
+    }
+
+    /**
+     * Test that YouTube media plugin renders embed code correctly
+     * when the "nocookie" config options is set to true.
+     *
+     * @covers \media_youtube_plugin::embed_external
+     */
+    public function test_youtube_nocookie(): void {
+        // Turn on the no cookie option.
+        set_config('nocookie', true, 'media_youtube');
+
+        // Test that the embed code contains the no cookie domain.
+        $url = new \moodle_url('http://www.youtube.com/v/vyrwMmsufJc');
+        $text = \html_writer::link($url, 'Watch this one');
+        $content = format_text($text, FORMAT_HTML);
+        $this->assertMatchesRegularExpression('~youtube-nocookie~', $content);
+
+        // Next test for a playlist.
+        $url = new \moodle_url('https://www.youtube.com/playlist?list=PL59FEE129ADFF2B12');
+        $text = \html_writer::link($url, 'Great Playlist');
+        $content = format_text($text, FORMAT_HTML);
+        $this->assertMatchesRegularExpression('~youtube-nocookie~', $content);
     }
 }

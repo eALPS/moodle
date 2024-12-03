@@ -14,19 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Contains class \core\output\inplace_editable
- *
- * @package    core
- * @category   output
- * @copyright  2016 Marina Glancy
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 namespace core\output;
 
-use templatable;
-use renderable;
 use lang_string;
 
 /**
@@ -51,8 +40,7 @@ use lang_string;
  * @copyright  2016 Marina Glancy
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class inplace_editable implements templatable, renderable {
-
+class inplace_editable implements renderable, templatable {
     /**
      * @var string component responsible for diplsying/updating
      */
@@ -90,6 +78,11 @@ class inplace_editable implements templatable, renderable {
     protected $edithint = null;
 
     /**
+     * @var pix_icon icon to use to toggle editing
+     */
+    protected $editicon = null;
+
+    /**
      * @var bool indicates if the current user is allowed to edit this element - set in constructor after permissions are checked
      */
     protected $editable = false;
@@ -108,7 +101,8 @@ class inplace_editable implements templatable, renderable {
      * Constructor.
      *
      * @param string $component name of the component or plugin responsible for the updating of the value (must declare callback)
-     * @param string $itemtype type of the item inside the component - each component/plugin may implement multiple inplace-editable elements
+     * @param string $itemtype type of the item inside the component
+     *                         Each component/plugin may implement multiple inplace-editable elements.
      * @param int $itemid identifier of the item that can be edited in-place
      * @param bool $editable whether this value is editable (check capabilities and editing mode), if false, only "displayvalue"
      *              will be displayed without anything else
@@ -117,9 +111,19 @@ class inplace_editable implements templatable, renderable {
      * @param string $value what needs to be edited - usually raw value from the database, it may contain multilang tags
      * @param lang_string|string $edithint hint (title) that will be displayed under the edit link
      * @param lang_string|string $editlabel label for the input element in the editing mode (for screenreaders)
+     * @param pix_icon|null $editicon icon to use to toggle editing
      */
-    public function __construct($component, $itemtype, $itemid, $editable,
-            $displayvalue, $value = null, $edithint = null, $editlabel = null) {
+    public function __construct(
+        $component,
+        $itemtype,
+        $itemid,
+        $editable,
+        $displayvalue,
+        $value = null,
+        $edithint = null,
+        $editlabel = null,
+        ?pix_icon $editicon = null
+    ) {
         $this->component = $component;
         $this->itemtype = $itemtype;
         $this->itemid = $itemid;
@@ -128,6 +132,7 @@ class inplace_editable implements templatable, renderable {
         $this->value = $value;
         $this->edithint = $edithint;
         $this->editlabel = $editlabel;
+        $this->editicon = $editicon;
     }
 
     /**
@@ -143,7 +148,7 @@ class inplace_editable implements templatable, renderable {
      */
     public function set_type_toggle($options = null) {
         if ($options === null) {
-            $options = array(0, 1);
+            $options = [0, 1];
         }
         $options = array_values($options);
         $idx = array_search($this->value, $options, true);
@@ -190,6 +195,30 @@ class inplace_editable implements templatable, renderable {
         if ($this->displayvalue === null) {
             $this->displayvalue = $options[$this->value];
         }
+        if ($this->editicon === null) {
+            $this->editicon = new pix_icon('t/expanded', (string) $this->edithint);
+        }
+        return $this;
+    }
+
+    /**
+     * Sets the element type to be an autocomplete field
+     *
+     * @param array $options associative array with dropdown options
+     * @param array $attributes associative array with attributes for autoselect field. See AMD module core/form-autocomplete.
+     * @return self
+     */
+    public function set_type_autocomplete($options, $attributes) {
+        $this->type = 'autocomplete';
+
+        $pairedoptions = [];
+        foreach ($options as $key => $value) {
+            $pairedoptions[] = [
+                'key' => $key,
+                'value' => $value,
+            ];
+        }
+        $this->options = json_encode(['options' => $pairedoptions, 'attributes' => $attributes]);
         return $this;
     }
 
@@ -211,17 +240,21 @@ class inplace_editable implements templatable, renderable {
     /**
      * Export this data so it can be used as the context for a mustache template (core/inplace_editable).
      *
-     * @param renderer_base $output typically, the renderer that's calling this function
+     * @param \renderer_base $output typically, the renderer that's calling this function
      * @return array data context for a mustache template
      */
     public function export_for_template(\renderer_base $output) {
         if (!$this->editable) {
-            return array(
-                'displayvalue' => (string)$this->displayvalue
-            );
+            return [
+                'displayvalue' => (string)$this->displayvalue,
+            ];
         }
 
-        return array(
+        if ($this->editicon === null) {
+            $this->editicon = new pix_icon('t/editstring', (string) $this->edithint);
+        }
+
+        return [
             'component' => $this->component,
             'itemtype' => $this->itemtype,
             'itemid' => $this->itemid,
@@ -229,16 +262,17 @@ class inplace_editable implements templatable, renderable {
             'value' => (string)$this->value,
             'edithint' => (string)$this->edithint,
             'editlabel' => (string)$this->editlabel,
+            'editicon' => $this->editicon->export_for_pix(),
             'type' => $this->type,
             'options' => $this->options,
             'linkeverything' => $this->get_linkeverything() ? 1 : 0,
-        );
+        ];
     }
 
     /**
      * Renders this element
      *
-     * @param renderer_base $output typically, the renderer that's calling this function
+     * @param \renderer_base $output typically, the renderer that's calling this function
      * @return string
      */
     public function render(\renderer_base $output) {

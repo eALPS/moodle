@@ -32,6 +32,10 @@ $classname = optional_param('classname', '', PARAM_RAW);
 
 $pageurl = new moodle_url('/admin/tool/messageinbound/index.php');
 
+$PAGE->set_primary_active_tab('siteadminnode');
+
+$PAGE->navbar->add(get_string('message_handlers', 'tool_messageinbound'), $PAGE->url);
+
 if (empty($classname)) {
     $renderer = $PAGE->get_renderer('tool_messageinbound');
 
@@ -40,6 +44,7 @@ if (empty($classname)) {
     foreach ($records as $record) {
         $instances[] = \core\message\inbound\manager::get_handler($record->classname);
     }
+    $records->close();
 
     echo $OUTPUT->header();
     echo $renderer->messageinbound_handlers_table($instances);

@@ -28,6 +28,8 @@ $string['affectedtable'] = 'Affected table';
 $string['all'] = 'All';
 $string['clear'] = 'Clear';
 $string['component'] = 'Component';
+$string['core'] = 'Core';
+$string['coresubsystem'] = 'Subsystem ({$a})';
 $string['create'] = 'create';
 $string['crud'] = 'Database query type';
 $string['delete'] = 'delete';
@@ -56,4 +58,4 @@ $string['teaching'] = 'Teaching';
 $string['typedeclaration'] = 'Other event parameters';
 $string['update'] = 'update';
 $string['yes'] = 'yes';
-
+$string['privacy:metadata'] = 'The Events list plugin does not store any personal data.';

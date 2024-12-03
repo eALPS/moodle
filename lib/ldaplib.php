@@ -209,7 +209,7 @@ function ldap_connect_moodle($host_url, $ldap_version, $user_type, $bind_dn, $bi
         }
 
         if ($start_tls && (!ldap_start_tls($connresult))) {
-            $debuginfo .= "Server: '$server', Connection: '$connresult', STARTTLS failed.\n";
+            $debuginfo .= "Server: '$server', STARTTLS failed.\n";
             continue;
         }
 
@@ -224,7 +224,7 @@ function ldap_connect_moodle($host_url, $ldap_version, $user_type, $bind_dn, $bi
             return $connresult;
         }
 
-        $debuginfo .= "Server: '$server', Connection: '$connresult', Bind result: '$bindresult'\n";
+        $debuginfo .= "Server: '$server', Bind result: '$bindresult'\n";
     }
 
     // If any of servers were alive we have already returned connection.
@@ -339,13 +339,18 @@ function ldap_get_entries_moodle($ldapconnection, $searchresult) {
         return array();
     }
     do {
-        $attributes = array_change_key_case(ldap_get_attributes($ldapconnection, $entry), CASE_LOWER);
-        for ($j = 0; $j < $attributes['count']; $j++) {
-            $values = ldap_get_values_len($ldapconnection, $entry, $attributes[$j]);
+        $attributes = array();
+        $attribute = ldap_first_attribute($ldapconnection, $entry);
+        while ($attribute !== false) {
+            $attributes[] = strtolower($attribute); // Attribute names don't usually contain non-ASCII characters.
+            $attribute = ldap_next_attribute($ldapconnection, $entry);
+        }
+        foreach ($attributes as $attribute) {
+            $values = ldap_get_values_len($ldapconnection, $entry, $attribute);
             if (is_array($values)) {
-                $result[$i][$attributes[$j]] = $values;
+                $result[$i][$attribute] = $values;
             } else {
-                $result[$i][$attributes[$j]] = array($values);
+                $result[$i][$attribute] = array($values);
             }
         }
         $i++;
@@ -443,7 +448,7 @@ function ldap_stripslashes($text) {
     $text = preg_replace_callback($quoted,
                                   function ($match) use ($specialchars) {
                                       if (ctype_xdigit(ltrim($match[1], '\\'))) {
-                                          return chr(hexdec($match[1]));
+                                          return chr(hexdec(ltrim($match[1], '\\')));
                                       } else {
                                           return str_replace($specialchars[LDAP_DN_SPECIAL_CHARS_QUOTED_ALPHA],
                                                              $specialchars[LDAP_DN_SPECIAL_CHARS],
@@ -488,7 +493,7 @@ function ldap_paged_results_supported($ldapversion, $ldapconnection = null) {
     if (empty($entries)) {
         return false;
     }
-    $info = array_change_key_case($entries[0], CASE_LOWER);
+    $info = $entries[0];
     if (isset($info['supportedcontrol']) && in_array(LDAP_PAGED_RESULTS_CONTROL, $info['supportedcontrol'])) {
         return true;
     }

@@ -40,6 +40,7 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
     var scorm_disable_toc = false;
     var scorm_hide_nav = true;
     var scorm_hide_toc = true;
+    var launch_sco_fix = launch_sco;
     if (hide_toc == 0) {
         if (nav_display !== 0) {
             scorm_hide_nav = false;
@@ -50,6 +51,38 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
     }
 
     scoes_nav = Y.JSON.parse(scoes_nav);
+
+    var scorm_update_siblings = function (scoesnav) {
+        for(var key in scoesnav ){
+            var siblings = [],
+                parentscoid = key;
+            for (var mk in scoesnav) {
+                var val = scoesnav[mk];
+                if (typeof val !== "undefined" && typeof val.parentscoid !== 'undefined' && val.parentscoid === parentscoid) {
+                    siblings.push(mk);
+                }
+            }
+            if (siblings.length > 1) {
+                scoesnav = scorm_get_siblings(scoesnav, siblings);
+            }
+        }
+        return scoesnav;
+    };
+
+    var scorm_get_siblings = function (scoesnav, siblings) {
+        siblings.forEach(function (key, index) {
+            if (index > 0 && typeof scoesnav[key] !== "undefined" && typeof scoesnav[key].prevsibling === "undefined") {
+                scoesnav[key].prevsibling = siblings[index - 1];
+            }
+            if (index < siblings.length - 1 && typeof scoesnav[key] !== "undefined" &&
+               typeof scoesnav[key].nextsibling === "undefined") {
+                scoesnav[key].nextsibling = siblings[index + 1];
+            }
+        });
+        return scoesnav;
+    };
+
+    scoes_nav = scorm_update_siblings(scoes_nav);
     var scorm_buttons = [];
     var scorm_bloody_labelclick = false;
     var scorm_nav_panel;
@@ -162,6 +195,12 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
             if (!window_name && node.title != null) {
                 obj.setAttribute('src', url_prefix + node.title);
             }
+            // Attach unload observers to the iframe. The scorm package may be observing these unload events
+            // and trying to save progress when they occur. We need to ensure we use the Beacon API in those
+            // situations.
+            if (typeof mod_scorm_monitorForBeaconRequirement !== 'undefined') {
+                mod_scorm_monitorForBeaconRequirement(obj);
+            }
             if (window_name) {
                 var mine = window.open('','','width=1,height=1,left=0,top=0,scrollbars=no');
                 if(! mine) {
@@ -198,11 +237,12 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
          * @return void
          */
         var scorm_fixnav = function() {
+            launch_sco_fix = launch_sco;
             var skipprevnode = scorm_skipprev(scorm_current_node);
             var prevnode = scorm_prev(scorm_current_node);
-            var skipnextnode = scorm_skipnext(scorm_current_node);
-            var nextnode = scorm_next(scorm_current_node);
             var upnode = scorm_up(scorm_current_node);
+            var nextnode = scorm_next(scorm_current_node, true, true);
+            var skipnextnode = scorm_skipnext(scorm_current_node, true, true);
 
             scorm_buttons[0].set('disabled', ((skipprevnode === null) ||
                         (typeof(skipprevnode.scoid) === 'undefined') ||
@@ -308,7 +348,12 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
 
         };
 
-        // Handle AJAX Request
+        /**
+         * @deprecated as it is now unused.
+         * @param {string} url
+         * @param {string} datastring
+         * @returns {string|*|boolean}
+         */
         var scorm_ajax_request = function(url, datastring) {
             var myRequest = NewHttpReq();
             var result = DoRequest(myRequest, url + datastring);
@@ -400,13 +445,13 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
             return null;
         };
 
-        var scorm_next = function(node, update_launch_sco) {
+        var scorm_next = function(node, update_launch_sco, test) {
             if (node === false) {
                 return scorm_tree_node.children[0];
             }
-            if (node.children.length && typeof scoes_nav[launch_sco].nextscoid != 'undefined') {
+            if (node.children.length && typeof scoes_nav[launch_sco_fix].nextscoid != 'undefined') {
                 node = node.children[0];
-                var nextscoid = scoes_nav[launch_sco].nextscoid;
+                var nextscoid = scoes_nav[launch_sco_fix].nextscoid;
                 if (node.title !== scoes_nav[nextscoid].url) {
                     node = scorm_tree_node.getNodeByAttribute('title', scoes_nav[nextscoid].url);
                     if (node === null) {
@@ -415,17 +460,21 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
                     }
                 }
                 if (update_launch_sco) {
-                    launch_sco = nextscoid;
+                    launch_sco_fix = nextscoid;
+                    if (!test) {
+                        launch_sco = launch_sco_fix;
+                    }
                 }
                 return node;
             }
-            return scorm_skipnext(node, update_launch_sco);
+            return scorm_skipnext(node, update_launch_sco, test);
         };
 
-        var scorm_skipnext = function(node, update_launch_sco) {
+        var scorm_skipnext = function(node, update_launch_sco, test) {
             var next = node.next();
-            if (next && next.title && typeof scoes_nav[launch_sco] !== 'undefined' && typeof scoes_nav[launch_sco].nextsibling !== 'undefined') {
-                var nextsibling = scoes_nav[launch_sco].nextsibling;
+            if (next && next.title && typeof scoes_nav[launch_sco_fix] !== 'undefined' &&
+                        typeof scoes_nav[launch_sco_fix].nextsibling !== 'undefined') {
+                var nextsibling = scoes_nav[launch_sco_fix].nextsibling;
                 if (next.title !== scoes_nav[nextsibling].url) {
                     next = scorm_tree_node.getNodeByAttribute('title', scoes_nav[nextsibling].url);
                     if (next === null) {
@@ -434,11 +483,14 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
                     }
                 }
                 if (update_launch_sco) {
-                    launch_sco = nextsibling;
+                    launch_sco_fix = nextsibling;
+                    if (!test) {
+                        launch_sco = launch_sco_fix;
+                    }
                 }
                 return next;
-            } else if (node.parent && node.parent.parent && typeof scoes_nav[launch_sco].parentscoid !== 'undefined') {
-                var parentscoid = scoes_nav[launch_sco].parentscoid;
+            } else if (node.parent && node.parent.parent && typeof scoes_nav[launch_sco_fix].parentscoid !== 'undefined') {
+                var parentscoid = scoes_nav[launch_sco_fix].parentscoid;
                 var parent = node.parent;
                 if (parent.title !== scoes_nav[parentscoid].url) {
                     parent = scorm_tree_node.getNodeByAttribute('title', scoes_nav[parentscoid].url);
@@ -447,11 +499,30 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
                     }
                 }
                 if (update_launch_sco) {
-                    launch_sco = parentscoid;
+                    launch_sco_fix = parentscoid;
+                    if (!test) {
+                        launch_sco = launch_sco_fix;
+                    }
                 }
-                return scorm_skipnext(parent, update_launch_sco);
+                return scorm_skipnext(parent, update_launch_sco, test);
             }
             return null;
+        };
+
+        /**
+         * Sends a request to the sequencing handler script on the server.
+         * @param {string} datastring
+         * @returns {string|boolean|*}
+         */
+        var scorm_dorequest_sequencing = function(datastring) {
+            var myRequest = NewHttpReq();
+            var result = DoRequest(
+                myRequest,
+                M.cfg.wwwroot + '/mod/scorm/datamodels/sequencinghandler.php?' + datastring,
+                '',
+                false
+            );
+            return result;
         };
 
         // Launch prev sco
@@ -459,10 +530,18 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
             var result = null;
             if (scoes_nav[launch_sco].flow === 1) {
                 var datastring = scoes_nav[launch_sco].url + '&function=scorm_seq_flow&request=backward';
-                result = scorm_ajax_request(M.cfg.wwwroot + '/mod/scorm/datamodels/sequencinghandler.php?', datastring);
-                mod_scorm_seq = encodeURIComponent(result);
-                result = Y.JSON.parse (result);
-                if (typeof result.nextactivity.id != undefined) {
+                result = scorm_dorequest_sequencing(datastring);
+
+                // Check the scorm_ajax_result, it may be false.
+                if (result === false) {
+                    // Either the outcome was a failure, or we are unloading and simply just don't know
+                    // what the outcome actually was.
+                    result = {};
+                } else {
+                    result = Y.JSON.parse(result);
+                }
+
+                if (typeof result.nextactivity !== 'undefined' && typeof result.nextactivity.id !== 'undefined') {
                         var node = scorm_prev(scorm_tree_node.getSelectedNodes()[0]);
                         if (node == null) {
                             // Avoid use of TreeView for Navigation.
@@ -488,12 +567,21 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
 
         // Launch next sco
         var scorm_launch_next_sco = function () {
+            launch_sco_fix = launch_sco;
             var result = null;
             if (scoes_nav[launch_sco].flow === 1) {
                 var datastring = scoes_nav[launch_sco].url + '&function=scorm_seq_flow&request=forward';
-                result = scorm_ajax_request(M.cfg.wwwroot + '/mod/scorm/datamodels/sequencinghandler.php?', datastring);
-                mod_scorm_seq = encodeURIComponent(result);
-                result = Y.JSON.parse (result);
+                result = scorm_dorequest_sequencing(datastring);
+
+                // Check the scorm_ajax_result, it may be false.
+                if (result === false) {
+                    // Either the outcome was a failure, or we are unloading and simply just don't know
+                    // what the outcome actually was.
+                    result = {};
+                } else {
+                    result = Y.JSON.parse(result);
+                }
+
                 if (typeof result.nextactivity !== 'undefined' && typeof result.nextactivity.id !== 'undefined') {
                     var node = scorm_next(scorm_tree_node.getSelectedNodes()[0]);
                     if (node === null) {
@@ -506,13 +594,14 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
                         node.title = scoes_nav[result.nextactivity.id].url;
                     }
                     launch_sco = result.nextactivity.id;
+                    launch_sco_fix = launch_sco;
                     scorm_activate_item(node);
                     scorm_fixnav();
                 } else {
-                    scorm_activate_item(scorm_next(scorm_tree_node.getSelectedNodes()[0], true));
+                    scorm_activate_item(scorm_next(scorm_tree_node.getSelectedNodes()[0], true, false));
                 }
             } else {
-                scorm_activate_item(scorm_next(scorm_tree_node.getSelectedNodes()[0], true));
+                scorm_activate_item(scorm_next(scorm_tree_node.getSelectedNodes()[0], true,false));
             }
         };
 
@@ -582,7 +671,8 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
         var tree = new Y.TreeView({
             container: '#scorm_tree',
             nodes: toc,
-            multiSelect: false
+            multiSelect: false,
+            lazyRender: false
         });
         scorm_tree_node = tree;
         // Trigger after instead of on, avoid recursive calls.
@@ -733,11 +823,13 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
                 render: true,
                 on: {
                     'click' : function(ev) {
-                        scorm_activate_item(scorm_skipnext(scorm_tree_node.getSelectedNodes()[0], true));
+                        launch_sco_fix = launch_sco;
+                        scorm_activate_item(scorm_skipnext(scorm_tree_node.getSelectedNodes()[0], true, false));
                     },
                     'keydown' : function(ev) {
+                        launch_sco_fix = launch_sco;
                         if (ev.domEvent.keyCode === 13 || ev.domEvent.keyCode === 32) {
-                            scorm_activate_item(scorm_skipnext(scorm_tree_node.getSelectedNodes()[0], true));
+                            scorm_activate_item(scorm_skipnext(scorm_tree_node.getSelectedNodes()[0], true, false));
                         }
                     }
                 }
@@ -813,6 +905,9 @@ M.mod_scorm.connectPrereqCallback = {
             var pagecontent = document.getElementById("page-content");
             if (!pagecontent) {
                 pagecontent = document.getElementById("content");
+            }
+            if (!pagecontent) {
+                pagecontent = document.getElementById("scormpage");
             }
             el_new_tree.setAttribute('id','scormtree123');
             el_new_tree.innerHTML = o.responseText;

@@ -13,15 +13,14 @@ Feature: Atto editor with customised toolbar
       | activity   | name | intro                                                                                  | course | idnumber |
       | label      | L1   | <a href="../lib/editor/atto/tests/fixtures/custom_toolbar_example.php">FixtureLink</a> | C1     | label1   |
     When I log in as "admin"
-    And I am on site homepage
-    And I follow "Course 1"
-    And I follow "FixtureLink"
+    And I am on "Course 1" course homepage
+    And I click on "FixtureLink" "link" in the "region-main" "region"
 
   @javascript
   Scenario: Confirm that both editors have different toolbars but still function
     Then ".atto_link_button" "css_element" should exist in the ".normaldiv" "css_element"
     And ".atto_link_button" "css_element" should not exist in the ".specialdiv" "css_element"
-    And ".atto_bold_button_bold" "css_element" should exist in the ".normaldiv" "css_element"
-    And ".atto_italic_button_italic" "css_element" should exist in the ".normaldiv" "css_element"
-    And ".atto_bold_button_bold" "css_element" should exist in the ".specialdiv" "css_element"
-    And ".atto_italic_button_italic" "css_element" should exist in the ".specialdiv" "css_element"
+    And ".atto_bold_button" "css_element" should exist in the ".normaldiv" "css_element"
+    And ".atto_italic_button" "css_element" should exist in the ".normaldiv" "css_element"
+    And ".atto_bold_button" "css_element" should exist in the ".specialdiv" "css_element"
+    And ".atto_italic_button" "css_element" should exist in the ".specialdiv" "css_element"

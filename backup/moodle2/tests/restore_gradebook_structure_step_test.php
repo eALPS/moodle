@@ -14,13 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Test for restore_stepslib.
- *
- * @package core_backup
- * @copyright 2016 Andrew Nicols <andrew@nicols.co.uk>
- * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core_backup;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -36,19 +30,20 @@ require_once($CFG->libdir . '/completionlib.php');
  * @copyright 2016 Andrew Nicols <andrew@nicols.co.uk>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_backup_restore_gradebook_structure_step_testcase extends advanced_testcase {
+class restore_gradebook_structure_step_test extends \advanced_testcase {
 
     /**
      * Provide tests for rewrite_step_backup_file_for_legacy_freeze based upon fixtures.
      *
      * @return array
      */
-    public function rewrite_step_backup_file_for_legacy_freeze_provider() {
+    public static function rewrite_step_backup_file_for_legacy_freeze_provider(): array {
         $fixturesdir = realpath(__DIR__ . '/fixtures/rewrite_step_backup_file_for_legacy_freeze/');
         $tests = [];
         $iterator = new \RecursiveIteratorIterator(
-                new \RecursiveDirectoryIterator($fixturesdir),
-                \RecursiveIteratorIterator::LEAVES_ONLY);
+            new \RecursiveDirectoryIterator($fixturesdir),
+            \RecursiveIteratorIterator::LEAVES_ONLY,
+        );
 
         foreach ($iterator as $sourcefile) {
             $pattern = '/\.test$/';
@@ -69,9 +64,9 @@ class core_backup_restore_gradebook_structure_step_testcase extends advanced_tes
      * @param   string  $source     The source file to test
      * @param   string  $expected   The expected result of the transformation
      */
-    public function test_rewrite_step_backup_file_for_legacy_freeze($source, $expected) {
+    public function test_rewrite_step_backup_file_for_legacy_freeze($source, $expected): void {
         $restore = $this->getMockBuilder('\restore_gradebook_structure_step')
-            ->setMethods(null)
+            ->onlyMethods([])
             ->disableOriginalConstructor()
             ->getMock()
             ;
@@ -83,7 +78,6 @@ class core_backup_restore_gradebook_structure_step_testcase extends advanced_tes
 
         $rc = new \ReflectionClass('\restore_gradebook_structure_step');
         $rcm = $rc->getMethod('rewrite_step_backup_file_for_legacy_freeze');
-        $rcm->setAccessible(true);
         $rcm->invoke($restore, $filepath);
 
         // Check the result.

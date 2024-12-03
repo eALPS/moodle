@@ -18,15 +18,24 @@
  * flatfile enrolment sync tests.
  *
  * @package    enrol_flatfile
- * @category   phpunit
+ * @category   test
  * @copyright  2012 Petr Skoda {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
+namespace enrol_flatfile;
 
+use enrol_flatfile\task\flatfile_sync_task;
 
-class enrol_flatfile_testcase extends advanced_testcase {
+/**
+ * flatfile enrolment sync tests.
+ *
+ * @package    enrol_flatfile
+ * @category   test
+ * @copyright  2012 Petr Skoda {@link http://skodak.org}
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class flatfile_test extends \advanced_testcase {
 
     protected function enable_plugin() {
         $enabled = enrol_get_plugins(true);
@@ -42,36 +51,36 @@ class enrol_flatfile_testcase extends advanced_testcase {
         set_config('enrol_plugins_enabled', implode(',', $enabled));
     }
 
-    public function test_basics() {
+    public function test_basics(): void {
         $this->assertFalse(enrol_is_enabled('flatfile'));
         $plugin = enrol_get_plugin('flatfile');
         $this->assertInstanceOf('enrol_flatfile_plugin', $plugin);
         $this->assertEquals(ENROL_EXT_REMOVED_SUSPENDNOROLES, get_config('enrol_flatfile', 'expiredaction'));
     }
 
-    public function test_sync_nothing() {
+    public function test_sync_nothing(): void {
         $this->resetAfterTest();
 
         $this->disable_plugin();
         $flatfileplugin = enrol_get_plugin('flatfile');
 
         // Just make sure the sync does not throw any errors when nothing to do.
-        $flatfileplugin->sync(new null_progress_trace());
+        $flatfileplugin->sync(new \null_progress_trace());
         $this->enable_plugin();
-        $flatfileplugin->sync(new null_progress_trace());
+        $flatfileplugin->sync(new \null_progress_trace());
     }
 
-    public function test_sync() {
+    public function test_sync(): void {
         global $CFG, $DB;
         $this->resetAfterTest();
 
-        /** @var enrol_flatfile_plugin $flatfileplugin  */
+        /** @var \enrol_flatfile_plugin $flatfileplugin  */
         $flatfileplugin = enrol_get_plugin('flatfile');
-        /** @var enrol_manual_plugin $manualplugin  */
+        /** @var \enrol_manual_plugin $manualplugin  */
         $manualplugin = enrol_get_plugin('manual');
         $this->assertNotEmpty($manualplugin);
 
-        $trace = new null_progress_trace();
+        $trace = new \null_progress_trace();
         $this->enable_plugin();
         $file = "$CFG->dataroot/enrol.txt";
 
@@ -93,9 +102,9 @@ class enrol_flatfile_testcase extends advanced_testcase {
         $course1 = $this->getDataGenerator()->create_course(array('idnumber'=>'c1'));
         $course2 = $this->getDataGenerator()->create_course(array('idnumber'=>'c2'));
         $course3 = $this->getDataGenerator()->create_course(array('idnumber'=>'c3'));
-        $context1 = context_course::instance($course1->id);
-        $context2 = context_course::instance($course2->id);
-        $context3 = context_course::instance($course3->id);
+        $context1 = \context_course::instance($course1->id);
+        $context2 = \context_course::instance($course2->id);
+        $context3 = \context_course::instance($course3->id);
 
         $maninstance1 = $DB->get_record('enrol', array('courseid'=>$course1->id, 'enrol'=>'manual'), '*', MUST_EXIST);
         $maninstance2 = $DB->get_record('enrol', array('courseid'=>$course2->id, 'enrol'=>'manual'), '*', MUST_EXIST);
@@ -167,7 +176,7 @@ class enrol_flatfile_testcase extends advanced_testcase {
         // Test encoding.
 
         $data = "add;student;čtvrtý;c3";
-        $data = core_text::convert($data, 'utf-8', 'iso-8859-2');
+        $data = \core_text::convert($data, 'utf-8', 'iso-8859-2');
         file_put_contents($file, $data);
         $flatfileplugin->set_config('encoding', 'iso-8859-2');
 
@@ -268,21 +277,21 @@ class enrol_flatfile_testcase extends advanced_testcase {
         $this->assertTrue($DB->record_exists('user_enrolments', array('userid'=>$user1->id, 'enrolid'=>$maninstance1->id)));
     }
 
-    public function test_notification() {
+    public function test_notification(): void {
         global $CFG, $DB;
         $this->resetAfterTest();
 
         $this->preventResetByRollback();
 
-        /** @var enrol_flatfile_plugin $flatfileplugin  */
+        /** @var \enrol_flatfile_plugin $flatfileplugin  */
         $flatfileplugin = enrol_get_plugin('flatfile');
-        /** @var enrol_manual_plugin $manualplugin  */
+        /** @var \enrol_manual_plugin $manualplugin  */
         $manualplugin = enrol_get_plugin('manual');
         $this->assertNotEmpty($manualplugin);
 
         $this->enable_plugin();
 
-        $trace = new progress_trace_buffer(new text_progress_trace(), false);
+        $trace = new \progress_trace_buffer(new \text_progress_trace(), false);
         $file = "$CFG->dataroot/enrol.txt";
         $flatfileplugin->set_config('location', $file);
 
@@ -298,8 +307,8 @@ class enrol_flatfile_testcase extends advanced_testcase {
 
         $course1 = $this->getDataGenerator()->create_course(array('idnumber'=>'c1'));
         $course2 = $this->getDataGenerator()->create_course(array('idnumber'=>'c2'));
-        $context1 = context_course::instance($course1->id);
-        $context2 = context_course::instance($course2->id);
+        $context1 = \context_course::instance($course1->id);
+        $context2 = \context_course::instance($course2->id);
 
         $maninstance1 = $DB->get_record('enrol', array('courseid'=>$course1->id, 'enrol'=>'manual'), '*', MUST_EXIST);
 
@@ -355,18 +364,18 @@ class enrol_flatfile_testcase extends advanced_testcase {
         $this->assertEquals($admin->id, $messages[4]->useridfrom);
     }
 
-    public function test_expired() {
+    public function test_expired(): void {
         global $DB;
         $this->resetAfterTest();
 
-        /** @var enrol_flatfile_plugin $flatfileplugin  */
+        /** @var \enrol_flatfile_plugin $flatfileplugin  */
         $flatfileplugin = enrol_get_plugin('flatfile');
-        /** @var enrol_manual_plugin $manualplugin  */
+        /** @var \enrol_manual_plugin $manualplugin  */
         $manualplugin = enrol_get_plugin('manual');
         $this->assertNotEmpty($manualplugin);
 
         $now = time();
-        $trace = new null_progress_trace();
+        $trace = new \null_progress_trace();
         $this->enable_plugin();
 
 
@@ -386,8 +395,8 @@ class enrol_flatfile_testcase extends advanced_testcase {
 
         $course1 = $this->getDataGenerator()->create_course();
         $course2 = $this->getDataGenerator()->create_course();
-        $context1 = context_course::instance($course1->id);
-        $context2 = context_course::instance($course2->id);
+        $context1 = \context_course::instance($course1->id);
+        $context2 = \context_course::instance($course2->id);
 
         $data = array('roleid'=>$studentrole->id, 'courseid'=>$course1->id);
         $id = $flatfileplugin->add_instance($course1, $data);
@@ -471,13 +480,13 @@ class enrol_flatfile_testcase extends advanced_testcase {
     /**
      * Flatfile enrolment sync task test.
      */
-    public function test_flatfile_sync_task() {
+    public function test_flatfile_sync_task(): void {
         global $CFG, $DB;
         $this->resetAfterTest();
 
         $flatfileplugin = enrol_get_plugin('flatfile');
 
-        $trace = new null_progress_trace();
+        $trace = new \null_progress_trace();
         $this->enable_plugin();
         $file = "$CFG->dataroot/enrol.txt";
         $flatfileplugin->set_config('location', $file);
@@ -487,15 +496,60 @@ class enrol_flatfile_testcase extends advanced_testcase {
 
         $user1 = $this->getDataGenerator()->create_user(array('idnumber' => 'u1'));
         $course1 = $this->getDataGenerator()->create_course(array('idnumber' => 'c1'));
-        $context1 = context_course::instance($course1->id);
+        $context1 = \context_course::instance($course1->id);
 
         $data =
             "add,student,u1,c1";
         file_put_contents($file, $data);
 
-        $task = new enrol_flatfile\task\flatfile_sync_task;
+        $task = new flatfile_sync_task;
         $task->execute();
 
         $this->assertEquals(1, $DB->count_records('role_assignments', array('roleid' => $studentrole->id)));
+    }
+
+    /**
+     * Test for getting user enrolment actions.
+     */
+    public function test_get_user_enrolment_actions(): void {
+        global $CFG, $PAGE;
+        $this->resetAfterTest();
+
+        // Set page URL to prevent debugging messages.
+        $PAGE->set_url('/enrol/editinstance.php');
+
+        $pluginname = 'flatfile';
+
+        // Only enable the flatfile enrol plugin.
+        $CFG->enrol_plugins_enabled = $pluginname;
+
+        $generator = $this->getDataGenerator();
+
+        // Get the enrol plugin.
+        $plugin = enrol_get_plugin($pluginname);
+
+        // Create a course.
+        $course = $generator->create_course();
+        // Enable this enrol plugin for the course.
+        $plugin->add_instance($course);
+
+        // Create a student.
+        $student = $generator->create_user();
+        // Enrol the student to the course.
+        $generator->enrol_user($student->id, $course->id, 'student', $pluginname);
+
+        // Teachers don't have enrol/flatfile:manage and enrol/flatfile:unenrol capabilities by default.
+        // Login as admin for simplicity.
+        $this->setAdminUser();
+
+        require_once($CFG->dirroot . '/enrol/locallib.php');
+        $manager = new \course_enrolment_manager($PAGE, $course);
+        $userenrolments = $manager->get_user_enrolments($student->id);
+        $this->assertCount(1, $userenrolments);
+
+        $ue = reset($userenrolments);
+        $actions = $plugin->get_user_enrolment_actions($manager, $ue);
+        // Flatfile enrolment has 2 enrol actions for active users -- edit and unenrol.
+        $this->assertCount(2, $actions);
     }
 }

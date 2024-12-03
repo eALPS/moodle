@@ -41,17 +41,35 @@ class qtype_ddwtos_edit_form extends qtype_gapselect_edit_form_base {
 
     protected function data_preprocessing_choice($question, $answer, $key) {
         $question = parent::data_preprocessing_choice($question, $answer, $key);
-        $options = unserialize($answer->feedback);
-        $question->choices[$key]['choicegroup'] = $options->draggroup;
-        $question->choices[$key]['infinite'] = $options->infinite;
+        $options = unserialize_object($answer->feedback);
+        $question->choices[$key]['choicegroup'] = $options->draggroup ?? 1;
+        $question->choices[$key]['infinite'] = !empty($options->infinite);
         return $question;
     }
 
     protected function choice_group($mform) {
         $grouparray = parent::choice_group($mform);
-        $grouparray[] = $mform->createElement('checkbox', 'infinite', ' ',
-                get_string('infinite', 'qtype_ddwtos'), null,
+        $grouparray[] = $mform->createElement('checkbox', 'infinite', get_string('infinite', 'qtype_ddwtos'), '', null,
                 array('size' => 1, 'class' => 'tweakcss'));
         return $grouparray;
+    }
+
+    protected function extra_slot_validation(array $slots, array $choices): ?string {
+        foreach ($slots as $slot) {
+            if (count(array_filter($slots, fn($value) => $value == $slot)) > 1) {
+                $choice = $choices[$slot - 1];
+                if (!isset($choice['infinite']) || $choice['infinite'] != 1) {
+                    return get_string('errorlimitedchoice', 'qtype_ddwtos',
+                        html_writer::tag('b', $slot));
+                }
+            }
+        }
+        return null;
+    }
+
+    protected function definition_inner($mform): void {
+        parent::definition_inner($mform);
+        $mform->insertElementBefore($mform->createElement('static', 'previewarea', '',
+            get_string('choicesacceptedtext', 'qtype_ddwtos')), 'shuffleanswers');
     }
 }

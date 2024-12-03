@@ -50,9 +50,8 @@ class behat_mod_feedback extends behat_base {
     public function i_add_question_to_the_feedback_with($questiontype, TableNode $questiondata) {
 
         $questiontype = $this->escape($questiontype);
-        $additem = $this->escape(get_string('add_item', 'feedback'));
-
-        $this->execute('behat_forms::i_select_from_the_singleselect', array($questiontype, $additem));
+        $this->execute('behat_general::i_click_on', [get_string('add_item', 'mod_feedback'), 'link']);
+        $this->execute('behat_general::i_click_on', [$questiontype, 'link']);
 
         // Wait again, for page to reloaded.
         $this->execute('behat_general::i_wait_to_be_redirected');
@@ -69,8 +68,25 @@ class behat_mod_feedback extends behat_base {
 
         $this->execute("behat_forms::i_set_the_following_fields_to_these_values", $newdata);
 
-        $saveitem = $this->escape(get_string('save_item', 'feedback'));
+        $saveitem = $this->escape(get_string('save'));
         $this->execute("behat_forms::press_button", $saveitem);
+    }
+
+    /**
+     * Adds a question to the existing feedback with filling the form.
+     *
+     * The form for creating a question should be on one page.
+     *
+     * @When /^I add a page break to the feedback$/
+     */
+    public function i_add_a_page_break_to_the_feedback() {
+
+        $questiontype = $this->escape(get_string('add_pagebreak', 'feedback'));
+        $this->execute('behat_general::i_click_on', [get_string('add_item', 'mod_feedback'), 'link']);
+        $this->execute('behat_general::i_click_on', [$questiontype, 'link']);
+
+        // Wait again, for page to reloaded.
+        $this->execute('behat_general::i_wait_to_be_redirected');
     }
 
     /**
@@ -90,8 +106,7 @@ class behat_mod_feedback extends behat_base {
         $this->execute('behat_auth::i_log_in_as', $username);
 
         // Navigate to feedback complete form.
-        $this->execute('behat_general::click_link', $coursename);
-        $this->execute('behat_general::click_link', $feedbackname);
+        $this->execute('behat_navigation::i_am_on_page_instance', [$feedbackname, 'feedback activity']);
         $this->execute('behat_general::click_link', $completeform);
 
         // Fill form and submit.
@@ -121,7 +136,7 @@ class behat_mod_feedback extends behat_base {
                 return $behatgeneralcontext->download_file_from_link($link);
             },
             array('link' => $link),
-            self::EXTENDED_TIMEOUT,
+            behat_base::get_extended_timeout(),
             $exception
         );
 
@@ -136,8 +151,8 @@ class behat_mod_feedback extends behat_base {
      */
     public function i_show_chart_data_for_the_feedback($feedbackname) {
 
-        $feedbackxpath = "//th[contains(normalize-space(string(.)), \"" . $feedbackname . "\")]/ancestor::table/" .
-            "following-sibling::div[contains(concat(' ', normalize-space(@class), ' '), ' chart-area ')][1]" .
+        $feedbackxpath = "//th[contains(normalize-space(string(.)), \"" . $feedbackname . "\")]/ancestor::table//" .
+            "div[contains(concat(' ', normalize-space(@class), ' '), ' chart-table ')]" .
             "//p[contains(concat(' ', normalize-space(@class), ' '), ' chart-table-expand ') and ".
             "//a[contains(normalize-space(string(.)), '".get_string('showchartdata')."')]]";
 
@@ -147,9 +162,7 @@ class behat_mod_feedback extends behat_base {
         // If chart data is not visible then expand.
         $node = $this->get_selected_node("xpath_element", $charttabledataxpath);
         if ($node) {
-            if (!$node->isVisible()) {
-                // Focus on node, before checking if it's visible.
-                $node->focus();
+            if ($node->getAttribute('aria-expanded') === 'false') {
                 $this->execute('behat_general::i_click_on_in_the', array(
                     get_string('showchartdata'),
                     'link',
@@ -214,5 +227,18 @@ class behat_mod_feedback extends behat_base {
             // Get the next itemactual.
             $itemactual = next($dataactual);
         }
+    }
+
+    /**
+     * Return the list of partial named selectors
+     *
+     * @return behat_component_named_selector[]
+     */
+    public static function get_partial_named_selectors(): array {
+        return [
+            new behat_component_named_selector('Question', [
+                ".//*[starts-with(@id, 'fitem_feedback_item_')][.//*[contains(text(), %locator%)]]",
+            ]),
+        ];
     }
 }

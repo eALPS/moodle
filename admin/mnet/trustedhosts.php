@@ -5,16 +5,12 @@
     require_once($CFG->libdir.'/adminlib.php');
     include_once($CFG->dirroot.'/mnet/lib.php');
 
-    require_login();
     admin_externalpage_setup('trustedhosts');
 
-    $context = context_system::instance();
-
-    require_capability('moodle/site:config', $context, $USER->id, true, "nopermissions");
 
     if (!extension_loaded('openssl')) {
         echo $OUTPUT->header();
-        print_error('requiresopenssl', 'mnet', '', NULL, true);
+        throw new \moodle_exception('requiresopenssl', 'mnet', '', null, true);
     }
 
     $site = get_site();

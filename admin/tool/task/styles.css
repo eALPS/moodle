@@ -1,4 +1,5 @@
-#page-admin-tool-task-scheduledtasks .task-class {
+#page-admin-tool-task-scheduledtasks .task-class,
+#page-admin-tool-task-runningtasks .task-class {
     display: block;
     padding: 0 0.5em;
     color: #888;
@@ -10,6 +11,18 @@
     direction: ltr;
 }
 
-#page-admin-tool-task-scheduledtasks .task-runnow {
+#page-admin-tool-task-scheduledtasks .task-runnow,
+#page-admin-tool-task-scheduledtasks .task-clearfaildelay {
     font-size: 0.75em;
+}
+
+.path-admin .task-output {
+    color: #fff;
+    background: #333;
+    padding: 1em;
+
+    a {
+        color: #fff;
+        text-decoration: underline;
+    }
 }

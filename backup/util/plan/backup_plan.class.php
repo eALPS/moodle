@@ -34,16 +34,21 @@ class backup_plan extends base_plan implements loggable {
     protected $excludingdactivities;
 
     /**
+     * The role ids to keep in a copy operation.
+     * @var array
+     */
+    protected $keptroles = array();
+
+    /**
      * Constructor - instantiates one object of this class
      */
     public function __construct($controller) {
-        global $CFG;
-
         if (! $controller instanceof backup_controller) {
             throw new backup_plan_exception('wrong_backup_controller_specified');
         }
+        $backuptempdir    = make_backup_temp_directory('');
         $this->controller = $controller;
-        $this->basepath   = $CFG->tempdir . '/backup/' . $controller->get_backupid();
+        $this->basepath   = $backuptempdir . '/' . $controller->get_backupid();
         $this->excludingdactivities = false;
         parent::__construct('backup_plan');
     }
@@ -105,6 +110,26 @@ class backup_plan extends base_plan implements loggable {
         $this->excludingdactivities = true;
     }
 
+    /**
+     * Sets the user roles that should be kept in the destination course
+     * for a course copy operation.
+     *
+     * @param array $roleids
+     */
+    public function set_kept_roles(array $roleids): void {
+        $this->keptroles = $roleids;
+    }
+
+    /**
+     * Get the user roles that should be kept in the destination course
+     * for a course copy operation.
+     *
+     * @return array
+     */
+    public function get_kept_roles(): array {
+        return $this->keptroles;
+    }
+
     public function log($message, $level, $a = null, $depth = null, $display = false) {
         backup_helper::log($message, $level, $a, $depth, $display, $this->get_logger());
     }
@@ -119,6 +144,22 @@ class backup_plan extends base_plan implements loggable {
         $this->controller->set_status(backup::STATUS_EXECUTING);
         parent::execute();
         $this->controller->set_status(backup::STATUS_FINISHED_OK);
+
+        if ($this->controller->get_type() === backup::TYPE_1COURSE) {
+            // Trigger a course_backup_created event.
+            $otherarray = array('format' => $this->controller->get_format(),
+                                'mode' => $this->controller->get_mode(),
+                                'interactive' => $this->controller->get_interactive(),
+                                'type' => $this->controller->get_type(),
+                                'backupid' => $this->controller->get_backupid()
+            );
+            $event = \core\event\course_backup_created::create(array(
+                'objectid' => $this->get_courseid(),
+                'context' => context_course::instance($this->get_courseid()),
+                'other' => $otherarray
+            ));
+            $event->trigger();
+        }
     }
 }
 

@@ -14,18 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * This file contains tests for the question_attempt class.
- *
- * Action methods like start, process_action and finish are assumed to be
- * tested by walkthrough tests in the various behaviours.
- *
- * @package    moodlecore
- * @subpackage questionengine
- * @copyright  2009 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core_question;
 
+use question_attempt;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -33,83 +24,85 @@ global $CFG;
 require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/helpers.php');
 
-
 /**
  * Unit tests for the {@link question_attempt} class.
  *
+ * Action methods like start, process_action and finish are assumed to be
+ * tested by walkthrough tests in the various behaviours.
+ *
  * These are the tests that don't require any steps.
  *
+ * @package    core_question
+ * @category   test
  * @copyright  2009 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class question_attempt_testcase extends advanced_testcase {
+class questionattempt_test extends \advanced_testcase {
+    /** @var question_definition a question that can be used in the tests. */
     private $question;
+    /** @var int fake question_usage id used in some tests. */
     private $usageid;
+    /** @var question_attempt a question attempt that can be used in the tests. */
     private $qa;
 
-    protected function setUp() {
-        $this->question = test_question_maker::make_question('description');
+    protected function setUp(): void {
+        parent::setUp();
+        $this->question = \test_question_maker::make_question('description');
         $this->question->defaultmark = 3;
         $this->usageid = 13;
         $this->qa = new question_attempt($this->question, $this->usageid);
     }
 
-    protected function tearDown() {
-        $this->question = null;
-        $this->useageid = null;
-        $this->qa = null;
-    }
-
-    public function test_constructor_sets_maxmark() {
+    public function test_constructor_sets_maxmark(): void {
         $qa = new question_attempt($this->question, $this->usageid);
-        $this->assertSame($this->question, $qa->get_question());
+        $this->assertSame($this->question, $qa->get_question(false));
         $this->assertEquals(3, $qa->get_max_mark());
     }
 
-    public function test_maxmark_beats_default_mark() {
+    public function test_maxmark_beats_default_mark(): void {
         $qa = new question_attempt($this->question, $this->usageid, null, 2);
         $this->assertEquals(2, $qa->get_max_mark());
     }
 
-    public function test_get_set_slot() {
+    public function test_get_set_slot(): void {
         $this->qa->set_slot(7);
         $this->assertEquals(7, $this->qa->get_slot());
     }
 
-    public function test_fagged_initially_false() {
+    public function test_fagged_initially_false(): void {
         $this->assertEquals(false, $this->qa->is_flagged());
     }
 
-    public function test_set_is_flagged() {
+    public function test_set_is_flagged(): void {
         $this->qa->set_flagged(true);
         $this->assertEquals(true, $this->qa->is_flagged());
     }
 
-    public function test_get_qt_field_name() {
+    public function test_get_qt_field_name(): void {
         $name = $this->qa->get_qt_field_name('test');
-        $this->assertRegExp('/^' . preg_quote($this->qa->get_field_prefix(), '/') . '/', $name);
-        $this->assertRegExp('/_test$/', $name);
+        $this->assertMatchesRegularExpression('/^' . preg_quote($this->qa->get_field_prefix(), '/') . '/', $name);
+        $this->assertMatchesRegularExpression('/_test$/', $name);
     }
 
-    public function test_get_behaviour_field_name() {
+    public function test_get_behaviour_field_name(): void {
         $name = $this->qa->get_behaviour_field_name('test');
-        $this->assertRegExp('/^' . preg_quote($this->qa->get_field_prefix(), '/') . '/', $name);
-        $this->assertRegExp('/_-test$/', $name);
+        $this->assertMatchesRegularExpression('/^' . preg_quote($this->qa->get_field_prefix(), '/') . '/', $name);
+        $this->assertMatchesRegularExpression('/_-test$/', $name);
     }
 
-    public function test_get_field_prefix() {
+    public function test_get_field_prefix(): void {
         $this->qa->set_slot(7);
         $name = $this->qa->get_field_prefix();
-        $this->assertRegExp('/' . preg_quote($this->usageid, '/') . '/', $name);
-        $this->assertRegExp('/' . preg_quote($this->qa->get_slot(), '/') . '/', $name);
+        $this->assertMatchesRegularExpression('/' . preg_quote($this->usageid, '/') . '/', $name);
+        $this->assertMatchesRegularExpression('/' . preg_quote($this->qa->get_slot(), '/') . '/', $name);
     }
 
-    public function test_get_submitted_var_not_present_var_returns_null() {
+    public function test_get_submitted_var_not_present_var_returns_null(): void {
         $this->assertNull($this->qa->get_submitted_var(
                 'reallyunlikelyvariablename', PARAM_BOOL));
     }
 
-    public function test_get_all_submitted_qt_vars() {
+    public function test_get_all_submitted_qt_vars(): void {
         $this->qa->set_usage_id('MDOgzdhS4W');
         $this->qa->set_slot(1);
         $this->assertEquals(array('omval_response1' => 1, 'omval_response2' => 666, 'omact_gen_14' => 'Check'),

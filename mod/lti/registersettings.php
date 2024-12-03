@@ -73,6 +73,9 @@ if ($isupdate) {
     $data['isupdate'] = true;
 }
 
+$PAGE->set_primary_active_tab('siteadminnode');
+$PAGE->set_secondary_active_tab('modules');
+
 $form = new mod_lti_register_types_form($pageurl, (object)$data);
 
 if ($form->is_cancelled()) {
@@ -81,7 +84,7 @@ if ($form->is_cancelled()) {
     $id = lti_add_tool_proxy($data);
     redirect($redirect);
 } else {
-    $PAGE->set_title("{$SITE->shortname}: " . get_string('toolregistration', 'lti'));
+    $PAGE->set_title(get_string('toolregistration', 'lti'));
     $PAGE->navbar->add(get_string('lti_administration', 'lti'), $redirect);
 
     echo $OUTPUT->header();

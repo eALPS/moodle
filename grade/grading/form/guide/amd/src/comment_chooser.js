@@ -17,12 +17,11 @@
  * AMD code for the frequently used comments chooser for the marking guide grading form.
  *
  * @module     gradingform_guide/comment_chooser
- * @class      comment_chooser
- * @package    core
  * @copyright  2015 Jun Pataleta <jun@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
-  */
-define(['jquery', 'core/templates', 'core/notification', 'core/yui'], function($, templates, notification) {
+ */
+define(['jquery', 'core/templates', 'core/key_codes', 'core/notification', 'core/yui'],
+        function($, templates, keycodes, notification) {
 
     // Private variables and functions.
 
@@ -77,7 +76,7 @@ define(['jquery', 'core/templates', 'core/notification', 'core/yui'], function($
                         var remarkText = remarkTextArea.val();
 
                         // Add line break if the current value of the remark text is not empty.
-                        if ($.trim(remarkText) !== '') {
+                        if (remarkText.trim() !== '') {
                             remarkText += '\n';
                         }
                         remarkText += comment.description;
@@ -91,9 +90,8 @@ define(['jquery', 'core/templates', 'core/notification', 'core/yui'], function($
                     $(document).off('keypress', commentOptionId).on('keypress', commentOptionId, function() {
                         var keyCode = event.which || event.keyCode;
 
-                        // Enter or space key.
-                        if (keyCode == 13 || keyCode == 32) {
-                            // Trigger click event.
+                        // Trigger click event when user presses space.
+                        if (keyCode === keycodes.space) {
                             $(commentOptionId).click();
                         }
                     });

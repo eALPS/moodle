@@ -14,15 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for /lib/classes/curl/curl_security_helper.php.
- *
- * @package   core
- * @copyright 2016 Jake Dallimore <jrhdallimore@gmail.com>
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
+namespace core;
 
 /**
  * cURL security test suite.
@@ -34,19 +26,32 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright  2016 Jake Dallimore <jrhdallimore@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_curl_security_helper_testcase extends advanced_testcase {
+class curl_security_helper_test extends \advanced_testcase {
     /**
      * Test for \core\files\curl_security_helper::url_is_blocked().
      *
+     * @param array $dns a mapping between hosts and IPs to be used instead of a real DNS lookup. The values must be arrays.
      * @param string $url the url to validate.
      * @param string $blockedhosts the list of blocked hosts.
      * @param string $allowedports the list of allowed ports.
      * @param bool $expected the expected result.
      * @dataProvider curl_security_url_data_provider
      */
-    public function test_curl_security_helper_url_is_blocked($url, $blockedhosts, $allowedports, $expected) {
+    public function test_curl_security_helper_url_is_blocked($dns, $url, $blockedhosts, $allowedports, $expected): void {
         $this->resetAfterTest(true);
-        $helper = new \core\files\curl_security_helper();
+        $helper = $this->getMockBuilder('\core\files\curl_security_helper')
+            ->onlyMethods(['get_host_list_by_name'])
+            ->getMock();
+
+        // Override the get host list method to return hard coded values based on a mapping provided by $dns.
+        $helper->method('get_host_list_by_name')->will(
+            $this->returnCallback(
+                function($host) use ($dns) {
+                    return isset($dns[$host]) ? $dns[$host] : [];
+                }
+            )
+        );
+
         set_config('curlsecurityblockedhosts', $blockedhosts);
         set_config('curlsecurityallowedport', $allowedports);
         $this->assertEquals($expected, $helper->url_is_blocked($url));
@@ -57,68 +62,88 @@ class core_curl_security_helper_testcase extends advanced_testcase {
      *
      * @return array
      */
-    public function curl_security_url_data_provider() {
+    public static function curl_security_url_data_provider(): array {
+        $simpledns = ['localhost' => ['127.0.0.1']];
+        $multiplerecorddns = [
+            'sub.example.com' => ['1.2.3.4', '5.6.7.8']
+        ];
         // Format: url, blocked hosts, allowed ports, expected result.
         return [
-            // Base set without the blacklist enabled - no checking takes place.
-            ["http://localhost/x.png", "", "", false],       // IP=127.0.0.1, Port=80 (port inferred from http).
-            ["http://localhost:80/x.png", "", "", false],    // IP=127.0.0.1, Port=80 (specific port overrides http scheme).
-            ["https://localhost/x.png", "", "", false],      // IP=127.0.0.1, Port=443 (port inferred from https).
-            ["http://localhost:443/x.png", "", "", false],   // IP=127.0.0.1, Port=443 (specific port overrides http scheme).
-            ["localhost/x.png", "", "", false],              // IP=127.0.0.1, Port=80 (port inferred from http fallback).
-            ["localhost:443/x.png", "", "", false],          // IP=127.0.0.1, Port=443 (port hard specified, despite http fallback).
-            ["http://127.0.0.1/x.png", "", "", false],       // IP=127.0.0.1, Port=80 (port inferred from http).
-            ["127.0.0.1/x.png", "", "", false],              // IP=127.0.0.1, Port=80 (port inferred from http fallback).
-            ["http://localhost:8080/x.png", "", "", false],  // IP=127.0.0.1, Port=8080 (port hard specified).
-            ["http://192.168.1.10/x.png", "", "", false],    // IP=192.168.1.10, Port=80 (port inferred from http).
-            ["https://192.168.1.10/x.png", "", "", false],   // IP=192.168.1.10, Port=443 (port inferred from https).
-            ["http://sub.example.com/x.png", "", "", false], // IP=::1, Port = 80 (port inferred from http).
-            ["http://s-1.d-1.com/x.png", "", "", false],     // IP=::1, Port = 80 (port inferred from http).
+            // Base set without the blocklist enabled - no checking takes place.
+            [$simpledns, "http://localhost/x.png", "", "", false],       // IP=127.0.0.1, Port=80 (port inferred from http).
+            [$simpledns, "http://localhost:80/x.png", "", "", false],    // IP=127.0.0.1, Port=80 (specific port overrides http scheme).
+            [$simpledns, "https://localhost/x.png", "", "", false],      // IP=127.0.0.1, Port=443 (port inferred from https).
+            [$simpledns, "http://localhost:443/x.png", "", "", false],   // IP=127.0.0.1, Port=443 (specific port overrides http scheme).
+            [$simpledns, "localhost/x.png", "", "", false],              // IP=127.0.0.1, Port=80 (port inferred from http fallback).
+            [$simpledns, "localhost:443/x.png", "", "", false],          // IP=127.0.0.1, Port=443 (port hard specified, despite http fallback).
+            [$simpledns, "http://127.0.0.1/x.png", "", "", false],       // IP=127.0.0.1, Port=80 (port inferred from http).
+            [$simpledns, "127.0.0.1/x.png", "", "", false],              // IP=127.0.0.1, Port=80 (port inferred from http fallback).
+            [$simpledns, "http://localhost:8080/x.png", "", "", false],  // IP=127.0.0.1, Port=8080 (port hard specified).
+            [$simpledns, "http://192.168.1.10/x.png", "", "", false],    // IP=192.168.1.10, Port=80 (port inferred from http).
+            [$simpledns, "https://192.168.1.10/x.png", "", "", false],   // IP=192.168.1.10, Port=443 (port inferred from https).
+            [$simpledns, "http://sub.example.com/x.png", "", "", false], // IP=::1, Port = 80 (port inferred from http).
+            [$simpledns, "http://s-1.d-1.com/x.png", "", "", false],     // IP=::1, Port = 80 (port inferred from http).
 
             // Test set using domain name filters but with all ports allowed (empty).
-            ["http://localhost/x.png", "localhost", "", true],
-            ["localhost/x.png", "localhost", "", true],
-            ["localhost:0/x.png", "localhost", "", true],
-            ["ftp://localhost/x.png", "localhost", "", true],
-            ["http://sub.example.com/x.png", "localhost", "", false],
-            ["http://example.com/x.png", "example.com", "", true],
-            ["http://sub.example.com/x.png", "example.com", "", false],
+            [$simpledns, "http://localhost/x.png", "localhost", "", true],
+            [$simpledns, "localhost/x.png", "localhost", "", true],
+            [$simpledns, "localhost:0/x.png", "localhost", "", true],
+            [$simpledns, "ftp://localhost/x.png", "localhost", "", true],
+            [$simpledns, "http://sub.example.com/x.png", "localhost", "", false],
+            [$simpledns, "http://example.com/x.png", "example.com", "", true],
+            [$simpledns, "http://sub.example.com/x.png", "example.com", "", false],
 
             // Test set using wildcard domain name filters but with all ports allowed (empty).
-            ["http://sub.example.com/x.png", "*.com", "", true],
-            ["http://example.com/x.png", "*.example.com", "", false],
-            ["http://sub.example.com/x.png", "*.example.com", "", true],
-            ["http://sub.example.com/x.png", "*.sub.example.com", "", false],
-            ["http://sub.example.com/x.png", "*.example", "", false],
+            [$simpledns, "http://sub.example.com/x.png", "*.com", "", true],
+            [$simpledns, "http://example.com/x.png", "*.example.com", "", false],
+            [$simpledns, "http://sub.example.com/x.png", "*.example.com", "", true],
+            [$simpledns, "http://sub.example.com/x.png", "*.sub.example.com", "", false],
+            [$simpledns, "http://sub.example.com/x.png", "*.example", "", false],
 
             // Test set using IP address filters but with all ports allowed (empty).
-            ["http://localhost/x.png", "127.0.0.1", "", true],
-            ["http://127.0.0.1/x.png", "127.0.0.1", "", true],
-            ["http://sub.example.com", "127.0.0.1", "", false],
+            [$simpledns, "http://localhost/x.png", "127.0.0.1", "", true],
+            [$simpledns, "http://127.0.0.1/x.png", "127.0.0.1", "", true],
 
             // Test set using CIDR IP range filters but with all ports allowed (empty).
-            ["http://localhost/x.png", "127.0.0.0/24", "", true],
-            ["http://127.0.0.1/x.png", "127.0.0.0/24", "", true],
-            ["http://sub.example.com", "127.0.0.0/24", "", false],
+            [$simpledns, "http://localhost/x.png", "127.0.0.0/24", "", true],
+            [$simpledns, "http://127.0.0.1/x.png", "127.0.0.0/24", "", true],
 
             // Test set using last-group range filters but with all ports allowed (empty).
-            ["http://localhost/x.png", "127.0.0.0-30", "", true],
-            ["http://127.0.0.1/x.png", "127.0.0.0-30", "", true],
-            ["http://sub.example.com", "127.0.0.0/24", "", false],
+            [$simpledns, "http://localhost/x.png", "127.0.0.0-30", "", true],
+            [$simpledns, "http://127.0.0.1/x.png", "127.0.0.0-30", "", true],
 
             // Test set using port filters but with all hosts allowed (empty).
-            ["http://localhost/x.png", "", "80\n443", false],
-            ["http://localhost:80/x.png", "", "80\n443", false],
-            ["https://localhost/x.png", "", "80\n443", false],
-            ["http://localhost:443/x.png", "", "80\n443", false],
-            ["http://sub.example.com:8080/x.png", "", "80\n443", true],
-            ["http://sub.example.com:-80/x.png", "", "80\n443", true],
-            ["http://sub.example.com:aaa/x.png", "", "80\n443", true],
+            [$simpledns, "http://localhost/x.png", "", "80\n443", false],
+            [$simpledns, "http://localhost:80/x.png", "", "80\n443", false],
+            [$simpledns, "https://localhost/x.png", "", "80\n443", false],
+            [$simpledns, "http://localhost:443/x.png", "", "80\n443", false],
+            [$simpledns, "http://sub.example.com:8080/x.png", "", "80\n443", true],
+            [$simpledns, "http://sub.example.com:-80/x.png", "", "80\n443", true],
+            [$simpledns, "http://sub.example.com:aaa/x.png", "", "80\n443", true],
 
             // Test set using port filters and hosts filters.
-            ["http://localhost/x.png", "127.0.0.1", "80\n443", true],
-            ["http://127.0.0.1/x.png", "127.0.0.1", "80\n443", true],
-            ["http://sub.example.com", "127.0.0.1", "80\n443", false],
+            [$simpledns, "http://localhost/x.png", "127.0.0.1", "80\n443", true],
+            [$simpledns, "http://127.0.0.1/x.png", "127.0.0.1", "80\n443", true],
+
+            // Test using multiple A records.
+            // Multiple record DNS gives two IPs for the same host, we want to make
+            // sure that if we block one of those (doesn't matter which one)
+            // the request is blocked.
+            [$multiplerecorddns, "http://sub.example.com", '1.2.3.4', "", true],
+            [$multiplerecorddns, "http://sub.example.com", '5.6.7.8', "", true],
+
+            // Test when DNS resolution fails.
+            [[], "http://example.com", "127.0.0.1", "", true],
+
+            // Test ensures that the default value of getremoteaddr() 0.0.0.0 will check against the provided blocked list.
+            [$simpledns, "http://0.0.0.0/x.png", "0.0.0.0", "", true],
+            // Test set using IPV4 with integer format.
+            [$simpledns, "http://2852039166/x.png", "169.254.169.254", "", true],
+
+            // Test some freaky deaky Unicode domains. Should be blocked always.
+            [$simpledns, "http://169。254。169。254/", "127.0.0.1", "", true],
+            [$simpledns, "http://169。254。169。254/", "1.2.3.4", "", true],
+            [$simpledns, "http://169。254。169。254/", "127.0.0.1", "80\n443", true]
 
             // Note on testing URLs using IPv6 notation:
             // At present, the curl_security_helper class doesn't support IPv6 url notation.
@@ -142,7 +167,7 @@ class core_curl_security_helper_testcase extends advanced_testcase {
      * @param bool $expected the expected result.
      * @dataProvider curl_security_settings_data_provider
      */
-    public function test_curl_security_helper_is_enabled($blockedhosts, $allowedports, $expected) {
+    public function test_curl_security_helper_is_enabled($blockedhosts, $allowedports, $expected): void {
         $this->resetAfterTest(true);
         $helper = new \core\files\curl_security_helper();
         set_config('curlsecurityblockedhosts', $blockedhosts);
@@ -155,7 +180,7 @@ class core_curl_security_helper_testcase extends advanced_testcase {
      *
      * @return array
      */
-    public function curl_security_settings_data_provider() {
+    public static function curl_security_settings_data_provider(): array {
         // Format: blocked hosts, allowed ports, expected result.
         return [
             ["", "", false],
@@ -174,11 +199,11 @@ class core_curl_security_helper_testcase extends advanced_testcase {
      * @param bool $expected the expected result.
      * @dataProvider curl_security_host_data_provider
      */
-    public function test_curl_security_helper_host_is_blocked($host, $blockedhosts, $expected) {
+    public function test_curl_security_helper_host_is_blocked($host, $blockedhosts, $expected): void {
         $this->resetAfterTest(true);
         $helper = new \core\files\curl_security_helper();
         set_config('curlsecurityblockedhosts', $blockedhosts);
-        $this->assertEquals($expected, phpunit_util::call_internal_method($helper, 'host_is_blocked', [$host],
+        $this->assertEquals($expected, \phpunit_util::call_internal_method($helper, 'host_is_blocked', [$host],
                                                                           '\core\files\curl_security_helper'));
     }
 
@@ -187,7 +212,7 @@ class core_curl_security_helper_testcase extends advanced_testcase {
      *
      * @return array
      */
-    public function curl_security_host_data_provider() {
+    public static function curl_security_host_data_provider(): array {
         return [
             // IPv4 hosts.
             ["127.0.0.1", "127.0.0.1", true],
@@ -228,11 +253,11 @@ class core_curl_security_helper_testcase extends advanced_testcase {
      * @param bool $expected the expected result.
      * @dataProvider curl_security_port_data_provider
      */
-    public function test_curl_security_helper_port_is_blocked($port, $allowedports, $expected) {
+    public function test_curl_security_helper_port_is_blocked($port, $allowedports, $expected): void {
         $this->resetAfterTest(true);
         $helper = new \core\files\curl_security_helper();
         set_config('curlsecurityallowedport', $allowedports);
-        $this->assertEquals($expected, phpunit_util::call_internal_method($helper, 'port_is_blocked', [$port],
+        $this->assertEquals($expected, \phpunit_util::call_internal_method($helper, 'port_is_blocked', [$port],
                                                                           '\core\files\curl_security_helper'));
     }
 
@@ -241,7 +266,7 @@ class core_curl_security_helper_testcase extends advanced_testcase {
      *
      * @return array
      */
-    public function curl_security_port_data_provider() {
+    public static function curl_security_port_data_provider(): array {
         return [
             ["", "80\n443", true],
             [" ", "80\n443", true],
@@ -255,8 +280,8 @@ class core_curl_security_helper_testcase extends advanced_testcase {
             ["80", "80\n443", false],
             [80, "80\n443", false],
             [443, "80\n443", false],
-            [0, "", true], // Port 0 and below are always invalid, even when the admin hasn't set whitelist entries.
-            [-1, "", true], // Port 0 and below are always invalid, even when the admin hasn't set whitelist entries.
+            [0, "", true], // Port 0 and below are always invalid, even when the admin hasn't set allowed entries.
+            [-1, "", true], // Port 0 and below are always invalid, even when the admin hasn't set allowed entries.
             [null, "", true], // Non-string, non-int values are invalid.
         ];
     }
@@ -264,7 +289,7 @@ class core_curl_security_helper_testcase extends advanced_testcase {
     /**
      * Test for \core\files\curl_security_helper::get_blocked_url_string().
      */
-    public function test_curl_security_helper_get_blocked_url_string() {
+    public function test_curl_security_helper_get_blocked_url_string(): void {
         $helper = new \core\files\curl_security_helper();
         $this->assertEquals(get_string('curlsecurityurlblocked', 'admin'), $helper->get_blocked_url_string());
     }

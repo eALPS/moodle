@@ -100,10 +100,14 @@ if ($mform->is_cancelled()) {
 // Page settings.
 $context = context_system::instance();
 $PAGE->set_url(new \moodle_url('/admin/tool/filetypes/edit.php', array('oldextension' => $oldextension)));
+
+$PAGE->set_primary_active_tab('siteadminnode');
+$PAGE->set_secondary_active_tab('server');
+
 $PAGE->navbar->add($oldextension ? s($oldextension) : $title);
 $PAGE->set_context($context);
 $PAGE->set_pagelayout('admin');
-$PAGE->set_title($SITE->fullname. ': ' . $title);
+$PAGE->set_title($title);
 
 // Display the page.
 echo $OUTPUT->header();

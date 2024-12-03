@@ -28,8 +28,9 @@ require_once('lib.php');
 $courseid = required_param('id', PARAM_INT);
 $groupid  = optional_param('group', false, PARAM_INT);
 $userid   = optional_param('user', false, PARAM_INT);
-$action   = groups_param_action();
-// Support either single group= parameter, or array groups[]
+$action = optional_param('action', false, PARAM_TEXT);
+
+// Support either single group= parameter, or array groups[].
 if ($groupid) {
     $groupids = array($groupid);
 } else {
@@ -40,11 +41,10 @@ $singlegroup = (count($groupids) == 1);
 $returnurl = $CFG->wwwroot.'/group/index.php?id='.$courseid;
 
 // Get the course information so we can print the header and
-// check the course id is valid
+// check the course id is valid.
+$course = $DB->get_record('course', array('id' => $courseid), '*', MUST_EXIST);
 
-$course = $DB->get_record('course', array('id'=>$courseid), '*', MUST_EXIST);
-
-$url = new moodle_url('/group/index.php', array('id'=>$courseid));
+$url = new moodle_url('/group/index.php', array('id' => $courseid));
 navigation_node::override_active_url($url);
 if ($userid) {
     $url->param('user', $userid);
@@ -60,34 +60,56 @@ require_login($course);
 $context = context_course::instance($course->id);
 require_capability('moodle/course:managegroups', $context);
 
-$PAGE->requires->js('/group/clientlib.js');
+$PAGE->requires->js('/group/clientlib.js', true);
+$PAGE->requires->js('/group/module.js', true);
 
-// Check for multiple/no group errors
+// Check for multiple/no group errors.
 if (!$singlegroup) {
     switch($action) {
         case 'ajax_getmembersingroup':
         case 'showgroupsettingsform':
         case 'showaddmembersform':
         case 'updatemembers':
-            print_error('errorselectone', 'group', $returnurl);
+            throw new \moodle_exception('errorselectone', 'group', $returnurl);
     }
 }
 
 switch ($action) {
-    case false: //OK, display form.
+    case false: // OK, display form.
         break;
 
     case 'ajax_getmembersingroup':
         $roles = array();
-        if ($groupmemberroles = groups_get_members_by_role($groupids[0], $courseid, 'u.id, ' . get_all_user_name_fields(true, 'u'))) {
-            foreach($groupmemberroles as $roleid=>$roledata) {
+
+        $userfieldsapi = \core_user\fields::for_identity($context)->with_userpic();
+        [
+            'selects' => $userfieldsselects,
+            'joins' => $userfieldsjoin,
+            'params' => $userfieldsparams
+        ] = (array)$userfieldsapi->get_sql('u', true, '', '', false);
+        $extrafields = $userfieldsapi->get_required_fields([\core_user\fields::PURPOSE_IDENTITY]);
+        if ($groupmemberroles = groups_get_members_by_role($groupids[0], $courseid,
+                'u.id, ' . $userfieldsselects, null, '', $userfieldsparams, $userfieldsjoin)) {
+
+            $viewfullnames = has_capability('moodle/site:viewfullnames', $context);
+
+            foreach ($groupmemberroles as $roleid => $roledata) {
                 $shortroledata = new stdClass();
-                $shortroledata->name = $roledata->name;
+                $shortroledata->name = html_entity_decode($roledata->name, ENT_QUOTES, 'UTF-8');
                 $shortroledata->users = array();
-                foreach($roledata->users as $member) {
+                foreach ($roledata->users as $member) {
                     $shortmember = new stdClass();
                     $shortmember->id = $member->id;
-                    $shortmember->name = fullname($member, true);
+                    $shortmember->name = fullname($member, $viewfullnames);
+                    if ($extrafields) {
+                        $extrafieldsdisplay = [];
+                        foreach ($extrafields as $field) {
+                            // No escaping here, handled client side in response to AJAX request.
+                            $extrafieldsdisplay[] = $member->{$field};
+                        }
+                        $shortmember->name .= ' (' . implode(', ', $extrafieldsdisplay) . ')';
+                    }
+
                     $shortroledata->users[] = $shortmember;
                 }
                 $roles[] = $shortroledata;
@@ -98,95 +120,85 @@ switch ($action) {
 
     case 'deletegroup':
         if (count($groupids) == 0) {
-            print_error('errorselectsome','group',$returnurl);
+            throw new \moodle_exception('errorselectsome', 'group', $returnurl);
         }
         $groupidlist = implode(',', $groupids);
-        redirect(new moodle_url('/group/delete.php', array('courseid'=>$courseid, 'groups'=>$groupidlist)));
+        redirect(new moodle_url('/group/delete.php', array('courseid' => $courseid, 'groups' => $groupidlist)));
         break;
 
     case 'showcreateorphangroupform':
-        redirect(new moodle_url('/group/group.php', array('courseid'=>$courseid)));
+        redirect(new moodle_url('/group/group.php', array('courseid' => $courseid)));
         break;
 
     case 'showautocreategroupsform':
-        redirect(new moodle_url('/group/autogroup.php', array('courseid'=>$courseid)));
+        redirect(new moodle_url('/group/autogroup.php', array('courseid' => $courseid)));
         break;
 
     case 'showimportgroups':
-        redirect(new moodle_url('/group/import.php', array('id'=>$courseid)));
+        redirect(new moodle_url('/group/import.php', array('id' => $courseid)));
         break;
 
     case 'showgroupsettingsform':
-        redirect(new moodle_url('/group/group.php', array('courseid'=>$courseid, 'id'=>$groupids[0])));
+        redirect(new moodle_url('/group/group.php', array('courseid' => $courseid, 'id' => $groupids[0])));
         break;
 
-    case 'updategroups': //Currently reloading.
+    case 'updategroups': // Currently reloading.
         break;
 
     case 'removemembers':
         break;
 
     case 'showaddmembersform':
-        redirect(new moodle_url('/group/members.php', array('group'=>$groupids[0])));
+        redirect(new moodle_url('/group/members.php', array('group' => $groupids[0])));
         break;
 
-    case 'updatemembers': //Currently reloading.
+    case 'updatemembers': // Currently reloading.
         break;
 
-    default: //ERROR.
-        print_error('unknowaction', '', $returnurl);
+    case 'enablemessaging':
+        set_groups_messaging($groupids, true);
+        redirect($returnurl, get_string('messagingenabled', 'group', count($groupids)), null,
+            \core\output\notification::NOTIFY_SUCCESS);
+        break;
+
+    case 'disablemessaging':
+        set_groups_messaging($groupids, false);
+        redirect($returnurl, get_string('messagingdisabled', 'group', count($groupids)), null,
+            \core\output\notification::NOTIFY_SUCCESS);
+        break;
+
+    default: // ERROR.
+        throw new \moodle_exception('unknowaction', '', $returnurl);
         break;
 }
 
-// Print the page and form
+// Print the page and form.
 $strgroups = get_string('groups');
 $strparticipants = get_string('participants');
 
-/// Print header
+// Print header.
 $PAGE->set_title($strgroups);
 $PAGE->set_heading($course->fullname);
 $PAGE->set_pagelayout('standard');
 echo $OUTPUT->header();
 
-// Add tabs
-$currenttab = 'groups';
-require('tabs.php');
-
-$disabled = 'disabled="disabled"';
-
-// Some buttons are enabled if single group selected.
-$showaddmembersform_disabled = $singlegroup ? '' : $disabled;
-$showeditgroupsettingsform_disabled = $singlegroup ? '' : $disabled;
-$deletegroup_disabled = count($groupids) > 0 ? '' : $disabled;
-
-echo $OUTPUT->heading(format_string($course->shortname, true, array('context' => $context)) .' '.$strgroups, 3);
-echo '<form id="groupeditform" action="index.php" method="post">'."\n";
-echo '<div>'."\n";
-echo '<input type="hidden" name="id" value="' . $courseid . '" />'."\n";
-
-echo html_writer::start_tag('div', array('class' => 'groupmanagementtable boxaligncenter'));
-echo html_writer::start_tag('div', array('class' => 'groups'));
-
-echo '<p><label for="groups"><span id="groupslabel">'.get_string('groups').':</span><span id="thegrouping">&nbsp;</span></label></p>'."\n";
-
-$onchange = 'M.core_group.membersCombo.refreshMembers();';
-
-echo '<select name="groups[]" multiple="multiple" id="groups" size="15" class="select" onchange="'.$onchange.'">'."\n";
+echo $OUTPUT->render_participants_tertiary_nav($course);
 
 $groups = groups_get_all_groups($courseid);
-$selectedname = '&nbsp;';
+$selectedname = null;
 $preventgroupremoval = array();
 
+// Get list of groups to render.
+$groupoptions = array();
 if ($groups) {
-    // Print out the HTML
     foreach ($groups as $group) {
-        $select = '';
-        $usercount = $DB->count_records('groups_members', array('groupid'=>$group->id));
-        $groupname = format_string($group->name).' ('.$usercount.')';
-        if (in_array($group->id,$groupids)) {
-            $select = ' selected="selected"';
+        $selected = false;
+        $usercount = $DB->count_records('groups_members', array('groupid' => $group->id));
+        $groupname = format_string($group->name, true, ['context' => $context, 'escape' => false]) . ' (' . $usercount . ')';
+        if (in_array($group->id, $groupids)) {
+            $selected = true;
             if ($singlegroup) {
-                // Only keep selected name if there is one group selected
+                // Only keep selected name if there is one group selected.
                 $selectedname = $groupname;
             }
         }
@@ -194,106 +206,61 @@ if ($groups) {
             $preventgroupremoval[$group->id] = true;
         }
 
-        echo "<option value=\"{$group->id}\"$select title=\"$groupname\">$groupname</option>\n";
+        $groupoptions[] = (object) [
+            'value' => $group->id,
+            'selected' => $selected,
+            'text' => s($groupname)
+        ];
     }
-} else {
-    // Print an empty option to avoid the XHTML error of having an empty select element
-    echo '<option>&nbsp;</option>';
 }
 
-echo '</select>'."\n";
-echo '<p><input type="submit" name="act_updatemembers" id="updatemembers" value="'
-        . get_string('showmembersforgroup', 'group') . '" /></p>'."\n";
-echo '<p><input type="submit" '. $showeditgroupsettingsform_disabled . ' name="act_showgroupsettingsform" id="showeditgroupsettingsform" value="'
-        . get_string('editgroupsettings', 'group') . '" /></p>'."\n";
-echo '<p><input type="submit" '. $deletegroup_disabled . ' name="act_deletegroup" id="deletegroup" value="'
-        . get_string('deleteselectedgroup', 'group') . '" /></p>'."\n";
-
-echo '<p><input type="submit" name="act_showcreateorphangroupform" id="showcreateorphangroupform" value="'
-        . get_string('creategroup', 'group') . '" /></p>'."\n";
-
-echo '<p><input type="submit" name="act_showautocreategroupsform" id="showautocreategroupsform" value="'
-        . get_string('autocreategroups', 'group') . '" /></p>'."\n";
-
-echo '<p><input type="submit" name="act_showimportgroups" id="showimportgroups" value="'
-        . get_string('importgroups', 'core_group') . '" /></p>'."\n";
-
-echo html_writer::end_tag('div');
-echo html_writer::start_tag('div', array('class' => 'members'));
-
-echo '<p><label for="members"><span id="memberslabel">'.
-    get_string('membersofselectedgroup', 'group').
-    ' </span><span id="thegroup">'.$selectedname.'</span></label></p>'."\n";
-//NOTE: the SELECT was, multiple="multiple" name="user[]" - not used and breaks onclick.
-echo '<select name="user" id="members" size="15" class="select"'."\n";
-echo ' onclick="window.status=this.options[this.selectedIndex].title;" onmouseout="window.status=\'\';">'."\n";
-
-$member_names = array();
-
-$atleastonemember = false;
+// Get list of group members to render if there is a single selected group.
+$members = array();
 if ($singlegroup) {
-    if ($groupmemberroles = groups_get_members_by_role($groupids[0], $courseid, 'u.id, ' . get_all_user_name_fields(true, 'u'))) {
-        foreach($groupmemberroles as $roleid=>$roledata) {
-            echo '<optgroup label="'.s($roledata->name).'">';
-            foreach($roledata->users as $member) {
-                echo '<option value="'.$member->id.'">'.fullname($member, true).'</option>';
-                $atleastonemember = true;
+    $userfieldsapi = \core_user\fields::for_identity($context)->with_userpic();
+    [
+        'selects' => $userfieldsselects,
+        'joins' => $userfieldsjoin,
+        'params' => $userfieldsparams
+    ] = (array)$userfieldsapi->get_sql('u', true, '', '', false);
+    $extrafields = $userfieldsapi->get_required_fields([\core_user\fields::PURPOSE_IDENTITY]);
+    if ($groupmemberroles = groups_get_members_by_role(reset($groupids), $courseid,
+            'u.id, ' . $userfieldsselects, null, '', $userfieldsparams, $userfieldsjoin)) {
+
+        $viewfullnames = has_capability('moodle/site:viewfullnames', $context);
+
+        foreach ($groupmemberroles as $roleid => $roledata) {
+            $users = array();
+            foreach ($roledata->users as $member) {
+                $shortmember = new stdClass();
+                $shortmember->value = $member->id;
+                $shortmember->text = fullname($member, $viewfullnames);
+                if ($extrafields) {
+                    $extrafieldsdisplay = [];
+                    foreach ($extrafields as $field) {
+                        $extrafieldsdisplay[] = s($member->{$field});
+                    }
+                    $shortmember->text .= ' (' . implode(', ', $extrafieldsdisplay) . ')';
+                }
+
+                $users[] = $shortmember;
             }
-            echo '</optgroup>';
+
+            $members[] = (object)[
+                'role' => html_entity_decode($roledata->name, ENT_QUOTES, 'UTF-8'),
+                'rolemembers' => $users
+            ];
         }
     }
 }
 
-if (!$atleastonemember) {
-    // Print an empty option to avoid the XHTML error of having an empty select element
-    echo '<option>&nbsp;</option>';
-}
+$disableaddedit = !$singlegroup;
+$disabledelete = !empty($groupids);
+$caneditmessaging = \core_message\api::can_create_group_conversation($USER->id, $context);
 
-echo '</select>'."\n";
-
-echo '<p><input type="submit" ' . $showaddmembersform_disabled . ' name="act_showaddmembersform" '
-        . 'id="showaddmembersform" value="' . get_string('adduserstogroup', 'group'). '" /></p>'."\n";
-echo html_writer::end_tag('div');
-echo html_writer::end_tag('div');
-
-//<input type="hidden" name="rand" value="om" />
-echo '</div>'."\n";
-echo '</form>'."\n";
-
-$PAGE->requires->js_init_call('M.core_group.init_index', array($CFG->wwwroot, $courseid));
-$PAGE->requires->js_init_call('M.core_group.groupslist', array($preventgroupremoval));
+$renderable = new \core_group\output\index_page($courseid, $groupoptions, $selectedname, $members, $disableaddedit, $disabledelete,
+        $preventgroupremoval, $caneditmessaging);
+$output = $PAGE->get_renderer('core_group');
+echo $output->render($renderable);
 
 echo $OUTPUT->footer();
-
-/**
- * Returns the first button action with the given prefix, taken from
- * POST or GET, otherwise returns false.
- * @see /lib/moodlelib.php function optional_param().
- * @param string $prefix 'act_' as in 'action'.
- * @return string The action without the prefix, or false if no action found.
- */
-function groups_param_action($prefix = 'act_') {
-    $action = false;
-//($_SERVER['QUERY_STRING'] && preg_match("/$prefix(.+?)=(.+)/", $_SERVER['QUERY_STRING'], $matches)) { //b_(.*?)[&;]{0,1}/
-
-    if ($_POST) {
-        $form_vars = $_POST;
-    }
-    elseif ($_GET) {
-        $form_vars = $_GET;
-    }
-    if ($form_vars) {
-        foreach ($form_vars as $key => $value) {
-            if (preg_match("/$prefix(.+)/", $key, $matches)) {
-                $action = $matches[1];
-                break;
-            }
-        }
-    }
-    if ($action && !preg_match('/^\w+$/', $action)) {
-        $action = false;
-        print_error('unknowaction');
-    }
-    ///if (debugging()) echo 'Debug: '.$action;
-    return $action;
-}

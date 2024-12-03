@@ -81,9 +81,6 @@
 
             $items = array();
 
-            $formatoptions = new stdClass();
-            $formatoptions->trusttext = true;
-
             foreach ($recs as $rec) {
                 $item = new stdClass();
                 $item->title = $rec->entryconcept;
@@ -97,7 +94,10 @@
 
                 $definition = file_rewrite_pluginfile_urls($rec->entrydefinition, 'pluginfile.php',
                     $modcontext->id, 'mod_glossary', 'entry', $rec->entryid);
-                $item->description = format_text($definition, $rec->entryformat, $formatoptions, $glossary->course);
+                $item->description = format_text($definition, $rec->entryformat, [
+                    'context' => $modcontext,
+                    'trusted' => true,
+                ]);
                 $items[] = $item;
             }
 
@@ -145,7 +145,8 @@
         }
 
         if ($glossary->rsstype == 1) {//With author
-            $allnamefields = get_all_user_name_fields(true,'u');
+            $userfieldsapi = \core_user\fields::for_name();
+            $allnamefields = $userfieldsapi->get_sql('u', false, '', '', false)->selects;
             $sql = "SELECT e.id AS entryid,
                       e.concept AS entryconcept,
                       e.definition AS entrydefinition,

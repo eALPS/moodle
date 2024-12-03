@@ -1,4 +1,90 @@
+=== 4.5 Onwards ===
+
+This file has been replaced by UPGRADING.md. See MDL-81125 for further information.
+
+===
 This files describes API changes in the assign code.
+
+=== 4.3 ===
+* The following deprecated methods have been removed and should not be used any more:
+  - `assign::add_to_log`
+  - `assign::format_grade_for_log`
+  - `assign::format_submission_for_log`
+  - `assign_plugin::format_for_log`
+* The assign_files renderable no longer abuses the dynamic nature of PHP and puts random properties onto stored_file
+  instances.
+  If you were previously using these properties, please update to use the new method on the tree:
+  * $file->portfoliobutton      $renderer->get_portfolio_button($file)
+  * $file->timemodified         $tree->get_modified_time($file)
+  * $file->fileurl              $tree->get_file_url($file)
+
+=== 4.2 ===
+* The upgradelib.php file has been removed from mod_assign as it was only being used by mod_assignment and mod_assignment has been removed from core.
+
+=== 4.1 ===
+* New method \assign::is_userid_filtered() has been implemented. It returns false if user id is filtered out by either
+  user preferences for grading table or submission status filter. Otherwise, returns true.
+* A new method was added to feedback/editpdf/locallib.php - get_user_data_file_areas() This just returns the necessary file areas
+  for retrieving a complete feedback pdf.
+
+=== 4.0 ===
+* The method \assign::grading_disabled() now has optional $gradinginfo parameter to improve performance
+* Renderer (renderer.php) has been moved from mod root to classes/output/ to be more PSR compliant.
+* Class assign_header has been moved from renderable.php to classes/ouput/assign_header.php
+* Class assign_submion_status has been moved from renderable.php to classes/ouput/assign_submion_status.php
+* The external functions mod_assign_external::list_participants and mod_assign_external::get_participant now return a new field
+  "submissionstatus" indicating the submission status (new, draft, reopened or submitted). Empty when not submitted.
+
+=== 3.9 ===
+
+* The following functions, previously used (exclusively) by upgrade steps are not available anymore because of the upgrade cleanup performed for this version. See MDL-65809 for more info:
+    - get_assignments_with_rescaled_null_grades()
+
+=== 3.8 ===
+* The allow_image_conversion method has been added to the submissionplugins. It determines whether the submission plugin
+  allows image conversion or not. By default conversion is not allowed (except when overwritten in the submission plugin)
+* Webservice function mod_assign_get_submission_status, return value 'warnofungroupedusers', changed from PARAM_BOOL to PARAM_ALPHA. See the description for possible values.
+* The following functions have been finally deprecated and can not be used anymore:
+    * assign_scale_used()
+
+=== 3.7 ===
+* Submissions plugins should implement the "remove" function to remove data when "Remove submission" is used.
+
+=== 3.6 ===
+* The mod_assign_base_testcase unit test base class has been deprecated.
+  It encouraged poor unit test design and led to significant performance issues with unit tests. See MDL-55609 for
+  further information.
+* The function can_grade() now has optional $user parameter.
+* Feedback plugins can now specify whether or not they want to attach files to the
+  feedback that is stored in the gradebook via the new method files_for_gradebook().
+  An example of what this method would return is -
+  [
+      'contextid' => $modulecontext->id,
+      'component' => ASSIGNFEEDBACK_XYZ_COMPONENT,
+      'filearea' => ASSIGNFEEDBACK_XYZ_FILEAREA,
+      'itemid' => $grade->id
+  ]
+
+=== 3.5 ===
+* Functions assign:get_assign_grading_summary_renderable, assign:can_view_submission, assign:count_submissions_with_status,
+  assign:count_submissions_need_grading and mod_assign_external::get_submission_status now admit an additional group parameter.
+  This parameter can be used to force those functions to retrieve data only for the given group.
+
+=== 3.4 ===
+* assign::add_attempt requires that set_most_recent_team_submission() be called if attempting to use this function with a team
+  submission.
+
+=== 3.3.2 ===
+* assign_refresh_events() Now takes two additional parameters to refine the update to a specific instance. This function
+  now optionally takes the module instance object or ID, and the course module object or ID. Please try to send the full
+  objects instead of the ids to save DB calls.
+
+=== 3.3 ===
+* All pluginfile file serving functions now pass through the options to send_stored_file() (all assignment plugins should do
+  the same).
+* Fixed calendar event types for overridden due dates from 'close' to 'due'.
+* Removed calendar event type of 'open', since mod_assign only has the 'due' event type. No point in creating an override event
+for an event type that does not exist.
 
 === 3.2 ===
 * External function mod_assign_external::get_assignments now returns additional optional fields:

@@ -17,7 +17,7 @@
 define('NO_MOODLE_COOKIES', true); // Session not used here.
 
 require('../../../config.php');
-require('../lib.php');
+require_once('../lib.php');
 
 $chatsid = required_param('chat_sid', PARAM_ALPHANUM);
 
@@ -25,7 +25,7 @@ $PAGE->set_url('/mod/chat/gui_sockets/chatinput.php', array('chat_sid' => $chats
 $PAGE->set_popup_notification_allowed(false);
 
 if (!$chatuser = $DB->get_record('chat_users', array('sid' => $chatsid))) {
-    print_error('notlogged', 'chat');
+    throw new \moodle_exception('notlogged', 'chat');
 }
 
 // Get the user theme.

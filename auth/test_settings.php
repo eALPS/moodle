@@ -22,7 +22,7 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require(__DIR__.'../../config.php');
+require(__DIR__.'/../config.php');
 require_once("$CFG->libdir/adminlib.php");
 
 $auth = optional_param('auth', '', PARAM_RAW);
@@ -31,9 +31,6 @@ if (!core_component::is_valid_plugin_name('auth', $auth)) {
 } else if (!file_exists("$CFG->dirroot/auth/$auth/auth.php")) {
     $auth = '';
 }
-
-require_login();
-require_capability('moodle/site:config', context_system::instance());
 
 navigation_node::override_active_url(new moodle_url('/admin/settings.php', array('section'=>'manageauths')));
 admin_externalpage_setup('authtestsettings');
@@ -59,7 +56,7 @@ if (!$auth) {
 
     echo $OUTPUT->heading(get_string('testsettings', 'core_auth'));
 
-    $url = new moodle_url('/auth/test_settings.php', array('sesskey'=>sesskey()));
+    $url = new moodle_url('/auth/test_settings.php');
     echo $OUTPUT->single_select($url, 'auth', $options);
 
     echo $OUTPUT->footer();

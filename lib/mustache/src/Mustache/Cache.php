@@ -3,7 +3,7 @@
 /*
  * This file is part of Mustache.php.
  *
- * (c) 2010-2016 Justin Hileman
+ * (c) 2010-2017 Justin Hileman
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -33,4 +33,11 @@ interface Mustache_Cache
      * @param string $value
      */
     public function cache($key, $value);
+
+    /**
+     * Set a logger instance.
+     *
+     * @param Mustache_Logger|Psr\Log\LoggerInterface $logger
+     */
+    public function setLogger($logger = null);
 }

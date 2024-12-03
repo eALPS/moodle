@@ -15,6 +15,7 @@
     along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 }}
 {{!
+    @deprecated since Moodle 4.0
     @template theme_boost/flat_navigation
 
     Display the flat navigation for the boost theme
@@ -55,38 +56,47 @@
         ]
     }
 }}
-<nav class="list-group">
-{{# flatnavigation }}
-    {{#showdivider}}
-</nav>
-<nav class="list-group m-t-1">
-    {{/showdivider}}
-    {{#action}}
-    <a class="list-group-item list-group-item-action {{#isactive}}font-weight-bold{{/isactive}}" href="{{{action}}}" data-key="{{key}}">
-        <div class="m-l-{{get_indent}}">
-            {{#is_section}}
-                <div class="media">
-                    <span class="media-left">
-                        {{#pix}}i/folder{{/pix}}
-                    </span>
-                    <span class="media-body">{{{text}}}</span>
+<nav class="list-group" aria-label="{{firstcollectionlabel}}">
+    <ul>
+    {{# flatnavigation }}
+        {{#showdivider}}
+            </ul>
+            </nav>
+            <nav class="list-group mt-1" aria-label="{{get_collectionlabel}}">
+            <ul>
+        {{/showdivider}}
+        {{#action}}
+            <li>
+                <a class="list-group-item list-group-item-action {{#isactive}}active{{/isactive}} {{#classes}}{{.}} {{/classes}}" href="{{{action}}}" data-key="{{key}}" data-isexpandable="{{isexpandable}}" data-indent="{{get_indent}}" data-showdivider="{{showdivider}}" data-type="{{type}}" data-nodetype="{{nodetype}}" data-collapse="{{collapse}}" data-forceopen="{{forceopen}}" data-isactive="{{isactive}}" data-hidden="{{hidden}}" data-preceedwithhr="{{preceedwithhr}}" {{#parent.key}}data-parent-key="{{.}}"{{/parent.key}}>
+                    <div class="ms-{{get_indent}}">
+                        <div class="d-flex">
+                            {{#icon.pix}}
+                                <span class="flex-shrink-0">
+                                    {{#pix}}{{{icon.pix}}}, {{{icon.component}}}, {{{icon.alt}}}{{/pix}}
+                                </span>
+                            {{/icon.pix}}
+                            <span class="flex-grow-1 ms-3 {{#isactive}}font-weight-bold{{/isactive}}">{{{text}}}</span>
+                        </div>
+                    </div>
+                </a>
+            </li>
+        {{/action}}
+        {{^action}}
+            <li>
+                <div class="list-group-item {{#classes}}{{.}} {{/classes}}" data-key="{{key}}" data-isexpandable="{{isexpandable}}" data-indent="{{get_indent}}" data-showdivider="{{showdivider}}" data-type="{{type}}" data-nodetype="{{nodetype}}" data-collapse="{{collapse}}" data-forceopen="{{forceopen}}" data-isactive="{{isactive}}" data-hidden="{{hidden}}" data-preceedwithhr="{{preceedwithhr}}" {{#parent.key}}data-parent-key="{{.}}"{{/parent.key}}>
+                    <div class="ms-{{get_indent}}">
+                        <div class="d-flex">
+                            {{#icon.pix}}
+                                <span class="flex-shrink-0">
+                                    {{#pix}}{{{icon.pix}}}, {{{icon.component}}}, {{{icon.alt}}}{{/pix}}
+                                </span>
+                            {{/icon.pix}}
+                            <span class="flex-grow-1 ms-3">{{{text}}}</span>
+                        </div>
+                    </div>
                 </div>
-            {{/is_section}}
-            {{^is_section}}
-                {{{text}}}
-            {{/is_section}}
-        </div>
-    </a>
-    {{/action}}
-    {{^action}}
-    <div class="list-group-item" data-key="{{key}}">
-        <div class="m-l-{{get_indent}}">
-            {{#is_section}}
-                {{#pix}}i/folder{{/pix}}
-            {{/is_section}}
-            {{{text}}}
-        </div>
-    </div>
-    {{/action}}
-{{/ flatnavigation }}
+            </li>
+        {{/action}}
+    {{/ flatnavigation }}
+    </ul>
 </nav>

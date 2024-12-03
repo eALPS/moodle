@@ -22,34 +22,23 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Quiz statistics report upgrade code.
  */
 function xmldb_quiz_statistics_upgrade($oldversion) {
-    global $DB;
-
-    // Moodle v2.8.0 release upgrade line.
+    // Automatically generated Moodle v4.1.0 release upgrade line.
     // Put any upgrade step following this.
 
-    // Moodle v2.9.0 release upgrade line.
+    // Automatically generated Moodle v4.2.0 release upgrade line.
     // Put any upgrade step following this.
 
-    // Moodle v3.0.0 release upgrade line.
+    // Automatically generated Moodle v4.3.0 release upgrade line.
     // Put any upgrade step following this.
 
-    // Moodle v3.1.0 release upgrade line.
+    // Automatically generated Moodle v4.4.0 release upgrade line.
     // Put any upgrade step following this.
 
-    if ($oldversion < 2016100500) {
-        // Clear the quiz_statistics table - it is only a cache table anyway.
-        // This will force re-calculation.
-        $DB->delete_records('quiz_statistics');
-        upgrade_plugin_savepoint(true, 2016100500, 'quiz', 'statistics');
-    }
-
-    // Automatically generated Moodle v3.2.0 release upgrade line.
+    // Automatically generated Moodle v4.5.0 release upgrade line.
     // Put any upgrade step following this.
 
     return true;

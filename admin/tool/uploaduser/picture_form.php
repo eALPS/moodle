@@ -28,7 +28,7 @@ defined('MOODLE_INTERNAL') || die();
 require_once $CFG->libdir.'/formslib.php';
 
 class admin_uploadpicture_form extends moodleform {
-    function definition (){
+    function definition(){
         global $CFG, $USER;
 
         $mform =& $this->_form;
@@ -37,7 +37,7 @@ class admin_uploadpicture_form extends moodleform {
 
 
         $options = array();
-        $options['accepted_types'] = array('archive');
+        $options['accepted_types'] = array('.zip');
         $mform->addElement('filepicker', 'userpicturesfile', get_string('file'), 'size="40"', $options);
         $mform->addRule('userpicturesfile', null, 'required');
 

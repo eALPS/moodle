@@ -14,15 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * This file contains tests for the autosave code in the question_usage class.
- *
- * @package    moodlecore
- * @subpackage questionengine
- * @copyright  2013 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core_question;
 
+use question_bank;
+use question_state;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -30,16 +25,17 @@ global $CFG;
 require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/helpers.php');
 
-
 /**
  * Unit tests for the autosave parts of the {@link question_usage} class.
  *
+ * @package   core_question
+ * @category  test
  * @copyright 2013 The Open University
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class question_usage_autosave_test extends qbehaviour_walkthrough_test_base {
+class questionusage_autosave_test extends \qbehaviour_walkthrough_test_base {
 
-    public function test_autosave_then_display() {
+    public function test_autosave_then_display(): void {
         $this->resetAfterTest();
         $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
         $cat = $generator->create_question_category();
@@ -84,7 +80,7 @@ class question_usage_autosave_test extends qbehaviour_walkthrough_test_base {
         $this->delete_quba();
     }
 
-    public function test_autosave_then_autosave_different_data() {
+    public function test_autosave_then_autosave_different_data(): void {
         $this->resetAfterTest();
         $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
         $cat = $generator->create_question_category();
@@ -143,7 +139,7 @@ class question_usage_autosave_test extends qbehaviour_walkthrough_test_base {
         $this->delete_quba();
     }
 
-    public function test_autosave_then_autosave_same_data() {
+    public function test_autosave_then_autosave_same_data(): void {
         $this->resetAfterTest();
         $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
         $cat = $generator->create_question_category();
@@ -208,7 +204,7 @@ class question_usage_autosave_test extends qbehaviour_walkthrough_test_base {
         $this->delete_quba();
     }
 
-    public function test_autosave_then_autosave_original_data() {
+    public function test_autosave_then_autosave_original_data(): void {
         $this->resetAfterTest();
         $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
         $cat = $generator->create_question_category();
@@ -268,7 +264,7 @@ class question_usage_autosave_test extends qbehaviour_walkthrough_test_base {
         $this->delete_quba();
     }
 
-    public function test_autosave_then_real_save() {
+    public function test_autosave_then_real_save(): void {
         $this->resetAfterTest();
         $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
         $cat = $generator->create_question_category();
@@ -324,7 +320,7 @@ class question_usage_autosave_test extends qbehaviour_walkthrough_test_base {
         $this->check_output_contains_hidden_input(':sequencecheck', 3);
     }
 
-    public function test_autosave_then_real_save_same() {
+    public function test_autosave_then_real_save_same(): void {
         $this->resetAfterTest();
         $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
         $cat = $generator->create_question_category();
@@ -380,7 +376,7 @@ class question_usage_autosave_test extends qbehaviour_walkthrough_test_base {
         $this->check_output_contains_hidden_input(':sequencecheck', 3);
     }
 
-    public function test_autosave_then_submit() {
+    public function test_autosave_then_submit(): void {
         $this->resetAfterTest();
         $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
         $cat = $generator->create_question_category();
@@ -437,7 +433,7 @@ class question_usage_autosave_test extends qbehaviour_walkthrough_test_base {
         $this->check_output_contains_hidden_input(':sequencecheck', 4);
     }
 
-    public function test_autosave_and_save_concurrently() {
+    public function test_autosave_and_save_concurrently(): void {
         // This test simulates the following scenario:
         // 1. Student looking at a page of the quiz, and edits a field then waits.
         // 2. Autosave starts.
@@ -452,7 +448,7 @@ class question_usage_autosave_test extends qbehaviour_walkthrough_test_base {
         if (!isset($cfg->dboptions)) {
             $cfg->dboptions = array();
         }
-        $DB2 = moodle_database::get_driver_instance($cfg->dbtype, $cfg->dblibrary);
+        $DB2 = \moodle_database::get_driver_instance($cfg->dbtype, $cfg->dblibrary);
         $DB2->connect($cfg->dbhost, $cfg->dbuser, $cfg->dbpass, $cfg->dbname, $cfg->prefix, $cfg->dboptions);
 
         // Since we need to commit our transactions in a given order, close the
@@ -510,7 +506,7 @@ class question_usage_autosave_test extends qbehaviour_walkthrough_test_base {
         $DB2->dispose();
     }
 
-    public function test_concurrent_autosaves() {
+    public function test_concurrent_autosaves(): void {
         // This test simulates the following scenario:
         // 1. Student opens  a page of the quiz in two separate browser.
         // 2. Autosave starts in both at the same time.
@@ -523,7 +519,7 @@ class question_usage_autosave_test extends qbehaviour_walkthrough_test_base {
         if (!isset($cfg->dboptions)) {
             $cfg->dboptions = array();
         }
-        $DB2 = moodle_database::get_driver_instance($cfg->dbtype, $cfg->dblibrary);
+        $DB2 = \moodle_database::get_driver_instance($cfg->dbtype, $cfg->dblibrary);
         $DB2->connect($cfg->dbhost, $cfg->dbuser, $cfg->dbpass, $cfg->dbname, $cfg->prefix, $cfg->dboptions);
 
         // Since we need to commit our transactions in a given order, close the
@@ -582,7 +578,7 @@ class question_usage_autosave_test extends qbehaviour_walkthrough_test_base {
         $DB2->dispose();
     }
 
-    public function test_autosave_with_wrong_seq_number_ignored() {
+    public function test_autosave_with_wrong_seq_number_ignored(): void {
         $this->resetAfterTest();
         $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
         $cat = $generator->create_question_category();
@@ -629,7 +625,7 @@ class question_usage_autosave_test extends qbehaviour_walkthrough_test_base {
         $this->delete_quba();
     }
 
-    public function test_finish_with_unhandled_autosave_data() {
+    public function test_finish_with_unhandled_autosave_data(): void {
         $this->resetAfterTest();
         $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
         $cat = $generator->create_question_category();
@@ -686,9 +682,71 @@ class question_usage_autosave_test extends qbehaviour_walkthrough_test_base {
         $this->delete_quba();
     }
 
-    protected function tearDown() {
+    /**
+     * Test that regrading doesn't convert autosave steps to finished steps.
+     * This can result in students loosing data (due to question_out_of_sequence_exception) if a teacher
+     * regrades an attempt while it is in progress.
+     */
+    public function test_autosave_and_regrade_then_display(): void {
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $cat = $generator->create_question_category();
+        $question = $generator->create_question('shortanswer', null,
+                array('category' => $cat->id));
+
+        // Start attempt at a shortanswer question.
+        $q = question_bank::load_question($question->id);
+        $this->start_attempt_at_question($q, 'deferredfeedback', 1);
+
+        $this->check_current_state(question_state::$todo);
+        $this->check_current_mark(null);
+        $this->check_step_count(1);
+
+        // First see if the starting sequence is right.
+        $this->render();
+        $this->check_output_contains_hidden_input(':sequencecheck', 1);
+
+        // Add a submission.
+        $this->process_submission(array('answer' => 'first response'));
+        $this->save_quba();
+
+        // Check the submission and that the sequence went up.
+        $this->render();
+        $this->check_output_contains_text_input('answer', 'first response');
+        $this->check_output_contains_hidden_input(':sequencecheck', 2);
+        $this->assertFalse($this->get_question_attempt()->has_autosaved_step());
+
+        // Add a autosave response.
+        $this->load_quba();
+        $this->process_autosave(array('answer' => 'second response'));
+        $this->save_quba();
+
+        // Confirm that the autosave value shows up, but that the sequence hasn't increased.
+        $this->render();
+        $this->check_output_contains_text_input('answer', 'second response');
+        $this->check_output_contains_hidden_input(':sequencecheck', 2);
+        $this->assertTrue($this->get_question_attempt()->has_autosaved_step());
+
+        // Call regrade.
+        $this->load_quba();
+        $this->quba->regrade_all_questions();
+        $this->save_quba();
+
+        // Check and see if the autosave response is still there, that the sequence didn't increase,
+        // and that there is an autosave step.
+        $this->load_quba();
+        $this->render();
+        $this->check_output_contains_text_input('answer', 'second response');
+        $this->check_output_contains_hidden_input(':sequencecheck', 2);
+        $this->assertTrue($this->get_question_attempt()->has_autosaved_step());
+
+        $this->delete_quba();
+    }
+
+    protected function tearDown(): void {
         // This test relies on the destructor for the second DB connection being called before running the next test.
         // Without this change - there will be unit test failures on "some" DBs (MySQL).
         gc_collect_cycles();
+        parent::tearDown();
     }
 }

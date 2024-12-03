@@ -37,15 +37,15 @@ if ($hook !== 'ALL') {
 $PAGE->set_url($url);
 
 if (! $cm = get_coursemodule_from_id('glossary', $id)) {
-    print_error('invalidcoursemodule');
+    throw new \moodle_exception('invalidcoursemodule');
 }
 
 if (! $course = $DB->get_record("course", array("id"=>$cm->course))) {
-    print_error('coursemisconf');
+    throw new \moodle_exception('coursemisconf');
 }
 
 if (! $glossary = $DB->get_record("glossary", array("id"=>$cm->instance))) {
-    print_error('invalidid', 'glossary');
+    throw new \moodle_exception('invalidid', 'glossary');
 }
 
 if ($pagelimit < 0) {
@@ -215,6 +215,10 @@ if ( $allentries ) {
         }
 
         glossary_print_entry($course, $cm, $glossary, $entry, $mode, $hook, 1, $displayformat, true);
+    }
+    // The all entries value may be a recordset or an array.
+    if ($allentries instanceof moodle_recordset) {
+        $allentries->close();
     }
 }
 

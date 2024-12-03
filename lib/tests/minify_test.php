@@ -14,23 +14,22 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * core_minify related tests.
- *
- * @package    core
- * @category   phpunit
- * @copyright  2013 Petr Skoda {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core;
 
-defined('MOODLE_INTERNAL') || die();
-
+use core_minify;
 
 /**
  * Class core_minify_testcase.
+ *
+ * core_minify related tests.
+ *
+ * @package    core
+ * @category   test
+ * @copyright  2013 Petr Skoda {@link http://skodak.org}
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_minify_testcase extends advanced_testcase {
-    public function test_css() {
+class minify_test extends \advanced_testcase {
+    public function test_css(): void {
         $css = "
 body {
 background: #fff;
@@ -42,7 +41,7 @@ color: #281f18;
         $this->assertSame("body{background:#fff;margin:0;padding:0;color:#281f18}", core_minify::css($css));
     }
 
-    public function test_css_files() {
+    public function test_css_files(): void {
         global $CFG;
 
         $testfile1 = "$CFG->tempdir/test1.css";
@@ -76,21 +75,21 @@ color: #281f18;
         unlink($testfile2);
     }
 
-    public function test_js() {
+    public function test_js(): void {
         $js = "
 function hm()
 {
 }
 ";
 
-        $this->assertSame("function hm()\n{}", core_minify::js($js));
+        $this->assertSame("function hm(){}", core_minify::js($js));
 
         $js = "function hm{}";
         $result = core_minify::js($js);
-        $this->assertContains($js, $result);
+        $this->assertStringContainsString($js, $result);
     }
 
-    public function test_js_files() {
+    public function test_js_files(): void {
         global $CFG;
 
         $testfile1 = "$CFG->tempdir/test1.js";
@@ -110,11 +109,11 @@ function hm()
 
         $files = array($testfile1, $testfile2);
 
-        $this->assertSame("function hm()\n{};\nfunction oh(){}", core_minify::js_files($files));
+        $this->assertSame("function hm(){};\nfunction oh(){}", core_minify::js_files($files));
 
         $files = array($testfile1, $testfile2, $testfile3);
 
-        $this->assertStringStartsWith("function hm()\n{};\nfunction oh(){};\n\n\n// Cannot read JS file ",
+        $this->assertStringStartsWith("function hm(){};\nfunction oh(){};\n\n\n// Cannot read JS file ",
             @core_minify::js_files($files));
 
         unlink($testfile1);

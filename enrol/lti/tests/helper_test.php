@@ -14,15 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Test the helper functionality.
- *
- * @package enrol_lti
- * @copyright 2016 Mark Nelson <markn@moodle.com>
- * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
+namespace enrol_lti;
 
 /**
  * Test the helper functionality.
@@ -31,15 +23,15 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright 2016 Mark Nelson <markn@moodle.com>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class enrol_lti_helper_testcase extends advanced_testcase {
+class helper_test extends \advanced_testcase {
 
     /**
-     * @var stdClass $user1 A user.
+     * @var \stdClass $user1 A user.
      */
     public $user1;
 
     /**
-     * @var stdClass $user2 A user.
+     * @var \stdClass $user2 A user.
      */
     public $user2;
 
@@ -48,7 +40,8 @@ class enrol_lti_helper_testcase extends advanced_testcase {
      *
      * This is executed before running any test in this file.
      */
-    public function setUp() {
+    public function setUp(): void {
+        parent::setUp();
         $this->resetAfterTest();
 
         // Set this user as the admin.
@@ -62,7 +55,7 @@ class enrol_lti_helper_testcase extends advanced_testcase {
     /**
      * Test the update user profile image function.
      */
-    public function test_update_user_profile_image() {
+    public function test_update_user_profile_image(): void {
         global $DB, $CFG;
 
         // Set the profile image.
@@ -72,14 +65,14 @@ class enrol_lti_helper_testcase extends advanced_testcase {
         $this->user1 = $DB->get_record('user', array('id' => $this->user1->id));
 
         // Set the page details.
-        $page = new moodle_page();
+        $page = new \moodle_page();
         $page->set_url('/user/profile.php');
-        $page->set_context(context_system::instance());
+        $page->set_context(\context_system::instance());
         $renderer = $page->get_renderer('core');
-        $usercontext = context_user::instance($this->user1->id);
+        $usercontext = \context_user::instance($this->user1->id);
 
         // Get the user's profile picture and make sure it is correct.
-        $userpicture = new user_picture($this->user1);
+        $userpicture = new \user_picture($this->user1);
         $this->assertSame($CFG->wwwroot . '/pluginfile.php/' . $usercontext->id . '/user/icon/boost/f2?rev=' .$this->user1->picture,
             $userpicture->get_url($page, $renderer)->out(false));
     }
@@ -87,11 +80,11 @@ class enrol_lti_helper_testcase extends advanced_testcase {
     /**
      * Test that we can not enrol past the maximum number of users allowed.
      */
-    public function test_enrol_user_max_enrolled() {
+    public function test_enrol_user_max_enrolled(): void {
         global $DB;
 
         // Set up the LTI enrolment tool.
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->maxenrolled = 1;
         $tool = $this->getDataGenerator()->create_lti_tool($data);
 
@@ -116,11 +109,11 @@ class enrol_lti_helper_testcase extends advanced_testcase {
     /**
      * Test that we can not enrol when the enrolment has not started.
      */
-    public function test_enrol_user_enrolment_not_started() {
+    public function test_enrol_user_enrolment_not_started(): void {
         global $DB;
 
         // Set up the LTI enrolment tool.
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->enrolstartdate = time() + DAYSECS; // Make sure it is in the future.
         $tool = $this->getDataGenerator()->create_lti_tool($data);
 
@@ -138,11 +131,11 @@ class enrol_lti_helper_testcase extends advanced_testcase {
     /**
      * Test that we can not enrol when the enrolment has finished.
      */
-    public function test_enrol_user_enrolment_finished() {
+    public function test_enrol_user_enrolment_finished(): void {
         global $DB;
 
         // Set up the LTI enrolment tool.
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->enrolenddate = time() - DAYSECS; // Make sure it is in the past.
         $tool = $this->getDataGenerator()->create_lti_tool($data);
 
@@ -160,18 +153,18 @@ class enrol_lti_helper_testcase extends advanced_testcase {
     /**
      * Test returning the number of available tools.
      */
-    public function test_count_lti_tools() {
+    public function test_count_lti_tools(): void {
         $generator = $this->getDataGenerator();
         // Create two tools belonging to the same course.
         $course1 = $generator->create_course();
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->courseid = $course1->id;
         $generator->create_lti_tool($data);
         $generator->create_lti_tool($data);
 
         // Create two more tools in a separate course.
         $course2 = $this->getDataGenerator()->create_course();
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->courseid = $course2->id;
         $generator->create_lti_tool($data);
 
@@ -199,18 +192,18 @@ class enrol_lti_helper_testcase extends advanced_testcase {
     /**
      * Test returning the list of available tools.
      */
-    public function test_get_lti_tools() {
+    public function test_get_lti_tools(): void {
         $generator = $this->getDataGenerator();
         // Create two tools belonging to the same course.
         $course1 = $generator->create_course();
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->courseid = $course1->id;
         $tool1 = $generator->create_lti_tool($data);
         $tool2 = $generator->create_lti_tool($data);
 
         // Create two more tools in a separate course.
         $course2 = $generator->create_course();
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->courseid = $course2->id;
         $tool3 = $generator->create_lti_tool($data);
 
@@ -252,21 +245,21 @@ class enrol_lti_helper_testcase extends advanced_testcase {
     /**
      * Test getting the launch url of a tool.
      */
-    public function test_get_launch_url() {
+    public function test_get_launch_url(): void {
         $course1 = $this->getDataGenerator()->create_course();
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->courseid = $course1->id;
         $tool1 = $this->getDataGenerator()->create_lti_tool($data);
 
         $id = $tool1->id;
         $launchurl = \enrol_lti\helper::get_launch_url($id);
-        $this->assertEquals('http://www.example.com/moodle/enrol/lti/tool.php?id=' . $id, $launchurl->out());
+        $this->assertEquals('https://www.example.com/moodle/enrol/lti/tool.php?id=' . $id, $launchurl->out());
     }
 
     /**
      * Test getting the cartridge url of a tool.
      */
-    public function test_get_cartridge_url() {
+    public function test_get_cartridge_url(): void {
         global $CFG;
 
         $slasharguments = $CFG->slasharguments;
@@ -274,20 +267,20 @@ class enrol_lti_helper_testcase extends advanced_testcase {
         $CFG->slasharguments = false;
 
         $course1 = $this->getDataGenerator()->create_course();
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->courseid = $course1->id;
         $tool1 = $this->getDataGenerator()->create_lti_tool($data);
 
         $id = $tool1->id;
         $token = \enrol_lti\helper::generate_cartridge_token($id);
         $launchurl = \enrol_lti\helper::get_cartridge_url($tool1);
-        $this->assertEquals('http://www.example.com/moodle/enrol/lti/cartridge.php?id=' . $id . '&amp;token=' . $token,
+        $this->assertEquals('https://www.example.com/moodle/enrol/lti/cartridge.php?id=' . $id . '&amp;token=' . $token,
                             $launchurl->out());
 
         $CFG->slasharguments = true;
 
         $launchurl = \enrol_lti\helper::get_cartridge_url($tool1);
-        $this->assertEquals('http://www.example.com/moodle/enrol/lti/cartridge.php/' . $id . '/' . $token . '/cartridge.xml',
+        $this->assertEquals('https://www.example.com/moodle/enrol/lti/cartridge.php/' . $id . '/' . $token . '/cartridge.xml',
                             $launchurl->out());
 
         $CFG->slasharguments = $slasharguments;
@@ -296,7 +289,7 @@ class enrol_lti_helper_testcase extends advanced_testcase {
     /**
      * Test getting the cartridge url of a tool.
      */
-    public function test_get_proxy_url() {
+    public function test_get_proxy_url(): void {
         global $CFG;
 
         $slasharguments = $CFG->slasharguments;
@@ -304,20 +297,20 @@ class enrol_lti_helper_testcase extends advanced_testcase {
         $CFG->slasharguments = false;
 
         $course1 = $this->getDataGenerator()->create_course();
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->courseid = $course1->id;
         $tool1 = $this->getDataGenerator()->create_lti_tool($data);
 
         $id = $tool1->id;
         $token = \enrol_lti\helper::generate_proxy_token($id);
         $launchurl = \enrol_lti\helper::get_proxy_url($tool1);
-        $this->assertEquals('http://www.example.com/moodle/enrol/lti/proxy.php?id=' . $id . '&amp;token=' . $token,
+        $this->assertEquals('https://www.example.com/moodle/enrol/lti/proxy.php?id=' . $id . '&amp;token=' . $token,
                             $launchurl->out());
 
         $CFG->slasharguments = true;
 
         $launchurl = \enrol_lti\helper::get_proxy_url($tool1);
-        $this->assertEquals('http://www.example.com/moodle/enrol/lti/proxy.php/' . $id . '/' . $token . '/',
+        $this->assertEquals('https://www.example.com/moodle/enrol/lti/proxy.php/' . $id . '/' . $token . '/',
                             $launchurl->out());
 
         $CFG->slasharguments = $slasharguments;
@@ -326,9 +319,9 @@ class enrol_lti_helper_testcase extends advanced_testcase {
     /**
      * Test getting the name of a tool.
      */
-    public function test_get_name() {
+    public function test_get_name(): void {
         $course1 = $this->getDataGenerator()->create_course();
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->courseid = $course1->id;
         $tool1 = $this->getDataGenerator()->create_lti_tool($data);
 
@@ -343,50 +336,50 @@ class enrol_lti_helper_testcase extends advanced_testcase {
     /**
      * Test getting the description of a tool.
      */
-    public function test_get_description() {
+    public function test_get_description(): void {
         $generator = $this->getDataGenerator();
         $course1 = $generator->create_course();
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->courseid = $course1->id;
         $tool1 = $generator->create_lti_tool($data);
 
         $description = \enrol_lti\helper::get_description($tool1);
-        $this->assertContains('Test course 1 Lorem ipsum dolor sit amet', $description);
+        $this->assertStringContainsString('Test course 1 Lorem ipsum dolor sit amet', $description);
 
         $module1 = $generator->create_module('assign', array(
                 'course' => $course1->id
             ));
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->cmid = $module1->cmid;
         $tool2 = $generator->create_lti_tool($data);
         $description = \enrol_lti\helper::get_description($tool2);
-        $this->assertContains('Test assign 1', $description);
+        $this->assertStringContainsString('Test assign 1', $description);
     }
 
     /**
      * Test getting the icon of a tool.
      */
-    public function test_get_icon() {
+    public function test_get_icon(): void {
         global $CFG;
 
         $course1 = $this->getDataGenerator()->create_course();
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->courseid = $course1->id;
         $tool = $this->getDataGenerator()->create_lti_tool($data);
 
         $icon = \enrol_lti\helper::get_icon($tool);
         $icon = $icon->out();
         // Only local icons are supported by the LTI framework.
-        $this->assertContains($CFG->wwwroot, $icon);
+        $this->assertStringContainsString($CFG->wwwroot, $icon);
 
     }
 
     /**
      * Test verifying a cartridge token.
      */
-    public function test_verify_cartridge_token() {
+    public function test_verify_cartridge_token(): void {
         $course1 = $this->getDataGenerator()->create_course();
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->courseid = $course1->id;
         $tool1 = $this->getDataGenerator()->create_lti_tool($data);
 
@@ -398,9 +391,9 @@ class enrol_lti_helper_testcase extends advanced_testcase {
     /**
      * Test verifying a proxy token.
      */
-    public function test_verify_proxy_token() {
+    public function test_verify_proxy_token(): void {
         $course1 = $this->getDataGenerator()->create_course();
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->courseid = $course1->id;
         $tool1 = $this->getDataGenerator()->create_lti_tool($data);
 
@@ -412,7 +405,7 @@ class enrol_lti_helper_testcase extends advanced_testcase {
     /**
      * Data provider for the set_xpath test.
      */
-    public function set_xpath_provider() {
+    public static function set_xpath_provider(): array {
         return [
             "Correct structure" => [
                 "parameters" => [
@@ -482,24 +475,23 @@ class enrol_lti_helper_testcase extends advanced_testcase {
      * @param array $parameters A hash of parameters represented by a heirarchy of xpath expressions
      * @param string $expected The name of the fixture file containing the expected result.
      */
-    public function test_set_xpath($parameters, $expected) {
-        $helper = new ReflectionClass('enrol_lti\\helper');
+    public function test_set_xpath($parameters, $expected): void {
+        $helper = new \ReflectionClass('enrol_lti\\helper');
         $function = $helper->getMethod('set_xpath');
-        $function->setAccessible(true);
 
         $document = new \DOMDocument();
-        $document->load(realpath(__DIR__ . '/fixtures/input.xml'));
+        $document->load(realpath(self::get_fixture_path(__NAMESPACE__, 'input.xml')));
         $xpath = new \DOMXpath($document);
         $function->invokeArgs(null, [$xpath, $parameters]);
         $result = $document->saveXML();
-        $expected = file_get_contents(realpath(__DIR__ . '/fixtures/' . $expected));
+        $expected = file_get_contents(realpath(self::get_fixture_path(__NAMESPACE__, $expected)));
         $this->assertEquals($expected, $result);
     }
 
     /**
      * Test set_xpath when an incorrect xpath expression is given.
      */
-    public function test_set_xpath_incorrect_xpath() {
+    public function test_set_xpath_incorrect_xpath(): void {
         $parameters = [
             "/root" => [
                 "/firstnode" => null,
@@ -508,12 +500,11 @@ class enrol_lti_helper_testcase extends advanced_testcase {
                 ],
             ]
         ];
-        $helper = new ReflectionClass('enrol_lti\\helper');
+        $helper = new \ReflectionClass('enrol_lti\\helper');
         $function = $helper->getMethod('set_xpath');
-        $function->setAccessible(true);
 
         $document = new \DOMDocument();
-        $document->load(realpath(__DIR__ . '/fixtures/input.xml'));
+        $document->load(realpath(self::get_fixture_path(__NAMESPACE__, 'input.xml')));
         $xpath = new \DOMXpath($document);
 
         $this->expectException('coding_exception');
@@ -523,17 +514,17 @@ class enrol_lti_helper_testcase extends advanced_testcase {
     /**
      * Test create cartridge.
      */
-    public function test_create_cartridge() {
+    public function test_create_cartridge(): void {
         global $CFG;
 
         $course1 = $this->getDataGenerator()->create_course();
-        $data = new stdClass();
+        $data = new \stdClass();
         $data->courseid = $course1->id;
         $tool1 = $this->getDataGenerator()->create_lti_tool($data);
 
         $cartridge = \enrol_lti\helper::create_cartridge($tool1->id);
-        $this->assertContains('<blti:title>Test LTI</blti:title>', $cartridge);
-        $this->assertContains("<blti:icon>$CFG->wwwroot/theme/image.php/_s/boost/theme/1/favicon</blti:icon>", $cartridge);
-        $this->assertContains("<blti:launch_url>$CFG->wwwroot/enrol/lti/tool.php?id=$tool1->id</blti:launch_url>", $cartridge);
+        $this->assertStringContainsString('<blti:title>Test LTI</blti:title>', $cartridge);
+        $this->assertStringContainsString("<blti:icon>$CFG->wwwroot/theme/image.php/boost/theme/1/favicon</blti:icon>", $cartridge);
+        $this->assertStringContainsString("<blti:launch_url>$CFG->wwwroot/enrol/lti/tool.php?id=$tool1->id</blti:launch_url>", $cartridge);
     }
 }

@@ -35,7 +35,7 @@ require_once('templatable_form_element.php');
 /**
  * Editor element
  *
- * It creates preffered editor (textbox/TinyMce) form element for the format (Text/HTML) selected.
+ * It creates preffered editor (textbox/Tiny) form element for the format (Text/HTML) selected.
  *
  * @package   core_form
  * @category  form
@@ -58,11 +58,14 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element implements templatab
     /** @var array options provided to initalize filepicker */
     protected $_options = array('subdirs' => 0, 'maxbytes' => 0, 'maxfiles' => 0, 'changeformat' => 0,
             'areamaxbytes' => FILE_AREA_MAX_BYTES_UNLIMITED, 'context' => null, 'noclean' => 0, 'trusttext' => 0,
-            'return_types' => 7, 'enable_filemanagement' => true);
-    // $_options['return_types'] = FILE_INTERNAL | FILE_EXTERNAL | FILE_REFERENCE
+            'return_types' => 15, 'enable_filemanagement' => true, 'removeorphaneddrafts' => false, 'autosave' => true);
+    // 15 is $_options['return_types'] = FILE_INTERNAL | FILE_EXTERNAL | FILE_REFERENCE | FILE_CONTROLLED_LINK.
 
     /** @var array values for editor */
     protected $_values     = array('text'=>null, 'format'=>null, 'itemid'=>null);
+
+    /** @var bool if true label will be hidden */
+    protected $_hiddenLabel = false;
 
     /**
      * Constructor
@@ -246,6 +249,15 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element implements templatab
     }
 
     /**
+     * Returns editor text content
+     *
+     * @return string Text content
+     */
+    public function get_text(): string {
+        return $this->_values['text'];
+    }
+
+    /**
      * Returns editor format
      *
      * @return int.
@@ -390,13 +402,28 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element implements templatab
             $subtitle_options->env = 'editor';
             $subtitle_options->itemid = $draftitemid;
 
+            if (has_capability('moodle/h5p:deploy', $ctx)) {
+                // Only set H5P Plugin settings if the user can deploy new H5P content.
+                // H5P plugin.
+                $args->accepted_types = array('.h5p');
+                $h5poptions = initialise_filepicker($args);
+                $h5poptions->context = $ctx;
+                $h5poptions->client_id = uniqid();
+                $h5poptions->maxbytes  = $this->_options['maxbytes'];
+                $h5poptions->areamaxbytes  = $this->_options['areamaxbytes'];
+                $h5poptions->env = 'editor';
+                $h5poptions->itemid = $draftitemid;
+                $fpoptions['h5p'] = $h5poptions;
+            }
+
             $fpoptions['image'] = $image_options;
             $fpoptions['media'] = $media_options;
             $fpoptions['link'] = $link_options;
             $fpoptions['subtitle'] = $subtitle_options;
         }
 
-        //If editor is required and tinymce, then set required_tinymce option to initalize tinymce validation.
+        // TODO Remove this in MDL-77334 for Moodle 4.6.
+        // If editor is required and tinymce, then set required_tinymce option to initalize tinymce validation.
         if (($editor instanceof tinymce_texteditor)  && !is_null($this->getAttribute('onchange'))) {
             $this->_options['required'] = true;
         }
@@ -427,6 +454,7 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element implements templatab
         $context['id'] = $id;
         $context['value'] = $text;
         $context['format'] = $format;
+        $context['formatlabel'] = get_string('editorxformat', 'editor', $this->_label);
 
         if (!is_null($this->getAttribute('onblur')) && !is_null($this->getAttribute('onchange'))) {
             $context['changelistener'] = true;
@@ -474,12 +502,21 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element implements templatab
     }
 
     /**
-     * What to display when element is frozen.
+     * Returns the formatted value. The return from parent class is not acceptable.
      *
-     * @return empty string
+     * @return string
      */
-    function getFrozenHtml() {
+    public function getFrozenHtml(): string {
+        return format_text($this->get_text(), $this->getFormat()) . $this->_getPersistantData();
+    }
 
-        return '';
+    /**
+     * Sets label to be hidden.
+     *
+     * @param bool $hiddenLabel Whether the label should be hidden or not.
+     * @return void
+     */
+    function setHiddenLabel($hiddenLabel) {
+        $this->_hiddenLabel = $hiddenLabel;
     }
 }

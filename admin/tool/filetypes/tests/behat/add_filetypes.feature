@@ -6,7 +6,7 @@ Feature: Add customised file types
 
   Scenario: Add a new file type
     Given I log in as "admin"
-    And I navigate to "File types" node in "Site administration > Server"
+    And I navigate to "Server > File types" in site administration
     And I press "Add"
     # Try setting all the form fields, not just the optional ones.
     And I set the following fields to these values:
@@ -21,11 +21,10 @@ Feature: Add customised file types
     Then I should see "Froggy file" in the "application/x-frog" "table_row"
     And I should see "document" in the "application/x-frog" "table_row"
     And I should see "frog" in the "application/x-frog" "table_row"
-    And "//img[contains(@src, 'archive')]" "xpath_element" should exist in the "application/x-frog" "table_row"
 
   Scenario: Update an existing file type
     Given I log in as "admin"
-    And I navigate to "File types" node in "Site administration > Server"
+    And I navigate to "Server > File types" in site administration
     When I click on "Edit 7z" "link"
     And I set the following fields to these values:
       | Extension | doc |
@@ -38,7 +37,7 @@ Feature: Add customised file types
 
   Scenario: Change the text option (was buggy)
     Given I log in as "admin"
-    And I navigate to "File types" node in "Site administration > Server"
+    And I navigate to "Server > File types" in site administration
     When I click on "Edit 7z" "link"
     And I set the following fields to these values:
       | Description type   | Custom description specified in this form |
@@ -52,7 +51,7 @@ Feature: Add customised file types
 
   Scenario: Try to select a text option without entering a value.
     Given I log in as "admin"
-    And I navigate to "File types" node in "Site administration > Server"
+    And I navigate to "Server > File types" in site administration
     When I click on "Edit dmg" "link"
     And I set the field "Description type" to "Custom description"
     And I press "Save changes"
@@ -67,7 +66,7 @@ Feature: Add customised file types
 
   Scenario: Delete an existing file type
     Given I log in as "admin"
-    And I navigate to "File types" node in "Site administration > Server"
+    And I navigate to "Server > File types" in site administration
     When I click on "Delete 7z" "link"
     Then I should see "Are you absolutely sure you want to remove .7z?"
     And I press "Yes"
@@ -75,7 +74,7 @@ Feature: Add customised file types
 
   Scenario: Delete a custom file type
     Given I log in as "admin"
-    And I navigate to "File types" node in "Site administration > Server"
+    And I navigate to "Server > File types" in site administration
     And I press "Add"
     And I set the following fields to these values:
       | Extension                  | frog                                      |
@@ -87,7 +86,7 @@ Feature: Add customised file types
 
   Scenario: Revert changes to deleted file type
     Given I log in as "admin"
-    And I navigate to "File types" node in "Site administration > Server"
+    And I navigate to "Server > File types" in site administration
     When I click on "Delete 7z" "link"
     And I press "Yes"
     And I follow "Restore 7z to Moodle defaults"
@@ -96,14 +95,14 @@ Feature: Add customised file types
 
   Scenario: Revert changes to updated file type
     Given I log in as "admin"
-    And I navigate to "File types" node in "Site administration > Server"
+    And I navigate to "Server > File types" in site administration
     And I click on "Edit 7z" "link"
     And I set the following fields to these values:
-      | File icon | document |
+      | Type groups | document |
     And I press "Save changes"
-    When I follow "Restore 7z to Moodle defaults"
+    And I follow "Restore 7z to Moodle defaults"
     And I press "Yes"
-    Then "//img[contains(@src, 'archive')]" "xpath_element" should exist in the "7z" "table_row"
+    Then "//*[contains(text(), 'archive')]" "xpath_element" should exist in the "7z" "table_row"
 
   @javascript @_file_upload
   Scenario: Create a resource activity which contains a customised file type
@@ -111,7 +110,7 @@ Feature: Add customised file types
       | fullname | shortname |
       | Course 1 | C1        |
     And I log in as "admin"
-    And I navigate to "File types" node in "Site administration > Server"
+    And I navigate to "Server > File types" in site administration
     And I press "Add"
     And I set the following fields to these values:
       | Extension          | frog                                      |
@@ -121,10 +120,7 @@ Feature: Add customised file types
       | Custom description | Froggy file                               |
     And I press "Save changes"
     # Create a resource activity and add it to a course
-    And I am on site homepage
-    And I follow "Course 1"
-    And I turn editing mode on
-    When I add a "File" to section "1"
+    When I add a resource activity to course "Course 1" section "1"
     And I set the following fields to these values:
       | Name        | An example of customised file type |
       | Description | File description                   |
@@ -132,5 +128,4 @@ Feature: Add customised file types
     And I expand all fieldsets
     And I set the field "Show type" to "1"
     And I press "Save and return to course"
-    Then I should see "Froggy file"
-    And the "src" attribute of ".modtype_resource a img" "css_element" should contain "archive"
+    Then I should see "FROG" in the "span.activitybadge" "css_element"

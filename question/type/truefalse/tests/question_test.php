@@ -14,15 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for the true-false question definition class.
- *
- * @package    qtype
- * @subpackage truefalse
- * @copyright  2008 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace qtype_truefalse;
 
+use question_attempt_step;
+use question_classified_response;
+use question_display_options;
+use question_state;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -33,28 +30,29 @@ require_once($CFG->dirroot . '/question/engine/tests/helpers.php');
 /**
  * Unit tests for the true-false question definition class.
  *
+ * @package    qtype_truefalse
  * @copyright  2008 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class qtype_truefalse_question_test extends advanced_testcase {
-    public function test_is_complete_response() {
-        $question = test_question_maker::make_question('truefalse', 'true');
+class question_test extends \advanced_testcase {
+    public function test_is_complete_response(): void {
+        $question = \test_question_maker::make_question('truefalse', 'true');
 
         $this->assertFalse($question->is_complete_response(array()));
         $this->assertTrue($question->is_complete_response(array('answer' => 0)));
         $this->assertTrue($question->is_complete_response(array('answer' => 1)));
     }
 
-    public function test_is_gradable_response() {
-        $question = test_question_maker::make_question('truefalse', 'true');
+    public function test_is_gradable_response(): void {
+        $question = \test_question_maker::make_question('truefalse', 'true');
 
         $this->assertFalse($question->is_gradable_response(array()));
         $this->assertTrue($question->is_gradable_response(array('answer' => 0)));
         $this->assertTrue($question->is_gradable_response(array('answer' => 1)));
     }
 
-    public function test_grading() {
-        $question = test_question_maker::make_question('truefalse', 'true');
+    public function test_grading(): void {
+        $question = \test_question_maker::make_question('truefalse', 'true');
 
         $this->assertEquals(array(0, question_state::$gradedwrong),
                 $question->grade_response(array('answer' => 0)));
@@ -62,8 +60,8 @@ class qtype_truefalse_question_test extends advanced_testcase {
                 $question->grade_response(array('answer' => 1)));
     }
 
-    public function test_get_correct_response() {
-        $question = test_question_maker::make_question('truefalse', 'true');
+    public function test_get_correct_response(): void {
+        $question = \test_question_maker::make_question('truefalse', 'true');
 
         // True.
         $this->assertSame(array('answer' => 1),
@@ -75,14 +73,14 @@ class qtype_truefalse_question_test extends advanced_testcase {
                 $question->get_correct_response());
     }
 
-    public function test_get_question_summary() {
-        $tf = test_question_maker::make_question('truefalse', 'true');
+    public function test_get_question_summary(): void {
+        $tf = \test_question_maker::make_question('truefalse', 'true');
         $qsummary = $tf->get_question_summary();
         $this->assertEquals('The answer is true.', $qsummary);
     }
 
-    public function test_summarise_response() {
-        $tf = test_question_maker::make_question('truefalse', 'true');
+    public function test_summarise_response(): void {
+        $tf = \test_question_maker::make_question('truefalse', 'true');
 
         $this->assertEquals(get_string('false', 'qtype_truefalse'),
                 $tf->summarise_response(array('answer' => '0')));
@@ -91,8 +89,8 @@ class qtype_truefalse_question_test extends advanced_testcase {
                 $tf->summarise_response(array('answer' => '1')));
     }
 
-    public function test_classify_response() {
-        $tf = test_question_maker::make_question('truefalse', 'true');
+    public function test_classify_response(): void {
+        $tf = \test_question_maker::make_question('truefalse', 'true');
         $tf->start_attempt(new question_attempt_step(), 1);
 
         $this->assertEquals(array(
@@ -106,5 +104,20 @@ class qtype_truefalse_question_test extends advanced_testcase {
         $this->assertEquals(array(
                 $tf->id => question_classified_response::no_response()),
                 $tf->classify_response(array()));
+    }
+
+    /**
+     * test_get_question_definition_for_external_rendering
+     */
+    public function test_get_question_definition_for_external_rendering(): void {
+        $this->resetAfterTest();
+
+        $question = \test_question_maker::make_question('truefalse', 'true');
+        $question->start_attempt(new question_attempt_step(), 1);
+        $qa = \test_question_maker::get_a_qa($question);
+        $displayoptions = new question_display_options();
+
+        $options = $question->get_question_definition_for_external_rendering($qa, $displayoptions);
+        $this->assertNull($options);
     }
 }

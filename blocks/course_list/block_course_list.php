@@ -23,7 +23,6 @@
  */
 
 include_once($CFG->dirroot . '/course/lib.php');
-include_once($CFG->libdir . '/coursecatlib.php');
 
 class block_course_list extends block_list {
     function init() {
@@ -46,7 +45,7 @@ class block_course_list extends block_list {
         $this->content->icons = array();
         $this->content->footer = '';
 
-        $icon  = '<img src="' . $OUTPUT->pix_url('i/course') . '" class="icon" alt="" />';
+        $icon = $OUTPUT->pix_icon('i/course', get_string('course'));
 
         $adminseesall = true;
         if (isset($CFG->block_course_list_adminview)) {
@@ -55,16 +54,14 @@ class block_course_list extends block_list {
            }
         }
 
+        $allcourselink =
+            (has_capability('moodle/course:update', context_system::instance())
+            || empty($CFG->block_course_list_hideallcourseslink)) &&
+            core_course_category::user_top();
+
         if (empty($CFG->disablemycourses) and isloggedin() and !isguestuser() and
           !(has_capability('moodle/course:update', context_system::instance()) and $adminseesall)) {    // Just print My Courses
-            // As this is producing navigation sort order should default to $CFG->navsortmycoursessort instead
-            // of using the default.
-            if (!empty($CFG->navsortmycoursessort)) {
-                $sortorder = 'visible DESC, ' . $CFG->navsortmycoursessort . ' ASC';
-            } else {
-                $sortorder = 'visible DESC, sortorder ASC';
-            }
-            if ($courses = enrol_get_my_courses(NULL, $sortorder)) {
+            if ($courses = enrol_get_my_courses()) {
                 foreach ($courses as $course) {
                     $coursecontext = context_course::instance($course->id);
                     $linkcss = $course->visible ? "" : " class=\"dimmed\" ";
@@ -73,7 +70,7 @@ class block_course_list extends block_list {
                 }
                 $this->title = get_string('mycourses');
             /// If we can update any course of the view all isn't hidden, show the view all courses link
-                if (has_capability('moodle/course:update', context_system::instance()) || empty($CFG->block_course_list_hideallcourseslink)) {
+                if ($allcourselink) {
                     $this->content->footer = "<a href=\"$CFG->wwwroot/course/index.php\">".get_string("fulllistofcourses")."</a> ...";
                 }
             }
@@ -83,8 +80,9 @@ class block_course_list extends block_list {
             }
         }
 
-        $categories = coursecat::get(0)->get_children();  // Parent = 0   ie top-level categories only
-        if ($categories) {   //Check we have categories
+        // User is not enrolled in any courses, show list of available categories or courses (if there is only one category).
+        $topcategory = core_course_category::top();
+        if ($topcategory->is_uservisible() && ($categories = $topcategory->get_children())) { // Check we have categories.
             if (count($categories) > 1 || (count($categories) == 1 && $DB->count_records('course') > 200)) {     // Just print top level category links
                 foreach ($categories as $category) {
                     $categoryname = $category->get_formatted_name();
@@ -92,13 +90,13 @@ class block_course_list extends block_list {
                     $this->content->items[]="<a $linkcss href=\"$CFG->wwwroot/course/index.php?categoryid=$category->id\">".$icon . $categoryname . "</a>";
                 }
             /// If we can update any course of the view all isn't hidden, show the view all courses link
-                if (has_capability('moodle/course:update', context_system::instance()) || empty($CFG->block_course_list_hideallcourseslink)) {
+                if ($allcourselink) {
                     $this->content->footer .= "<a href=\"$CFG->wwwroot/course/index.php\">".get_string('fulllistofcourses').'</a> ...';
                 }
                 $this->title = get_string('categories');
             } else {                          // Just print course names of single category
                 $category = array_shift($categories);
-                $courses = get_courses($category->id);
+                $courses = $category->get_courses();
 
                 if ($courses) {
                     foreach ($courses as $course) {
@@ -106,12 +104,12 @@ class block_course_list extends block_list {
                         $linkcss = $course->visible ? "" : " class=\"dimmed\" ";
 
                         $this->content->items[]="<a $linkcss title=\""
-                                   . format_string($course->shortname, true, array('context' => $coursecontext))."\" ".
+                                   . s($course->get_formatted_shortname())."\" ".
                                    "href=\"$CFG->wwwroot/course/view.php?id=$course->id\">"
-                                   .$icon. format_string(get_course_display_name_for_list($course), true, array('context' => context_course::instance($course->id))) . "</a>";
+                                   .$icon. $course->get_formatted_name() . "</a>";
                     }
                 /// If we can update any course of the view all isn't hidden, show the view all courses link
-                    if (has_capability('moodle/course:update', context_system::instance()) || empty($CFG->block_course_list_hideallcourseslink)) {
+                    if ($allcourselink) {
                         $this->content->footer .= "<a href=\"$CFG->wwwroot/course/index.php\">".get_string('fulllistofcourses').'</a> ...';
                     }
                     $this->get_remote_courses();
@@ -139,7 +137,7 @@ class block_course_list extends block_list {
             return;
         }
 
-        $icon = '<img src="'.$OUTPUT->pix_url('i/mnethost') . '" class="icon" alt="" />';
+        $icon = $OUTPUT->pix_icon('i/mnethost', get_string('host', 'mnet'));
 
         // shortcut - the rest is only for logged in users!
         if (!isloggedin() || isguestuser()) {
@@ -178,6 +176,27 @@ class block_course_list extends block_list {
      */
     public function get_aria_role() {
         return 'navigation';
+    }
+
+    /**
+     * Return the plugin config settings for external functions.
+     *
+     * @return stdClass the configs for both the block instance and plugin
+     * @since Moodle 3.8
+     */
+    public function get_config_for_external() {
+        global $CFG;
+
+        // Return all settings for all users since it is safe (no private keys, etc..).
+        $configs = (object) [
+            'adminview' => $CFG->block_course_list_adminview,
+            'hideallcourseslink' => $CFG->block_course_list_hideallcourseslink
+        ];
+
+        return (object) [
+            'instance' => new stdClass(),
+            'plugin' => $configs,
+        ];
     }
 }
 

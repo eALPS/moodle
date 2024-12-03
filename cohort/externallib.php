@@ -14,6 +14,19 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+use core_external\external_api;
+use core_external\external_format_value;
+use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
+use core_external\external_warnings;
+use core_external\util;
+
+defined('MOODLE_INTERNAL') || die();
+
+require_once($CFG->dirroot . '/cohort/lib.php');
+
 /**
  * External cohort API
  *
@@ -22,9 +35,6 @@
  * @copyright  MediaTouch 2000 srl
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-require_once("$CFG->libdir/externallib.php");
-
 class core_cohort_external extends external_api {
 
     /**
@@ -52,6 +62,11 @@ class core_cohort_external extends external_api {
                             'description' => new external_value(PARAM_RAW, 'cohort description', VALUE_OPTIONAL),
                             'descriptionformat' => new external_format_value('description', VALUE_DEFAULT),
                             'visible' => new external_value(PARAM_BOOL, 'cohort visible', VALUE_OPTIONAL, true),
+                            'theme' => new external_value(PARAM_THEME,
+                                'the cohort theme. The allowcohortthemes setting must be enabled on Moodle',
+                                VALUE_OPTIONAL
+                            ),
+                            'customfields' => self::build_custom_fields_parameters_structure(),
                         )
                     )
                 )
@@ -71,6 +86,8 @@ class core_cohort_external extends external_api {
         require_once("$CFG->dirroot/cohort/lib.php");
 
         $params = self::validate_parameters(self::create_cohorts_parameters(), array('cohorts' => $cohorts));
+
+        $availablethemes = cohort_get_list_of_themes();
 
         $transaction = $DB->start_delegated_transaction();
 
@@ -105,13 +122,32 @@ class core_cohort_external extends external_api {
             self::validate_context($context);
             require_capability('moodle/cohort:manage', $context);
 
+            // Make sure theme is valid.
+            if (isset($cohort->theme)) {
+                if (!empty($CFG->allowcohortthemes)) {
+                    if (empty($availablethemes[$cohort->theme])) {
+                        throw new moodle_exception('errorinvalidparam', 'webservice', '', 'theme');
+                    }
+                }
+            }
+
             // Validate format.
-            $cohort->descriptionformat = external_validate_format($cohort->descriptionformat);
+            $cohort->descriptionformat = util::validate_format($cohort->descriptionformat);
+
+            // Custom fields.
+            if (!empty($cohort->customfields)) {
+                foreach ($cohort->customfields as $field) {
+                    $fieldname = self::build_custom_field_name($field['shortname']);
+                    $cohort->{$fieldname} = $field['value'];
+                }
+                unset($cohort->customfields);
+            }
+
             $cohort->id = cohort_add_cohort($cohort);
 
             list($cohort->description, $cohort->descriptionformat) =
-                external_format_text($cohort->description, $cohort->descriptionformat,
-                        $context->id, 'cohort', 'description', $cohort->id);
+                \core_external\util::format_text($cohort->description, $cohort->descriptionformat,
+                        $context, 'cohort', 'description', $cohort->id);
             $cohortids[] = (array)$cohort;
         }
         $transaction->allow_commit();
@@ -122,7 +158,7 @@ class core_cohort_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 2.5
      */
     public static function create_cohorts_returns() {
@@ -135,6 +171,7 @@ class core_cohort_external extends external_api {
                     'description' => new external_value(PARAM_RAW, 'cohort description'),
                     'descriptionformat' => new external_format_value('description'),
                     'visible' => new external_value(PARAM_BOOL, 'cohort visible'),
+                    'theme' => new external_value(PARAM_THEME, 'cohort theme', VALUE_OPTIONAL),
                 )
             )
         );
@@ -221,16 +258,20 @@ class core_cohort_external extends external_api {
      * @since Moodle 2.5
      */
     public static function get_cohorts($cohortids = array()) {
-        global $DB;
+        global $DB, $CFG;
 
         $params = self::validate_parameters(self::get_cohorts_parameters(), array('cohortids' => $cohortids));
 
         if (empty($cohortids)) {
             $cohorts = $DB->get_records('cohort');
+            if (!empty($cohorts)) {
+                $cohortids = array_keys($cohorts);
+            }
         } else {
             $cohorts = $DB->get_records_list('cohort', 'id', $params['cohortids']);
         }
 
+        $customfieldsdata = self::get_custom_fields_data($cohortids);
         $cohortsinfo = array();
         foreach ($cohorts as $cohort) {
             // Now security checks.
@@ -243,10 +284,16 @@ class core_cohort_external extends external_api {
                 throw new required_capability_exception($context, 'moodle/cohort:view', 'nopermissions', '');
             }
 
-            list($cohort->description, $cohort->descriptionformat) =
-                external_format_text($cohort->description, $cohort->descriptionformat,
-                        $context->id, 'cohort', 'description', $cohort->id);
+            // Only return theme when $CFG->allowcohortthemes is enabled.
+            if (!empty($cohort->theme) && empty($CFG->allowcohortthemes)) {
+                $cohort->theme = null;
+            }
 
+            list($cohort->description, $cohort->descriptionformat) =
+                \core_external\util::format_text($cohort->description, $cohort->descriptionformat,
+                        $context, 'cohort', 'description', $cohort->id);
+
+            $cohort->customfields = !empty($customfieldsdata[$cohort->id]) ? $customfieldsdata[$cohort->id] : [];
             $cohortsinfo[] = (array) $cohort;
         }
         return $cohortsinfo;
@@ -256,7 +303,7 @@ class core_cohort_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 2.5
      */
     public static function get_cohorts_returns() {
@@ -269,10 +316,158 @@ class core_cohort_external extends external_api {
                     'description' => new external_value(PARAM_RAW, 'cohort description'),
                     'descriptionformat' => new external_format_value('description'),
                     'visible' => new external_value(PARAM_BOOL, 'cohort visible'),
+                    'theme' => new external_value(PARAM_THEME, 'cohort theme', VALUE_OPTIONAL),
+                    'customfields' => self::build_custom_fields_returns_structure(),
                 )
             )
         );
     }
+
+    /**
+     * Returns the description of external function parameters.
+     *
+     * @return external_function_parameters
+     */
+    public static function search_cohorts_parameters() {
+        $query = new external_value(
+            PARAM_RAW,
+            'Query string'
+        );
+        $includes = new external_value(
+            PARAM_ALPHA,
+            'What other contexts to fetch the frameworks from. (all, parents, self)',
+            VALUE_DEFAULT,
+            'parents'
+        );
+        $limitfrom = new external_value(
+            PARAM_INT,
+            'limitfrom we are fetching the records from',
+            VALUE_DEFAULT,
+            0
+        );
+        $limitnum = new external_value(
+            PARAM_INT,
+            'Number of records to fetch',
+            VALUE_DEFAULT,
+            25
+        );
+        return new external_function_parameters(array(
+            'query' => $query,
+            'context' => self::get_context_parameters(),
+            'includes' => $includes,
+            'limitfrom' => $limitfrom,
+            'limitnum' => $limitnum
+        ));
+    }
+
+    /**
+     * Search cohorts.
+     *
+     * @param string $query
+     * @param array $context
+     * @param string $includes
+     * @param int $limitfrom
+     * @param int $limitnum
+     * @return array
+     */
+    public static function search_cohorts($query, $context, $includes = 'parents', $limitfrom = 0, $limitnum = 25) {
+        global $CFG;
+        require_once($CFG->dirroot . '/cohort/lib.php');
+
+        $params = self::validate_parameters(self::search_cohorts_parameters(), array(
+            'query' => $query,
+            'context' => $context,
+            'includes' => $includes,
+            'limitfrom' => $limitfrom,
+            'limitnum' => $limitnum,
+        ));
+        $query = $params['query'];
+        $includes = $params['includes'];
+        $context = self::get_context_from_params($params['context']);
+        $limitfrom = $params['limitfrom'];
+        $limitnum = $params['limitnum'];
+
+        self::validate_context($context);
+
+        $manager = has_capability('moodle/cohort:manage', $context);
+        if (!$manager) {
+            require_capability('moodle/cohort:view', $context);
+        }
+
+        // TODO Make this more efficient.
+        if ($includes == 'self') {
+            $results = cohort_get_cohorts($context->id, $limitfrom, $limitnum, $query);
+            $results = $results['cohorts'];
+        } else if ($includes == 'parents') {
+            $results = cohort_get_cohorts($context->id, $limitfrom, $limitnum, $query);
+            $results = $results['cohorts'];
+            if (!$context instanceof context_system) {
+                $results = $results + cohort_get_available_cohorts($context, COHORT_ALL, $limitfrom, $limitnum, $query);
+            }
+        } else if ($includes == 'all') {
+            $results = cohort_get_all_cohorts($limitfrom, $limitnum, $query);
+            $results = $results['cohorts'];
+        } else {
+            throw new coding_exception('Invalid parameter value for \'includes\'.');
+        }
+
+        $cohorts = array();
+
+        if (!empty($results)) {
+            $cohortids = array_column($results, 'id');
+            $customfieldsdata = self::get_custom_fields_data($cohortids);
+        }
+
+        foreach ($results as $key => $cohort) {
+            $cohortcontext = context::instance_by_id($cohort->contextid);
+
+            // Only return theme when $CFG->allowcohortthemes is enabled.
+            if (!empty($cohort->theme) && empty($CFG->allowcohortthemes)) {
+                $cohort->theme = null;
+            }
+
+            if (!isset($cohort->description)) {
+                $cohort->description = '';
+            }
+            if (!isset($cohort->descriptionformat)) {
+                $cohort->descriptionformat = FORMAT_PLAIN;
+            }
+
+            list($cohort->description, $cohort->descriptionformat) =
+                \core_external\util::format_text($cohort->description, $cohort->descriptionformat,
+                        $cohortcontext, 'cohort', 'description', $cohort->id);
+
+            $cohort->customfields = !empty($customfieldsdata[$cohort->id]) ? $customfieldsdata[$cohort->id] : [];
+
+            $cohorts[$key] = $cohort;
+        }
+
+        return array('cohorts' => $cohorts);
+    }
+
+    /**
+     * Returns description of external function result value.
+     *
+     * @return \core_external\external_description
+     */
+    public static function search_cohorts_returns() {
+        return new external_single_structure(array(
+            'cohorts' => new external_multiple_structure(
+                new external_single_structure(array(
+                    'id' => new external_value(PARAM_INT, 'ID of the cohort'),
+                    'name' => new external_value(PARAM_RAW, 'cohort name'),
+                    'idnumber' => new external_value(PARAM_RAW, 'cohort idnumber'),
+                    'description' => new external_value(PARAM_RAW, 'cohort description'),
+                    'descriptionformat' => new external_format_value('description'),
+                    'visible' => new external_value(PARAM_BOOL, 'cohort visible'),
+                    'theme' => new external_value(PARAM_THEME, 'cohort theme', VALUE_OPTIONAL),
+                    'customfields' => self::build_custom_fields_returns_structure(),
+                ))
+            )
+        ));
+    }
+
+
 
     /**
      * Returns description of method parameters
@@ -300,6 +495,11 @@ class core_cohort_external extends external_api {
                             'description' => new external_value(PARAM_RAW, 'cohort description', VALUE_OPTIONAL),
                             'descriptionformat' => new external_format_value('description', VALUE_DEFAULT),
                             'visible' => new external_value(PARAM_BOOL, 'cohort visible', VALUE_OPTIONAL),
+                            'theme' => new external_value(PARAM_THEME,
+                                'the cohort theme. The allowcohortthemes setting must be enabled on Moodle',
+                                VALUE_OPTIONAL
+                            ),
+                            'customfields' => self::build_custom_fields_parameters_structure(),
                         )
                     )
                 )
@@ -319,6 +519,8 @@ class core_cohort_external extends external_api {
         require_once("$CFG->dirroot/cohort/lib.php");
 
         $params = self::validate_parameters(self::update_cohorts_parameters(), array('cohorts' => $cohorts));
+
+        $availablethemes = cohort_get_list_of_themes();
 
         $transaction = $DB->start_delegated_transaction();
         $syscontext = context_system::instance();
@@ -358,8 +560,25 @@ class core_cohort_external extends external_api {
                 require_capability('moodle/cohort:manage', $context);
             }
 
+            // Make sure theme is valid.
+            if (!empty($cohort->theme) && !empty($CFG->allowcohortthemes)) {
+                if (empty($availablethemes[$cohort->theme])) {
+                    $debuginfo = 'The following cohort theme is not installed on this site: '.$cohort->theme;
+                    throw new moodle_exception('errorinvalidparam', 'webservice', '', 'theme', $debuginfo);
+                }
+            }
+
             if (!empty($cohort->description)) {
-                $cohort->descriptionformat = external_validate_format($cohort->descriptionformat);
+                $cohort->descriptionformat = util::validate_format($cohort->descriptionformat);
+            }
+
+            // Custom fields.
+            if (!empty($cohort->customfields)) {
+                foreach ($cohort->customfields as $field) {
+                    $fieldname = self::build_custom_field_name($field['shortname']);
+                    $cohort->{$fieldname} = $field['value'];
+                }
+                unset($cohort->customfields);
             }
 
             cohort_update_cohort($cohort);
@@ -633,7 +852,7 @@ class core_cohort_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 2.5
      */
     public static function get_cohort_members_returns() {
@@ -645,5 +864,78 @@ class core_cohort_external extends external_api {
                 )
             )
         );
+    }
+
+    /**
+     * Builds a structure for custom fields parameters.
+     *
+     * @return \core_external\external_multiple_structure
+     */
+    protected static function build_custom_fields_parameters_structure(): external_multiple_structure {
+        return new external_multiple_structure(
+            new external_single_structure(
+                array(
+                    'shortname' => new external_value(PARAM_ALPHANUMEXT, 'The shortname of the custom field'),
+                    'value' => new external_value(PARAM_RAW, 'The value of the custom field'),
+                )
+            ), 'Custom fields for the cohort', VALUE_OPTIONAL
+        );
+    }
+
+    /**
+     * Builds a structure for custom fields returns.
+     *
+     * @return \core_external\external_multiple_structure
+     */
+    protected static function build_custom_fields_returns_structure(): external_multiple_structure {
+        return new external_multiple_structure(
+            new external_single_structure(
+                array(
+                    'name' => new external_value(PARAM_RAW, 'The name of the custom field'),
+                    'shortname' => new external_value(PARAM_RAW,
+                        'The shortname of the custom field - to be able to build the field class in the code'),
+                    'type' => new external_value(PARAM_ALPHANUMEXT,
+                        'The type of the custom field - text field, checkbox...'),
+                    'valueraw' => new external_value(PARAM_RAW, 'The raw value of the custom field'),
+                    'value' => new external_value(PARAM_RAW, 'The value of the custom field'),
+                )
+            ), 'Custom fields', VALUE_OPTIONAL
+        );
+    }
+
+    /**
+     * Returns custom fields data for provided cohorts.
+     *
+     * @param array $cohortids a list of cohort IDs to provide data for.
+     * @return array
+     */
+    protected static function get_custom_fields_data(array $cohortids): array {
+        $result = [];
+
+        $customfieldsdata = cohort_get_custom_fields_data($cohortids);
+
+        foreach ($customfieldsdata as $cohortid => $fieldcontrollers) {
+            foreach ($fieldcontrollers as $fieldcontroller) {
+                $result[$cohortid][] = [
+                    'type' => $fieldcontroller->get_field()->get('type'),
+                    'value' => $fieldcontroller->export_value(),
+                    'valueraw' => $fieldcontroller->get_value(),
+                    'name' => $fieldcontroller->get_field()->get('name'),
+                    'shortname' => $fieldcontroller->get_field()->get('shortname'),
+                ];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Builds a suitable name of a custom field for a custom field handler based on provided shortname.
+     *
+     * @param string $shortname shortname to use.
+     * @return string
+     */
+    protected static function build_custom_field_name(string $shortname): string {
+        return 'customfield_' . $shortname;
     }
 }

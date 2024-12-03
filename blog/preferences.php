@@ -27,6 +27,7 @@
 require_once('../config.php');
 require_once($CFG->dirroot.'/blog/lib.php');
 require_once('preferences_form.php');
+require_once($CFG->dirroot.'/user/editlib.php');
 
 $courseid = optional_param('courseid', SITEID, PARAM_INT);
 $modid    = optional_param('modid', null, PARAM_INT);
@@ -60,11 +61,11 @@ $PAGE->set_context($usercontext);
 require_login($courseid);
 
 if (empty($CFG->enableblogs)) {
-    print_error('blogdisable', 'blog');
+    throw new \moodle_exception('blogdisable', 'blog');
 }
 
 if (isguestuser()) {
-    print_error('noguest');
+    throw new \moodle_exception('noguest');
 }
 
 // The preference is site wide not blog specific. Hence user should have permissions in site level.
@@ -79,9 +80,10 @@ if (!$mform->is_cancelled() && $data = $mform->get_data()) {
     $pagesize = $data->pagesize;
 
     if ($pagesize < 1) {
-        print_error('invalidpagesize');
+        throw new \moodle_exception('invalidpagesize');
     }
-    set_user_preference('blogpagesize', $pagesize);
+    useredit_update_user_preference(['id' => $USER->id,
+        'preference_blogpagesize' => $pagesize]);
 }
 
 if ($mform->is_cancelled()) {
@@ -93,7 +95,7 @@ $site = get_site();
 $strpreferences = get_string('preferences');
 $strblogs       = get_string('blogs', 'blog');
 
-$title = "$site->shortname: $strblogs : $strpreferences";
+$title = "$strblogs : $strpreferences";
 $PAGE->set_title($title);
 $PAGE->set_heading(fullname($USER));
 

@@ -374,8 +374,8 @@ function scorm_parse_aicc(&$scorm) {
     }
     if (!empty($oldscoes)) {
         foreach ($oldscoes as $oldsco) {
-            $DB->delete_records('scorm_scoes', array('id' => $oldsco->id));
-            $DB->delete_records('scorm_scoes_track', array('scoid' => $oldsco->id));
+            scorm_delete_tracks($scorm->id, $oldsco->id);
+            $DB->delete_records('scorm_scoes', ['id' => $oldsco->id]);
         }
     }
 
@@ -461,8 +461,8 @@ function scorm_aicc_generate_simple_sco($scorm) {
     }
     // Get rid of old ones.
     foreach ($scos as $oldsco) {
-        $DB->delete_records('scorm_scoes', array('id' => $oldsco->id));
-        $DB->delete_records('scorm_scoes_track', array('scoid' => $oldsco->id));
+        scorm_delete_tracks($scorm->id, $oldsco->id);
+        $DB->delete_records('scorm_scoes', ['id' => $oldsco->id]);
     }
 
     $sco->identifier = 'A1';
@@ -520,10 +520,10 @@ function get_scorm_default (&$userdata, $scorm, $scoid, $attempt, $mode) {
             $userdata->$key = $value;
         }
     } else {
-        print_error('cannotfindsco', 'scorm');
+        throw new \moodle_exception('cannotfindsco', 'scorm');
     }
     if (!$sco = scorm_get_sco($scoid)) {
-        print_error('cannotfindsco', 'scorm');
+        throw new \moodle_exception('cannotfindsco', 'scorm');
     }
 
     $userdata->mode = 'normal';

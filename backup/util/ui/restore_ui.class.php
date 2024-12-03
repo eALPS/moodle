@@ -109,7 +109,7 @@ class restore_ui extends base_ui {
      * @param array $params
      * @return restore_ui_stage_initial|restore_ui_stage_schema|restore_ui_stage_confirmation|restore_ui_stage_final
      */
-    protected function initialise_stage($stage = null, array $params = null) {
+    protected function initialise_stage($stage = null, ?array $params = null) {
         if ($stage == null) {
             $stage = optional_param('stage', self::STAGE_CONFIRM, PARAM_INT);
         }
@@ -215,12 +215,7 @@ class restore_ui extends base_ui {
         if ($this->stage->get_stage() < self::STAGE_PROCESS) {
             throw new restore_ui_exception('restoreuifinalisedbeforeexecute');
         }
-        if ($this->controller->get_target() == backup::TARGET_CURRENT_DELETING || $this->controller->get_target() == backup::TARGET_EXISTING_DELETING) {
-            $options = array();
-            $options['keep_roles_and_enrolments'] = $this->get_setting_value('keep_roles_and_enrolments');
-            $options['keep_groups_and_groupings'] = $this->get_setting_value('keep_groups_and_groupings');
-            restore_dbops::delete_course_content($this->controller->get_courseid(), $options);
-        }
+
         $this->controller->execute_plan();
         $this->progress = self::PROGRESS_EXECUTED;
         $this->stage = new restore_ui_stage_complete($this, $this->stage->get_params(), $this->controller->get_results());

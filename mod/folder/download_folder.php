@@ -37,23 +37,33 @@ $folder = $DB->get_record('folder', array('id' => $cm->instance), '*', MUST_EXIS
 
 $downloadable = folder_archive_available($folder, $cm);
 if (!$downloadable) {
-    print_error('cannotdownloaddir', 'repository');
+    throw new \moodle_exception('cannotdownloaddir', 'repository');
 }
-
-folder_downloaded($folder, $course, $cm, $context);
 
 $fs = get_file_storage();
-$file = $fs->get_file($context->id, 'mod_folder', 'content', 0, '/', '.');
-if (!$file) {
-    print_error('cannotdownloaddir', 'repository');
+$files = $fs->get_area_files($context->id, 'mod_folder', 'content');
+if (empty($files)) {
+    throw new \moodle_exception('cannotdownloaddir', 'repository');
 }
 
-$zipper   = get_file_packer('application/zip');
-$filename = clean_filename($folder->name . "-" . date("Ymd")) . ".zip";
-$temppath = make_request_directory() . $filename;
+// Log zip as downloaded.
+folder_downloaded($folder, $course, $cm, $context);
 
-if ($zipper->archive_to_pathname(array('/' => $file), $temppath)) {
-    send_temp_file($temppath, $filename);
-} else {
-    print_error('cannotdownloaddir', 'repository');
+// Close the session.
+\core\session\manager::write_close();
+
+$foldername = format_string($folder->name, true, ["context" => $context]);
+$filename = shorten_filename(clean_filename($foldername . "-" . date("Ymd")) . ".zip");
+$zipwriter = \core_files\archive_writer::get_stream_writer($filename, \core_files\archive_writer::ZIP_WRITER);
+
+foreach ($files as $file) {
+    if ($file->is_directory()) {
+        continue;
+    }
+    $pathinzip = $file->get_filepath() . $file->get_filename();
+    $zipwriter->add_file_from_stored_file($pathinzip, $file);
 }
+
+// Finish the archive.
+$zipwriter->finish();
+exit();

@@ -27,6 +27,7 @@ namespace gradereport_history\output;
 defined('MOODLE_INTERNAL') || die;
 
 require_once($CFG->libdir . '/tablelib.php');
+require_once($CFG->dirroot . '/user/lib.php');
 
 /**
  * Renderable class for gradehistory report.
@@ -52,6 +53,11 @@ class tablelog extends \table_sql implements \renderable {
      * @var \stdClass A list of filters to be applied to the sql query.
      */
     protected $filters;
+
+    /**
+     * @var \stdClass[] List of users included in the report (if userids are specified as filters)
+     */
+    protected $users = [];
 
     /**
      * @var array A list of grade items present in the course.
@@ -98,8 +104,7 @@ class tablelog extends \table_sql implements \renderable {
         $this->context = $context;
         $this->courseid = $this->context->instanceid;
         $this->pagesize = $perpage;
-        $this->page = $page;
-        $this->filters = (object)$filters;
+        $this->currpage = $page;
         $this->gradeitems = \grade_item::fetch_all(array('courseid' => $this->courseid));
         $this->cms = get_fast_modinfo($this->courseid);
         $this->useridfield = 'userid';
@@ -107,6 +112,9 @@ class tablelog extends \table_sql implements \renderable {
 
         // Define columns in the table.
         $this->define_table_columns();
+
+        // Define filters.
+        $this->define_table_filters((object) $filters);
 
         // Define configs.
         $this->define_table_configs($url);
@@ -137,10 +145,40 @@ class tablelog extends \table_sql implements \renderable {
     }
 
     /**
+     * Define table filters
+     *
+     * @param \stdClass $filters
+     */
+    protected function define_table_filters(\stdClass $filters): void {
+        global $DB;
+
+        $this->filters = $filters;
+
+        if (!empty($this->filters->userids)) {
+
+            $course = get_course($this->courseid);
+
+            // Retrieve userids that are part of the filters object, and ensure user can access each of them.
+            [$userselect, $userparams] = $DB->get_in_or_equal(explode(',', $this->filters->userids), SQL_PARAMS_NAMED);
+            [$usersort] = users_order_by_sql();
+
+            $this->users = array_filter(
+                $DB->get_records_select('user', "id {$userselect}", $userparams, $usersort),
+                static function(\stdClass $user) use ($course): bool {
+                    return user_can_view_profile($user, $course);
+                }
+            );
+
+            // Reset userids to the filtered array of users.
+            $this->filters->userids = implode(',', array_keys($this->users));
+        }
+    }
+
+    /**
      * Setup the headers for the html table.
      */
     protected function define_table_columns() {
-        $extrafields = get_extra_user_fields($this->context);
+        $extrafields = \core_user\fields::get_identity_fields($this->context);
 
         // Define headers and columns.
         $cols = array(
@@ -153,7 +191,7 @@ class tablelog extends \table_sql implements \renderable {
             if (get_string_manager()->string_exists($field, 'moodle')) {
                 $cols[$field] = get_string($field);
             } else {
-                $cols[$field] = $field;
+                $cols[$field] = \core_user\fields::get_display_name($field);
             }
         }
 
@@ -314,7 +352,20 @@ class tablelog extends \table_sql implements \renderable {
         if ($this->is_downloading()) {
             return $history->feedback;
         } else {
-            return format_text($history->feedback, $history->feedbackformat, array('context' => $this->context));
+            // We need the activity context, not the course context.
+            $gradeitem = $this->gradeitems[$history->itemid];
+            $context = $gradeitem->get_context();
+
+            $feedback = file_rewrite_pluginfile_urls(
+                $history->feedback,
+                'pluginfile.php',
+                $context->id,
+                GRADE_FILE_COMPONENT,
+                GRADE_HISTORY_FEEDBACK_FILEAREA,
+                $history->id
+            );
+
+            return format_text($feedback, $history->feedbackformat, array('context' => $context));
         }
     }
 
@@ -324,7 +375,7 @@ class tablelog extends \table_sql implements \renderable {
      * @return array containing sql to use and an array of params.
      */
     protected function get_filters_sql_and_params() {
-        global $DB;
+        global $DB, $USER;
 
         $coursecontext = $this->context;
         $filter = 'gi.courseid = :courseid';
@@ -355,6 +406,16 @@ class tablelog extends \table_sql implements \renderable {
             $params += array('grader' => $this->filters->grader);
         }
 
+        // If the course is separate group mode and the current user is not allowed to see all groups make sure
+        // that we display only users from the same groups as current user.
+        $groupmode = get_course($coursecontext->instanceid)->groupmode;
+        if ($groupmode == SEPARATEGROUPS && !has_capability('moodle/site:accessallgroups', $coursecontext)) {
+            $groupids = array_column(groups_get_all_groups($coursecontext->instanceid, $USER->id, 0, 'g.id'), 'id');
+            list($gsql, $gparams) = $DB->get_in_or_equal($groupids, SQL_PARAMS_NAMED, 'gmuparam', true, 0);
+            $filter .= " AND EXISTS (SELECT 1 FROM {groups_members} gmu WHERE gmu.userid=ggh.userid AND gmu.groupid $gsql)";
+            $params += $gparams;
+        }
+
         return array($filter, $params);
     }
 
@@ -370,18 +431,29 @@ class tablelog extends \table_sql implements \renderable {
                    ggh.source, ggh.overridden, ggh.locked, ggh.excluded, ggh.feedback, ggh.feedbackformat,
                    gi.itemtype, gi.itemmodule, gi.iteminstance, gi.itemnumber, ';
 
-        // Add extra user fields that we need for the graded user.
-        $extrafields = get_extra_user_fields($this->context);
-        foreach ($extrafields as $field) {
-            $fields .= 'u.' . $field . ', ';
+        $userfieldsapi = \core_user\fields::for_identity($this->context);
+        $userfieldssql = $userfieldsapi->get_sql('u', true, '', '', true);
+        $userfieldsselects = '';
+        $userfieldsjoins = '';
+        $userfieldsparams = [];
+        if (!$count) {
+            $userfieldsselects = $userfieldssql->selects;
+            $userfieldsjoins = $userfieldssql->joins;
+            $userfieldsparams = $userfieldssql->params;
         }
-        $gradeduserfields = get_all_user_name_fields(true, 'u');
-        $fields .= $gradeduserfields . ', ';
+
+        // Add extra user fields that we need for the graded user.
+        $extrafields = [];
+        foreach ($userfieldsapi->get_required_fields([\core_user\fields::PURPOSE_IDENTITY]) as $field) {
+            $extrafields[$field] = $userfieldssql->mappings[$field];
+        }
+        $userfieldsapi = \core_user\fields::for_name();
+        $fields .= $userfieldsapi->get_sql('u', false, '', '', false)->selects . ', ';
         $groupby = $fields;
 
         // Add extra user fields that we need for the grader user.
-        $fields .= get_all_user_name_fields(true, 'ug', '', 'grader');
-        $groupby .= get_all_user_name_fields(true, 'ug');
+        $fields .= $userfieldsapi->get_sql('ug', false, 'grader', '', false)->selects;
+        $groupby .= $userfieldsapi->get_sql('ug', false, '', '', false)->selects;
 
         // Filtering on revised grades only.
         $revisedonly = !empty($this->filters->revisedonly);
@@ -411,12 +483,14 @@ class tablelog extends \table_sql implements \renderable {
 
         list($where, $params) = $this->get_filters_sql_and_params();
 
-        $sql =  "SELECT $select
+        $sql = " SELECT $select $userfieldsselects
                    FROM {grade_grades_history} ggh
                    JOIN {grade_items} gi ON gi.id = ggh.itemid
                    JOIN {user} u ON u.id = ggh.userid
+                        $userfieldsjoins
               LEFT JOIN {user} ug ON ug.id = ggh.usermodified
                   WHERE $where";
+        $params = array_merge($userfieldsparams, $params);
 
         // As prevgrade is a dynamic field, we need to wrap the query. This is the only filtering
         // that should be defined outside the method self::get_filters_sql_and_params().
@@ -470,7 +544,7 @@ class tablelog extends \table_sql implements \renderable {
         if ($this->is_downloading()) {
             $histories = $DB->get_records_sql($sql, $params);
         } else {
-            $histories = $DB->get_records_sql($sql, $params, $this->pagesize * $this->page, $this->pagesize);
+            $histories = $DB->get_records_sql($sql, $params, $this->pagesize * $this->currpage, $this->pagesize);
         }
         foreach ($histories as $history) {
             $this->rawdata[] = $history;
@@ -484,19 +558,9 @@ class tablelog extends \table_sql implements \renderable {
     /**
      * Returns a list of selected users.
      *
-     * @return array returns an array in the format $userid => $userid
+     * @return \stdClass[] List of user objects
      */
-    public function get_selected_users() {
-        global $DB;
-        $idlist = array();
-        if (!empty($this->filters->userids)) {
-
-            $idlist = explode(',', $this->filters->userids);
-            list($where, $params) = $DB->get_in_or_equal($idlist);
-            return $DB->get_records_select('user', "id $where", $params);
-
-        }
-        return $idlist;
+    public function get_selected_users(): array {
+        return $this->users;
     }
-
 }

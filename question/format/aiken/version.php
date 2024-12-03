@@ -25,8 +25,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'qformat_aiken';
-$plugin->version   = 2016120500;
+$plugin->version   = 2024100700;
 
-$plugin->requires  = 2016112900;
+$plugin->requires  = 2024100100;
 
 $plugin->maturity  = MATURITY_STABLE;

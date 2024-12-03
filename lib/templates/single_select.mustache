@@ -83,7 +83,7 @@
 }}
 
 <div class="{{classes}} d-inline-block">
-    <form method="{{method}}" action="{{action}}" class="form-inline" id="{{formid}}">
+    <form method="{{method}}" action="{{action}}" class="d-flex flex-wrap align-items-center" id="{{formid}}">
         {{#params}}
             <input type="hidden" name="{{name}}" value="{{value}}">
         {{/params}}
@@ -95,7 +95,8 @@
         {{#helpicon}}
             {{>core/help_icon}}
         {{/helpicon}}
-        <select {{#attributes}}{{name}}="{{value}}" {{/attributes}} id="{{id}}" class="custom-select {{classes}}" name="{{name}}">
+        <select {{#attributes}}{{name}}="{{value}}" {{/attributes}} id="{{id}}" class="custom-select {{classes}}" name="{{name}}"
+                {{#title}}title="{{.}}"{{/title}} {{#disabled}}disabled{{/disabled}}>
             {{#options}}
                 {{#optgroup}}
                     <optgroup label="{{name}}">
@@ -105,19 +106,23 @@
                     </optgroup>
                 {{/optgroup}}
                 {{^optgroup}}
-                    <option value="{{value}}" {{#selected}}selected{{/selected}}>{{{name}}}</option>
+                    <option {{ignore}} value="{{value}}" {{#selected}}selected{{/selected}}>{{{name}}}</option>
                 {{/optgroup}}
             {{/options}}
         </select>
         <noscript>
-            <input type="submit" role="button" class="btn btn-secondary" value="{{#str}}go, core{{/str}}">
+            <input type="submit" class="btn btn-secondary ms-1" value="{{#str}}go, core{{/str}}">
         </noscript>
     </form>
 </div>
 {{#js}}
-require(['jquery'], function($) {
-    $('#{{id}}').change(function() {
-        $('#{{formid}}').submit();
+require(['jquery', 'core/custom_interaction_events'], function($, CustomEvents) {
+    CustomEvents.define('#{{id}}', [CustomEvents.events.accessibleChange]);
+    $('#{{id}}').on(CustomEvents.events.accessibleChange, function() {
+        var ignore = $(this).find(':selected').attr('data-ignore');
+        if (typeof ignore === typeof undefined) {
+            $('#{{formid}}').submit();
+        }
     });
 });
 {{/js}}

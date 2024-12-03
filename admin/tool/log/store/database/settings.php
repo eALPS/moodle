@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 if ($hassiteconfig) {
-    $testurl = new moodle_url('/admin/tool/log/store/database/test_settings.php', array('sesskey' => sesskey()));
+    $testurl = new moodle_url('/admin/tool/log/store/database/test_settings.php');
     $test = new admin_externalpage('logstoredbtestsettings', get_string('testsettings', 'logstore_database'),
         $testurl, 'moodle/site:config', true);
     $ADMIN->add('logging', $test);
@@ -54,8 +54,14 @@ if ($hassiteconfig) {
         'logstore_database'), '', ''));
     $settings->add(new admin_setting_configtext('logstore_database/dbcollation', get_string('databasecollation',
         'logstore_database'), '', ''));
+    $settings->add(new admin_setting_configcheckbox('logstore_database/dbhandlesoptions', get_string('databasehandlesoptions',
+        'logstore_database'), get_string('databasehandlesoptions_help', 'logstore_database'), '0'));
     $settings->add(new admin_setting_configtext('logstore_database/buffersize', get_string('buffersize',
         'logstore_database'), get_string('buffersize_help', 'logstore_database'), 50));
+
+    $settings->add(new admin_setting_configcheckbox('logstore_database/jsonformat',
+            new lang_string('jsonformat', 'logstore_database'),
+            new lang_string('jsonformat_desc', 'logstore_database'), 1));
 
     // Filters.
     $settings->add(new admin_setting_heading('filters', get_string('filters', 'logstore_database'), get_string('filters_help',

@@ -1,18 +1,17 @@
-@editor @editor_atto @atto @atto_image @_file_upload
+@editor @editor_atto @atto @atto_image
 Feature: Add images to Atto
   To write rich text - I need to add images.
 
   @javascript
   Scenario: Insert an image
-    Given I log in as "admin"
-    And I follow "Manage private files..."
-    And I upload "lib/editor/atto/tests/fixtures/moodle-logo.png" file to "Files" filemanager
-    And I click on "Save changes" "button"
-    And I follow "Profile" in the user menu
-    And I click on "Edit profile" "link" in the "region-main" "region"
+    Given the following "user private file" exists:
+      | user     | admin                                          |
+      | filepath | lib/editor/atto/tests/fixtures/moodle-logo.png |
+    And I log in as "admin"
+    And I open my profile in edit mode
     When I set the field "Description" to "<p>Image test</p>"
     And I select the text in the "Description" Atto editor
-    And I click on "Image" "button"
+    And I click on "Insert or edit image" "button"
     And I click on "Browse repositories..." "button"
     And I click on "Private files" "link" in the ".fp-repo-area" "css_element"
     And I click on "moodle-logo.png" "link"
@@ -40,11 +39,12 @@ Feature: Add images to Atto
     And I take focus off "Height" "field"
     And the field "Width" matches value "123"
     And the field "Height" matches value "456"
-    And I click on "Save image" "button"
-    And I click on "Update profile" "button"
+    And I change window size to "large"
+    And I press "Save image"
+    And I press "Update profile"
     And I click on "Edit profile" "link" in the "region-main" "region"
     And I select the text in the "Description" Atto editor
-    And I click on "Image" "button"
+    And I click on "Insert or edit image" "button"
     Then the field "Describe this image for someone who cannot see it" matches value "It's the Moodle"
     And the field "Width" matches value "123"
     And the field "Height" matches value "456"
@@ -52,21 +52,42 @@ Feature: Add images to Atto
   @javascript
   Scenario: Manually inserting an image
     Given I log in as "admin"
-    And I follow "Profile" in the user menu
-    And I click on "Edit profile" "link" in the "region-main" "region"
+    And I open my profile in edit mode
     And I set the field "Description" to "<p>Image: <img src='/nothing/here'>.</p>"
     And I select the text in the "Description" Atto editor
-    When I click on "Image" "button"
+    When I click on "Insert or edit image" "button"
     Then the field "Enter URL" matches value "/nothing/here"
     And I set the field "Describe this image for someone who cannot see it" to "Something"
-    And I set the field "Enter URL" to ""
+    And I set the field "Width" to "1"
+    And I set the field "Height" to "1"
     And I press "Save image"
     And I set the field "Description" to "<p>Image: <img src='/nothing/again' width='123' height='456' alt='Awesome!'>.</p>"
     And I press "Update profile"
     And I click on "Edit profile" "link" in the "region-main" "region"
     And I select the text in the "Description" Atto editor
-    And I click on "Image" "button"
+    And I click on "Insert or edit image" "button"
     And the field "Enter URL" matches value "/nothing/again"
     And the field "Width" matches value "123"
     And the field "Height" matches value "456"
     And the field "Describe this image" matches value "Awesome!"
+
+  @javascript
+  Scenario: Error handling when inserting an image manually
+    Given I log in as "admin"
+    And I open my profile in edit mode
+    And I set the field "Description" to "<p>Image: <img src='/nothing/here'>.</p>"
+    And I select the text in the "Description" Atto editor
+    When I click on "Insert or edit image" "button"
+    Then the field "Enter URL" matches value "/nothing/here"
+    And I set the field "Describe this image for someone who cannot see it" to ""
+    And I take focus off "Describe this image for someone who cannot see it" "field"
+    And I should see "An image must have a description, unless it is marked as decorative only."
+    And I set the field "Describe this image for someone who cannot see it" to "Something"
+    And I set the field "Enter URL" to ""
+    And I press "Save image"
+    And I should see "An image must have a URL."
+    And I set the field "Enter URL" to "/nothing/here"
+    And I set the field "Width" to "1"
+    And I set the field "Height" to "1"
+    And I press "Save image"
+    And I press "Update profile"

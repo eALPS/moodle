@@ -39,7 +39,7 @@ if ($section !== 'calculation') {
 $PAGE->set_url($url);
 
 if (!$course = $DB->get_record('course', array('id' => $courseid))) {
-    print_error('nocourseid');
+    throw new \moodle_exception('invalidcourseid');
 }
 
 require_login($course);
@@ -55,7 +55,7 @@ $gpr = new grade_plugin_return();
 $returnurl = $gpr->get_return_url($CFG->wwwroot.'/grade/report/index.php?id='.$course->id);
 
 if (!$grade_item = grade_item::fetch(array('id'=>$id, 'courseid'=>$course->id))) {
-    print_error('invaliditemid');
+    throw new \moodle_exception('invaliditemid');
 }
 
 // activity items and items without grade can not have calculation
@@ -139,7 +139,7 @@ echo '
         </div>
     </fieldset>
     <div class="fitem" style="text-align: center;">
-        <input id="id_addidnumbers" type="submit" value="'.get_string('addidnumbers', 'grades').'" name="addidnumbers" />
+        <input id="id_addidnumbers" type="submit" class="btn btn-secondary" value="' . get_string('addidnumbers', 'grades') . '" name="addidnumbers" />
     </div>
 </form>';
 
@@ -195,7 +195,7 @@ function get_grade_tree(&$gtree, $element, $current_itemid=null, $errors=null) {
         }
     }
 
-    $icon = $gtree->get_element_icon($element, true);
+    $icon = grade_helper::get_element_icon($element, true);
     $last = '';
     $catcourseitem = ($element['type'] == 'courseitem' or $element['type'] == 'categoryitem');
 

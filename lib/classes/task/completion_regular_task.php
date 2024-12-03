@@ -44,13 +44,27 @@ class completion_regular_task extends scheduled_task {
      * Throw exceptions on errors (the job will be retried).
      */
     public function execute() {
-        global $CFG;
+        global $CFG, $COMPLETION_CRITERIA_TYPES, $DB;
 
         if ($CFG->enablecompletion) {
-            // Regular Completion cron.
-            require_once($CFG->dirroot.'/completion/cron.php');
-            completion_cron_criteria();
-            completion_cron_completions();
+            require_once($CFG->libdir . "/completionlib.php");
+
+            // Process each criteria type.
+            foreach ($COMPLETION_CRITERIA_TYPES as $type) {
+                $object = 'completion_criteria_' . $type;
+                require_once($CFG->dirroot . '/completion/criteria/' . $object . '.php');
+
+                $class = new $object();
+                // Run the criteria type's cron method, if it has one.
+                if (method_exists($class, 'cron')) {
+                    if (debugging()) {
+                        mtrace('Running '.$object.'->cron()');
+                    }
+                    $class->cron();
+                }
+            }
+
+            aggregate_completions(0, true);
         }
     }
 

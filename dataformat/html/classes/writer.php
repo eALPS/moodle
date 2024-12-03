@@ -42,12 +42,11 @@ class writer extends \core\dataformat\base {
     public $extension = ".html";
 
     /**
-     * Write the start of the format
-     *
-     * @param array $columns
+     * Write the start of the output
      */
-    public function write_header($columns) {
-        echo "<!DOCTYPE html><html>";
+    public function start_output() {
+        echo "<!DOCTYPE html><html><head>";
+        echo \html_writer::empty_tag('meta', ['charset' => 'UTF-8']);
         echo \html_writer::tag('title', $this->filename);
         echo "<style>
 html, body {
@@ -75,14 +74,31 @@ table {
     margin: auto;
 }
 </style>
-<body>
-<table border=1 cellspacing=0 cellpadding=3>
-";
+</head>
+<body>";
+    }
+
+    /**
+     * Write the start of the sheet we will be adding data to.
+     *
+     * @param array $columns
+     */
+    public function start_sheet($columns) {
+        echo "<table border=1 cellspacing=0 cellpadding=3>";
         echo \html_writer::start_tag('tr');
         foreach ($columns as $k => $v) {
             echo \html_writer::tag('th', $v);
         }
         echo \html_writer::end_tag('tr');
+    }
+
+    /**
+     * Method to define whether the dataformat supports export of HTML
+     *
+     * @return bool
+     */
+    public function supports_html(): bool {
+        return true;
     }
 
     /**
@@ -92,6 +108,8 @@ table {
      * @param int $rownum
      */
     public function write_record($record, $rownum) {
+        $record = $this->format_record($record);
+
         echo \html_writer::start_tag('tr');
         foreach ($record as $cell) {
             echo \html_writer::tag('td', $cell);
@@ -100,12 +118,18 @@ table {
     }
 
     /**
-     * Write the end of the format
+     * Write the end of the sheet containing the data.
      *
      * @param array $columns
      */
-    public function write_footer($columns) {
-        echo "</table></body></html>";
+    public function close_sheet($columns) {
+        echo "</table>";
     }
 
+    /**
+     * Write the end of the sheet containing the data.
+     */
+    public function close_output() {
+        echo "</body></html>";
+    }
 }

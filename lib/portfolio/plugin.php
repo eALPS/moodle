@@ -19,7 +19,6 @@
  *
  * portfolio_plugin_pull_base and portfolio_plugin_push_base
  * which both in turn inherit from portfolio_plugin_base.
- * {@link http://docs.moodle.org/dev/Writing_a_Portfolio_Plugin}
  *
  * @package    core_portfolio
  * @copyright  2008 Penny Leach <penny@catalyst.net.nz>,
@@ -59,7 +58,7 @@ abstract class portfolio_plugin_base {
     /** @var bool whether this instance is visible or not */
     protected $visible;
 
-    /** @var array admin configured config use {@link set_config} and {@get_config} to access */
+    /** @var stdClass admin configured config use {@see set_config} and {@see get_config} to access */
     protected $config;
 
     /** @var array user config cache. keyed on userid and then on config field => value use {@link get_user_config} and {@link set_user_config} to access. */
@@ -108,14 +107,14 @@ abstract class portfolio_plugin_base {
      *                             is given the final say
      *                             because it might be (for example) download.
      */
-    public abstract function expected_time($callertime);
+    abstract public function expected_time($callertime);
 
     /**
      * Is this plugin push or pull.
      * If push, cleanup will be called directly after send_package
      * If not, cleanup will be called after portfolio/file.php is requested
      */
-    public abstract function is_push();
+    abstract public function is_push();
 
     /**
      * Returns the user-friendly name for this plugin.
@@ -208,7 +207,7 @@ abstract class portfolio_plugin_base {
      * Eg: things that your subclasses want to keep in state
      * across the export.
      * Keys must be in get_allowed_export_config
-     * This is deliberately not final (see boxnet plugin)
+     * This is deliberately not final (see googledocs plugin)
      * @see get_allowed_export_config
      *
      * @param array $config named array of config items to set.
@@ -234,7 +233,7 @@ abstract class portfolio_plugin_base {
      * @param string $key field to fetch
      * @return null|string config value
      */
-    public final function get_export_config($key) {
+    final public function get_export_config($key) {
         $allowed = array_merge(
             array('hidewait', 'wait', 'format', 'hideformat'),
             $this->get_allowed_export_config()
@@ -272,7 +271,7 @@ abstract class portfolio_plugin_base {
      * @see get_tempfiles
      *
      */
-    public abstract function prepare_package();
+    abstract public function prepare_package();
 
     /**
      * This is the function that is responsible for sending
@@ -281,7 +280,7 @@ abstract class portfolio_plugin_base {
      *
      * @return bool success
      */
-    public abstract function send_package();
+    abstract public function send_package();
 
 
     /**
@@ -301,7 +300,7 @@ abstract class portfolio_plugin_base {
      * The url for the user to continue to their portfolio
      * during the lifecycle of the request
      */
-    public abstract function get_interactive_continue_url();
+    abstract public function get_interactive_continue_url();
 
     /**
      * The url to save in the log as the continue url.
@@ -402,7 +401,7 @@ abstract class portfolio_plugin_base {
      * and the request (get and post but not cookie) parameters.
      * This is useful for external systems that need to redirect the user back
      * with some extra data in the url (like auth tokens etc)
-     * for an example implementation, see boxnet portfolio plugin.
+     * for an example implementation, see googledocs portfolio plugin.
      *
      * @param int $stage the stage before control was stolen
      * @param array $params a merge of $_GET and $_POST
@@ -518,7 +517,7 @@ abstract class portfolio_plugin_base {
      *
      * @param array $config array of config items.
      */
-    public final function set_config($config) {
+    final public function set_config($config) {
         global $DB;
         foreach ($config as $key => $value) {
             // try set it in $this first
@@ -549,7 +548,7 @@ abstract class portfolio_plugin_base {
      * @param string $key key to fetch
      * @return null|mixed the corresponding value
      */
-    public final function get_config($key) {
+    final public function get_config($key) {
         if (!in_array($key, $this->get_allowed_config())) {
             $a = (object)array('property' => $key, 'class' => get_class($this));
             throw new portfolio_export_exception($this->get('exporter'), 'invalidconfigproperty', 'portfolio', null, $a);
@@ -568,7 +567,7 @@ abstract class portfolio_plugin_base {
      * @return string the corresponding value
      *
      */
-    public final function get_user_config($key, $userid=0) {
+    final public function get_user_config($key, $userid=0) {
         global $DB;
 
         if (empty($userid)) {
@@ -601,7 +600,7 @@ abstract class portfolio_plugin_base {
      * @param int $userid userid to set config for (defaults to current)
      *
      */
-    public final function set_user_config($config, $userid=0) {
+    final public function set_user_config($config, $userid=0) {
         global $DB;
 
         if (empty($userid)) {
@@ -634,9 +633,14 @@ abstract class portfolio_plugin_base {
      * like name, visible etc.
      *
      * @param string $field property name
-     * @return array|string|int|boolean value of the field
+     * @return mixed value of the field
      */
-    public final function get($field) {
+    final public function get($field) {
+        // This is a legacy change to the way files are get/set.
+        // We now only set $this->file to the id of the \stored_file. So, we need to convert that id back to a \stored_file here.
+        if ($field === 'file') {
+            return $this->get_file();
+        }
         if (property_exists($this, $field)) {
             return $this->{$field};
         }
@@ -653,7 +657,13 @@ abstract class portfolio_plugin_base {
      * @param string $value property's value
      * @return bool
      */
-    public final function set($field, $value) {
+    final public function set($field, $value) {
+        // This is a legacy change to the way files are get/set.
+        // Make sure we never save the \stored_file object. Instead, use the id from $file->get_id() - set_file() does this for us.
+        if ($field === 'file') {
+            $this->set_file($value);
+            return true;
+        }
         if (property_exists($this, $field)) {
             $this->{$field} =& $value;
             $this->dirty = true;
@@ -776,7 +786,7 @@ abstract class portfolio_plugin_push_base extends portfolio_plugin_base {
  */
 abstract class portfolio_plugin_pull_base extends portfolio_plugin_base {
 
-    /** @var stdclass single file */
+    /** @var int $file the id of a single file */
     protected $file;
 
     /**
@@ -806,7 +816,7 @@ abstract class portfolio_plugin_pull_base extends portfolio_plugin_base {
      *
      * @param array $params request parameters (POST wins over GET)
      */
-    public abstract function verify_file_request_params($params);
+    abstract public function verify_file_request_params($params);
 
     /**
      * Called from portfolio/file.php.
@@ -827,4 +837,36 @@ abstract class portfolio_plugin_pull_base extends portfolio_plugin_base {
         $this->get('exporter')->log_transfer();
     }
 
+    /**
+     * Sets the $file instance var to the id of the supplied \stored_file.
+
+     * This helper allows the $this->get('file') call to return a \stored_file, but means that we only ever record an id reference
+     * in the $file instance var.
+     *
+     * @param \stored_file $file The stored_file instance.
+     * @return void
+     */
+    protected function set_file(\stored_file $file) {
+        $fileid = $file->get_id();
+        if (empty($fileid)) {
+            debugging('stored_file->id should not be empty');
+            $this->file = null;
+        } else {
+            $this->file = $fileid;
+        }
+    }
+
+    /**
+     * Gets the \stored_file object from the file id in the $file instance var.
+     *
+     * @return stored_file|null the \stored_file object if it exists, null otherwise.
+     */
+    protected function get_file() {
+        if (!$this->file) {
+            return null;
+        }
+        // The get_file_by_id call can return false, so normalise to null.
+        $file = get_file_storage()->get_file_by_id($this->file);
+        return ($file) ? $file : null;
+    }
 }

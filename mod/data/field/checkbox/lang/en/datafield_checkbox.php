@@ -24,5 +24,6 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-$string['pluginname'] = 'Checkbox';
-$string['fieldtypelabel'] = 'Checkbox field';
+$string['pluginname'] = 'Checkboxes';
+$string['fieldtypelabel'] = 'Checkboxes';
+$string['privacy:metadata'] = 'The Checkboxes field component doesn\'t store any personal data; it uses tables defined in mod_data.';

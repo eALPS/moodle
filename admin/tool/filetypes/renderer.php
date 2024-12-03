@@ -52,7 +52,7 @@ class tool_filetypes_renderer extends plugin_renderer_base {
         $out = $this->heading(get_string('pluginname', 'tool_filetypes'));
         if ($restricted) {
             $out .= html_writer::div(
-                    html_writer::div(get_string('configoverride', 'admin'), 'form-overridden'),
+                    html_writer::div(get_string('configoverride', 'admin'), 'alert alert-info'),
                     '', array('id' => 'adminsettings'));
         }
         if (count($combined) > 1) {
@@ -82,7 +82,9 @@ class tool_filetypes_renderer extends plugin_renderer_base {
 
                 // First cell has icon and extension.
                 $icon = $this->pix_icon('f/' . $filetype['icon'], '');
-                $row->cells[] = new html_table_cell($icon . ' ' . html_writer::span(s($extension)));
+                $iconcell = new html_table_cell($icon . ' ' . html_writer::span(s($extension)));
+                $iconcell->attributes['class'] = 'icon-size-5';
+                $row->cells[] = $iconcell;
 
                 // Reset URL and button if needed.
                 $reverturl = new \moodle_url('/admin/tool/filetypes/revert.php',
@@ -116,7 +118,7 @@ class tool_filetypes_renderer extends plugin_renderer_base {
                         $editurl = new \moodle_url('/admin/tool/filetypes/edit.php',
                                 array('oldextension' => $extension));
                         $editbutton = html_writer::link($editurl, $this->pix_icon('t/edit',
-                                get_string('edita', '', s($extension))));
+                                get_string('edita', 'moodle', s($extension))));
                         $deleteurl = new \moodle_url('/admin/tool/filetypes/delete.php',
                                 array('extension' => $extension));
                         $deletebutton = html_writer::link($deleteurl, $this->pix_icon('t/delete',

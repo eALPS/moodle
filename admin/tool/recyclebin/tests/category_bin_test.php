@@ -14,15 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Recycle bin tests.
- *
- * @package    tool_recyclebin
- * @copyright  2015 University of Kent
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
+namespace tool_recyclebin;
 
 /**
  * Recycle bin category tests.
@@ -31,22 +23,23 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright  2015 University of Kent
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class tool_recyclebin_category_bin_tests extends advanced_testcase {
+class category_bin_test extends \advanced_testcase {
 
     /**
-     * @var stdClass $course
+     * @var \stdClass $course
      */
     protected $course;
 
     /**
-     * @var stdClass $coursebeingrestored
+     * @var \stdClass $coursebeingrestored
      */
     protected $coursebeingrestored;
 
     /**
      * Setup for each test.
      */
-    protected function setUp() {
+    protected function setUp(): void {
+        parent::setUp();
         $this->resetAfterTest();
         $this->setAdminUser();
 
@@ -59,7 +52,7 @@ class tool_recyclebin_category_bin_tests extends advanced_testcase {
     /**
      * Check that our hook is called when a course is deleted.
      */
-    public function test_pre_course_delete_hook() {
+    public function test_pre_course_delete_hook(): void {
         global $DB;
 
         // This simulates a temporary course being cleaned up by a course restore.
@@ -84,7 +77,7 @@ class tool_recyclebin_category_bin_tests extends advanced_testcase {
     /**
      * Check that our hook is called when a course is deleted.
      */
-    public function test_pre_course_category_delete_hook() {
+    public function test_pre_course_category_delete_hook(): void {
         global $DB;
 
         // Should have nothing in the recycle bin.
@@ -96,7 +89,7 @@ class tool_recyclebin_category_bin_tests extends advanced_testcase {
         $this->assertEquals(1, $DB->count_records('tool_recyclebin_category'));
 
         // Now let's delete the course category.
-        $category = coursecat::get($this->course->category);
+        $category = \core_course_category::get($this->course->category);
         $category->delete_full(false);
 
         // Check that the course was deleted from the category recycle bin.
@@ -106,7 +99,7 @@ class tool_recyclebin_category_bin_tests extends advanced_testcase {
     /**
      * Test that we can restore recycle bin items.
      */
-    public function test_restore() {
+    public function test_restore(): void {
         global $DB;
 
         delete_course($this->course, false);
@@ -124,7 +117,7 @@ class tool_recyclebin_category_bin_tests extends advanced_testcase {
     /**
      * Test that we can delete recycle bin items.
      */
-    public function test_delete() {
+    public function test_delete(): void {
         global $DB;
 
         delete_course($this->course, false);
@@ -142,7 +135,7 @@ class tool_recyclebin_category_bin_tests extends advanced_testcase {
     /**
      * Test the cleanup task.
      */
-    public function test_cleanup_task() {
+    public function test_cleanup_task(): void {
         global $DB;
 
         // Set the expiry to 1 week.
@@ -175,5 +168,122 @@ class tool_recyclebin_category_bin_tests extends advanced_testcase {
         $this->assertEquals(1, count($courses));
         $course = reset($courses);
         $this->assertEquals('Test course 2', $course->fullname);
+    }
+
+    /**
+     * Provider for test_course_restore_with_userdata() and test_course_restore_without_userdata()
+     *
+     * Used to verify that recycle bin is immune to various settings. Provides plugin, name, value for
+     * direct usage with set_config()
+     */
+    public static function recycle_bin_settings_provider(): array {
+        return [
+            'backup/backup_auto_storage moodle' => [[
+                (object)['plugin' => 'backup', 'name' => 'backup_auto_storage', 'value' => 0],
+            ]],
+
+            'backup/backup_auto_storage external' => [[
+                (object)['plugin' => 'backup', 'name' => 'backup_auto_storage', 'value' => 1],
+                (object)['plugin' => 'backup', 'name' => 'backup_auto_destination', 'value' => true],
+            ]],
+
+            'backup/backup_auto_storage mixed' => [[
+                (object)['plugin' => 'backup', 'name' => 'backup_auto_storage', 'value' => 2],
+                (object)['plugin' => 'backup', 'name' => 'backup_auto_destination', 'value' => true],
+            ]],
+
+            'restore/restore_general_users moodle' => [[
+                (object)['plugin' => 'restore', 'name' => 'restore_general_users', 'value' => 0],
+                (object)['plugin' => 'restore', 'name' => 'restore_general_groups', 'value' => 0],
+            ]],
+        ];
+    }
+
+    /**
+     * Tests that user data is restored when course is restored.
+     *
+     * @dataProvider recycle_bin_settings_provider
+     * @param array $settings array of plugin, name, value stdClass().
+     */
+    public function test_course_restore_with_userdata($settings): void {
+        global $DB;
+
+        // Force configuration changes from provider.
+        foreach ($settings as $setting) {
+            // Need to create a directory for backup_auto_destination.
+            if ($setting->plugin === 'backup' && $setting->name === 'backup_auto_destination' && $setting->value === true) {
+                $setting->value = make_request_directory();
+            }
+            set_config($setting->name, $setting->value, $setting->plugin);
+        }
+
+        // We want user data to be included for this test.
+        set_config('backup_auto_users', true, 'backup');
+
+        $student = $this->getDataGenerator()->create_and_enrol($this->course, 'student');
+
+        // Delete course.
+        delete_course($this->course, false);
+        $this->assertFalse($DB->record_exists('course', ['id' => $this->course->id]));
+
+        // Verify there is now a backup @ cat recycle bin file area.
+        $recyclebin = new \tool_recyclebin\category_bin($this->course->category);
+        $this->assertEquals(1, count($recyclebin->get_items()));
+
+        // Restore the recycle bin item.
+        $recyclebin->restore_item(current($recyclebin->get_items()));
+
+        // Get the new course.
+        $newcourse = $DB->get_record('course', ['shortname' => $this->course->shortname], '*', MUST_EXIST);
+
+        // Check that it was removed from the recycle bin.
+        $this->assertEquals(0, count($recyclebin->get_items()));
+
+        // Verify that student DOES continue enrolled.
+        $this->assertTrue(is_enrolled(\context_course::instance($newcourse->id), $student->id));
+    }
+
+    /**
+     * Tests that user data is not restored when course is restored.
+     *
+     * @dataProvider recycle_bin_settings_provider
+     * @param array $settings array of plugin, name, value stdClass().
+     */
+    public function test_course_restore_without_userdata($settings): void {
+        global $DB;
+
+        // Force configuration changes from provider.
+        foreach ($settings as $setting) {
+            // Need to create a directory for backup_auto_destination.
+            if ($setting->plugin === 'backup' && $setting->name === 'backup_auto_destination' && $setting->value === true) {
+                $setting->value = make_request_directory();
+            }
+            set_config($setting->name, $setting->value, $setting->plugin);
+        }
+
+        // We want user data to be included for this test.
+        set_config('backup_auto_users', false, 'backup');
+
+        $student = $this->getDataGenerator()->create_and_enrol($this->course, 'student');
+
+        // Delete course.
+        delete_course($this->course, false);
+        $this->assertFalse($DB->record_exists('course', ['id' => $this->course->id]));
+
+        // Verify there is now a backup @ cat recycle bin file area.
+        $recyclebin = new \tool_recyclebin\category_bin($this->course->category);
+        $this->assertEquals(1, count($recyclebin->get_items()));
+
+        // Restore the recycle bin item.
+        $recyclebin->restore_item(current($recyclebin->get_items()));
+
+        // Get the new course.
+        $newcourse = $DB->get_record('course', ['shortname' => $this->course->shortname], '*', MUST_EXIST);
+
+        // Check that it was removed from the recycle bin.
+        $this->assertEquals(0, count($recyclebin->get_items()));
+
+        // Verify that student DOES NOT continue enrolled.
+        $this->assertFalse(is_enrolled(\context_course::instance($newcourse->id), $student->id));
     }
 }

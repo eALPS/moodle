@@ -95,6 +95,44 @@ M.course_dndupload = {
         if (options.showstatus) {
             this.add_status_div();
         }
+
+        var self = this;
+        require([
+            'core_courseformat/courseeditor',
+            'core_course/events'
+        ], function(
+            Editor,
+            CourseEvents
+        ) {
+            // Any change to the course must be applied also to the course state via the courseeditor module.
+            self.courseeditor = Editor.getCurrentCourseEditor();
+
+            // Some formats can add sections without reloading the page.
+            document.querySelector('#' + self.pagecontentid).addEventListener(
+                CourseEvents.sectionRefreshed,
+                self.sectionRefreshed.bind(self)
+            );
+        });
+        document.addEventListener('scroll', function() {
+            sections.each(function(el) {
+                if (el.hasClass('dndupload-dropzone')) {
+                    self.rePositionPreviewInfoElement(el);
+                }
+            }, this);
+        }, true);
+    },
+
+    /**
+     * Setup Drag and Drop in a section.
+     * @param {CustomEvent} event The custom event
+     */
+    sectionRefreshed: function(event) {
+        if (event.detail.newSectionElement === undefined) {
+            return;
+        }
+        var element = this.Y.one(event.detail.newSectionElement);
+        this.add_preview_element(element);
+        this.init_events(element);
     },
 
     /**
@@ -265,6 +303,24 @@ M.course_dndupload = {
     },
 
     /**
+     * Check if the event includes only data of the Files type
+     *
+     * Chrome drag page images as files. To differentiate a real file from a page
+     * image we need to check if all the dataTransfers types are files.
+     *
+     * @param {Event} e the event details
+     * @return true if the data types contains only Files related type
+     */
+    typesIncludesFilesOnly: function(e) {
+        return e._event.dataTransfer.types.every(function(currentType) {
+            return (currentType.toLowerCase() != 'text/uri-list'
+                && currentType.toLowerCase() != 'text/html'
+                && currentType.toLowerCase() != 'text/plain'
+            );
+        });
+    },
+
+    /**
      * Look through the event data, checking it against the registered data types
      * (in order of priority) and return details of the first matching data type
      * @param e the event details
@@ -288,7 +344,7 @@ M.course_dndupload = {
         }
 
         // Check for files first.
-        if (this.types_includes(e, 'Files')) {
+        if (this.types_includes(e, 'Files') && this.typesIncludesFilesOnly(e)) {
             if (e.type != 'drop' || e._event.dataTransfer.files.length != 0) {
                 if (this.handlers.filehandlers.length == 0) {
                     return false; // No available file handlers - ignore this drag.
@@ -366,7 +422,7 @@ M.course_dndupload = {
             }
         }
 
-        this.show_preview_element(section, type);
+        this.showPreviewInfoElement(section);
 
         return false;
     },
@@ -410,11 +466,11 @@ M.course_dndupload = {
      * @return false to prevent the event from continuing to be processed
      */
     drop: function(e) {
+        this.hide_preview_element();
+
         if (!(type = this.check_drag(e))) {
             return false;
         }
-
-        this.hide_preview_element();
 
         // Work out the number of the section we are on (from its id)
         var section = this.get_section(e.currentTarget);
@@ -493,7 +549,7 @@ M.course_dndupload = {
         resel.div.appendChild(resel.a);
 
         resel.icon.src = M.util.image_url('i/ajaxloader');
-        resel.icon.className = 'activityicon iconlarge';
+        resel.icon.className = 'activityicon';
         resel.a.appendChild(resel.icon);
 
         resel.namespan.className = 'instancename';
@@ -509,7 +565,7 @@ M.course_dndupload = {
         resel.progressouter.appendChild(resel.progress);
         resel.div.appendChild(resel.progressouter);
 
-        modsel.insertBefore(resel.li, modsel.get('children').pop()); // Leave the 'preview element' at the bottom
+        modsel.insertBefore(resel.li, modsel.get('children')); // Leave the 'preview element' at the bottom
 
         return resel;
     },
@@ -518,8 +574,9 @@ M.course_dndupload = {
      * Hide any visible dndupload-preview elements on the page
      */
     hide_preview_element: function() {
-        this.Y.all('li.dndupload-preview').addClass('dndupload-hidden');
+        this.Y.all('.dndupload-preview-wrapper').addClass('dndupload-hidden');
         this.Y.all('.dndupload-over').removeClass('dndupload-over');
+        this.Y.all('.dndupload-dropzone').removeClass('dndupload-dropzone');
     },
 
     /**
@@ -527,6 +584,7 @@ M.course_dndupload = {
      * the correct message
      * @param section the YUI node representing the selected course section
      * @param type the details of the data type detected in the drag (including the message to display)
+     * @deprecated Since Moodle 4.0. Please use showPreviewInfoElement() instead.
      */
     show_preview_element: function(section, type) {
         this.hide_preview_element();
@@ -539,36 +597,89 @@ M.course_dndupload = {
     },
 
     /**
+     * Unhide the preview information element for the given section and set it to display
+     * the correct message
+     * @param {Object} section the YUI node representing the selected course section
+     */
+    showPreviewInfoElement: function(section) {
+        this.hide_preview_element();
+        section.one('.dndupload-preview-wrapper').removeClass('dndupload-hidden');
+        section.addClass('dndupload-dropzone');
+        this.rePositionPreviewInfoElement(section);
+    },
+
+    /**
      * Add the preview element to a course section. Note: this needs to be done before 'addEventListener'
      * is called, otherwise Firefox will ignore events generated when the mouse is over the preview
      * element (instead of passing them up to the parent element)
-     * @param section the YUI node representing the selected course section
+     * @param {Object} section the YUI node representing the selected course section
      */
     add_preview_element: function(section) {
-        var modsel = this.get_mods_element(section);
-        var preview = {
-            li: document.createElement('li'),
+        const modsEl = this.get_mods_element(section);
+
+        // Create overlay div.
+        const overlay = document.createElement('div');
+        overlay.className = 'dndupload-preview-overlay';
+
+        modsEl.get('parentNode').appendChild(overlay);
+
+        // Create preview div.
+        const preview = {
+            wrapper: document.createElement('div'),
             div: document.createElement('div'),
-            icon: document.createElement('img'),
-            namespan: document.createElement('span')
+            iconSpan: document.createElement('span'),
+            nameSpan: document.createElement('span')
         };
 
-        preview.li.className = 'dndupload-preview dndupload-hidden';
-
-        preview.div.className = 'mod-indent';
-        preview.li.appendChild(preview.div);
-
-        preview.icon.src = M.util.image_url('t/addfile');
-        preview.icon.className = 'icon';
-        preview.div.appendChild(preview.icon);
-
+        preview.wrapper.className = 'dndupload-preview-wrapper dndupload-hidden';
+        preview.wrapper.appendChild(preview.div);
+        preview.div.className = 'dndupload-preview';
         preview.div.appendChild(document.createTextNode(' '));
+        preview.iconSpan.className = 'fa fa-arrow-circle-o-down';
+        preview.nameSpan.className = 'instancename';
+        preview.nameSpan.innerHTML = M.util.get_string('addfilehere', 'moodle');
+        preview.div.appendChild(preview.iconSpan);
+        preview.div.appendChild(preview.nameSpan);
 
-        preview.namespan.className = 'instancename';
-        preview.namespan.innerHTML = M.util.get_string('addfilehere', 'moodle');
-        preview.div.appendChild(preview.namespan);
+        modsEl.get('parentNode').appendChild(preview.wrapper);
+    },
 
-        modsel.appendChild(preview.li);
+    /**
+     * Re-position the preview information element by calculating the section position.
+     *
+     * @param {Object} section the YUI node representing the selected course section
+     */
+    rePositionPreviewInfoElement: function(section) {
+        const sectionElement = document.getElementById(section.get('id'));
+        const rect = sectionElement.getBoundingClientRect();
+        const sectionHeight = parseInt(window.getComputedStyle(sectionElement).height, 10);
+        const sectionOffset = rect.top;
+        const preview = sectionElement.querySelector('.dndupload-preview-wrapper');
+        const previewHeight = parseInt(window.getComputedStyle(preview).height, 10) +
+            (2 * parseInt(window.getComputedStyle(preview).padding, 10));
+        let top, bottom;
+        if (sectionOffset < 0) {
+            if (sectionHeight + sectionOffset >= previewHeight) {
+                // We have enough space here, just stick the preview to the top.
+                let offSetTop = 0 - sectionOffset;
+                const navBar = document.querySelector('nav.navbar.fixed-top');
+                if (navBar) {
+                    offSetTop = offSetTop + navBar.offsetHeight;
+                }
+                top = offSetTop + 'px';
+                bottom = 'unset';
+            } else {
+                // We do not have enough space here, just stick the preview to the bottom.
+                top = 'unset';
+                bottom = 0;
+            }
+        } else {
+            top = 0;
+            bottom = 'unset';
+        }
+
+        preview.style.top = top
+        preview.style.bottom = bottom;
     },
 
     /**
@@ -742,7 +853,7 @@ M.course_dndupload = {
         var xhr = new XMLHttpRequest();
         var self = this;
 
-        if (file.size > this.maxbytes) {
+        if (this.maxbytes > 0 && file.size > this.maxbytes) {
             new M.core.alert({message: M.util.get_string('namedfiletoolarge', 'moodle', {filename: file.name})});
             return;
         }
@@ -761,6 +872,13 @@ M.course_dndupload = {
         // Wait for the AJAX call to complete, then update the
         // dummy element with the returned details
         xhr.onreadystatechange = function() {
+            if (xhr.readyState == 1) {
+                this.originalUnloadEvent = window.onbeforeunload;
+                // Trigger form upload start events.
+                require(['core_form/events'], function(FormEvent) {
+                    FormEvent.notifyUploadStarted(section.get('id'));
+                });
+            }
             if (xhr.readyState == 4) {
                 if (xhr.status == 200) {
                     var result = JSON.parse(xhr.responseText);
@@ -774,6 +892,8 @@ M.course_dndupload = {
                                 resel.li.outerHTML = unescape(resel.li.outerHTML);
                             }
                             self.add_editing(result.elementid);
+                            // Once done, send any new course module id to the courseeditor to update de course state.
+                            self.courseeditor.dispatch('cmState', [result.cmid]);
                             // Fire the content updated event.
                             require(['core/event', 'jquery'], function(event, $) {
                                 event.notifyFilterContentUpdated($(result.fullcontent));
@@ -787,21 +907,51 @@ M.course_dndupload = {
                 } else {
                     new M.core.alert({message: M.util.get_string('servererror', 'moodle')});
                 }
+                // Trigger form upload complete events.
+                require(['core_form/events'], function(FormEvent) {
+                    FormEvent.notifyUploadCompleted(section.get('id'));
+                });
             }
         };
 
         // Prepare the data to send
         var formData = new FormData();
-        formData.append('repo_upload_file', file);
+        try {
+            formData.append('repo_upload_file', file);
+        } catch (e) {
+            // Edge throws an error at this point if we try to upload a folder.
+            resel.parent.removeChild(resel.li);
+            new M.core.alert({message: M.util.get_string('filereaderror', 'moodle', file.name)});
+            return;
+        }
         formData.append('sesskey', M.cfg.sesskey);
         formData.append('course', this.courseid);
         formData.append('section', sectionnumber);
         formData.append('module', module);
         formData.append('type', 'Files');
 
-        // Send the AJAX call
-        xhr.open("POST", this.url, true);
-        xhr.send(formData);
+        // Try reading the file to check it is not a folder, before sending it to the server.
+        var reader = new FileReader();
+        reader.onload = function() {
+            // File was read OK - send it to the server.
+            xhr.open("POST", self.url, true);
+            xhr.send(formData);
+        };
+        reader.onerror = function() {
+            // Unable to read the file (it is probably a folder) - display an error message.
+            resel.parent.removeChild(resel.li);
+            new M.core.alert({message: M.util.get_string('filereaderror', 'moodle', file.name)});
+        };
+        if (file.size > 0) {
+            // If this is a non-empty file, try reading the first few bytes.
+            // This will trigger reader.onerror() for folders and reader.onload() for ordinary, readable files.
+            reader.readAsText(file.slice(0, 5));
+        } else {
+            // If you call slice() on a 0-byte folder, before calling readAsText, then Firefox triggers reader.onload(),
+            // instead of reader.onerror().
+            // So, for 0-byte files, just call readAsText on the whole file (and it will trigger load/error functions as expected).
+            reader.readAsText(file);
+        }
     },
 
     /**
@@ -990,6 +1140,13 @@ M.course_dndupload = {
         // Wait for the AJAX call to complete, then update the
         // dummy element with the returned details
         xhr.onreadystatechange = function() {
+            if (xhr.readyState == 1) {
+                this.originalUnloadEvent = window.onbeforeunload;
+                // Trigger form upload start events.
+                require(['core_form/events'], function(FormEvent) {
+                    FormEvent.notifyUploadStarted(section.get('id'));
+                });
+            }
             if (xhr.readyState == 4) {
                 if (xhr.status == 200) {
                     var result = JSON.parse(xhr.responseText);
@@ -1003,15 +1160,29 @@ M.course_dndupload = {
                                 resel.li.outerHTML = unescape(resel.li.outerHTML);
                             }
                             self.add_editing(result.elementid);
+                            // Once done, send any new course module id to the courseeditor to update de course state.
+                            self.courseeditor.dispatch('cmState', [result.cmid]);
                         } else {
                             // Error - remove the dummy element
                             resel.parent.removeChild(resel.li);
+                            // Trigger form upload complete events.
+                            require(['core_form/events'], function(FormEvent) {
+                                FormEvent.notifyUploadCompleted(section.get('id'));
+                            });
                             new M.core.alert({message: result.error});
                         }
                     }
                 } else {
+                    // Trigger form upload complete events.
+                    require(['core_form/events'], function(FormEvent) {
+                        FormEvent.notifyUploadCompleted(section.get('id'));
+                    });
                     new M.core.alert({message: M.util.get_string('servererror', 'moodle')});
                 }
+                // Trigger form upload complete events.
+                require(['core_form/events'], function(FormEvent) {
+                    FormEvent.notifyUploadCompleted(section.get('id'));
+                });
             }
         };
 

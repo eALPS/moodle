@@ -10,33 +10,36 @@ Feature: Add a comment to the comments block
       | Course 1 | C1 | 0 |
     And the following "users" exist:
       | username | firstname | lastname | email |
-      | teacher1 | Teacher | Frist | teacher1@example.com |
+      | teacher1 | Teacher | First | teacher1@example.com |
       | student1 | Student | First | student1@example.com |
     And the following "course enrolments" exist:
       | user | course | role |
       | teacher1 | C1 | editingteacher |
       | student1 | C1 | student |
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add the "Comments" block
-    And I log out
-    And I log in as "student1"
-    And I follow "Course 1"
+    And the following "blocks" exist:
+      | blockname | contextlevel | reference | pagetypepattern | defaultregion |
+      | comments  | Course       | C1        | course-view-*   | side-pre      |
+    And I am on the "Course 1" course page logged in as student1
 
   @javascript
   Scenario: Add a comment with Javascript enabled
     When I add "I'm a comment from student1" comment to comments block
     Then I should see "I'm a comment from student1"
+    And I am on the "Course 1" course page logged in as teacher1
+    And I should see "I'm a comment from student1"
 
   Scenario: Add a comment with Javascript disabled
     When I follow "Show comments"
     And I add "I'm a comment from student1" comment to comments block
     Then I should see "I'm a comment from student1"
+    And I am on the "Course 1" course page logged in as teacher1
+    And I follow "Show comments"
+    And I should see "I'm a comment from student1"
 
   @javascript
   Scenario: Test comment block pagination
     When I add "Super test comment 01" comment to comments block
+    And I change window size to "1024x4096"
     And I add "Super test comment 02" comment to comments block
     And I add "Super test comment 03" comment to comments block
     And I add "Super test comment 04" comment to comments block
@@ -69,7 +72,7 @@ Feature: Add a comment to the comments block
     And I add "Super test comment 31" comment to comments block
     Then I should see "Super test comment 01"
     And I should see "Super test comment 31"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I should not see "Super test comment 01"
     And I should not see "Super test comment 02"
     And I should not see "Super test comment 16"

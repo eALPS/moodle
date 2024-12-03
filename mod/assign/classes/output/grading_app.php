@@ -57,11 +57,16 @@ class grading_app implements templatable, renderable {
     public $assignment = null;
 
     /**
+     * @var array - List of user records with extra fields.
+     */
+    public $participants = [];
+
+    /**
      * Constructor for this renderable.
      *
      * @param int $userid The user we will open the grading app too.
      * @param int $groupid If groups are enabled this is the current course group.
-     * @param assign $assignment The assignment class
+     * @param \assign $assignment The assignment class
      */
     public function __construct($userid, $groupid, $assignment) {
         $this->userid = $userid;
@@ -80,7 +85,7 @@ class grading_app implements templatable, renderable {
      * @return stdClass - Flat list of exported data.
      */
     public function export_for_template(renderer_base $output) {
-        global $CFG;
+        global $CFG, $USER;
 
         $export = new stdClass();
         $export->userid = $this->userid;
@@ -88,9 +93,15 @@ class grading_app implements templatable, renderable {
         $export->cmid = $this->assignment->get_course_module()->id;
         $export->contextid = $this->assignment->get_context()->id;
         $export->groupid = $this->groupid;
-        $export->name = $this->assignment->get_context()->get_context_name();
+        $export->name = $this->assignment->get_context()->get_context_name(true, false, false);
         $export->courseid = $this->assignment->get_course()->id;
         $export->participants = array();
+        $export->filters = $this->assignment->get_filters();
+        $export->markingworkflowfilters = $this->assignment->get_marking_workflow_filters(true);
+        $export->hasmarkingworkflow = count($export->markingworkflowfilters) > 0;
+        $export->markingallocationfilters = $this->assignment->get_marking_allocation_filters(true);
+        $export->hasmarkingallocation = count($export->markingallocationfilters) > 0;
+
         $num = 1;
         foreach ($this->participants as $idx => $record) {
             $user = new stdClass();
@@ -121,11 +132,14 @@ class grading_app implements templatable, renderable {
             }
         }
 
+        $export->actiongrading = 'grading';
+        $export->viewgrading = get_string('viewgrading', 'mod_assign');
+
         $export->showreview = $showreview;
 
         $time = time();
         $export->count = count($export->participants);
-        $export->coursename = $this->assignment->get_course_context()->get_context_name();
+        $export->coursename = $this->assignment->get_course_context()->get_context_name(true, false, false);
         $export->caneditsettings = has_capability('mod/assign:addinstance', $this->assignment->get_context());
         $export->duedate = $this->assignment->get_instance()->duedate;
         $export->duedatestr = userdate($this->assignment->get_instance()->duedate);
@@ -156,8 +170,11 @@ class grading_app implements templatable, renderable {
         $export->rarrow = $output->rarrow();
         $export->larrow = $output->larrow();
         // List of identity fields to display (the user info will not contain any fields the user cannot view anyway).
-        $export->showuseridentity = $CFG->showuseridentity;
-
+        // TODO Does not support custom user profile fields (MDL-70456).
+        $export->showuseridentity = implode(',', \core_user\fields::get_identity_fields(null, false));
+        $export->currentuserid = $USER->id;
+        $helpicon = new \help_icon('sendstudentnotifications', 'assign');
+        $export->helpicon = $helpicon->export_for_template($output);
         return $export;
     }
 

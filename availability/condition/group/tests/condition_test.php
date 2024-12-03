@@ -14,17 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for the condition.
- *
- * @package availability_group
- * @copyright 2014 The Open University
- * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
-
-use availability_group\condition;
+namespace availability_group;
 
 /**
  * Unit tests for the condition.
@@ -33,20 +23,21 @@ use availability_group\condition;
  * @copyright 2014 The Open University
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class availability_group_condition_testcase extends advanced_testcase {
+class condition_test extends \advanced_testcase {
     /**
      * Load required classes.
      */
-    public function setUp() {
+    public function setUp(): void {
         // Load the mock info class so that it can be used.
         global $CFG;
         require_once($CFG->dirroot . '/availability/tests/fixtures/mock_info.php');
+        parent::setUp();
     }
 
     /**
      * Tests constructing and using condition.
      */
-    public function test_usage() {
+    public function test_usage(): void {
         global $CFG, $USER;
         $this->resetAfterTest();
         $CFG->enableavailability = true;
@@ -57,8 +48,9 @@ class availability_group_condition_testcase extends advanced_testcase {
         // Make a test course and user.
         $generator = $this->getDataGenerator();
         $course = $generator->create_course();
-        $user = $generator->create_user();
-        $generator->enrol_user($user->id, $course->id);
+        $user = $generator->create_and_enrol($course);
+        $usertwo = $generator->create_and_enrol($course);
+
         $info = new \core_availability\mock_info($course, $user->id);
 
         // Make 2 test groups, one in a grouping and one not.
@@ -73,30 +65,38 @@ class availability_group_condition_testcase extends advanced_testcase {
         // Check if available (when not available).
         $this->assertFalse($cond->is_available(false, $info, true, $user->id));
         $information = $cond->get_description(false, false, $info);
-        $this->assertRegExp('~You belong to.*G1!~', $information);
+        $information = \core_availability\info::format_info($information, $course);
+        $this->assertMatchesRegularExpression('~You belong to.*G1!~', $information);
         $this->assertTrue($cond->is_available(true, $info, true, $user->id));
 
         // Add user to groups and refresh cache.
         groups_add_member($group1, $user);
         groups_add_member($group2, $user);
-        get_fast_modinfo($course->id, 0, true);
+        $info = new \core_availability\mock_info($course, $user->id);
 
         // Recheck.
         $this->assertTrue($cond->is_available(false, $info, true, $user->id));
         $this->assertFalse($cond->is_available(true, $info, true, $user->id));
+        $this->assertFalse($cond->is_available(false, $info, true, $usertwo->id));
+        $this->assertTrue($cond->is_available(true, $info, true, $usertwo->id));
         $information = $cond->get_description(false, true, $info);
-        $this->assertRegExp('~do not belong to.*G1!~', $information);
+        $information = \core_availability\info::format_info($information, $course);
+        $this->assertMatchesRegularExpression('~do not belong to.*G1!~', $information);
 
         // Check group 2 works also.
         $cond = new condition((object)array('id' => (int)$group2->id));
         $this->assertTrue($cond->is_available(false, $info, true, $user->id));
+        $this->assertFalse($cond->is_available(false, $info, true, $usertwo->id));
 
         // What about an 'any group' condition?
         $cond = new condition((object)array());
         $this->assertTrue($cond->is_available(false, $info, true, $user->id));
         $this->assertFalse($cond->is_available(true, $info, true, $user->id));
+        $this->assertFalse($cond->is_available(false, $info, true, $usertwo->id));
+        $this->assertTrue($cond->is_available(true, $info, true, $usertwo->id));
         $information = $cond->get_description(false, true, $info);
-        $this->assertRegExp('~do not belong to any~', $information);
+        $information = \core_availability\info::format_info($information, $course);
+        $this->assertMatchesRegularExpression('~do not belong to any~', $information);
 
         // Admin user doesn't belong to a group, but they can access it
         // either way (positive or NOT).
@@ -108,21 +108,22 @@ class availability_group_condition_testcase extends advanced_testcase {
         $cond = new condition((object)array('id' => $group2->id + 1000));
         $this->assertFalse($cond->is_available(false, $info, true, $user->id));
         $information = $cond->get_description(false, false, $info);
-        $this->assertRegExp('~You belong to.*\(Missing group\)~', $information);
+        $information = \core_availability\info::format_info($information, $course);
+        $this->assertMatchesRegularExpression('~You belong to.*\(Missing group\)~', $information);
     }
 
     /**
      * Tests the constructor including error conditions. Also tests the
      * string conversion feature (intended for debugging only).
      */
-    public function test_constructor() {
+    public function test_constructor(): void {
         // Invalid id (not int).
         $structure = (object)array('id' => 'bourne');
         try {
             $cond = new condition($structure);
             $this->fail();
-        } catch (coding_exception $e) {
-            $this->assertContains('Invalid ->id', $e->getMessage());
+        } catch (\coding_exception $e) {
+            $this->assertStringContainsString('Invalid ->id', $e->getMessage());
         }
 
         // Valid (with id).
@@ -139,7 +140,7 @@ class availability_group_condition_testcase extends advanced_testcase {
     /**
      * Tests the save() function.
      */
-    public function test_save() {
+    public function test_save(): void {
         $structure = (object)array('id' => 123);
         $cond = new condition($structure);
         $structure->type = 'group';
@@ -154,7 +155,7 @@ class availability_group_condition_testcase extends advanced_testcase {
     /**
      * Tests the update_dependency_id() function.
      */
-    public function test_update_dependency_id() {
+    public function test_update_dependency_id(): void {
         $cond = new condition((object)array('id' => 123));
         $this->assertFalse($cond->update_dependency_id('frogs', 123, 456));
         $this->assertFalse($cond->update_dependency_id('groups', 12, 34));
@@ -167,7 +168,7 @@ class availability_group_condition_testcase extends advanced_testcase {
      * Tests the filter_users (bulk checking) function. Also tests the SQL
      * variant get_user_list_sql.
      */
-    public function test_filter_users() {
+    public function test_filter_users(): void {
         global $DB;
         $this->resetAfterTest();
 

@@ -23,110 +23,85 @@
  * @package mod_data
  */
 
+use mod_data\manager;
+
 require_once('../../config.php');
-require_once('lib.php');
+require_once('locallib.php');
 require_once("$CFG->libdir/rsslib.php");
 require_once("$CFG->libdir/form/filemanager.php");
 
-$id    = optional_param('id', 0, PARAM_INT);    // course module id
-$d     = optional_param('d', 0, PARAM_INT);    // database id
-$rid   = optional_param('rid', 0, PARAM_INT);    //record id
-$cancel   = optional_param('cancel', '', PARAM_RAW);    // cancel an add
-$mode ='addtemplate';    //define the mode for this page, only 1 mode available
-
-
+$id = optional_param('id', 0, PARAM_INT); // Course module id.
+$d = optional_param('d', 0, PARAM_INT); // Database id.
+$rid = optional_param('rid', 0, PARAM_INT); // Record id.
+$mode = 'addtemplate'; // Define the mode for this page, only 1 mode available.
+$tags = optional_param_array('tags', [], PARAM_TAGLIST);
+$redirectbackto = optional_param('backto', '', PARAM_LOCALURL); // The location to redirect back.
 
 $url = new moodle_url('/mod/data/edit.php');
-if ($rid !== 0) {
-    $record = $DB->get_record('data_records', array(
-            'id' => $rid,
-            'dataid' => $d,
-        ), '*', MUST_EXIST);
-    $url->param('rid', $rid);
-}
-if ($cancel !== '') {
-    $url->param('cancel', $cancel);
-}
+
+$record = null;
 
 if ($id) {
-    $url->param('id', $id);
-    $PAGE->set_url($url);
-    if (! $cm = get_coursemodule_from_id('data', $id)) {
-        print_error('invalidcoursemodule');
-    }
-    if (! $course = $DB->get_record('course', array('id'=>$cm->course))) {
-        print_error('coursemisconf');
-    }
-    if (! $data = $DB->get_record('data', array('id'=>$cm->instance))) {
-        print_error('invalidcoursemodule');
-    }
+    list($course, $cm) = get_course_and_cm_from_cmid($id, manager::MODULE);
+    $manager = manager::create_from_coursemodule($cm);
+} else {   // We must have $d.
+    $data = $DB->get_record('data', ['id' => $d], '*', MUST_EXIST);
+    $manager = manager::create_from_instance($data);
+    $cm = $manager->get_coursemodule();
+    $course = get_course($cm->course);
+}
+$data = $manager->get_instance();
+$context = $manager->get_context();
+$url->param('id', $cm->id);
 
-} else {
-    $url->param('d', $d);
-    $PAGE->set_url($url);
-    if (! $data = $DB->get_record('data', array('id'=>$d))) {
-        print_error('invalidid', 'data');
-    }
-    if (! $course = $DB->get_record('course', array('id'=>$data->course))) {
-        print_error('coursemisconf');
-    }
-    if (! $cm = get_coursemodule_from_instance('data', $data->id, $course->id)) {
-        print_error('invalidcoursemodule');
-    }
+if ($rid !== 0) {
+    $record = $DB->get_record(
+        'data_records',
+        ['id' => $rid, 'dataid' => $data->id],
+        '*',
+        MUST_EXIST
+    );
+    $url->param('rid', $rid);
 }
 
+$PAGE->set_url($url);
 require_login($course, false, $cm);
+
+$url->param('backto', $redirectbackto);
 
 if (isguestuser()) {
     redirect('view.php?d='.$data->id);
 }
 
-$context = context_module::instance($cm->id);
-
-/// If it's hidden then it doesn't show anything.  :)
-if (empty($cm->visible) and !has_capability('moodle/course:viewhiddenactivities', $context)) {
-    $strdatabases = get_string("modulenameplural", "data");
-
-    $PAGE->set_title($data->name);
-    $PAGE->set_heading($course->fullname);
-    echo $OUTPUT->header();
-    notice(get_string("activityiscurrentlyhidden"));
-}
-
 /// Can't use this if there are no fields
-if (has_capability('mod/data:managetemplates', $context)) {
-    if (!$DB->record_exists('data_fields', array('dataid'=>$data->id))) {      // Brand new database!
-        redirect($CFG->wwwroot.'/mod/data/field.php?d='.$data->id);  // Redirect to field entry
+if ($manager->can_manage_templates()) {
+    if (!$manager->has_fields()) {
+        redirect($CFG->wwwroot.'/mod/data/field.php?d='.$data->id);  // Redirect to field entry.
     }
 }
 
 if ($rid) {
-    // When editing an existing record, we require the session key
+    // When editing an existing record, we require the session key.
     require_sesskey();
 }
 
-// Get Group information for permission testing and record creation
+// Get Group information for permission testing and record creation.
 $currentgroup = groups_get_activity_group($cm);
 $groupmode = groups_get_activity_groupmode($cm);
 
 if (!has_capability('mod/data:manageentries', $context)) {
     if ($rid) {
-        // User is editing an existing record
+        // User is editing an existing record.
         if (!data_user_can_manage_entry($record, $data, $context)) {
-            print_error('noaccess','data');
+            throw new \moodle_exception('noaccess', 'data');
         }
     } else if (!data_user_can_add_entry($data, $currentgroup, $groupmode, $context)) {
-        // User is trying to create a new record
-        print_error('noaccess','data');
+        // User is trying to create a new record.
+        throw new \moodle_exception('noaccess', 'data');
     }
 }
 
-if ($cancel) {
-    redirect('view.php?d='.$data->id);
-}
-
-
-/// RSS and CSS and JS meta
+// RSS and CSS and JS meta.
 if (!empty($CFG->enablerssfeeds) && !empty($CFG->data_enablerssfeeds) && $data->rssarticles > 0) {
     $courseshortname = format_string($course->shortname, true, array('context' => context_course::instance($course->id)));
     $rsstitle = $courseshortname . ': ' . format_string($data->name);
@@ -139,167 +114,79 @@ if ($data->jstemplate) {
     $PAGE->requires->js('/mod/data/js.php?d='.$data->id, true);
 }
 
-$possiblefields = $DB->get_records('data_fields', array('dataid'=>$data->id), 'id');
-
-foreach ($possiblefields as $field) {
-    if ($field->type == 'file' || $field->type == 'picture') {
-        require_once($CFG->dirroot.'/repository/lib.php');
-        break;
-    }
-}
-
-/// Define page variables
+// Define page variables.
 $strdata = get_string('modulenameplural','data');
 
 if ($rid) {
     $PAGE->navbar->add(get_string('editentry', 'data'));
 }
 
-$PAGE->set_title($data->name);
-$PAGE->set_heading($course->fullname);
+$PAGE->add_body_class('mediumwidth');
+if ($rid) {
+    $pagename = get_string('editentry', 'data');
+} else {
+    $pagename = get_string('newentry', 'data');
+}
+$PAGE->navbar->add($pagename);
+$titleparts = [
+    $pagename,
+    format_string($data->name),
+    format_string($course->fullname),
+];
+$PAGE->set_title(implode(moodle_page::TITLE_SEPARATOR, $titleparts));
+$PAGE->force_settings_menu(true);
+$PAGE->set_secondary_active_tab('modulepage');
+$PAGE->activityheader->disable();
 
 // Process incoming data for adding/updating records.
 
-// Keep track of any notifications.
-$generalnotifications = array();
-$fieldnotifications = array();
+// Keep track of any notifications ad submitted data.
+$processeddata = null;
+$datarecord = data_submitted() ?: null;
 
 // Process the submitted form.
-if ($datarecord = data_submitted() and confirm_sesskey()) {
-    if ($rid) {
-        // Updating an existing record.
+if ($datarecord && confirm_sesskey()) {
+    // Validate the form to ensure that enough data was submitted.
+    $fields = $manager->get_field_records();
+    $processeddata = data_process_submission($data, $fields, $datarecord);
 
-        // Retrieve the format for the fields.
-        $fields = $DB->get_records('data_fields', array('dataid' => $datarecord->d));
-
-        // Validate the form to ensure that enough data was submitted.
-        $processeddata = data_process_submission($data, $fields, $datarecord);
-
-        // Add the new notification data.
-        $generalnotifications = array_merge($generalnotifications, $processeddata->generalnotifications);
-        $fieldnotifications = array_merge($fieldnotifications, $processeddata->fieldnotifications);
-
-        if ($processeddata->validated) {
-            // Enough data to update the record.
-
-            // Obtain the record to be updated.
-
-            // Reset the approved flag after edit if the user does not have permission to approve their own entries.
-            if (!has_capability('mod/data:approve', $context)) {
-                $record->approved = 0;
+    if ($processeddata->validated) {
+        if ($rid) {
+            $recordid = $rid;
+            // Updating an existing record.
+            data_update_record_fields_contents($data, $record, $context, $datarecord, $processeddata);
+        } else {
+            // Add instance to data_record.
+            $recordid = data_add_record($data, $currentgroup);
+            if ($recordid) {
+                // Now populate the fields contents of the new record.
+                data_add_fields_contents_to_new_record($data, $context, $recordid, $fields, $datarecord, $processeddata);
             }
-
-            // Update the parent record.
-            $record->timemodified = time();
-            $DB->update_record('data_records', $record);
-
-            // Update all content.
-            foreach ($processeddata->fields as $fieldname => $field) {
-                $field->update_content($rid, $datarecord->$fieldname, $fieldname);
-            }
-
-            // Trigger an event for updating this record.
-            $event = \mod_data\event\record_updated::create(array(
-                'objectid' => $rid,
-                'context' => $context,
-                'courseid' => $course->id,
-                'other' => array(
-                    'dataid' => $data->id
-                )
-            ));
-            $event->add_record_snapshot('data', $data);
-            $event->trigger();
-
-            $viewurl = new moodle_url('/mod/data/view.php', array(
-                'd' => $data->id,
-                'rid' => $rid,
-            ));
-            redirect($viewurl);
         }
 
-    } else {
-        // No recordid was specified - creating a new entry.
+        if ($recordid) {
+            core_tag_tag::set_item_tags('mod_data', 'data_records', $recordid, $context, $tags);
 
-        // Retrieve the format for the fields.
-        $fields = $DB->get_records('data_fields', array('dataid' => $datarecord->d));
-
-        // Validate the form to ensure that enough data was submitted.
-        $processeddata = data_process_submission($data, $fields, $datarecord);
-
-        // Add the new notification data.
-        $generalnotifications = array_merge($generalnotifications, $processeddata->generalnotifications);
-        $fieldnotifications = array_merge($fieldnotifications, $processeddata->fieldnotifications);
-
-        // Add instance to data_record.
-        if ($processeddata->validated && $recordid = data_add_record($data, $currentgroup)) {
-
-            // Insert a whole lot of empty records to make sure we have them.
-            $records = array();
-            foreach ($fields as $field) {
-                $content = new stdClass();
-                $content->recordid = $recordid;
-                $content->fieldid = $field->id;
-                $records[] = $content;
-            }
-
-            // Bulk insert the records now. Some records may have no data but all must exist.
-            $DB->insert_records('data_content', $records);
-
-            // Add all provided content.
-            foreach ($processeddata->fields as $fieldname => $field) {
-                $field->update_content($recordid, $datarecord->$fieldname, $fieldname);
-            }
-
-            // Trigger an event for updating this record.
-            $event = \mod_data\event\record_created::create(array(
-                'objectid' => $rid,
-                'context' => $context,
-                'courseid' => $course->id,
-                'other' => array(
-                    'dataid' => $data->id
-                )
-            ));
-            $event->add_record_snapshot('data', $data);
-            $event->trigger();
-
-            if (!empty($datarecord->saveandview)) {
-                $viewurl = new moodle_url('/mod/data/view.php', array(
-                    'd' => $data->id,
-                    'rid' => $recordid,
-                ));
-                redirect($viewurl);
-            } else if (!empty($datarecord->saveandadd)) {
+            if (!empty($datarecord->saveandadd)) {
                 // User has clicked "Save and add another". Reset all of the fields.
                 $datarecord = null;
+            } else {
+                $viewurl = new moodle_url('/mod/data/view.php', [
+                    'd' => $data->id,
+                    'rid' => $recordid,
+                ]);
+                redirect($viewurl);
             }
         }
     }
 }
 // End of form processing.
 
-
-/// Print the page header
-
 echo $OUTPUT->header();
-echo $OUTPUT->heading(format_string($data->name), 2);
-echo $OUTPUT->box(format_module_intro('data', $data, $cm->id), 'generalbox', 'intro');
+
 groups_print_activity_menu($cm, $CFG->wwwroot.'/mod/data/edit.php?d='.$data->id);
 
-/// Print the tabs
-
-$currenttab = 'add';
-if ($rid) {
-    $editentry = true;  //used in tabs
-}
-include('tabs.php');
-
-
-/// Print the browsing interface
-
-$patterns = array();    //tags to replace
-$replacement = array();    //html to replace those yucky tags
-
-//form goes here first in case add template is empty
+// Form goes here first in case add template is empty.
 echo '<form enctype="multipart/form-data" action="edit.php" method="post">';
 echo '<div>';
 echo '<input name="d" value="'.$data->id.'" type="hidden" />';
@@ -307,78 +194,49 @@ echo '<input name="rid" value="'.$rid.'" type="hidden" />';
 echo '<input name="sesskey" value="'.sesskey().'" type="hidden" />';
 echo $OUTPUT->box_start('generalbox boxaligncenter boxwidthwide');
 
-if (!$rid){
-    echo $OUTPUT->heading(get_string('newentry','data'), 3);
+echo $OUTPUT->heading($pagename);
+
+$template = $manager->get_template($mode);
+echo $template->parse_add_entry($processeddata, $rid, $datarecord);
+
+if (empty($redirectbackto)) {
+    $redirectbackto = new \moodle_url('/mod/data/view.php', ['id' => $cm->id]);
 }
 
-/******************************************
- * Regular expression replacement section *
- ******************************************/
-if ($data->addtemplate){
-    $possiblefields = $DB->get_records('data_fields', array('dataid'=>$data->id), 'id');
-    $patterns = array();
-    $replacements = array();
+$actionbuttons = html_writer::link(
+    $redirectbackto,
+    get_string('cancel'),
+    ['class' => 'btn btn-secondary mx-1', 'role' => 'button']
+);
+$actionbuttons .= html_writer::empty_tag('input', [
+    'type' => 'submit',
+    'name' => 'saveandview',
+    'value' => get_string('save'),
+    'class' => 'btn btn-primary mx-1'
+]);
 
-    ///then we generate strings to replace
-    foreach ($possiblefields as $eachfield){
-        $field = data_get_field($eachfield, $data);
-
-        // To skip unnecessary calls to display_add_field().
-        if (strpos($data->addtemplate, "[[".$field->field->name."]]") !== false) {
-            // Replace the field tag.
-            $patterns[] = "[[".$field->field->name."]]";
-            $errors = '';
-            if (!empty($fieldnotifications[$field->field->name])) {
-                foreach ($fieldnotifications[$field->field->name] as $notification) {
-                    $errors .= $OUTPUT->notification($notification);
-                }
-            }
-            $replacements[] = $errors . $field->display_add_field($rid, $datarecord);
-        }
-
-        // Replace the field id tag.
-        $patterns[] = "[[".$field->field->name."#id]]";
-        $replacements[] = 'field_'.$field->field->id;
-    }
-    $newtext = str_ireplace($patterns, $replacements, $data->{$mode});
-
-} else {    //if the add template is not yet defined, print the default form!
-    echo data_generate_default_template($data, 'addtemplate', $rid, true, false);
-    $newtext = '';
+if (!$rid && ((!$data->maxentries) ||
+    has_capability('mod/data:manageentries', $context) ||
+    (data_numentries($data) < ($data->maxentries - 1)))) {
+    $actionbuttons .= html_writer::empty_tag('input', [
+        'type' => 'submit', 'name' => 'saveandadd',
+        'value' => get_string('saveandadd', 'data'), 'class' => 'btn btn-primary mx-1'
+    ]);
 }
 
-foreach ($generalnotifications as $notification) {
-    echo $OUTPUT->notification($notification);
-}
-echo $newtext;
+$stickyfooter = new core\output\sticky_footer($actionbuttons);
+echo $OUTPUT->render($stickyfooter);
 
-echo '<div class="mdl-align m-t-1"><input type="submit" class="btn btn-primary" name="saveandview" ' .
-     'value="' . get_string('saveandview', 'data') . '" />';
-if ($rid) {
-    echo '&nbsp;<input type="submit" class="btn btn-primary" name="cancel" ' .
-         'value="' . get_string('cancel') . '" onclick="javascript:history.go(-1)" />';
-} else {
-    if ((!$data->maxentries) ||
-            has_capability('mod/data:manageentries', $context) ||
-            (data_numentries($data) < ($data->maxentries - 1))) {
-        echo '&nbsp;<input type="submit" class="btn btn-primary" name="saveandadd" ' .
-             'value="' . get_string('saveandadd', 'data') . '" />';
-    }
-}
-echo '</div>';
 echo $OUTPUT->box_end();
 echo '</div></form>';
 
-
-/// Finish the page
-
-// Print the stuff that need to come after the form fields.
-if (!$fields = $DB->get_records('data_fields', array('dataid'=>$data->id))) {
-    print_error('nofieldindatabase', 'data');
-}
-foreach ($fields as $eachfield) {
-    $field = data_get_field($eachfield, $data);
+$possiblefields = $manager->get_fields();
+foreach ($possiblefields as $field) {
     $field->print_after_form();
 }
 
+// Finish the page.
+if (empty($possiblefields)) {
+    throw new \moodle_exception('nofieldindatabase', 'data');
+}
 echo $OUTPUT->footer();

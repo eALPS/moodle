@@ -28,10 +28,10 @@ defined('MOODLE_INTERNAL') || die();
 
 
 /**
- * Stores one step in a {@link question_attempt}.
+ * Stores one step in a {@see question_attempt}.
  *
  * The most important attributes of a step are the state, which is one of the
- * {@link question_state} constants, the fraction, which may be null, or a
+ * {@see question_state} constants, the fraction, which may be null, or a
  * number bewteen the attempt's minfraction and maxfraction, and the array of submitted
  * data, about which more later.
  *
@@ -39,8 +39,7 @@ defined('MOODLE_INTERNAL') || die();
  * creating it.
  *
  * The submitted data is basically just an array of name => value pairs, with
- * certain conventions about the to divide the variables into four = two times two
- * categories.
+ * certain conventions about the to divide the variables into five = 2 x 2 + 1 categories.
  *
  * Variables may either belong to the behaviour, in which case the
  * name starts with a '-', or they may belong to the question type in which case
@@ -50,15 +49,21 @@ defined('MOODLE_INTERNAL') || die();
  * which case the name does not start with an _, or they are cached values that
  * were created during processing, in which case the name does start with an _.
  *
- * That is, each name will start with one of '', '_'. '-' or '-_'. The remainder
- * of the name should match the regex [a-z][a-z0-9]*.
+ * In addition, we can store 'metadata', typically only in the first step of a
+ * question attempt. These are stored with the initial characters ':_'.
  *
- * These variables can be accessed with {@link get_behaviour_var()} and {@link get_qt_var()},
+ * That is, each name will start with one of '', '_', '-', '-_' or ':_'. The remainder
+ * of the name was supposed to match the regex [a-z][a-z0-9]* - but this has never
+ * been enforced. Question types exist which break this rule. E.g. qtype_combined.
+ * Perhpas now, an accurate regex would be [a-z][a-z0-9_:]*.
+ *
+ * These variables can be accessed with {@see get_behaviour_var()} and {@see get_qt_var()},
  * - to be clear, ->get_behaviour_var('x') gets the variable with name '-x' -
- * and values whose names start with '_' can be set using {@link set_behaviour_var()}
- * and {@link set_qt_var()}. There are some other methods like {@link has_behaviour_var()}
- * to check wether a varaible with a particular name is set, and {@link get_behaviour_data()}
- * to get all the behaviour data as an associative array.
+ * and values whose names start with '_' can be set using {@see set_behaviour_var()}
+ * and {@see set_qt_var()}. There are some other methods like {@see has_behaviour_var()}
+ * to check wether a varaible with a particular name is set, and {@see get_behaviour_data()}
+ * to get all the behaviour data as an associative array. There are also
+ * {@see get_metadata_var()}, {@see set_metadata_var()} and {@see has_metadata_var()},
  *
  * @copyright  2009 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -71,7 +76,7 @@ class question_attempt_step {
     private $id = null;
 
     /**
-     * @var question_state one of the {@link question_state} constants.
+     * @var question_state one of the {@see question_state} constants.
      * The state after this step.
      */
     private $state;
@@ -82,29 +87,32 @@ class question_attempt_step {
      */
     private $fraction = null;
 
-    /** @var integer the timestamp when this step was created. */
+    /** @var int the timestamp when this step was created. */
     private $timecreated;
 
-    /** @var integer the id of the user resonsible for creating this step. */
+    /** @var int the id of the user responsible for creating this step. */
     private $userid;
 
     /** @var array name => value pairs. The submitted data. */
     private $data;
 
-    /** @var array name => array of {@link stored_file}s. Caches the contents of file areas. */
+    /** @var array name => array of {@see stored_file}s. Caches the contents of file areas. */
     private $files = array();
+
+    /** @var stdClass|null User information. */
+    private $user = null;
 
     /**
      * You should not need to call this constructor in your own code. Steps are
-     * normally created by {@link question_attempt} methods like
-     * {@link question_attempt::process_action()}.
+     * normally created by {@see question_attempt} methods like
+     * {@see question_attempt::process_action()}.
      * @param array $data the submitted data that defines this step.
-     * @param int $timestamp the time to record for the action. (If not given, use now.)
-     * @param int $userid the user to attribute the aciton to. (If not given, use the current user.)
-     * @param int $existingstepid if this step is going to replace an existing step
+     * @param int|null $timecreated the time to record for the action. (If not given, use now.)
+     * @param int|null $userid the user to attribute the aciton to. (If not given, use the current user.)
+     * @param int|null $existingstepid if this step is going to replace an existing step
      *      (for example, during a regrade) this is the id of the previous step we are replacing.
      */
-    public function __construct($data = array(), $timecreated = null, $userid = null,
+    public function __construct($data = [], $timecreated = null, $userid = null,
             $existingstepid = null) {
         global $USER;
 
@@ -144,7 +152,7 @@ class question_attempt_step {
 
     /**
      * Set the state. Normally only called by behaviours.
-     * @param question_state $state one of the {@link question_state} constants.
+     * @param question_state $state one of the {@see question_state} constants.
      */
     public function set_state($state) {
         $this->state = $state;
@@ -170,6 +178,41 @@ class question_attempt_step {
     /** @return int the id of the user resonsible for creating this step. */
     public function get_user_id() {
         return $this->userid;
+    }
+
+    /**
+     * Update full user information for step.
+     *
+     * @param stdClass $user Full user object.
+     * @throws coding_exception
+     */
+    public function add_full_user_object(stdClass $user): void {
+        if ($user->id != $this->userid) {
+            throw new coding_exception('Wrong user passed to add_full_user_object');
+        }
+        $this->user = $user;
+    }
+
+    /**
+     * Return the full user object.
+     *
+     * @return null|stdClass Get full user object.
+     */
+    public function get_user(): ?stdClass {
+        if ($this->user === null) {
+            debugging('Attempt to access the step user before it was initialised. ' .
+                'Did you forget to call question_usage_by_activity::preload_all_step_users() or similar?', DEBUG_DEVELOPER);
+        }
+        return $this->user;
+    }
+
+    /**
+     * Get full name of user who did action.
+     *
+     * @return string full name of user.
+     */
+    public function get_user_fullname(): string {
+        return fullname($this->get_user());
     }
 
     /** @return int the timestamp when this step was created. */
@@ -214,7 +257,8 @@ class question_attempt_step {
      * type question_attempt::PARAM_FILES.
      *
      * @param string $name the name of the associated variable.
-     * @return array of {@link stored_files}.
+     * @param int $contextid contextid of the question attempt
+     * @return array of {@see stored_files}.
      */
     public function get_qt_files($name, $contextid) {
         if (array_key_exists($name, $this->files)) {
@@ -227,8 +271,9 @@ class question_attempt_step {
         }
 
         $fs = get_file_storage();
+        $filearea = question_file_saver::clean_file_area_name('response_' . $name);
         $this->files[$name] = $fs->get_area_files($contextid, 'question',
-                'response_' . $name, $this->id, 'sortorder', false);
+                $filearea, $this->id, 'sortorder', false);
 
         return $this->files[$name];
     }
@@ -253,31 +298,33 @@ class question_attempt_step {
      *
      * @param string $name the variable name the files belong to.
      * @param int $contextid the id of the context the quba belongs to.
-     * @param string $text the text to update the URLs in.
+     * @param string|null $text the text to update the URLs in.
      * @return array(int, string) the draft itemid and the text with URLs rewritten.
      */
     public function prepare_response_files_draft_itemid_with_text($name, $contextid, $text) {
+        $filearea = question_file_saver::clean_file_area_name('response_' . $name);
         $draftid = 0; // Will be filled in by file_prepare_draft_area.
         $newtext = file_prepare_draft_area($draftid, $contextid, 'question',
-                'response_' . $name, $this->id, null, $text);
+                $filearea, $this->id, null, $text);
         return array($draftid, $newtext);
     }
 
     /**
      * Rewrite the @@PLUGINFILE@@ tokens in a response variable from this step
      * that contains links to file. Normally you should probably call
-     * {@link question_attempt::rewrite_response_pluginfile_urls()} instead of
+     * {@see question_attempt::rewrite_response_pluginfile_urls()} instead of
      * calling this method directly.
      *
      * @param string $text the text to update the URLs in.
      * @param int $contextid the id of the context the quba belongs to.
      * @param string $name the variable name the files belong to.
-     * @param array $extra extra file path components.
+     * @param array $extras extra file path components.
      * @return string the rewritten text.
      */
     public function rewrite_response_pluginfile_urls($text, $contextid, $name, $extras) {
+        $filearea = question_file_saver::clean_file_area_name('response_' . $name);
         return question_rewrite_question_urls($text, 'pluginfile.php', $contextid,
-                'question', 'response_' . $name, $extras, $this->id);
+                'question', $filearea, $extras, $this->id);
     }
 
     /**
@@ -328,7 +375,9 @@ class question_attempt_step {
 
     /**
      * Get all the behaviour variables.
-     * @param array name => value pairs.
+     *
+     * @return array name => value pairs. NOTE! the name has the leading - stripped off.
+     *      (If you don't understand the note, read the comment at the top of this class :-))
      */
     public function get_behaviour_data() {
         $result = array();
@@ -343,7 +392,7 @@ class question_attempt_step {
     /**
      * Get all the submitted data, but not the cached data. behaviour
      * variables have the - at the start of their name. This is only really
-     * intended for use by {@link question_attempt::regrade()}, it should not
+     * intended for use by {@see question_attempt::regrade()}, it should not
      * be considered part of the public API.
      * @param array name => value pairs.
      */
@@ -361,7 +410,7 @@ class question_attempt_step {
     /**
      * Get all the data. behaviour variables have the - at the start of
      * their name. This is only intended for internal use, for example by
-     * {@link question_engine_data_mapper::insert_question_attempt_step()},
+     * {@see question_engine_data_mapper::insert_question_attempt_step()},
      * however, it can occasionally be useful in test code. It should not be
      * considered part of the public API of this class.
      * @param array name => value pairs.
@@ -374,7 +423,7 @@ class question_attempt_step {
      * Set a metadata variable.
      *
      * Do not call this method directly from  your code. It is for internal
-     * use only. You should call {@link question_usage::set_question_attempt_metadata()}.
+     * use only. You should call {@see question_usage::set_question_attempt_metadata()}.
      *
      * @param string $name the name of the variable to set. [a-z][a-z0-9]*.
      * @param string $value the value to set.
@@ -387,7 +436,7 @@ class question_attempt_step {
      * Whether this step has a metadata variable.
      *
      * Do not call this method directly from  your code. It is for internal
-     * use only. You should call {@link question_usage::get_question_attempt_metadata()}.
+     * use only. You should call {@see question_usage::get_question_attempt_metadata()}.
      *
      * @param string $name the name of the variable to set. [a-z][a-z0-9]*.
      * @return bool the value to set previously, or null if this variable was never set.
@@ -400,7 +449,7 @@ class question_attempt_step {
      * Get a metadata variable.
      *
      * Do not call this method directly from  your code. It is for internal
-     * use only. You should call {@link question_usage::get_question_attempt_metadata()}.
+     * use only. You should call {@see question_usage::get_question_attempt_metadata()}.
      *
      * @param string $name the name of the variable to set. [a-z][a-z0-9]*.
      * @return string the value to set previously, or null if this variable was never set.
@@ -474,10 +523,10 @@ class question_attempt_step {
 
 
 /**
- * A subclass of {@link question_attempt_step} used when processing a new submission.
+ * A subclass of {@see question_attempt_step} used when processing a new submission.
  *
  * When we are processing some new submitted data, which may or may not lead to
- * a new step being added to the {@link question_usage_by_activity} we create an
+ * a new step being added to the {@see question_usage_by_activity} we create an
  * instance of this class. which is then passed to the question behaviour and question
  * type for processing. At the end of processing we then may, or may not, keep it.
  *
@@ -519,7 +568,7 @@ class question_attempt_pending_step extends question_attempt_step {
 
     /**
      * If as a result of processing this step, you identify that this variant of the
-     * question is acutally identical to the another one, you may change the
+     * question is actually identical to the another one, you may change the
      * variant number recorded, in order to give better statistics. For an example
      * see qbehaviour_opaque.
      * @param int $variant the new variant number.
@@ -547,7 +596,7 @@ class question_attempt_pending_step extends question_attempt_step {
 
 
 /**
- * A subclass of {@link question_attempt_step} that cannot be modified.
+ * A subclass of {@see question_attempt_step} that cannot be modified.
  *
  * @copyright  2009 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -569,9 +618,9 @@ class question_attempt_step_read_only extends question_attempt_step {
 
 
 /**
- * A null {@link question_attempt_step} returned from
- * {@link question_attempt::get_last_step()} etc. when a an attempt has just been
- * created and there is no acutal step.
+ * A null {@see question_attempt_step} returned from
+ * {@see question_attempt::get_last_step()} etc. when a an attempt has just been
+ * created and there is no actual step.
  *
  * @copyright  2009 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -592,7 +641,7 @@ class question_null_step {
 
 
 /**
- * This is an adapter class that wraps a {@link question_attempt_step} and
+ * This is an adapter class that wraps a {@see question_attempt_step} and
  * modifies the get/set_*_data methods so that they operate only on the parts
  * that belong to a particular subquestion, as indicated by an extra prefix.
  *
@@ -607,12 +656,12 @@ class question_attempt_step_subquestion_adapter extends question_attempt_step {
 
     /**
      * Constructor.
-     * @param question_attempt_step $realqas the step to wrap. (Can be null if you
+     * @param question_attempt_step $realstep the step to wrap. (Can be null if you
      *      just want to call add/remove.prefix.)
-     * @param unknown_type $extraprefix the extra prefix that is used for date fields.
+     * @param string $extraprefix the extra prefix that is used for date fields.
      */
-    public function __construct($realqas, $extraprefix) {
-        $this->realqas = $realqas;
+    public function __construct($realstep, $extraprefix) {
+        $this->realstep = $realstep;
         $this->extraprefix = $extraprefix;
     }
 
@@ -622,7 +671,7 @@ class question_attempt_step_subquestion_adapter extends question_attempt_step {
      * @return string the field name with the extra bit of prefix added.
      */
     public function add_prefix($field) {
-        if (substr($field, 0, 2) === '!_') {
+        if (substr($field, 0, 2) === '-_') {
             return '-_' . $this->extraprefix . substr($field, 2);
         } else if (substr($field, 0, 1) === '-') {
             return '-' . $this->extraprefix . substr($field, 1);
@@ -651,7 +700,7 @@ class question_attempt_step_subquestion_adapter extends question_attempt_step {
      * Filter some data to keep only those entries where the key contains
      * extraprefix, and remove the extra prefix from the reutrned arrary.
      * @param array $data some of the data stored in this step.
-     * @return array the data with the keys ajusted using {@link remove_prefix()}.
+     * @return array the data with the keys ajusted using {@see remove_prefix()}.
      */
     public function filter_array($data) {
         $result = array();
@@ -664,7 +713,7 @@ class question_attempt_step_subquestion_adapter extends question_attempt_step {
     }
 
     public function get_state() {
-        return $this->realqas->get_state();
+        return $this->realstep->get_state();
     }
 
     public function set_state($state) {
@@ -672,7 +721,7 @@ class question_attempt_step_subquestion_adapter extends question_attempt_step {
     }
 
     public function get_fraction() {
-        return $this->realqas->get_fraction();
+        return $this->realstep->get_fraction();
     }
 
     public function set_fraction($fraction) {
@@ -680,51 +729,51 @@ class question_attempt_step_subquestion_adapter extends question_attempt_step {
     }
 
     public function get_user_id() {
-        return $this->realqas->get_user_id;
+        return $this->realstep->get_user_id();
     }
 
     public function get_timecreated() {
-        return $this->realqas->get_timecreated();
+        return $this->realstep->get_timecreated();
     }
 
     public function has_qt_var($name) {
-        return $this->realqas->has_qt_var($this->add_prefix($name));
+        return $this->realstep->has_qt_var($this->add_prefix($name));
     }
 
     public function get_qt_var($name) {
-        return $this->realqas->get_qt_var($this->add_prefix($name));
+        return $this->realstep->get_qt_var($this->add_prefix($name));
     }
 
     public function set_qt_var($name, $value) {
-        return $this->realqas->set_qt_var($this->add_prefix($name), $value);
+        $this->realstep->set_qt_var($this->add_prefix($name), $value);
     }
 
     public function get_qt_data() {
-        return $this->filter_array($this->realqas->get_qt_data());
+        return $this->filter_array($this->realstep->get_qt_data());
     }
 
     public function has_behaviour_var($name) {
-        return $this->realqas->has_im_var($this->add_prefix($name));
+        return $this->realstep->has_behaviour_var($this->add_prefix($name));
     }
 
     public function get_behaviour_var($name) {
-        return $this->realqas->get_im_var($this->add_prefix($name));
+        return $this->realstep->get_behaviour_var($this->add_prefix($name));
     }
 
     public function set_behaviour_var($name, $value) {
-        return $this->realqas->set_im_var($this->add_prefix($name), $value);
+        return $this->realstep->set_behaviour_var($this->add_prefix($name), $value);
     }
 
     public function get_behaviour_data() {
-        return $this->filter_array($this->realqas->get_behaviour_data());
+        return $this->filter_array($this->realstep->get_behaviour_data());
     }
 
     public function get_submitted_data() {
-        return $this->filter_array($this->realqas->get_submitted_data());
+        return $this->filter_array($this->realstep->get_submitted_data());
     }
 
     public function get_all_data() {
-        return $this->filter_array($this->realqas->get_all_data());
+        return $this->filter_array($this->realstep->get_all_data());
     }
 
     public function get_qt_files($name, $contextid) {

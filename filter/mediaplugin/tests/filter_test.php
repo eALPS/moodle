@@ -14,42 +14,36 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace filter_mediaplugin;
+
 /**
  * Unit test for the filter_mediaplugin
  *
  * @package    filter_mediaplugin
- * @category   phpunit
+ * @category   test
  * @copyright  2011 Rossiani Wijaya <rwijaya@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \filter_mediaplugin\text_filter
  */
-
-defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
-require_once($CFG->dirroot . '/filter/mediaplugin/filter.php'); // Include the code to test
-
-
-class filter_mediaplugin_testcase extends advanced_testcase {
-
-    function test_filter_mediaplugin_link() {
+final class filter_test extends \advanced_testcase {
+    public function test_text_filter_link(): void {
         $this->resetAfterTest(true);
 
-        // we need to enable the plugins somehow and the flash fallback.
-        \core\plugininfo\media::set_enabled_plugins('vimeo,youtube,videojs,html5video,swf,html5audio');
-        set_config('useflash', true, 'media_videojs');
+        // We need to enable the media plugins.
+        \core\plugininfo\media::set_enabled_plugins('vimeo,youtube,videojs,html5video,html5audio');
 
-        $filterplugin = new filter_mediaplugin(null, array());
+        $filterplugin = new text_filter(null, []);
 
         $longurl = '<a href="http://moodle/.mp4">my test file</a>';
         $longhref = '';
 
         do {
             $longhref .= 'a';
-        } while(strlen($longhref) + strlen($longurl) < 4095);
+        } while (strlen($longhref) + strlen($longurl) < 4095);
 
         $longurl = '<a href="http://moodle/' . $longhref . '.mp4">my test file</a>';
 
-        $validtexts = array (
+        $validtexts = [
             '<a href="http://moodle.org/testfile/test.mp3">test mp3</a>',
             '<a href="http://moodle.org/testfile/test.ogg">test ogg</a>',
             '<a id="movie player" class="center" href="http://moodle.org/testfile/test.mp4">test mp4</a>',
@@ -59,7 +53,6 @@ class filter_mediaplugin_testcase extends advanced_testcase {
             '<a href="http://youtu.be/JghQgA2HMX8" class="href=css">test file</a>',
             '<a href="http://y2u.be/JghQgA2HMX8" class="href=css">test file</a>',
             '<a class="youtube" href="http://www.youtube.com/watch?v=JghQgA2HMX8">test file</a>',
-            '<a class="_blanktarget" href="http://moodle.org/testfile/test.flv?d=100x100">test flv</a>',
             '<a class="hrefcss" href="http://www.youtube.com/watch?v=JghQgA2HMX8">test file</a>',
             '<a  class="content"     href="http://moodle.org/testfile/test.ogg">test ogg</a>',
             '<a     id="audio"      href="http://moodle.org/testfile/test.mp3">test mp3</a>',
@@ -76,12 +69,12 @@ class filter_mediaplugin_testcase extends advanced_testcase {
                                     </a>',
             '<a             href="http://www.youtube.com/watch?v=JghQgA2HMX8?d=200x200"     >youtube\'s</a>',
             // Test a long URL under 4096 characters.
-            $longurl
-        );
+            $longurl,
+        ];
 
-        //test for valid link
+        // Test for valid link.
         foreach ($validtexts as $text) {
-            $msg = "Testing text: ". $text;
+            $msg = "Testing text: " . $text;
             $filter = $filterplugin->filter($text);
             $this->assertNotEquals($text, $filter, $msg);
         }
@@ -90,15 +83,18 @@ class filter_mediaplugin_testcase extends advanced_testcase {
         $longurl = substr_replace($longurl, 'http://pushover4096chars', $insertpoint, 0);
 
         $originalurl = '<p>Some text.</p><pre style="color: rgb(0, 0, 0); line-height: normal;">' .
-            '<a href="https://www.youtube.com/watch?v=uUhWl9Lm3OM">Valid link</a></pre><pre style="color: rgb(0, 0, 0); line-height: normal;">';
+            '<a href="https://www.youtube.com/watch?v=uUhWl9Lm3OM">Valid link</a>' .
+            '</pre><pre style="color: rgb(0, 0, 0); line-height: normal;">';
         $paddedurl = str_pad($originalurl, 6000, 'z');
-        $validpaddedurl = '<p>Some text.</p><pre style="color: rgb(0, 0, 0); line-height: normal;"><span class="mediaplugin mediaplugin_youtube">
-<iframe title="Valid link" width="400" height="300"
-  src="https://www.youtube.com/embed/uUhWl9Lm3OM?rel=0&amp;wmode=transparent" frameborder="0" allowfullscreen="1"></iframe>
+        $validpaddedurl = '<p>Some text.</p>' .
+            '<pre style="color: rgb(0, 0, 0); line-height: normal;">' .
+            '<span class="mediaplugin mediaplugin_youtube">
+<iframe title="Valid link" width="640" height="360" style="border:0;"
+        src="https://www.youtube.com/embed/uUhWl9Lm3OM?rel=0&wmode=transparent" allow="fullscreen" loading="lazy"></iframe>
 </span></pre><pre style="color: rgb(0, 0, 0); line-height: normal;">';
         $validpaddedurl = str_pad($validpaddedurl, 6000 + (strlen($validpaddedurl) - strlen($originalurl)), 'z');
 
-        $invalidtexts = array(
+        $invalidtexts = [
             '<a class="_blanktarget">href="http://moodle.org/testfile/test.mp3"</a>',
             '<a>test test</a>',
             '<a >test test</a>',
@@ -115,21 +111,21 @@ class filter_mediaplugin_testcase extends advanced_testcase {
             '<ahref="http://moodle.org/testfile/test.mp3">test mp3</a>',
             '<aclass="content" href="http://moodle.org/testfile/test.mp3">test mp3</a>',
             // Test a long URL over 4096 characters.
-            $longurl
-        );
+            $longurl,
+        ];
 
-        //test for invalid link
+        // Test for invalid link.
         foreach ($invalidtexts as $text) {
-            $msg = "Testing text: ". $text;
+            $msg = "Testing text: " . $text;
             $filter = $filterplugin->filter($text);
             $this->assertEquals($text, $filter, $msg);
         }
 
         // Valid mediaurl followed by a longurl.
-        $precededlongurl = '<a href="http://moodle.org/testfile/test.mp3">test.mp3</a>'. $longurl;
+        $precededlongurl = '<a href="http://moodle.org/testfile/test.mp3">test.mp3</a>' . $longurl;
         $filter = $filterplugin->filter($precededlongurl);
         $this->assertEquals(1, substr_count($filter, '</audio>'));
-        $this->assertContains($longurl, $filter);
+        $this->assertStringContainsString($longurl, $filter);
 
         // Testing for cases where: to be filtered content has 6+ text afterwards.
         $filter = $filterplugin->filter($paddedurl);

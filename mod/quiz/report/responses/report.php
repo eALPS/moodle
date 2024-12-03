@@ -22,10 +22,10 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use mod_quiz\local\reports\attempts_report;
 
 defined('MOODLE_INTERNAL') || die();
 
-require_once($CFG->dirroot . '/mod/quiz/report/attemptsreport.php');
 require_once($CFG->dirroot . '/mod/quiz/report/responses/responses_options.php');
 require_once($CFG->dirroot . '/mod/quiz/report/responses/responses_form.php');
 require_once($CFG->dirroot . '/mod/quiz/report/responses/last_responses_table.php');
@@ -46,7 +46,7 @@ require_once($CFG->dirroot . '/mod/quiz/report/responses/first_or_all_responses_
  * @copyright 1999 onwards Martin Dougiamas and others {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class quiz_responses_report extends quiz_attempts_report {
+class quiz_responses_report extends attempts_report {
 
     public function display($quiz, $cm, $course) {
         global $OUTPUT, $DB;
@@ -70,7 +70,7 @@ class quiz_responses_report extends quiz_attempts_report {
 
         // Prepare for downloading, if applicable.
         $courseshortname = format_string($course->shortname, true,
-                array('context' => context_course::instance($course->id)));
+                ['context' => context_course::instance($course->id)]);
         if ($options->whichtries === question_attempt::LAST_TRY) {
             $tableclassname = 'quiz_last_responses_table';
         } else {
@@ -111,36 +111,13 @@ class quiz_responses_report extends quiz_attempts_report {
 
         $this->process_actions($quiz, $cm, $currentgroup, $groupstudentsjoins, $allowedjoins, $options->get_url());
 
+        $hasquestions = quiz_has_questions($quiz->id);
+
         // Start output.
         if (!$table->is_downloading()) {
             // Only print headers if not asked to download data.
-            $this->print_header_and_tabs($cm, $course, $quiz, $this->mode);
-        }
-
-        if ($groupmode = groups_get_activity_groupmode($cm)) {
-            // Groups are being used, so output the group selector if we are not downloading.
-            if (!$table->is_downloading()) {
-                groups_print_activity_menu($cm, $options->get_url());
-            }
-        }
-
-        // Print information on the number of existing attempts.
-        if (!$table->is_downloading()) {
-            // Do not print notices when downloading.
-            if ($strattemptnum = quiz_num_attempt_summary($quiz, $cm, true, $currentgroup)) {
-                echo '<div class="quizattemptcounts">' . $strattemptnum . '</div>';
-            }
-        }
-
-        $hasquestions = quiz_has_questions($quiz->id);
-        if (!$table->is_downloading()) {
-            if (!$hasquestions) {
-                echo quiz_no_questions_message($quiz, $cm, $this->context);
-            } else if (!$hasstudents) {
-                echo $OUTPUT->notification(get_string('nostudentsyet'));
-            } else if ($currentgroup && !$this->hasgroupstudents) {
-                echo $OUTPUT->notification(get_string('nostudentsingroup'));
-            }
+            $this->print_standard_header_and_messages($cm, $course, $quiz,
+                    $options, $currentgroup, $hasquestions, $hasstudents);
 
             // Print the display options.
             $this->form->display();
@@ -149,11 +126,7 @@ class quiz_responses_report extends quiz_attempts_report {
         $hasstudents = $hasstudents && (!$currentgroup || $this->hasgroupstudents);
         if ($hasquestions && ($hasstudents || $options->attempts == self::ALL_WITH)) {
 
-            list($fields, $from, $where, $params) = $table->base_sql($allowedjoins);
-
-            $table->set_count_sql("SELECT COUNT(1) FROM $from WHERE $where", $params);
-
-            $table->set_sql($fields, $from, $where, $params);
+            $table->setup_sql_queries($allowedjoins);
 
             if (!$table->is_downloading()) {
                 // Print information on the grading method.
@@ -164,12 +137,13 @@ class quiz_responses_report extends quiz_attempts_report {
             }
 
             // Define table columns.
-            $columns = array();
-            $headers = array();
+            $columns = [];
+            $headers = [];
 
             if (!$table->is_downloading() && $options->checkboxcolumn) {
-                $columns[] = 'checkbox';
-                $headers[] = null;
+                $columnname = 'checkbox';
+                $columns[] = $columnname;
+                $headers[] = $table->checkbox_col_header($columnname);
             }
 
             $this->add_user_columns($table, $columns, $headers);
@@ -184,15 +158,15 @@ class quiz_responses_report extends quiz_attempts_report {
             foreach ($questions as $id => $question) {
                 if ($options->showqtext) {
                     $columns[] = 'question' . $id;
-                    $headers[] = get_string('questionx', 'question', $question->number);
+                    $headers[] = get_string('questionx', 'question', $question->displaynumber);
                 }
                 if ($options->showresponses) {
                     $columns[] = 'response' . $id;
-                    $headers[] = get_string('responsex', 'quiz_responses', $question->number);
+                    $headers[] = get_string('responsex', 'quiz_responses', $question->displaynumber);
                 }
                 if ($options->showright) {
                     $columns[] = 'right' . $id;
-                    $headers[] = get_string('rightanswerx', 'quiz_responses', $question->number);
+                    $headers[] = get_string('rightanswerx', 'quiz_responses', $question->displaynumber);
                 }
             }
 

@@ -26,7 +26,7 @@ class mod_survey_mod_form extends moodleform_mod {
         $mform->addRule('name', null, 'required', null, 'client');
 
         if (!$options = $DB->get_records_menu("survey", array("template"=>0), "name", "id, name")) {
-            print_error('cannotfindsurveytmpt', 'survey');
+            throw new \moodle_exception('cannotfindsurveytmpt', 'survey');
         }
 
         foreach ($options as $id => $name) {
@@ -47,26 +47,24 @@ class mod_survey_mod_form extends moodleform_mod {
     }
 
     /**
-     * Return submitted data if properly submitted or returns NULL if validation fails or
-     * if there is no submitted data.
+     * Allows module to modify the data returned by form get_data().
+     * This method is also called in the bulk activity completion form.
      *
-     * @return stdClass submitted data; NULL if not valid or not submitted or cancelled
+     * Only available on moodleform_mod.
+     *
+     * @param stdClass $data the form data to be modified.
      */
-    public function get_data() {
-        $data = parent::get_data();
-        if (!$data) {
-            return false;
-        }
-
+    public function data_postprocessing($data) {
+        parent::data_postprocessing($data);
         if (!empty($data->completionunlocked)) {
             // Turn off completion settings if the checkboxes aren't ticked.
-            $autocompletion = !empty($data->completion) &&
-                $data->completion == COMPLETION_TRACKING_AUTOMATIC;
-            if (!$autocompletion || empty($data->completionsubmit)) {
-                $data->completionsubmit = 0;
+            $suffix = $this->get_suffix();
+            $completion = $data->{'completion' . $suffix};
+            $autocompletion = !empty($completion) && $completion == COMPLETION_TRACKING_AUTOMATIC;
+            if (!$autocompletion || empty($data->{'completionsubmit' . $suffix})) {
+                $data->{'completionsubmit' . $suffix} = 0;
             }
         }
-        return $data;
     }
 
     /**
@@ -75,17 +73,21 @@ class mod_survey_mod_form extends moodleform_mod {
      */
     public function add_completion_rules() {
         $mform =& $this->_form;
-        $mform->addElement('checkbox', 'completionsubmit', '', get_string('completionsubmit', 'survey'));
-        return array('completionsubmit');
+        $suffix = $this->get_suffix();
+        $completionsubmitel = 'completionsubmit' . $suffix;
+        $mform->addElement('checkbox', $completionsubmitel, '', get_string('completionsubmit', 'survey'));
+        // Enable this completion rule by default.
+        $mform->setDefault($completionsubmitel, 1);
+        return [$completionsubmitel];
     }
 
     /**
      * Enable completion rules
-     * @param stdclass $data
-     * @return array
+     * @param array $data
+     * @return bool
      */
     public function completion_rule_enabled($data) {
-        return !empty($data['completionsubmit']);
+        $suffix = $this->get_suffix();
+        return !empty($data['completionsubmit' . $suffix]);
     }
 }
-

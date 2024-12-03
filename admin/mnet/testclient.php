@@ -18,20 +18,16 @@ require_once($CFG->libdir.'/adminlib.php');
 include_once($CFG->dirroot.'/mnet/lib.php');
 
 if ($CFG->mnet_dispatcher_mode === 'off') {
-    print_error('mnetdisabled', 'mnet');
+    throw new \moodle_exception('mnetdisabled', 'mnet');
 }
 
-require_login();
 admin_externalpage_setup('mnettestclient');
-
-$context = context_system::instance();
-require_capability('moodle/site:config', $context);
 
 error_reporting(DEBUG_ALL);
 
 echo $OUTPUT->header();
 if (!extension_loaded('openssl')) {
-    print_error('requiresopenssl', 'mnet', '', NULL, true);
+    throw new \moodle_exception('requiresopenssl', 'mnet', '', null, true);
 }
 
 // optional drilling down parameters

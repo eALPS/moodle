@@ -81,34 +81,41 @@ class lesson_override_form extends moodleform {
      * Define this form - called by the parent constructor
      */
     protected function definition() {
-        global $CFG, $DB;
+        global $DB;
 
         $cm = $this->cm;
         $mform = $this->_form;
 
         $mform->addElement('header', 'override', get_string('override', 'lesson'));
 
+        $lessongroupmode = groups_get_activity_groupmode($cm);
+        $accessallgroups = ($lessongroupmode == NOGROUPS) || has_capability('moodle/site:accessallgroups', $this->context);
+
         if ($this->groupmode) {
             // Group override.
             if ($this->groupid) {
                 // There is already a groupid, so freeze the selector.
-                $groupchoices = array();
-                $groupchoices[$this->groupid] = groups_get_group_name($this->groupid);
+                $groupchoices = [
+                    $this->groupid => format_string(groups_get_group_name($this->groupid), true, ['context' => $this->context]),
+                ];
                 $mform->addElement('select', 'groupid',
                         get_string('overridegroup', 'lesson'), $groupchoices);
                 $mform->freeze('groupid');
             } else {
                 // Prepare the list of groups.
-                $groups = groups_get_all_groups($cm->course);
+                // Only include the groups the current can access.
+                $groups = $accessallgroups ? groups_get_all_groups($cm->course) :  groups_get_activity_allowed_groups($cm);
                 if (empty($groups)) {
                     // Generate an error.
                     $link = new moodle_url('/mod/lesson/overrides.php', array('cmid' => $cm->id));
-                    print_error('groupsnone', 'lesson', $link);
+                    throw new \moodle_exception('groupsnone', 'lesson', $link);
                 }
 
                 $groupchoices = array();
                 foreach ($groups as $group) {
-                    $groupchoices[$group->id] = $group->name;
+                    if ($group->visibility != GROUPS_VISIBILITY_NONE) {
+                        $groupchoices[$group->id] = format_string($group->name, true, ['context' => $this->context]);
+                    }
                 }
                 unset($groups);
 
@@ -132,8 +139,19 @@ class lesson_override_form extends moodleform {
                 $mform->freeze('userid');
             } else {
                 // Prepare the list of users.
-                $users = get_enrolled_users($this->context, '', 0,
-                        'u.id, u.email, ' . get_all_user_name_fields(true, 'u'));
+                $users = [];
+                list($sort) = users_order_by_sql('u');
+
+                // Get the list of appropriate users, depending on whether and how groups are used.
+                $userfieldsapi = \core_user\fields::for_name();
+                $userfields = 'u.id, u.email, ' . $userfieldsapi->get_sql('u', false, '', '', false)->selects;
+                $groupids = 0;
+                if (!$accessallgroups) {
+                    $groups = groups_get_activity_allowed_groups($cm);
+                    $groupids = array_keys($groups);
+                }
+                $users = get_enrolled_users($this->context, '',
+                        $groupids, $userfields, $sort);
 
                 // Filter users based on any fixed restrictions (groups, profile).
                 $info = new \core_availability\info_module($cm);
@@ -142,11 +160,12 @@ class lesson_override_form extends moodleform {
                 if (empty($users)) {
                     // Generate an error.
                     $link = new moodle_url('/mod/lesson/overrides.php', array('cmid' => $cm->id));
-                    print_error('usersnone', 'lesson', $link);
+                    throw new \moodle_exception('usersnone', 'lesson', $link);
                 }
 
                 $userchoices = array();
-                $canviewemail = in_array('email', get_extra_user_fields($this->context));
+                // TODO Does not support custom user profile fields (MDL-70456).
+                $canviewemail = in_array('email', \core_user\fields::get_identity_fields($this->context, false));
                 foreach ($users as $id => $user) {
                     if (empty($invalidusers[$id]) || (!empty($override) &&
                             $id == $override->userid)) {
@@ -198,7 +217,7 @@ class lesson_override_form extends moodleform {
         $mform->setDefault('review', $this->lesson->review);
 
         // Number of attempts.
-        $numbers = array();
+        $numbers = ['0' => get_string('unlimited')];
         for ($i = 10; $i > 0; $i--) {
             $numbers[$i] = $i;
         }
@@ -235,7 +254,6 @@ class lesson_override_form extends moodleform {
      * @return array of "element_name"=>"error_description" if there are errors
      */
     public function validation($data, $files) {
-        global $COURSE, $DB;
         $errors = parent::validation($data, $files);
 
         $mform =& $this->_form;

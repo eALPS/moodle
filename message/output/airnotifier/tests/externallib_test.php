@@ -14,14 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * External airnotifier functions unit tests
- *
- * @package    message_airnotifier
- * @category   external
- * @copyright  2012 Jerome Mouneyrac
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace message_airnotifier;
+
+use core_external\external_api;
+use externallib_advanced_testcase;
+use message_airnotifier_external;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -37,20 +34,21 @@ require_once($CFG->dirroot . '/webservice/tests/helpers.php');
  * @copyright  2012 Jerome Mouneyrac
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class message_airnotifier_external_testcase extends externallib_advanced_testcase {
+class externallib_test extends externallib_advanced_testcase {
 
     /**
      * Tests set up
      */
-    protected function setUp() {
+    protected function setUp(): void {
         global $CFG;
         require_once($CFG->dirroot . '/message/output/airnotifier/externallib.php');
+        parent::setUp();
     }
 
     /**
      * Test is_system_configured
      */
-    public function test_is_system_configured() {
+    public function test_is_system_configured(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -76,7 +74,7 @@ class message_airnotifier_external_testcase extends externallib_advanced_testcas
     /**
      * Test are_notification_preferences_configured
      */
-    public function test_are_notification_preferences_configured() {
+    public function test_are_notification_preferences_configured(): void {
 
         $this->resetAfterTest(true);
 
@@ -86,10 +84,8 @@ class message_airnotifier_external_testcase extends externallib_advanced_testcas
 
         self::setUser($user1);
 
-        set_user_preference('message_provider_moodle_instantmessage_loggedin', 'airnotifier', $user1);
-        set_user_preference('message_provider_moodle_instantmessage_loggedoff', 'airnotifier', $user1);
-        set_user_preference('message_provider_moodle_instantmessage_loggedin', 'airnotifier', $user2);
-        set_user_preference('message_provider_moodle_instantmessage_loggedin', 'airnotifier', $user3);
+        set_user_preference('message_provider_moodle_instantmessage_enabled', 'airnotifier', $user1);
+        set_user_preference('message_provider_moodle_instantmessage_enabled', 'airnotifier', $user2);
 
         $params = array($user1->id, $user2->id, $user3->id);
 
@@ -116,29 +112,17 @@ class message_airnotifier_external_testcase extends externallib_advanced_testcas
         $this->assertEquals($expected, $preferences['users']);
         $this->assertEquals(2, count($preferences['warnings']));
 
-        // Now, remove one user1 preference (the user still has one prefernce for airnotifier).
-        unset_user_preference('message_provider_moodle_instantmessage_loggedin', $user1);
+        // Now, remove one user1 preference (the user still has one preference for airnotifier).
+        unset_user_preference('message_provider_moodle_instantmessage_enabled', $user1);
         $preferences = message_airnotifier_external::are_notification_preferences_configured($params);
         $preferences = external_api::clean_returnvalue($returnsdescription, $preferences);
-        $this->assertEquals($expected, $preferences['users']);
-
-        // Delete the last user1 preference.
-        unset_user_preference('message_provider_moodle_instantmessage_loggedoff', $user1);
-        $preferences = message_airnotifier_external::are_notification_preferences_configured($params);
-        $preferences = external_api::clean_returnvalue($returnsdescription, $preferences);
-        $expected = array(
-            array(
-                'userid' => $user1->id,
-                'configured' => 0
-            )
-        );
         $this->assertEquals($expected, $preferences['users']);
     }
 
     /**
      * Test get_user_devices
      */
-    public function test_get_user_devices() {
+    public function test_get_user_devices(): void {
         global $CFG, $DB;
         require_once($CFG->dirroot . '/user/externallib.php');
 
@@ -167,7 +151,7 @@ class message_airnotifier_external_testcase extends externallib_advanced_testcas
     /**
      * Test get_user_devices permissions
      */
-    public function test_get_user_devices_permissions() {
+    public function test_get_user_devices_permissions(): void {
         global $CFG, $DB;
         require_once($CFG->dirroot . '/user/externallib.php');
 
@@ -184,7 +168,7 @@ class message_airnotifier_external_testcase extends externallib_advanced_testcas
     /**
      * Test enable_device
      */
-    public function test_enable_device() {
+    public function test_enable_device(): void {
         global $USER, $DB;
 
         $this->resetAfterTest(true);

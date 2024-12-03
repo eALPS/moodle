@@ -55,7 +55,7 @@ if (file_exists($CFG->dirroot.'/repository/'.$type.'/lib.php')) {
     $classname = 'repository_' . $type;
     $repo = new $classname($repo_id, $repository->contextid, array('type'=>$type));
 } else {
-    print_error('invalidplugin', 'repository', $type);
+    throw new \moodle_exception('invalidplugin', 'repository', $type);
 }
 
 // post callback
@@ -69,6 +69,23 @@ $repo->callback();
 // manually.
 $strhttpsbug = json_encode(get_string('cannotaccessparentwin', 'repository'));
 $strrefreshnonjs = get_string('refreshnonjsfilepicker', 'repository');
+$reloadparent = optional_param('reloadparent', false, PARAM_BOOL);
+// If this request is coming from a popup, close window and reload parent window.
+if ($reloadparent == true) {
+    $js = <<<EOD
+<html>
+<head>
+    <script type="text/javascript">
+        window.opener.location.reload();
+        window.close();
+    </script>
+</head>
+<body></body>
+</html>
+EOD;
+    die($js);
+}
+
 $js =<<<EOD
 <html>
 <head>

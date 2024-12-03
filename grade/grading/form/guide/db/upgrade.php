@@ -23,8 +23,6 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Marking guide grading method upgrade task.
  *
@@ -35,21 +33,19 @@ defined('MOODLE_INTERNAL') || die();
  * @throws upgrade_exception
  */
 function xmldb_gradingform_guide_upgrade($oldversion) {
-    global $DB;
-
-    if ($oldversion < 2016051100) {
-        // Clean up empty string or null marking guide comments.
-        $sql = $DB->sql_isempty('gradingform_guide_comments', 'description', true, true);
-        $sql .= " OR description IS NULL ";
-        $DB->delete_records_select('gradingform_guide_comments', $sql);
-        // Main savepoint reached.
-        upgrade_plugin_savepoint(true, 2016051100, 'gradingform', 'guide');
-    }
-
-    // Moodle v3.1.0 release upgrade line.
+    // Automatically generated Moodle v4.1.0 release upgrade line.
     // Put any upgrade step following this.
 
-    // Automatically generated Moodle v3.2.0 release upgrade line.
+    // Automatically generated Moodle v4.2.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Automatically generated Moodle v4.3.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Automatically generated Moodle v4.4.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Automatically generated Moodle v4.5.0 release upgrade line.
     // Put any upgrade step following this.
 
     return true;

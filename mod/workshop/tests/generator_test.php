@@ -14,14 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * mod_workshop generator tests
- *
- * @package    mod_workshop
- * @category   test
- * @copyright  2013 Marina Glancy
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace mod_workshop;
 
 /**
  * Genarator tests class for mod_workshop.
@@ -31,9 +24,9 @@
  * @copyright  2013 Marina Glancy
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class mod_workshop_generator_testcase extends advanced_testcase {
+class generator_test extends \advanced_testcase {
 
-    public function test_create_instance() {
+    public function test_create_instance(): void {
         global $DB;
         $this->resetAfterTest();
         $this->setAdminUser();
@@ -53,7 +46,7 @@ class mod_workshop_generator_testcase extends advanced_testcase {
         $this->assertEquals('Another workshop', $records[$workshop->id]->name);
     }
 
-    public function test_create_submission() {
+    public function test_create_submission(): void {
         global $DB;
         $this->resetAfterTest();
         $this->setAdminUser();
@@ -75,7 +68,7 @@ class mod_workshop_generator_testcase extends advanced_testcase {
         $this->assertSame('My custom title', $submissions[$id]->title);
     }
 
-    public function test_create_assessment() {
+    public function test_create_assessment(): void {
         global $DB;
         $this->resetAfterTest();
         $this->setAdminUser();

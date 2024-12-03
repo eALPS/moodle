@@ -127,6 +127,7 @@
 .gradingform_guide.editor .addcriterion input,
 .gradingform_guide.editor .addcomment input {
     background: transparent url([[pix:t/add]]) no-repeat;
+    background-size: 0.75rem;
     display: block;
     color: #555;
     font-weight: bold;
@@ -135,7 +136,7 @@
 
 .gradingform_guide.editor .addcriterion input,
 .gradingform_guide.editor .addcomment input {
-    background-position: 5px 8px;
+    background-position: left 5px top 8px;
     height: 30px;
     line-height: 29px;
     margin-bottom: 14px;
@@ -236,4 +237,13 @@
 .gradingform_guide .score input {
     margin: 0;
     width: auto;
+}
+.gradingform_guide_comment_chooser {
+    max-height: 80vh;
+    overflow-y: auto;
+}
+.gradingform_guide-frequent-comments {
+    position: absolute;
+    top: 7px;
+    right: 0;
 }

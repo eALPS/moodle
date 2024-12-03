@@ -1,6 +1,5 @@
 <?php
-
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Automatically generated strings for Moodle installer
@@ -37,6 +36,7 @@ $string['chooselanguagesub'] = 'Сейчас необходимо выбрать
 $string['clialreadyconfigured'] = 'Файл config.php уже существует. Если Вы хотите установить Moodle на этот сайт, используйте admin/cli/install_database.php.';
 $string['clialreadyinstalled'] = 'Файл config.php уже существует. Если Вы хотите обновить сайт Moodle, то используйте скрипт admin/cli/upgrade.php.';
 $string['cliinstallheader'] = 'Программа установки Moodle {$a} в режиме командной строки';
+$string['clitablesexist'] = 'Таблицы базы данных уже существуют, невозможно продолжить установку в режиме командной строки.';
 $string['databasehost'] = 'Сервер баз данных';
 $string['databasename'] = 'Название базы данных';
 $string['databasetypehead'] = 'Выберите драйвер базы данных';
@@ -82,10 +82,9 @@ $string['pathsunsecuredataroot'] = 'Расположение каталога д
 $string['pathswrongadmindir'] = 'Каталог admin не существует';
 $string['phpextension'] = 'Расширение PHP «{$a}»';
 $string['phpversion'] = 'Версия PHP';
-$string['phpversionhelp'] = '<p>Для Moodle необходим PHP версии 4.3.0 и выше или 5.1.0 и выше (известны некоторые проблемы с версией 5.0.x).</p>
+$string['phpversionhelp'] = '<p>Для Moodle необходим PHP версии не ниже 5.6.5 или 7.1 (есть некоторые проблемы с версией 7.0.x).</p>
 <p>Сейчас у Вас используется версия {$a}</p>
-<p>Вам нужно обновить PHP или переместиться на хостинг с более новой версией PHP!<br />
-(В случае с версией 5.0.x можно также откатиться к версии 4.4.x)</p>';
+<p>Вам нужно обновить PHP или переместиться на хостинг с более новой версией PHP!<br />';
 $string['welcomep10'] = '{$a->installername} ({$a->installerversion})';
 $string['welcomep20'] = 'Вы видите эту страницу, потому что успешно установили и запустили на своем компьютере набор программ <strong>{$a->packname} {$a->packversion}</strong>. Поздравляем!';
 $string['welcomep30'] = 'Эта версия набора программ <strong>{$a->installername}</strong> включает следующие программы, необходимые для создания среды, в которой будет работать <strong>Moodle</strong>:';

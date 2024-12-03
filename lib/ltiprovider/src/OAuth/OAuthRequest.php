@@ -9,6 +9,7 @@ namespace IMSGlobal\LTI\OAuth;
  * @version 2008-08-04
  * @license https://opensource.org/licenses/MIT The MIT License
  */
+#[\AllowDynamicProperties]
 class OAuthRequest {
 
     protected $parameters;
@@ -17,7 +18,6 @@ class OAuthRequest {
     // for debug purposes
     public $base_string;
     public static $version = '1.0';
-    public static $POST_INPUT = 'php://input';
 
     function __construct($http_method, $http_url, $parameters = null) {
 
@@ -35,14 +35,8 @@ class OAuthRequest {
      */
     public static function from_request($http_method = null, $http_url = null, $parameters = null) {
 
-      $scheme = (!isset($_SERVER['HTTPS']) || $_SERVER['HTTPS'] != "on")
-                ? 'http'
-                : 'https';
-      $http_url = ($http_url) ? $http_url : $scheme .
-                                '://' . $_SERVER['SERVER_NAME'] .
-                                ':' .
-                                $_SERVER['SERVER_PORT'] .
-                                $_SERVER['REQUEST_URI'];
+      global $FULLME;
+      $http_url = $http_url ?: $FULLME;
       $http_method = ($http_method) ? $http_method : $_SERVER['REQUEST_METHOD'];
 
       // We weren't handed any parameters, so let's find the ones relevant to
@@ -60,22 +54,15 @@ class OAuthRequest {
               $parameters = array();
           }
 
-          // It's a POST request of the proper content-type, so parse POST
-          // parameters and add those overriding any duplicates from GET
-          if ($http_method == "POST"
-              &&  isset($request_headers['Content-Type'])
-              && strstr($request_headers['Content-Type'], 'application/x-www-form-urlencoded')) {
-              $post_data = OAuthUtil::parse_parameters(file_get_contents(self::$POST_INPUT));
-              $parameters = array_merge($parameters, $post_data);
-          }
-
-          // We have a Authorization-header with OAuth data. Parse the header
-          // and add those overriding any duplicates from GET or POST
+          // We have a Authorization-header with OAuth data. Parse the header and add those.
           if (isset($request_headers['Authorization']) && substr($request_headers['Authorization'], 0, 6) == 'OAuth ') {
               $header_parameters = OAuthUtil::split_header($request_headers['Authorization']);
               $parameters = array_merge($parameters, $header_parameters);
           }
 
+          // If there are parameters in $_POST, these are likely what will be used. Therefore, they should be considered
+          // the final value in the case of any duplicates from sources parsed above.
+          $parameters = array_merge($parameters, $_POST);
       }
 
       return new OAuthRequest($http_method, $http_url, $parameters);

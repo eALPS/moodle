@@ -32,9 +32,14 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright 2015 Totara Learning Solutions Ltd {@link http://www.totaralms.com/}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @author    Petr Skoda <petr.skoda@totaralms.com>
+ * @covers \core_date
+ * @coversDefaultClass \core_date
  */
-class core_date_testcase extends advanced_testcase {
-    public function test_get_default_php_timezone() {
+class date_test extends advanced_testcase {
+    /**
+     * @covers ::get_default_php_timezone
+     */
+    public function test_get_default_php_timezone(): void {
         $this->resetAfterTest();
 
         $origtz = core_date::get_default_php_timezone();
@@ -50,7 +55,10 @@ class core_date_testcase extends advanced_testcase {
         $this->assertSame('GMT', core_date::get_default_php_timezone());
     }
 
-    public function test_normalise_timezone() {
+    /**
+     * @covers ::normalise_timezone
+     */
+    public function test_normalise_timezone(): void {
         $this->resetAfterTest();
 
         $this->setTimezone('Pacific/Auckland');
@@ -114,8 +122,11 @@ class core_date_testcase extends advanced_testcase {
         $this->assertSame('Pacific/Auckland', core_date::normalise_timezone($tz));
     }
 
-    public function test_windows_conversion() {
-        $file = __DIR__ . '/fixtures/timezonewindows.xml';
+    /**
+     * @covers ::normalise_timezone
+     */
+    public function test_windows_conversion(): void {
+        $file = self::get_fixture_path('core', 'timezonewindows.xml');
 
         $contents = file_get_contents($file);
         preg_match_all('/<mapZone other="([^"]+)" territory="001" type="([^"]+)"\/>/', $contents, $matches, PREG_SET_ORDER);
@@ -139,7 +150,7 @@ class core_date_testcase extends advanced_testcase {
     /**
      * Sanity test for PHP stuff.
      */
-    public function test_php_gmt_offsets() {
+    public function test_php_gmt_offsets(): void {
         $this->resetAfterTest();
 
         $this->setTimezone('Pacific/Auckland', 'Pacific/Auckland');
@@ -166,13 +177,42 @@ class core_date_testcase extends advanced_testcase {
         }
     }
 
-    public function test_get_localised_timezone() {
+    /**
+     * We are only checking lang strings existence here, not code.
+     *
+     * @coversNothing
+     */
+    public function test_timezone_all_lang_strings(): void {
+        // We only run this test when PHPUNIT_LONGTEST is enabled, test_get_localised_timezone()
+        // is already checking the names of a few, hopefully stable enough to be run always.
+        if (!PHPUNIT_LONGTEST) {
+            $this->markTestSkipped('PHPUNIT_LONGTEST is not defined');
+        }
+
+        $phpzones = DateTimeZone::listIdentifiers();
+        $manager = get_string_manager();
+        foreach ($phpzones as $tz) {
+            $this->assertTrue($manager->string_exists(strtolower($tz), 'core_timezones'),
+                    'String for timezone ' . strtolower($tz) . ' not found.');
+        }
+    }
+
+    /**
+     * @covers ::get_localised_timezone
+     */
+    public function test_get_localised_timezone(): void {
         $this->resetAfterTest();
 
         $this->setTimezone('Pacific/Auckland', 'Pacific/Auckland');
 
         $result = core_date::get_localised_timezone('Pacific/Auckland');
         $this->assertSame('Pacific/Auckland', $result);
+
+        $result = core_date::get_localised_timezone('Europe/Madrid');
+        $this->assertSame('Europe/Madrid', $result);
+
+        $result = core_date::get_localised_timezone('America/New_York');
+        $this->assertSame('America/New_York', $result);
 
         $result = core_date::get_localised_timezone('99');
         $this->assertSame('Server timezone (Pacific/Auckland)', $result);
@@ -193,7 +233,10 @@ class core_date_testcase extends advanced_testcase {
         $this->assertSame('UTC', $result);
     }
 
-    public function test_get_list_of_timezones() {
+    /**
+     * @covers ::get_list_of_timezones
+     */
+    public function test_get_list_of_timezones(): void {
         $this->resetAfterTest();
 
         $this->setTimezone('Pacific/Auckland', 'Pacific/Auckland');
@@ -241,7 +284,10 @@ class core_date_testcase extends advanced_testcase {
 
     }
 
-    public function test_get_server_timezone() {
+    /**
+     * @covers ::get_server_timezone
+     */
+    public function test_get_server_timezone(): void {
         global $CFG;
         $this->resetAfterTest();
 
@@ -266,7 +312,10 @@ class core_date_testcase extends advanced_testcase {
         $this->assertSame('Europe/Prague', core_date::get_server_timezone());
     }
 
-    public function test_get_server_timezone_object() {
+    /**
+     * @covers ::get_server_timezone_object
+     */
+    public function test_get_server_timezone_object(): void {
         $this->resetAfterTest();
 
         $zones = core_date::get_list_of_timezones();
@@ -278,7 +327,10 @@ class core_date_testcase extends advanced_testcase {
         }
     }
 
-    public function test_set_default_server_timezone() {
+    /**
+     * @covers ::set_default_server_timezone
+     */
+    public function test_set_default_server_timezone(): void {
         global $CFG;
         $this->resetAfterTest();
 
@@ -334,7 +386,7 @@ class core_date_testcase extends advanced_testcase {
         $this->assertSame('Etc/GMT-1', date_default_timezone_get());
     }
 
-    public function legacyUserTimezoneProvider() {
+    public static function legacyUserTimezoneProvider(): array {
         return [
             ['', 'Australia/Perth'],            // Fallback on default timezone.
             ['-13.0', 'Australia/Perth'],       // Fallback on default timezone.
@@ -396,15 +448,19 @@ class core_date_testcase extends advanced_testcase {
 
     /**
      * @dataProvider legacyUserTimezoneProvider
+     * @covers ::get_user_timezone
      * @param string $tz The legacy timezone.
      * @param string $expected The expected converted timezone.
      */
-    public function test_get_legacy_user_timezone($tz, $expected) {
+    public function test_get_legacy_user_timezone($tz, $expected): void {
         $this->setTimezone('Australia/Perth', 'Australia/Perth');
         $this->assertEquals($expected, core_date::get_user_timezone($tz));
     }
 
-    public function test_get_user_timezone() {
+    /**
+     * @covers ::get_user_timezone
+     */
+    public function test_get_user_timezone(): void {
         global $CFG, $USER;
         $this->resetAfterTest();
 
@@ -540,7 +596,10 @@ class core_date_testcase extends advanced_testcase {
         $this->assertSame('Pacific/Auckland', core_date::get_user_timezone($tz));
     }
 
-    public function test_get_user_timezone_object() {
+    /**
+     * @covers ::get_user_timezone_object
+     */
+    public function test_get_user_timezone_object(): void {
         global $CFG, $USER;
         $this->resetAfterTest();
 
@@ -554,5 +613,153 @@ class core_date_testcase extends advanced_testcase {
             $this->assertInstanceOf('DateTimeZone', $tz);
             $this->assertSame($zone, $tz->getName());
         }
+    }
+
+    /**
+     * Data provider for the values for test_core_strftime().
+     *
+     * @return array
+     */
+    public static function get_strftime_provider(): array {
+        return [
+            'string_c' => [
+                "1708405742",
+                "%c",
+                "20 February 2024 at 1:09 pm",
+            ],
+            'Month Year only' => [
+                "1708405742",
+                "%B %Y",
+                "February 2024",
+            ],
+            'Abbreviated Month Year only' => [
+                "1708405742",
+                "%b %Y",
+                "Feb 2024",
+            ],
+            'DD Month Year' => [
+                "1708405742",
+                "%d %B %Y",
+                "20 February 2024",
+            ],
+            'D Month Year' => [
+                "1708405742",
+                "%e %B %Y",
+                "20 February 2024",
+            ],
+            'Abbreviated DD Month Year' => [
+                "1708405742",
+                "%d %b %Y",
+                "20 Feb 2024",
+            ],
+            'Abbreviated D Month Year' => [
+                "1708405742",
+                "%e %b %Y",
+                "20 Feb 2024",
+            ],
+            'numeric_c' => [
+                1708405742,
+                "%c",
+                "20 February 2024 at 1:09 pm",
+            ],
+            'string_strftimedatetime' => [
+                "1708405742",
+                get_string("strftimedatetime", 'langconfig'),
+                "20 February 2024, 01:09 PM",
+            ],
+            'numeric_strftimedatetime' => [
+                1708405742,
+                get_string("strftimedatetime", 'langconfig'),
+                "20 February 2024, 01:09 PM",
+            ],
+            'string_strftimedatetimeshortaccurate' => [
+                "1708405742",
+                get_string("strftimedatetimeshortaccurate", 'langconfig'),
+                "20/02/24, 13:09:02",
+            ],
+            'numeric_strftimedatetimeshortaccurate' => [
+                1708405742,
+                get_string("strftimedatetimeshortaccurate", 'langconfig'),
+                "20/02/24, 13:09:02",
+            ],
+        ];
+    }
+
+    /**
+     * Test \core_date::strftime function.
+     *
+     * @dataProvider get_strftime_provider
+     * @param mixed $input Input passed to strftime
+     * @param string $format The date format to pass to strftime, falls back to '%c' if null
+     * @param string $expected The output generated by strftime
+     */
+    public function test_strftime(mixed $input, string $format, string $expected): void {
+        $this->assertEqualsIgnoringWhitespace($expected, core_date::strftime($format, $input));
+    }
+
+    /**
+     * Data provider for ::test_strftime_locale.
+     *
+     * @return array[]
+     */
+    public static function get_strftime_locale_provider(): array {
+        return [
+            'Month Year only' => [
+                "1728487000",
+                'ru_RU.UTF-8',
+                "%B %Y",
+                "октябрь 2024",
+            ],
+            'DD Month Year' => [
+                "1728487000",
+                'ru_RU.UTF-8',
+                "%d %B %Y",
+                "09 октября 2024",
+            ],
+            'D Month Year' => [
+                "1728487000",
+                'ru_RU.UTF-8',
+                "%e %B %Y",
+                " 9 октября 2024",
+            ],
+            'Abbreviated Month Year only' => [
+                "1728487000",
+                'ru_RU.UTF-8',
+                "%b %Y",
+                "окт. 2024",
+            ],
+            'Abbreviated DD Month Year' => [
+                "1728487000",
+                'ru_RU.UTF-8',
+                "%d %b %Y",
+                "09 окт. 2024",
+            ],
+            'Abbreviated D Month Year' => [
+                "1728487000",
+                'ru_RU.UTF-8',
+                "%e %b %Y",
+                " 9 окт. 2024",
+            ],
+        ];
+    }
+
+    /**
+     * Test \core_date::strftime function with alternate languages.
+     *
+     * @dataProvider get_strftime_locale_provider
+     * @param mixed $input Input passed to strftime
+     * @param string $locale The locale
+     * @param string $format The date format to pass to strftime, falls back to '%c' if null
+     * @param string $expected The output generated by strftime
+     */
+    public function test_strftime_locale(
+        mixed $input,
+        string $locale,
+        string $format,
+        string $expected,
+    ): void {
+        $this->assertEqualsIgnoringWhitespace(
+            $expected,
+            core_date::strftime($format, $input, $locale));
     }
 }

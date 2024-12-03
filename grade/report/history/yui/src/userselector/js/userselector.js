@@ -58,7 +58,7 @@ var CSS = {
     HEADER: 'usp-header',
     HIDDEN: 'hidden',
     LIGHTBOX: 'usp-loading-lightbox',
-    LOADINGICON: 'loading-icon',
+    LOADINGICON: 'loading-icon icon',
     MORERESULTS: 'usp-more-results',
     OPTIONS: 'options',
     PICTURE: 'usp-picture',
@@ -395,7 +395,7 @@ Y.namespace('M.gradereport_history').UserSelector = Y.extend(USERSELECTOR, M.cor
                         '<div class="{{CSS.FULLNAME}}">' +
                             '<label for="{{checkboxId}}">{{fullname}}</label>' +
                         '</div>' +
-                        '<div id="{{extraFieldsId}}" class="{{CSS.EXTRAFIELDS}}">{{extrafields}}</div>' +
+                        '<div id="{{extraFieldsId}}" class="{{CSS.EXTRAFIELDS}}">{{{extrafields}}}</div>' +
                     '</div>' +
                 '</div>'
             );

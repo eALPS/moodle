@@ -46,11 +46,11 @@ if ($action) {
 $baseurl = $CFG->wwwroot . '/' . $CFG->admin . '/roles/manage.php';
 $defineurl = $CFG->wwwroot . '/' . $CFG->admin . '/roles/define.php';
 
+admin_externalpage_setup('defineroles');
+
 // Check access permissions.
 $systemcontext = context_system::instance();
-require_login();
 require_capability('moodle/role:manage', $systemcontext);
-admin_externalpage_setup('defineroles');
 
 // Get some basic data we are going to need.
 $roles = role_fix_names(get_all_roles(), $systemcontext, ROLENAME_ORIGINAL);
@@ -60,12 +60,15 @@ $undeletableroles[$CFG->notloggedinroleid] = 1;
 $undeletableroles[$CFG->guestroleid] = 1;
 $undeletableroles[$CFG->defaultuserroleid] = 1;
 
+$PAGE->set_primary_active_tab('siteadminnode');
+$PAGE->navbar->add(get_string('defineroles', 'role'), $PAGE->url);
+
 // Process submitted data.
 $confirmed = (optional_param('confirm', false, PARAM_BOOL) && data_submitted() && confirm_sesskey());
 switch ($action) {
     case 'delete':
         if (isset($undeletableroles[$roleid])) {
-            print_error('cannotdeletethisrole', '', $baseurl);
+            throw new \moodle_exception('cannotdeletethisrole', '', $baseurl);
         }
         if (!$confirmed) {
             // Show confirmation.
@@ -73,7 +76,7 @@ switch ($action) {
             $optionsyes = array('action'=>'delete', 'roleid'=>$roleid, 'sesskey'=>sesskey(), 'confirm'=>1);
             $a = new stdClass();
             $a->id = $roleid;
-            $a->name = $roles[$roleid]->name;
+            $a->name = $roles[$roleid]->localname;
             $a->shortname = $roles[$roleid]->shortname;
             $a->count = $DB->count_records_select('role_assignments',
                 'roleid = ?', array($roleid), 'COUNT(DISTINCT userid)');
@@ -85,12 +88,10 @@ switch ($action) {
             die;
         }
         if (!delete_role($roleid)) {
-            // The delete failed, but mark the context dirty in case.
-            $systemcontext->mark_dirty();
-            print_error('cannotdeleterolewithid', 'error', $baseurl, $roleid);
+            // The delete failed.
+            throw new \moodle_exception('cannotdeleterolewithid', 'error', $baseurl, $roleid);
         }
         // Deleted a role sitewide...
-        $systemcontext->mark_dirty();
         redirect($baseurl);
         break;
 
@@ -107,10 +108,10 @@ switch ($action) {
                 }
             }
             if (is_null($thisrole) || is_null($prevrole)) {
-                print_error('cannotmoverolewithid', 'error', '', $roleid);
+                throw new \moodle_exception('cannotmoverolewithid', 'error', '', $roleid);
             }
             if (!switch_roles($thisrole, $prevrole)) {
-                print_error('cannotmoverolewithid', 'error', '', $roleid);
+                throw new \moodle_exception('cannotmoverolewithid', 'error', '', $roleid);
             }
         }
 
@@ -130,10 +131,10 @@ switch ($action) {
                 }
             }
             if (is_null($nextrole)) {
-                print_error('cannotmoverolewithid', 'error', '', $roleid);
+                throw new \moodle_exception('cannotmoverolewithid', 'error', '', $roleid);
             }
             if (!switch_roles($thisrole, $nextrole)) {
-                print_error('cannotmoverolewithid', 'error', '', $roleid);
+                throw new \moodle_exception('cannotmoverolewithid', 'error', '', $roleid);
             }
         }
 
@@ -216,9 +217,9 @@ die;
 function get_action_icon($url, $icon, $alt, $tooltip) {
     global $OUTPUT;
     return '<a title="' . $tooltip . '" href="'. $url . '">' .
-            '<img src="' . $OUTPUT->pix_url('t/' . $icon) . '" class="iconsmall" alt="' . $alt . '" /></a> ';
+            $OUTPUT->pix_icon('t/' . $icon, $alt) . '</a> ';
 }
 function get_spacer() {
     global $OUTPUT;
-    return '<img src="' . $OUTPUT->pix_url('spacer') . '" class="iconsmall" alt="" /> ';
+    return $OUTPUT->spacer();
 }

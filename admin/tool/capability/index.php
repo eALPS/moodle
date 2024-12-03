@@ -40,7 +40,7 @@ admin_externalpage_setup('toolcapability');
 
 // Prepare the list of capabilities to choose from.
 $capabilitychoices = array();
-foreach ($context->get_capabilities() as $cap) {
+foreach ($context->get_capabilities('name') as $cap) {
     $capabilitychoices[$cap->name] = $cap->name . ': ' . get_capability_string($cap->name);
 }
 
@@ -55,17 +55,15 @@ $form = new tool_capability_settings_form(null, array(
     'capabilities' => $capabilitychoices,
     'roles' => $rolechoices
 ));
-$PAGE->requires->yui_module(
-    'moodle-tool_capability-search',
-    'M.tool_capability.init_capability_search',
-    array(array('strsearch' => get_string('search')))
-);
+
+$PAGE->requires->js_call_amd('tool_capability/search', 'init');
 
 // Log.
 $capabilities = array();
 $rolestoshow = array();
 $roleids = array('0');
 $cleanedroleids = array();
+$onlydiff = false;
 if ($data = $form->get_data()) {
 
     $roleids = array();
@@ -90,6 +88,10 @@ if ($data = $form->get_data()) {
             }
         }
     }
+
+    if (isset($data->onlydiff)) {
+        $onlydiff = $data->onlydiff;
+    }
 }
 
 \tool_capability\event\report_viewed::create()->trigger();
@@ -103,7 +105,7 @@ $form->display();
 // If we have a capability, generate the report.
 if (count($capabilities) && count($rolestoshow)) {
     /* @var tool_capability_renderer $renderer */
-    echo $renderer->capability_comparison_table($capabilities, $context->id, $rolestoshow);
+    echo $renderer->capability_comparison_table($capabilities, $context->id, $rolestoshow, $onlydiff);
 }
 
 // Footer.
@@ -138,7 +140,7 @@ function print_report_tree($contextid, $contexts, $allroles) {
     // If there are any role overrides here, print them.
     if (!empty($contexts[$contextid]->rolecapabilities)) {
         $rowcounter = 0;
-        echo '<table class="generaltable rolecaps"><tbody>';
+        echo '<table class="generaltable table-striped"><tbody>';
         foreach ($allroles as $role) {
             if (isset($contexts[$contextid]->rolecapabilities[$role->id])) {
                 $permission = $contexts[$contextid]->rolecapabilities[$role->id];

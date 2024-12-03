@@ -14,79 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Cache store - base class
- *
- * This file is part of Moodle's cache API, affectionately called MUC.
- * It contains the components that are required in order to use caching.
- *
- * @package    core
- * @category   cache
- * @copyright  2012 Sam Hemelryk
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core_cache;
 
-defined('MOODLE_INTERNAL') || die();
-
-/**
- * Cache store interface.
- *
- * This interface defines the static methods that must be implemented by every cache store plugin.
- * To ensure plugins implement this class the abstract cache_store class implements this interface.
- *
- * @package    core
- * @category   cache
- * @copyright  2012 Sam Hemelryk
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-interface cache_store_interface {
-    /**
-     * Static method to check if the store requirements are met.
-     *
-     * @return bool True if the stores software/hardware requirements have been met and it can be used. False otherwise.
-     */
-    public static function are_requirements_met();
-
-    /**
-     * Static method to check if a store is usable with the given mode.
-     *
-     * @param int $mode One of cache_store::MODE_*
-     */
-    public static function is_supported_mode($mode);
-
-    /**
-     * Returns the supported features as a binary flag.
-     *
-     * @param array $configuration The configuration of a store to consider specifically.
-     * @return int The supported features.
-     */
-    public static function get_supported_features(array $configuration = array());
-
-    /**
-     * Returns the supported modes as a binary flag.
-     *
-     * @param array $configuration The configuration of a store to consider specifically.
-     * @return int The supported modes.
-     */
-    public static function get_supported_modes(array $configuration = array());
-
-    /**
-     * Generates an instance of the cache store that can be used for testing.
-     *
-     * Returns an instance of the cache store, or false if one cannot be created.
-     *
-     * @param cache_definition $definition
-     * @return cache_store|false
-     */
-    public static function initialise_test_instance(cache_definition $definition);
-
-    /**
-     * Generates the appropriate configuration required for unit testing.
-     *
-     * @return array Array of unit test configuration data to be used by initialise().
-     */
-    public static function unit_test_configuration();
-}
+use core\exception\coding_exception;
+use stdClass;
 
 /**
  * Abstract cache store class.
@@ -95,13 +26,12 @@ interface cache_store_interface {
  * It lays down the foundation for what is required of a cache store plugin.
  *
  * @since Moodle 2.4
- * @package    core
+ * @package    core_cache
  * @category   cache
  * @copyright  2012 Sam Hemelryk
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-abstract class cache_store implements cache_store_interface {
-
+abstract class store implements store_interface {
     // Constants for features a cache store can support
 
     /**
@@ -144,6 +74,15 @@ abstract class cache_store implements cache_store_interface {
      * Request caches. Static caches really.
      */
     const MODE_REQUEST = 4;
+    /**
+     * Static caches.
+     */
+    const STATIC_ACCEL = '** static accel. **';
+
+    /**
+     * Returned from get_last_io_bytes if this cache store doesn't support counting bytes read/sent.
+     */
+    const IO_BYTES_NOT_SUPPORTED = -1;
 
     /**
      * Constructs an instance of the cache store.
@@ -162,7 +101,7 @@ abstract class cache_store implements cache_store_interface {
      * @param string $name The name of the cache store
      * @param array $configuration The configuration for this store instance.
      */
-    abstract public function __construct($name, array $configuration = array());
+    abstract public function __construct($name, array $configuration = []);
 
     /**
      * Returns the name of this store instance.
@@ -180,9 +119,9 @@ abstract class cache_store implements cache_store_interface {
      * If there are setup tasks that may fail they should be done within the __construct method
      * and should they fail is_ready should return false.
      *
-     * @param cache_definition $definition
+     * @param definition $definition
      */
-    abstract public function initialise(cache_definition $definition);
+    abstract public function initialise(definition $definition);
 
     /**
      * Returns true if this cache store instance has been initialised.
@@ -195,7 +134,7 @@ abstract class cache_store implements cache_store_interface {
      * @return bool
      */
     public function is_ready() {
-        return forward_static_call(array($this, 'are_requirements_met'));
+        return forward_static_call([$this, 'are_requirements_met']);
     }
 
     /**
@@ -261,11 +200,11 @@ abstract class cache_store implements cache_store_interface {
 
     /**
      * @deprecated since 2.5
-     * @see \cache_store::instance_deleted()
+     * @see store::instance_deleted()
      */
     public function cleanup() {
-        throw new coding_exception('cache_store::cleanup() can not be used anymore.' .
-            ' Please use cache_store::instance_deleted() instead.');
+        throw new coding_exception('store::cleanup() can not be used anymore.' .
+            ' Please use store::instance_deleted() instead.');
     }
 
     /**
@@ -335,7 +274,7 @@ abstract class cache_store implements cache_store_interface {
      * @return bool
      */
     public function is_searchable() {
-        return in_array('cache_is_searchable', class_implements($this));
+        return ($this instanceof searchable_cache_interface);
     }
 
     /**
@@ -357,9 +296,9 @@ abstract class cache_store implements cache_store_interface {
      * you can override this method to handle any situations you want before cloning.
      *
      * @param array $details An array containing the details of the store from the cache config.
-     * @return cache_store
+     * @return store
      */
-    public function create_clone(array $details = array()) {
+    public function create_clone(array $details = []) {
         // By default we just run clone.
         // Any stores that have an issue with this will need to override the create_clone method.
         return clone($this);
@@ -374,7 +313,124 @@ abstract class cache_store implements cache_store_interface {
      * @return string[] An array of warning strings from the store instance.
      */
     public function get_warnings() {
-        return array();
+        return [];
+    }
+
+    /**
+     * Estimates the storage size used within this cache if the given value is stored with the
+     * given key.
+     *
+     * This function is not exactly accurate; it does not necessarily take into account all the
+     * overheads involved. It is only intended to give a good idea of the relative size of
+     * different caches.
+     *
+     * The default implementation serializes both key and value and sums the lengths (as a rough
+     * estimate which is probably good enough for everything unless the cache offers compression).
+     *
+     * @param mixed $key Key
+     * @param mixed $value Value
+     * @return int Size in bytes
+     */
+    public function estimate_stored_size($key, $value): int {
+        return strlen(serialize($key)) + strlen(serialize($value));
+    }
+
+    /**
+     * Gets the amount of memory/storage currently used by this cache store if known.
+     *
+     * This value should be obtained quickly from the store itself, if available.
+     *
+     * This is the total memory usage of the entire store, not for ther specific cache in question.
+     *
+     * Where not supported (default), will always return null.
+     *
+     * @return int|null Amount of memory used in bytes or null
+     */
+    public function store_total_size(): ?int {
+        return null;
+    }
+
+    /**
+     * Gets the amount of memory used by this specific cache within the store, if known.
+     *
+     * This function may be slow and should not be called in normal usage, only for administration
+     * pages. The value is usually an estimate, and may not be available at all.
+     *
+     * When estimating, a number of sample items will be used for the estimate. If set to 50
+     * (default), then this function will retrieve 50 random items and use that to estimate the
+     * total size.
+     *
+     * The return value has the following fields:
+     * - supported (true if any other values are completed)
+     * - items (number of items)
+     * - mean (mean size of one item in bytes)
+     * - sd (standard deviation of item size in bytes, based on sample)
+     * - margin (95% confidence margin for mean - will be 0 if exactly computed)
+     *
+     * @param int $samplekeys Number of samples to use
+     * @return stdClass Object with information about the store size
+     */
+    public function cache_size_details(int $samplekeys = 50): stdClass {
+        $result = (object)[
+            'supported' => false,
+            'items' => 0,
+            'mean' => 0,
+            'sd' => 0,
+            'margin' => 0,
+        ];
+
+        // If this cache isn't searchable, we don't know the answer.
+        if (!$this->is_searchable()) {
+            return $result;
+        }
+        $result->supported = true;
+
+        // Get all the keys for the cache.
+        $keys = $this->find_all();
+        $result->items = count($keys);
+
+        // Don't do anything else if there are no items.
+        if ($result->items === 0) {
+            return $result;
+        }
+
+        // Select N random keys.
+        $exact = false;
+        if ($result->items <= $samplekeys) {
+            $samples = $keys;
+            $exact = true;
+        } else {
+            $indexes = array_rand($keys, $samplekeys);
+            $samples = [];
+            foreach ($indexes as $index) {
+                $samples[] = $keys[$index];
+            }
+        }
+
+        // Get the random items from cache and estimate the size of each.
+        $sizes = [];
+        foreach ($samples as $samplekey) {
+            $value = $this->get($samplekey);
+            $sizes[] = $this->estimate_stored_size($samplekey, $value);
+        }
+        $number = count($sizes);
+
+        // Calculate the mean and standard deviation.
+        $result->mean = array_sum($sizes) / $number;
+        $squarediff = 0;
+        foreach ($sizes as $size) {
+            $squarediff += ($size - $result->mean) ** 2;
+        }
+        $squarediff /= $number;
+        $result->sd = sqrt($squarediff);
+
+        // If it's not exact, also calculate the confidence interval.
+        if (!$exact) {
+            // 95% confidence has a Z value of 1.96.
+            $result->margin = (1.96 * $result->sd) / sqrt($number);
+        }
+
+        return $result;
     }
 
     /**
@@ -388,4 +444,28 @@ abstract class cache_store implements cache_store_interface {
     public static function ready_to_be_used_for_testing() {
         return false;
     }
+
+    /**
+     * Gets the number of bytes read from or written to cache as a result of the last action.
+     *
+     * This includes calls to the functions get(), get_many(), set(), and set_many(). The number
+     * is reset by calling any of these functions.
+     *
+     * This should be the actual number of bytes of the value read from or written to cache,
+     * giving an impression of the network or other load. It will not be exactly the same amount
+     * as netowrk traffic because of protocol overhead, key text, etc.
+     *
+     * If not supported, returns IO_BYTES_NOT_SUPPORTED.
+     *
+     * @return int Bytes read (or 0 if none/not supported)
+     * @since Moodle 4.0
+     */
+    public function get_last_io_bytes(): int {
+        return self::IO_BYTES_NOT_SUPPORTED;
+    }
 }
+
+// Alias this class to the old name.
+// This file will be autoloaded by the legacyclasses autoload system.
+// In future all uses of this class will be corrected and the legacy references will be removed.
+class_alias(store::class, \cache_store::class);

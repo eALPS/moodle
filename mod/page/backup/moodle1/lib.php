@@ -37,7 +37,7 @@ class moodle1_mod_page_handler extends moodle1_resource_successor_handler {
      * Converts /MOODLE_BACKUP/COURSE/MODULES/MOD/RESOURCE data
      * Called by moodle1_mod_resource_handler::process_resource()
      */
-    public function process_legacy_resource(array $data, array $raw = null) {
+    public function process_legacy_resource(array $data, ?array $raw = null) {
 
         // get the course module id and context id
         $instanceid = $data['id'];
@@ -72,7 +72,7 @@ class moodle1_mod_page_handler extends moodle1_resource_successor_handler {
         $page['timemodified']       = $data['timemodified'];
 
         // populate display and displayoptions fields
-        $options = array('printheading' => 1, 'printintro' => 0);
+        $options = array('printintro' => 0);
         if ($data['popup']) {
             $page['display'] = RESOURCELIB_DISPLAY_POPUP;
             $rawoptions = explode(',', $data['popup']);

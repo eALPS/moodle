@@ -96,26 +96,6 @@ class enrol_meta_plugin extends enrol_plugin {
     }
 
     /**
-     * Gets an array of the user enrolment actions
-     *
-     * @param course_enrolment_manager $manager
-     * @param stdClass $ue A user enrolment object
-     * @return array An array of user_enrolment_actions
-     */
-    public function get_user_enrolment_actions(course_enrolment_manager $manager, $ue) {
-        $actions = array();
-        $context = $manager->get_context();
-        $instance = $ue->enrolmentinstance;
-        $params = $manager->get_moodlepage()->url->params();
-        $params['ue'] = $ue->id;
-        if ($this->allow_unenrol_user($instance, $ue) && has_capability('enrol/meta:unenrol', $context)) {
-            $url = new moodle_url('/enrol/unenroluser.php', $params);
-            $actions[] = new user_enrolment_action(new pix_icon('t/delete', ''), get_string('unenrol', 'enrol'), $url, array('class'=>'unenrollink', 'rel'=>$ue->id));
-        }
-        return $actions;
-    }
-
-    /**
      * Called after updating/inserting course.
      *
      * @param bool $inserted true if course just inserted
@@ -134,16 +114,18 @@ class enrol_meta_plugin extends enrol_plugin {
      * @param array $fields instance fields
      * @return int id of last instance, null if can not be created
      */
-    public function add_instance($course, array $fields = null) {
+    public function add_instance($course, ?array $fields = null) {
         global $CFG;
 
         require_once("$CFG->dirroot/enrol/meta/locallib.php");
 
         // Support creating multiple at once.
-        if (is_array($fields['customint1'])) {
+        if (isset($fields['customint1']) && is_array($fields['customint1'])) {
             $courses = array_unique($fields['customint1']);
-        } else {
+        } else if (isset($fields['customint1'])) {
             $courses = array($fields['customint1']);
+        } else {
+            $courses = array(null); // Strange? Yes, but that's how it's working or instance is not created ever.
         }
         foreach ($courses as $courseid) {
             if (!empty($fields['customint2']) && $fields['customint2'] == ENROL_META_CREATE_GROUP) {
@@ -201,17 +183,6 @@ class enrol_meta_plugin extends enrol_plugin {
 
         require_once("$CFG->dirroot/enrol/meta/locallib.php");
         enrol_meta_sync($instance->courseid);
-    }
-
-    /**
-     * Called for all enabled enrol plugins that returned true from is_cron_required().
-     * @return void
-     */
-    public function cron() {
-        global $CFG;
-
-        require_once("$CFG->dirroot/enrol/meta/locallib.php");
-        enrol_meta_sync();
     }
 
     /**
@@ -357,31 +328,45 @@ class enrol_meta_plugin extends enrol_plugin {
      */
     public function edit_instance_validation($data, $files, $instance, $context) {
         global $DB;
+
         $errors = array();
         $thiscourseid = $context->instanceid;
-        $c = false;
 
         if (!empty($data['customint1'])) {
-            $courses = is_array($data['customint1']) ? $data['customint1'] : [$data['customint1']];
-            foreach ($courses as $courseid) {
-                $c = $DB->get_record('course', array('id' => $courseid), '*', MUST_EXIST);
-                $coursecontext = context_course::instance($c->id);
+            $coursesidarr = is_array($data['customint1']) ? $data['customint1'] : [$data['customint1']];
+            list($coursesinsql, $coursesinparams) = $DB->get_in_or_equal($coursesidarr, SQL_PARAMS_NAMED, 'metacourseid');
+            if ($coursesrecords = $DB->get_records_select('course', "id {$coursesinsql}",
+                $coursesinparams, '', 'id,visible')) {
+                // Cast NULL to 0 to avoid possible mess with the SQL.
+                $instanceid = $instance->id ?? 0;
 
-                $sqlexists = 'enrol = :meta AND courseid = :currentcourseid AND customint1 = :courseid AND id != :id';
-                $existing = $DB->record_exists_select('enrol', $sqlexists, [
+                $existssql = "enrol = :meta AND courseid = :currentcourseid AND id != :id AND customint1 {$coursesinsql}";
+                $existsparams = [
                     'meta' => 'meta',
                     'currentcourseid' => $thiscourseid,
-                    'courseid' => $c->id,
-                    'id' => $instance->id
-                ]);
-
-                if (!$c->visible and !has_capability('moodle/course:viewhiddencourses', $coursecontext)) {
-                    $errors['customint1'] = get_string('error');
-                } else if (!has_capability('enrol/meta:selectaslinked', $coursecontext)) {
-                    $errors['customint1'] = get_string('error');
-                } else if ($c->id == SITEID or $c->id == $thiscourseid or $existing) {
-                    $errors['customint1'] = get_string('error');
+                    'id' => $instanceid
+                ];
+                $existsparams += $coursesinparams;
+                if ($DB->record_exists_select('enrol', $existssql, $existsparams)) {
+                    // We may leave right here as further checks do not make sense in case we have existing enrol records
+                    // with the parameters from above.
+                    $errors['customint1'] = get_string('invalidcourseid', 'error');
+                } else {
+                    foreach ($coursesrecords as $coursesrecord) {
+                        $coursecontext = context_course::instance($coursesrecord->id);
+                        if (!$coursesrecord->visible and !has_capability('moodle/course:viewhiddencourses', $coursecontext)) {
+                            $errors['customint1'] = get_string('nopermissions', 'error',
+                                'moodle/course:viewhiddencourses');
+                        } else if (!has_capability('enrol/meta:selectaslinked', $coursecontext)) {
+                            $errors['customint1'] = get_string('nopermissions', 'error',
+                                'enrol/meta:selectaslinked');
+                        } else if ($coursesrecord->id == SITEID or $coursesrecord->id == $thiscourseid) {
+                            $errors['customint1'] = get_string('invalidcourseid', 'error');
+                        }
+                    }
                 }
+            } else {
+                $errors['customint1'] = get_string('invalidcourseid', 'error');
             }
         } else {
             $errors['customint1'] = get_string('required');
@@ -398,6 +383,142 @@ class enrol_meta_plugin extends enrol_plugin {
         return $errors;
     }
 
+    /**
+     * Check if data is valid for a given enrolment plugin
+     *
+     * @param array $enrolmentdata enrolment data to validate.
+     * @param int|null $courseid Course ID.
+     * @return array Errors
+     */
+    public function validate_enrol_plugin_data(array $enrolmentdata, ?int $courseid = null): array {
+        global $DB;
+
+        $errors = parent::validate_enrol_plugin_data($enrolmentdata, $courseid);
+
+        if (isset($enrolmentdata['addtogroup'])) {
+            $addtogroup = $enrolmentdata['addtogroup'];
+            if (($addtogroup == 1) || ($addtogroup == 0)) {
+                if (isset($enrolmentdata['groupname'])) {
+                    $errors['erroraddtogroupgroupname'] =
+                        new lang_string('erroraddtogroupgroupname', 'group');
+                }
+            } else {
+                $errors['erroraddtogroup'] =
+                    new lang_string('erroraddtogroup', 'group');
+            }
+        }
+
+        if ($courseid) {
+            $enrolmentdata = $this->fill_enrol_custom_fields($enrolmentdata, $courseid);
+
+            if (isset($enrolmentdata['groupname']) && $enrolmentdata['groupname']) {
+                $groupname = $enrolmentdata['groupname'];
+                if (!groups_get_group_by_name($courseid, $groupname)) {
+                    $errors['errorinvalidgroup'] =
+                        new lang_string('errorinvalidgroup', 'group', $groupname);
+                }
+            }
+        }
+
+        if (!isset($enrolmentdata['metacoursename'])) {
+            $errors['missingmandatoryfields'] =
+                new lang_string('missingmandatoryfields', 'tool_uploadcourse',
+                    'metacoursename');
+        } else {
+            $metacoursename = $enrolmentdata['metacoursename'];
+            $metacourseid = $DB->get_field('course', 'id', ['shortname' => $metacoursename]);
+
+            if (!$metacourseid) {
+                $errors['unknownmetacourse'] =
+                    new lang_string('unknownmetacourse', 'enrol_meta', $metacoursename);
+            }
+
+            if ($courseid && ($courseid == $metacourseid)) {
+                $errors['samemetacourse'] =
+                    new lang_string('samemetacourse', 'enrol_meta', $metacoursename);
+            }
+        }
+        return $errors;
+    }
+
+    /**
+     * Fill custom fields data for a given enrolment plugin.
+     *
+     * @param array $enrolmentdata enrolment data.
+     * @param int $courseid Course ID.
+     * @return array Updated enrolment data with custom fields info.
+     */
+    public function fill_enrol_custom_fields(array $enrolmentdata, int $courseid): array {
+        global $DB;
+
+        $metacoursename = $enrolmentdata['metacoursename'];
+        $enrolmentdata['customint1'] =
+            $DB->get_field('course', 'id', ['shortname' => $metacoursename]);
+
+        if (isset($enrolmentdata['addtogroup'])) {
+            if ($enrolmentdata['addtogroup'] == 0) {
+                $enrolmentdata['customint2'] = 0;
+            } else if ($enrolmentdata['addtogroup'] == 1) {
+                $enrolmentdata['customint2'] = ENROL_META_CREATE_GROUP;
+            }
+        } else if (isset($enrolmentdata['groupname'])) {
+            $enrolmentdata['customint2'] = groups_get_group_by_name($courseid, $enrolmentdata['groupname']);
+        }
+        return $enrolmentdata + [
+            'customint1' => null,
+            'customint2' => null,
+        ];
+    }
+
+    /**
+     * Check if enrolment plugin is supported in csv course upload.
+     *
+     * @return bool
+     */
+    public function is_csv_upload_supported(): bool {
+        return true;
+    }
+
+    /**
+     * Finds matching instances for a given course.
+     *
+     * @param array $enrolmentdata enrolment data.
+     * @param int $courseid Course ID.
+     * @return stdClass|null Matching instance
+     */
+    public function find_instance(array $enrolmentdata, int $courseid): ?stdClass {
+        global $DB;
+        $instances = enrol_get_instances($courseid, false);
+
+        $instance = null;
+        if (isset($enrolmentdata['metacoursename'])) {
+            $metacourseid = $DB->get_field('course', 'id', ['shortname' => $enrolmentdata['metacoursename']]);
+            if ($metacourseid) {
+                foreach ($instances as $i) {
+                    if ($i->enrol == 'meta' && $i->customint1 == $metacourseid) {
+                        $instance = $i;
+                        break;
+                    }
+                }
+            }
+        }
+        return $instance;
+    }
+
+    /**
+     * Add new instance of enrol plugin with custom settings,
+     * called when adding new instance manually or when adding new course.
+     * Used for example on course upload.
+     *
+     * Not all plugins support this.
+     *
+     * @param stdClass $course Course object
+     * @param array|null $fields instance fields
+     * @return int|null id of new instance or null if not supported
+     */
+    public function add_custom_instance(stdClass $course, ?array $fields = null): ?int {
+        return $this->add_instance($course, $fields);
+    }
 
     /**
      * Restore instance and map settings.

@@ -14,18 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Tests for myprofilelib apis.
- *
- * @package    core
- * @copyright  2015 onwards Ankit agarwal <ankit.agrr@gmail.com>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later.
- */
-
-defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
-require_once($CFG->dirroot . '/lib/myprofilelib.php');
+namespace core;
 
 /**
  * Tests for myprofilelib apis.
@@ -34,7 +23,7 @@ require_once($CFG->dirroot . '/lib/myprofilelib.php');
  * @copyright  2015 onwards Ankit agarwal <ankit.agrr@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later.
  */
-class core_myprofilelib_testcase extends advanced_testcase {
+class myprofilelib_test extends \advanced_testcase {
 
     /**
      * @var stdClass The user.
@@ -51,13 +40,23 @@ class core_myprofilelib_testcase extends advanced_testcase {
      */
     private $tree;
 
-    public function setUp() {
+    /**
+     * Load required test libraries
+     */
+    public static function setUpBeforeClass(): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/lib/myprofilelib.php');
+        require_once($CFG->dirroot . '/user/profile/lib.php');
+        parent::setUpBeforeClass();
+    }
+
+    public function setUp(): void {
         // Set the $PAGE->url value so core_myprofile_navigation() doesn't complain.
         global $PAGE;
+        parent::setUp();
         $PAGE->set_url('/test');
 
         $this->user = $this->getDataGenerator()->create_user();
-        $this->user2 = $this->getDataGenerator()->create_user();
         $this->course = $this->getDataGenerator()->create_course();
         $this->tree = new \core_user\output\myprofile\tree();
         $this->resetAfterTest();
@@ -66,15 +65,14 @@ class core_myprofilelib_testcase extends advanced_testcase {
     /**
      * Tests the core_myprofile_navigation() function as an admin viewing a user's course profile.
      */
-    public function test_core_myprofile_navigation_as_admin() {
+    public function test_core_myprofile_navigation_as_admin(): void {
         $this->setAdminUser();
         $iscurrentuser = false;
 
         // Test tree as admin user.
         core_myprofile_navigation($this->tree, $this->user, $iscurrentuser, $this->course);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $categories = $reflector->getProperty('categories');
-        $categories->setAccessible(true);
         $cats = $categories->getValue($this->tree);
         $this->assertArrayHasKey('contact', $cats);
         $this->assertArrayHasKey('coursedetails', $cats);
@@ -84,7 +82,6 @@ class core_myprofilelib_testcase extends advanced_testcase {
         $this->assertArrayHasKey('loginactivity', $cats);
 
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayHasKey('fullprofile', $nodes->getValue($this->tree));
     }
 
@@ -92,56 +89,53 @@ class core_myprofilelib_testcase extends advanced_testcase {
      * Tests the core_myprofile_navigation() function as a user without permission to view the full
      * profile of another another user.
      */
-    public function test_core_myprofile_navigation_course_without_permission() {
-        $this->setUser($this->user2);
+    public function test_core_myprofile_navigation_course_without_permission(): void {
+        // User without permission.
+        $this->setUser($this->getDataGenerator()->create_user());
         $iscurrentuser = false;
 
         core_myprofile_navigation($this->tree, $this->user, $iscurrentuser, $this->course);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayNotHasKey('fullprofile', $nodes->getValue($this->tree));
     }
 
     /**
      * Tests the core_myprofile_navigation() function as the currently logged in user.
      */
-    public function test_core_myprofile_navigation_profile_link_as_current_user() {
+    public function test_core_myprofile_navigation_profile_link_as_current_user(): void {
         $this->setUser($this->user);
         $iscurrentuser = true;
 
         core_myprofile_navigation($this->tree, $this->user, $iscurrentuser, $this->course);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayHasKey('editprofile', $nodes->getValue($this->tree));
     }
 
     /**
      * Tests the core_myprofile_navigation() function as the admin viewing another user.
      */
-    public function test_core_myprofile_navigation_profile_link_as_admin() {
+    public function test_core_myprofile_navigation_profile_link_as_admin(): void {
         $this->setAdminUser();
         $iscurrentuser = false;
 
         core_myprofile_navigation($this->tree, $this->user, $iscurrentuser, $this->course);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayHasKey('editprofile', $nodes->getValue($this->tree));
     }
 
     /**
      * Tests the core_myprofile_navigation() function when viewing the preference page as an admin.
      */
-    public function test_core_myprofile_navigation_preference_as_admin() {
+    public function test_core_myprofile_navigation_preference_as_admin(): void {
         $this->setAdminUser();
         $iscurrentuser = false;
 
         core_myprofile_navigation($this->tree, $this->user, $iscurrentuser, $this->course);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayHasKey('preferences', $nodes->getValue($this->tree));
         $this->assertArrayHasKey('loginas', $nodes->getValue($this->tree));
     }
@@ -150,26 +144,25 @@ class core_myprofilelib_testcase extends advanced_testcase {
      * Tests the core_myprofile_navigation() function when viewing the preference
      * page as another user without the ability to use the 'loginas' functionality.
      */
-    public function test_core_myprofile_navigation_preference_without_permission() {
+    public function test_core_myprofile_navigation_preference_without_permission(): void {
         // Login as link for a user who doesn't have the capability to login as.
-        $this->setUser($this->user2);
+        $this->setUser($this->getDataGenerator()->create_user());
         $iscurrentuser = false;
 
         core_myprofile_navigation($this->tree, $this->user, $iscurrentuser, $this->course);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayNotHasKey('loginas', $nodes->getValue($this->tree));
     }
 
     /**
      * Tests the core_myprofile_navigation() function as an admin viewing another user's contact details.
      */
-    public function test_core_myprofile_navigation_contact_fields_as_admin() {
+    public function test_core_myprofile_navigation_contact_fields_as_admin(): void {
         global $CFG;
 
         // User contact fields.
-        set_config("hiddenuserfields", "country,city,webpage,icqnumber,skypeid,yahooid,aimid,msnid");
+        set_config("hiddenuserfields", "country,city");
         set_config("showuseridentity", "email,address,phone1,phone2,institution,department,idnumber");
         $hiddenfields = explode(',', $CFG->hiddenuserfields);
         $identityfields = explode(',', $CFG->showuseridentity);
@@ -180,12 +173,6 @@ class core_myprofilelib_testcase extends advanced_testcase {
         $fields = array(
             'country' => 'AU',
             'city' => 'Silent hill',
-            'url' => 'Ghosts',
-            'icq' => 'Wth is ICQ?',
-            'skype' => 'derp',
-            'yahoo' => 'are you living in the 90\'s?',
-            'aim' => 'are you for real?',
-            'msn' => '...',
             'email' => 'Rulelikeaboss@example.com',
             'address' => 'Didn\'t I mention silent hill already ?',
             'phone1' => '123',
@@ -200,9 +187,8 @@ class core_myprofilelib_testcase extends advanced_testcase {
 
         // User with proper permissions.
         core_myprofile_navigation($this->tree, $this->user, $iscurrentuser, null);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         foreach ($hiddenfields as $field) {
             $this->assertArrayHasKey($field, $nodes->getValue($this->tree));
         }
@@ -215,7 +201,7 @@ class core_myprofilelib_testcase extends advanced_testcase {
      * Tests the core_myprofile_navigation() function as a user viewing another user's profile
      * ensuring that the contact details are not shown.
      */
-    public function test_core_myprofile_navigation_contact_field_without_permission() {
+    public function test_core_myprofile_navigation_contact_field_without_permission(): void {
         global $CFG;
 
         $iscurrentuser = false;
@@ -223,11 +209,10 @@ class core_myprofilelib_testcase extends advanced_testcase {
         $identityfields = explode(',', $CFG->showuseridentity);
 
         // User without permission.
-        $this->setUser($this->user2);
+        $this->setUser($this->getDataGenerator()->create_user());
         core_myprofile_navigation($this->tree, $this->user, $iscurrentuser, null);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         foreach ($hiddenfields as $field) {
             $this->assertArrayNotHasKey($field, $nodes->getValue($this->tree));
         }
@@ -237,18 +222,67 @@ class core_myprofilelib_testcase extends advanced_testcase {
     }
 
     /**
+     * Data provider for {@see test_core_myprofile_navigation_contact_timezone}
+     *
+     * @return array[]
+     */
+    public static function core_myprofile_navigation_contact_timezone_provider(): array {
+        return [
+            'Hidden field' => ['timezone', '99', '99', null],
+            'Forced timezone' => ['', 'Europe/London', 'Pacific/Tahiti', 'Europe/London'],
+            'User timezone (default)' => ['', '99', '99', 'Australia/Perth'],
+            'User timezone (selected)' => ['', '99', 'Pacific/Tahiti', 'Pacific/Tahiti'],
+        ];
+    }
+
+    /**
+     * Test timezone node added to user profile navigation
+     *
+     * @param string $hiddenuserfields
+     * @param string $forcetimezone Timezone identifier or '99' (User can choose their own)
+     * @param string $usertimezone Timezone identifier or '99' (Use server default)
+     * @param string|null $expectresult
+     * @return bool
+     *
+     * @dataProvider core_myprofile_navigation_contact_timezone_provider
+     */
+    public function test_core_myprofile_navigation_contact_timezone(string $hiddenuserfields, string $forcetimezone,
+            string $usertimezone, ?string $expectresult = null): void {
+
+        set_config('hiddenuserfields', $hiddenuserfields);
+        set_config('forcetimezone', $forcetimezone);
+
+        // Set the timezone of our test user, and load their navigation tree.
+        $this->user->timezone = $usertimezone;
+        $this->setUser($this->user);
+
+        core_myprofile_navigation($this->tree, $this->user, true, null);
+
+        $reflector = new \ReflectionObject($this->tree);
+        $nodes = $reflector->getProperty('nodes');
+
+        /** @var \core_user\output\myprofile\node[] $tree */
+        $tree = $nodes->getValue($this->tree);
+        if ($expectresult !== null) {
+            $this->assertArrayHasKey('timezone', $tree);
+            $this->assertEquals($expectresult, $tree['timezone']->content);
+        } else {
+            $this->assertArrayNotHasKey('timezone', $tree);
+        }
+    }
+
+    /**
      * Tests the core_myprofile_navigation() function as an admin viewing another user's
      * profile ensuring the login activity links are shown.
      */
-    public function test_core_myprofile_navigation_login_activity() {
+    public function test_core_myprofile_navigation_login_activity(): void {
         // First access, last access, last ip.
         $this->setAdminUser();
         $iscurrentuser = false;
 
         core_myprofile_navigation($this->tree, $this->user, $iscurrentuser, null);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayHasKey('firstaccess', $nodes->getValue($this->tree));
         $this->assertArrayHasKey('lastaccess', $nodes->getValue($this->tree));
         $this->assertArrayHasKey('lastip', $nodes->getValue($this->tree));
@@ -258,16 +292,15 @@ class core_myprofilelib_testcase extends advanced_testcase {
      * Tests the core_myprofile_navigation() function as a user viewing another user's profile
      * ensuring the login activity links are not shown.
      */
-    public function test_core_myprofile_navigationn_login_activity_without_permission() {
+    public function test_core_myprofile_navigationn_login_activity_without_permission(): void {
         // User without permission.
         set_config("hiddenuserfields", "firstaccess,lastaccess,lastip");
-        $this->setUser($this->user2);
+        $this->setUser($this->getDataGenerator()->create_user());
         $iscurrentuser = false;
 
         core_myprofile_navigation($this->tree, $this->user, $iscurrentuser, null);
-        $reflector = new ReflectionObject($this->tree);
+        $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayNotHasKey('firstaccess', $nodes->getValue($this->tree));
         $this->assertArrayNotHasKey('lastaccess', $nodes->getValue($this->tree));
         $this->assertArrayNotHasKey('lastip', $nodes->getValue($this->tree));

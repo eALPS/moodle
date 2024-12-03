@@ -33,6 +33,7 @@ defined('MOODLE_INTERNAL') || die();
  *      Extra information about event.
  *
  *      - int quizid: the id of the quiz.
+ *      - int page: the page number of attempt.
  * }
  *
  * @package    mod_quiz
@@ -66,8 +67,10 @@ class attempt_viewed extends \core\event\base {
      * @return string
      */
     public function get_description() {
-        return "The user with id '$this->userid' has viewed the attempt with id '$this->objectid' belonging to the user " .
-            "with id '$this->relateduserid' for the quiz with course module id '$this->contextinstanceid'.";
+        $page = isset($this->other['page']) ? $this->other['page'] + 1 : '';
+        return "The user with id '$this->userid' has viewed page '$page' of the attempt with id " .
+            "'$this->objectid' belonging to the user with id '$this->relateduserid' for the quiz " .
+            "with course module id '$this->contextinstanceid'.";
     }
 
     /**
@@ -76,17 +79,10 @@ class attempt_viewed extends \core\event\base {
      * @return \moodle_url
      */
     public function get_url() {
-        return new \moodle_url('/mod/quiz/review.php', array('attempt' => $this->objectid));
-    }
-
-    /**
-     * Return the legacy event log data.
-     *
-     * @return array
-     */
-    protected function get_legacy_logdata() {
-        return array($this->courseid, 'quiz', 'continue attempt', 'review.php?attempt=' . $this->objectid,
-            $this->other['quizid'], $this->contextinstanceid);
+        return new \moodle_url('/mod/quiz/review.php', [
+            'attempt' => $this->objectid,
+            'page' => isset($this->other['page']) ? $this->other['page'] : 0
+        ]);
     }
 
     /**
@@ -105,15 +101,19 @@ class attempt_viewed extends \core\event\base {
         if (!isset($this->other['quizid'])) {
             throw new \coding_exception('The \'quizid\' value must be set in other.');
         }
+
+        if (!isset($this->other['page'])) {
+            throw new \coding_exception('The \'page\' value must be set in other.');
+        }
     }
 
     public static function get_objectid_mapping() {
-        return array('db' => 'quiz_attempts', 'restore' => 'quiz_attempt');
+        return ['db' => 'quiz_attempts', 'restore' => 'quiz_attempt'];
     }
 
     public static function get_other_mapping() {
-        $othermapped = array();
-        $othermapped['quizid'] = array('db' => 'quiz', 'restore' => 'quiz');
+        $othermapped = [];
+        $othermapped['quizid'] = ['db' => 'quiz', 'restore' => 'quiz'];
 
         return $othermapped;
     }

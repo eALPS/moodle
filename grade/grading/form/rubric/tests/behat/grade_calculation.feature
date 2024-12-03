@@ -4,7 +4,7 @@ Feature: Converting rubric score to grades
   As a teacher
   I need to be able to use different grade settings
 
-  Scenario Outline:
+  Scenario Outline: Convert rubric scores to grades.
     Given the following "users" exist:
       | username | firstname | lastname | email |
       | teacher1 | Teacher | 1 | teacher1@example.com |
@@ -23,18 +23,19 @@ Feature: Converting rubric score to grades
       | activity   | name              | intro | course | idnumber    | grade   | advancedgradingmethod_submissions |
       | assign     | Test assignment 1 | Test  | C1     | assign1     | <grade> | rubric                            |
     When I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
+    And I change window size to "large"
+    And I am on "Course 1" course homepage with editing mode on
     And I go to "Test assignment 1" advanced grading definition page
     And I set the following fields to these values:
       | Name | Assignment 1 rubric |
       | Description | Rubric test description |
-      | Calculate grade based on the rubric having a minimum score of 0 | <lockzeropoints> |
+      | Calculate grade having a minimum score of the minimum achievable grade for the rubric | <lockzeropoints> |
     And I define the following rubric:
       | Criterion 1 | Level 11 | 20 | Level 12 | 25 | Level 13 | 40 | Level 14  | 50  |
       | Criterion 2 | Level 21 | 20 | Level 22 | 25 | Level 23 | 30 |           |     |
       | Criterion 3 | Level 31 | 10 | Level 32 | 20 |          |    |           |     |
     And I press "Save rubric and make it ready"
+    And I navigate to "Assignment" in current page administration
     # Grading a student.
     And I go to "Student 1" "Test assignment 1" activity advanced grading page
     And I grade by filling the rubric with:

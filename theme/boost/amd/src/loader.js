@@ -16,47 +16,127 @@
 /**
  * Template renderer for Moodle. Load and render Moodle templates with Mustache.
  *
- * @module     core/templates
- * @package    core
- * @class      templates
+ * @module     theme_boost/loader
  * @copyright  2015 Damyon Wiese <damyon@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @since      2.9
  */
-define(['jquery', './tether', 'core/event'], function(jQuery, Tether, Event) {
 
-    window.jQuery = jQuery;
-    window.Tether = Tether;
+import $ from 'jquery';
+import * as Aria from './aria';
+import Bootstrap from './index';
+import Pending from 'core/pending';
+import {DefaultWhitelist} from './bootstrap/tools/sanitizer';
+import setupBootstrapPendingChecks from './pending';
 
-    require(['theme_boost/util',
-            'theme_boost/alert',
-            'theme_boost/button',
-            'theme_boost/carousel',
-            'theme_boost/collapse',
-            'theme_boost/dropdown',
-            'theme_boost/modal',
-            'theme_boost/scrollspy',
-            'theme_boost/tab',
-            'theme_boost/tooltip',
-            'theme_boost/popover'],
-            function() {
+/**
+ * Rember the last visited tabs.
+ */
+const rememberTabs = () => {
+    $('a[data-toggle="tab"]').on('shown.bs.tab', function(e) {
+        var hash = $(e.target).attr('href');
+        if (history.replaceState) {
+            history.replaceState(null, null, hash);
+        } else {
+            location.hash = hash;
+        }
+    });
+    const hash = window.location.hash;
+    if (hash) {
+        const tab = document.querySelector('[role="tablist"] [href="' + hash + '"]');
+        if (tab) {
+            tab.click();
+        }
+    }
+};
 
-        jQuery('body').popover({
-            selector: '[data-toggle="popover"]',
-            trigger: 'focus'
-        });
-
-        // We need to call popover automatically if nodes are added to the page later.
-        Event.getLegacyEvents().done(function(events) {
-            jQuery(document).on(events.FILTER_CONTENT_UPDATED, function() {
-                jQuery('body').popover({
-                    selector: '[data-toggle="popover"]',
-                    trigger: 'focus'
-                });
-            });
-        });
+/**
+ * Enable all popovers
+ *
+ */
+const enablePopovers = () => {
+    $('body').popover({
+        container: 'body',
+        selector: '[data-toggle="popover"]',
+        trigger: 'focus click',
+        whitelist: Object.assign(DefaultWhitelist, {
+            table: [],
+            thead: [],
+            tbody: [],
+            tr: [],
+            th: [],
+            td: [],
+        }),
     });
 
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && e.target.closest('[data-toggle="popover"]')) {
+            $(e.target).popover('hide');
+        }
+        if (e.key === 'Enter' && e.target.closest('[data-toggle="popover"]')) {
+            $(e.target).popover('show');
+        }
+    });
+};
 
-    return {};
-});
+/**
+ * Enable tooltips
+ *
+ */
+const enableTooltips = () => {
+    $('body').tooltip({
+        container: 'body',
+        selector: '[data-toggle="tooltip"]',
+    });
+};
+
+const pendingPromise = new Pending('theme_boost/loader:init');
+
+// Add pending promise event listeners to relevant Bootstrap custom events.
+setupBootstrapPendingChecks();
+
+// Setup Aria helpers for Bootstrap features.
+Aria.init();
+
+// Remember the last visited tabs.
+rememberTabs();
+
+// Enable all popovers.
+enablePopovers();
+
+// Enable all tooltips.
+enableTooltips();
+
+// Disables flipping the dropdowns up or dynamically repositioning them along the Y-axis (based on the viewport)
+// to prevent the dropdowns getting hidden behind the navbar or them covering the trigger element.
+$.fn.dropdown.Constructor.Default.popperConfig = {
+    modifiers: {
+        flip: {
+            enabled: false,
+        },
+        storeTopPosition: {
+            enabled: true,
+            // eslint-disable-next-line no-unused-vars
+            fn(data, options) {
+                data.storedTop = data.offsets.popper.top;
+                return data;
+            },
+            order: 299
+        },
+        restoreTopPosition: {
+            enabled: true,
+            // eslint-disable-next-line no-unused-vars
+            fn(data, options) {
+                data.offsets.popper.top = data.storedTop;
+                return data;
+            },
+            order: 301
+        }
+    },
+};
+
+pendingPromise.resolve();
+
+export {
+    Bootstrap,
+};

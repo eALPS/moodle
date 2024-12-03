@@ -57,6 +57,9 @@ class store implements \tool_log\log\writer, \core\log\sql_reader {
         $levels = $this->get_config('includelevels', '');
         $this->includeactions = $actions === '' ? array() : explode(',', $actions);
         $this->includelevels = $levels === '' ? array() : explode(',', $levels);
+        // JSON writing defaults to false (table format compatibility with older versions).
+        // Note: This variable is defined in the buffered_writer trait.
+        $this->jsonformat = (bool)$this->get_config('jsonformat', false);
     }
 
     /**
@@ -88,6 +91,7 @@ class store implements \tool_log\log\writer, \core\log\sql_reader {
         $dboptions['dbport'] = $this->get_config('dbport', '');
         $dboptions['dbschema'] = $this->get_config('dbschema', '');
         $dboptions['dbcollation'] = $this->get_config('dbcollation', '');
+        $dboptions['dbhandlesoptions'] = $this->get_config('dbhandlesoptions', false);
         try {
             $db->connect($this->get_config('dbhost'), $this->get_config('dbuser'), $this->get_config('dbpass'),
                 $this->get_config('dbname'), false, $dboptions);
@@ -222,7 +226,7 @@ class store implements \tool_log\log\writer, \core\log\sql_reader {
         $extra = array('origin' => $data->origin, 'ip' => $data->ip, 'realuserid' => $data->realuserid);
         $data = (array)$data;
         $id = $data['id'];
-        $data['other'] = unserialize($data['other']);
+        $data['other'] = self::decode_other($data['other']);
         if ($data['other'] === false) {
             $data['other'] = array();
         }
@@ -256,6 +260,26 @@ class store implements \tool_log\log\writer, \core\log\sql_reader {
         }
 
         return $this->extdb->count_records_select($dbtable, $selectwhere, $params);
+    }
+
+    /**
+     * Get whether events are present for the given select clause.
+     *
+     * @param string $selectwhere select conditions.
+     * @param array $params params.
+     *
+     * @return bool Whether events available for the given conditions
+     */
+    public function get_events_select_exists(string $selectwhere, array $params): bool {
+        if (!$this->init()) {
+            return false;
+        }
+
+        if (!$dbtable = $this->get_config('dbtable')) {
+            return false;
+        }
+
+        return $this->extdb->record_exists_select($dbtable, $selectwhere, $params);
     }
 
     /**

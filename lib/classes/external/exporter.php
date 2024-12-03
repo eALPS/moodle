@@ -22,19 +22,15 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 namespace core\external;
-defined('MOODLE_INTERNAL') || die();
-
-require_once($CFG->libdir . '/externallib.php');
 
 use stdClass;
 use renderer_base;
 use context;
-use context_system;
 use coding_exception;
-use external_single_structure;
-use external_multiple_structure;
-use external_value;
-use external_format_value;
+use core_external\external_format_value;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
 
 /**
  * Generic exporter to take a stdClass and prepare it for return by webservice, or as the context for a template.
@@ -79,14 +75,16 @@ abstract class exporter {
             }
 
             $missingdataerr = 'Exporter class is missing required related data: (' . get_called_class() . ') ';
+            $scalartypes = ['string', 'int', 'bool', 'float'];
+            $scalarcheck = 'is_' . $classname;
 
-            if ($nullallowed && array_key_exists($key, $related) && $related[$key] === null) {
-                $this->related[$key] = $related[$key];
+            if ($nullallowed && (!array_key_exists($key, $related) || $related[$key] === null)) {
+                $this->related[$key] = null;
 
             } else if ($isarray) {
                 if (array_key_exists($key, $related) && is_array($related[$key])) {
                     foreach ($related[$key] as $index => $value) {
-                        if (!$value instanceof $classname) {
+                        if (!$value instanceof $classname && !$scalarcheck($value)) {
                             throw new coding_exception($missingdataerr . $key . ' => ' . $classname . '[]');
                         }
                     }
@@ -96,8 +94,6 @@ abstract class exporter {
                 }
 
             } else {
-                $scalartypes = ['string', 'int', 'bool', 'float'];
-                $scalarcheck = 'is_' . $classname;
                 if (array_key_exists($key, $related) &&
                         ((in_array($classname, $scalartypes) && $scalarcheck($related[$key])) ||
                         ($related[$key] instanceof $classname))) {
@@ -112,7 +108,7 @@ abstract class exporter {
     /**
      * Function to export the renderer data in a format that is suitable for a
      * mustache template. This means raw records are generated as in to_record,
-     * but all strings are correctly passed through external_format_text (or external_format_string).
+     * but all strings are correctly passed through \core_external\util::format_text (or \core_external\util::format_string).
      *
      * @param renderer_base $output Used to do a final render of any components that need to be rendered for export.
      * @return stdClass
@@ -149,15 +145,16 @@ abstract class exporter {
 
             // If the field is PARAM_RAW and has a format field.
             if ($propertyformat = self::get_format_field($properties, $property)) {
-                if (!property_exists($record, $propertyformat)) {
+                $formatdefinition = $properties[$propertyformat];
+                if (!property_exists($record, $propertyformat) && !array_key_exists('default', $formatdefinition)) {
                     // Whoops, we got something that wasn't defined.
                     throw new coding_exception('Unexpected property ' . $propertyformat);
                 }
 
                 $formatparams = $this->get_format_parameters($property);
-                $format = $record->$propertyformat;
+                $format = $record->$propertyformat ?? $formatdefinition['default'];
 
-                list($text, $format) = external_format_text($data->$property, $format, $formatparams['context']->id,
+                list($text, $format) = \core_external\util::format_text($data->$property, $format, $formatparams['context'],
                     $formatparams['component'], $formatparams['filearea'], $formatparams['itemid'], $formatparams['options']);
 
                 $data->$property = $text;
@@ -168,11 +165,11 @@ abstract class exporter {
 
                 if (!empty($definition['multiple'])) {
                     foreach ($data->$property as $key => $value) {
-                        $data->{$property}[$key] = external_format_string($value, $formatparams['context']->id,
+                        $data->{$property}[$key] = \core_external\util::format_string($value, $formatparams['context'],
                             $formatparams['striplinks'], $formatparams['options']);
                     }
                 } else {
-                    $data->$property = external_format_string($data->$property, $formatparams['context']->id,
+                    $data->$property = \core_external\util::format_string($data->$property, $formatparams['context'],
                             $formatparams['striplinks'], $formatparams['options']);
                 }
             }
@@ -184,18 +181,20 @@ abstract class exporter {
     /**
      * Get the format parameters.
      *
-     * This method returns the parameters to use with the functions external_format_text(), and
-     * external_format_string(). To override the default parameters, you can define a protected method
+     * This method returns the parameters to use with the functions \core_external\util::format_text(), and
+     * \core_external\util::format_string(). To override the default parameters, you can define a protected method
      * called 'get_format_parameters_for_<propertyName>'. For example, 'get_format_parameters_for_description',
      * if your property is 'description'.
      *
      * Your method must return an array containing any of the following keys:
      * - context: The context to use. Defaults to $this->related['context'] if defined, else throws an exception.
-     * - component: The component to use with external_format_text(). Defaults to null.
-     * - filearea: The filearea to use with external_format_text(). Defaults to null.
-     * - itemid: The itemid to use with external_format_text(). Defaults to null.
-     * - options: An array of options accepted by external_format_text() or external_format_string(). Defaults to [].
-     * - striplinks: Whether to strip the links with external_format_string(). Defaults to true.
+     * - component: The component to use with \core_external\util::format_text(). Defaults to null.
+     * - filearea: The filearea to use with \core_external\util::format_text(). Defaults to null.
+     * - itemid: The itemid to use with \core_external\util::format_text(). Defaults to null.
+     * - options: An array of options accepted by \core_external\util::format_text()
+     *            or \core_external\util::format_string().
+     *            Defaults to [].
+     * - striplinks: Whether to strip the links with \core_external\util::format_string(). Defaults to true.
      *
      * @param string $property The property to get the parameters for.
      * @return array
@@ -261,16 +260,32 @@ abstract class exporter {
     final public static function read_properties_definition() {
         $properties = static::properties_definition();
         $customprops = static::define_other_properties();
-        foreach ($customprops as $property => $definition) {
+        $customprops = static::format_properties($customprops);
+        $properties += $customprops;
+        return $properties;
+    }
+
+    /**
+     * Recursively formats a given property definition with the default fields required.
+     *
+     * @param array $properties List of properties to format
+     * @return array Formatted array
+     */
+    final public static function format_properties($properties) {
+        foreach ($properties as $property => $definition) {
             // Ensures that null is set to its default.
             if (!isset($definition['null'])) {
-                $customprops[$property]['null'] = NULL_NOT_ALLOWED;
+                $properties[$property]['null'] = NULL_NOT_ALLOWED;
             }
             if (!isset($definition['description'])) {
-                $customprops[$property]['description'] = $property;
+                $properties[$property]['description'] = $property;
+            }
+
+            // If an array is provided, it may be a nested array that is unformatted so rinse and repeat.
+            if (is_array($definition['type'])) {
+                $properties[$property]['type'] = static::format_properties($definition['type']);
             }
         }
-        $properties += $customprops;
         return $properties;
     }
 
@@ -375,7 +390,7 @@ abstract class exporter {
     /**
      * Get the context structure.
      *
-     * @return external_single_structure
+     * @return array
      */
     final protected static function get_context_structure() {
         return array(
@@ -394,7 +409,8 @@ abstract class exporter {
      */
     final protected static function get_format_field($definitions, $property) {
         $formatproperty = $property . 'format';
-        if ($definitions[$property]['type'] == PARAM_RAW && isset($definitions[$formatproperty])
+        if (($definitions[$property]['type'] == PARAM_RAW || $definitions[$property]['type'] == PARAM_CLEANHTML)
+                && isset($definitions[$formatproperty])
                 && $definitions[$formatproperty]['type'] == PARAM_INT) {
             return $formatproperty;
         }
@@ -410,10 +426,12 @@ abstract class exporter {
      * @return external_format_value
      */
     final protected static function get_format_structure($property, $definition, $required = VALUE_REQUIRED) {
+        $default = null;
         if (array_key_exists('default', $definition)) {
             $required = VALUE_DEFAULT;
+            $default = $definition['default'];
         }
-        return new external_format_value($property, $required);
+        return new external_format_value($property, $required, $default);
     }
 
     /**
@@ -472,12 +490,15 @@ abstract class exporter {
     /**
      * Returns the read structure.
      *
+     * @param int $required Whether is required.
+     * @param mixed $default The default value.
+     *
      * @return external_single_structure
      */
-    final public static function get_read_structure() {
+    final public static function get_read_structure($required = VALUE_REQUIRED, $default = null) {
         $properties = self::read_properties_definition();
 
-        return self::get_read_structure_from_properties($properties);
+        return self::get_read_structure_from_properties($properties, $required, $default);
     }
 
     /**
@@ -512,7 +533,7 @@ abstract class exporter {
                 // This is a nested array of more properties.
                 $thisvalue = self::get_read_structure_from_properties($type, $proprequired, $propdefault);
             } else {
-                if ($definition['type'] == PARAM_TEXT) {
+                if ($definition['type'] == PARAM_TEXT || $definition['type'] == PARAM_CLEANHTML) {
                     // PARAM_TEXT always becomes PARAM_RAW because filters may be applied.
                     $type = PARAM_RAW;
                 }
@@ -529,7 +550,12 @@ abstract class exporter {
                     if (isset($returns[$formatproperty])) {
                         throw new coding_exception('The format for \'' . $property . '\' is already defined.');
                     }
-                    $returns[$formatproperty] = self::get_format_structure($property, $properties[$formatproperty]);
+                    $formatpropertydef = $properties[$formatproperty];
+                    $formatpropertyrequired = VALUE_REQUIRED;
+                    if (!empty($formatpropertydef['optional'])) {
+                        $formatpropertyrequired = VALUE_OPTIONAL;
+                    }
+                    $returns[$formatproperty] = self::get_format_structure($property, $formatpropertydef, $formatpropertyrequired);
                 }
             }
         }

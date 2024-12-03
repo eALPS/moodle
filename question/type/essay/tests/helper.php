@@ -51,8 +51,12 @@ class qtype_essay_test_helper extends question_test_helper {
         $q->responseformat = 'editor';
         $q->responserequired = 1;
         $q->responsefieldlines = 10;
+        $q->minwordlimit = null;
+        $q->maxwordlimit = null;
         $q->attachments = 0;
         $q->attachmentsrequired = 0;
+        $q->maxbytes = 0;
+        $q->filetypeslist = null;
         $q->graderinfo = '';
         $q->graderinfoformat = FORMAT_HTML;
         $q->qtype = question_bank::get_qtype('essay');
@@ -87,8 +91,11 @@ class qtype_essay_test_helper extends question_test_helper {
         $fromform->responsefieldlines = 10;
         $fromform->attachments = 0;
         $fromform->attachmentsrequired = 0;
+        $fromform->maxbytes = 0;
+        $fromform->filetypeslist = ''; // Although once saved in the DB, this becomes null, the form returns '' here.
         $fromform->graderinfo = array('text' => '', 'format' => FORMAT_HTML);
         $fromform->responsetemplate = array('text' => '', 'format' => FORMAT_HTML);
+        $fromform->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
 
         return $fromform;
     }
@@ -102,6 +109,19 @@ class qtype_essay_test_helper extends question_test_helper {
         $q = $this->initialise_essay_question();
         $q->responseformat = 'editorfilepicker';
         $q->attachments = 3;
+        return $q;
+    }
+
+    /**
+     * Makes an essay question using the HTML editor allowing embedded files as
+     * input, and up to two attachments, two needed.
+     * @return qtype_essay_question
+     */
+    public function make_essay_question_editorfilepickertworequired() {
+        $q = $this->initialise_essay_question();
+        $q->responseformat = 'editorfilepicker';
+        $q->attachments = 2;
+        $q->attachmentsrequired = 2;
         return $q;
     }
 
@@ -124,8 +144,11 @@ class qtype_essay_test_helper extends question_test_helper {
         $fromform->responsefieldlines = 10;
         $fromform->attachments = 3;
         $fromform->attachmentsrequired = 0;
+        $fromform->maxbytes = 0;
+        $fromform->filetypeslist = ''; // Although once saved in the DB, this becomes null, the form returns '' here.
         $fromform->graderinfo = array('text' => '', 'format' => FORMAT_HTML);
         $fromform->responsetemplate = array('text' => '', 'format' => FORMAT_HTML);
+        $fromform->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
 
         return $fromform;
     }
@@ -159,8 +182,11 @@ class qtype_essay_test_helper extends question_test_helper {
         $fromform->responsefieldlines = 10;
         $fromform->attachments = 0;
         $fromform->attachmentsrequired = 0;
+        $fromform->maxbytes = 0;
+        $fromform->filetypeslist = ''; // Although once saved in the DB, this becomes null, the form returns '' here.
         $fromform->graderinfo = array('text' => '', 'format' => FORMAT_HTML);
         $fromform->responsetemplate = array('text' => '', 'format' => FORMAT_HTML);
+        $fromform->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
 
         return $fromform;
     }
@@ -183,7 +209,7 @@ class qtype_essay_test_helper extends question_test_helper {
     }
 
     /**
-     * Makes an essay question without an inline text editor.
+     * Makes an essay question without an online text editor.
      * @return qtype_essay_question
      */
     public function make_essay_question_noinline() {
@@ -191,6 +217,8 @@ class qtype_essay_test_helper extends question_test_helper {
         $q->responseformat = 'noinline';
         $q->attachments = 3;
         $q->attachmentsrequired = 1;
+        $q->filetypeslist = '';
+        $q->maxbytes = 0;
         return $q;
     }
 

@@ -34,7 +34,7 @@ class theme extends base {
     public function is_uninstall_allowed() {
         global $CFG;
 
-        if ($this->name === 'bootstrapbase') {
+        if ($this->name === 'boost') {
             // All of these are protected for now.
             return false;
         }
@@ -91,6 +91,6 @@ class theme extends base {
      * @return moodle_url
      */
     public static function get_manage_url() {
-        return new moodle_url('/theme/index.php');
+        return new moodle_url('/admin/themeselector.php');
     }
 }

@@ -32,6 +32,7 @@ class cohort_edit_form extends moodleform {
      * Define the cohort edit form
      */
     public function definition() {
+        global $CFG;
 
         $mform = $this->_form;
         $editoroptions = $this->_customdata['editoroptions'];
@@ -42,7 +43,8 @@ class cohort_edit_form extends moodleform {
         $mform->setType('name', PARAM_TEXT);
 
         $options = $this->get_category_options($cohort->contextid);
-        $mform->addElement('select', 'contextid', get_string('context', 'role'), $options);
+        $mform->addElement('autocomplete', 'contextid', get_string('context', 'role'), $options);
+        $mform->addRule('contextid', null, 'required', null, 'client');
 
         $mform->addElement('text', 'idnumber', get_string('idnumber', 'cohort'), 'maxlength="254" size="50"');
         $mform->setType('idnumber', PARAM_RAW); // Idnumbers are plain text, must not be changed.
@@ -54,6 +56,11 @@ class cohort_edit_form extends moodleform {
         $mform->addElement('editor', 'description_editor', get_string('description', 'cohort'), null, $editoroptions);
         $mform->setType('description_editor', PARAM_RAW);
 
+        if (!empty($CFG->allowcohortthemes)) {
+            $themes = array_merge(array('' => get_string('forceno')), cohort_get_list_of_themes());
+            $mform->addElement('select', 'theme', get_string('forcetheme'), $themes);
+        }
+
         $mform->addElement('hidden', 'id');
         $mform->setType('id', PARAM_INT);
 
@@ -62,8 +69,12 @@ class cohort_edit_form extends moodleform {
             $mform->setType('returnurl', PARAM_LOCALURL);
         }
 
+        $handler = core_cohort\customfield\cohort_handler::create();
+        $handler->instance_form_definition($mform, empty($cohort->id) ? 0 : $cohort->id);
+
         $this->add_action_buttons();
 
+        $handler->instance_form_before_set_data($cohort);
         $this->set_data($cohort);
     }
 
@@ -90,13 +101,14 @@ class cohort_edit_form extends moodleform {
             }
         }
 
+        $handler = core_cohort\customfield\cohort_handler::create();
+        $errors = array_merge($errors, $handler->instance_form_validation($data, $files));
+
         return $errors;
     }
 
     protected function get_category_options($currentcontextid) {
-        global $CFG;
-        require_once($CFG->libdir. '/coursecatlib.php');
-        $displaylist = coursecat::make_categories_list('moodle/cohort:manage');
+        $displaylist = core_course_category::make_categories_list('moodle/cohort:manage');
         $options = array();
         $syscontext = context_system::instance();
         if (has_capability('moodle/cohort:manage', $syscontext)) {
@@ -112,6 +124,15 @@ class cohort_edit_form extends moodleform {
             $options[$context->id] = $syscontext->get_context_name();
         }
         return $options;
+    }
+
+    /**
+     *  Apply a logic after data is set.
+     */
+    public function definition_after_data() {
+        $cohortid = $this->_form->getElementValue('id');
+        $handler = core_cohort\customfield\cohort_handler::create();
+        $handler->instance_form_definition_after_data($this->_form, empty($cohortid) ? 0 : $cohortid);
     }
 }
 

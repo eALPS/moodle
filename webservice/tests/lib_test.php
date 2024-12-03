@@ -22,6 +22,14 @@
  * @copyright  2016 Jun Pataleta <jun@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+namespace core_webservice;
+
+use core_external\external_api;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
+use webservice;
+
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
@@ -35,12 +43,12 @@ require_once($CFG->dirroot . '/webservice/lib.php');
  * @copyright  2016 Jun Pataleta <jun@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class webservice_test extends advanced_testcase {
+class lib_test extends \advanced_testcase {
 
     /**
      * Setup.
      */
-    public function setUp() {
+    public function setUp(): void {
         // Calling parent is good, always.
         parent::setUp();
 
@@ -51,7 +59,7 @@ class webservice_test extends advanced_testcase {
     /**
      * Test init_service_class().
      */
-    public function test_init_service_class() {
+    public function test_init_service_class(): void {
         global $DB, $USER;
 
         $this->resetAfterTest(true);
@@ -60,7 +68,7 @@ class webservice_test extends advanced_testcase {
         $this->setAdminUser();
 
         // Add a web service.
-        $webservice = new stdClass();
+        $webservice = new \stdClass();
         $webservice->name = 'Test web service';
         $webservice->enabled = true;
         $webservice->restrictedusers = false;
@@ -71,7 +79,7 @@ class webservice_test extends advanced_testcase {
         $externalserviceid = $DB->insert_record('external_services', $webservice);
 
         // Add token.
-        $externaltoken = new stdClass();
+        $externaltoken = new \stdClass();
         $externaltoken->token = 'testtoken';
         $externaltoken->tokentype = 0;
         $externaltoken->userid = $USER->id;
@@ -79,10 +87,11 @@ class webservice_test extends advanced_testcase {
         $externaltoken->contextid = 1;
         $externaltoken->creatorid = $USER->id;
         $externaltoken->timecreated = time();
+        $externaltoken->name = \core_external\util::generate_token_name();
         $DB->insert_record('external_tokens', $externaltoken);
 
         // Add a function to the service.
-        $wsmethod = new stdClass();
+        $wsmethod = new \stdClass();
         $wsmethod->externalserviceid = $externalserviceid;
         $wsmethod->functionname = 'core_course_get_contents';
         $DB->insert_record('external_services_functions', $wsmethod);
@@ -133,6 +142,166 @@ class webservice_test extends advanced_testcase {
 
             // Check description.
             $this->assertEquals($function->description, $method->description);
+        }
+    }
+
+    /**
+     * Tests update_token_lastaccess() function.
+     */
+    public function test_update_token_lastaccess(): void {
+        global $DB, $USER;
+
+        $this->resetAfterTest(true);
+
+        // Set current user.
+        $this->setAdminUser();
+
+        // Add a web service.
+        $webservice = new \stdClass();
+        $webservice->name = 'Test web service';
+        $webservice->enabled = true;
+        $webservice->restrictedusers = false;
+        $webservice->component = 'moodle';
+        $webservice->timecreated = time();
+        $webservice->downloadfiles = true;
+        $webservice->uploadfiles = true;
+        $DB->insert_record('external_services', $webservice);
+
+        // Add token.
+        $tokenstr = \core_external\util::generate_token(
+            EXTERNAL_TOKEN_EMBEDDED,
+            \core_external\util::get_service_by_name($webservice->name),
+            $USER->id,
+            \core\context\system::instance()
+        );
+        $token = $DB->get_record('external_tokens', ['token' => $tokenstr]);
+
+        // Trigger last access once (at current time).
+        webservice::update_token_lastaccess($token);
+
+        // Check last access.
+        $token = $DB->get_record('external_tokens', ['token' => $tokenstr]);
+        $this->assertLessThan(5, abs(time() - $token->lastaccess));
+
+        // Try setting it to +1 second. This should not update yet.
+        $before = (int)$token->lastaccess;
+        webservice::update_token_lastaccess($token, $before + 1);
+        $token = $DB->get_record('external_tokens', ['token' => $tokenstr]);
+        $this->assertEquals($before, $token->lastaccess);
+
+        // To -1000 seconds. This should not update.
+        webservice::update_token_lastaccess($token, $before - 1000);
+        $token = $DB->get_record('external_tokens', ['token' => $tokenstr]);
+        $this->assertEquals($before, $token->lastaccess);
+
+        // To +59 seconds. This should also not quite update.
+        webservice::update_token_lastaccess($token, $before + 59);
+        $token = $DB->get_record('external_tokens', ['token' => $tokenstr]);
+        $this->assertEquals($before, $token->lastaccess);
+
+        // Finally to +60 seconds, where it should update.
+        webservice::update_token_lastaccess($token, $before + 60);
+        $token = $DB->get_record('external_tokens', ['token' => $tokenstr]);
+        $this->assertEquals($before + 60, $token->lastaccess);
+    }
+
+    /**
+     * Tests for the {@see webservice::get_missing_capabilities_by_users()} implementation.
+     */
+    public function test_get_missing_capabilities_by_users(): void {
+        global $DB;
+
+        $this->resetAfterTest(true);
+        $wsman = new webservice();
+
+        $user1 = $this->getDataGenerator()->create_user();
+        $user2 = $this->getDataGenerator()->create_user();
+        $user3 = $this->getDataGenerator()->create_user();
+
+        // Add a test web service.
+        $serviceid = $wsman->add_external_service((object)[
+            'name' => 'Test web service',
+            'enabled' => 1,
+            'requiredcapability' => '',
+            'restrictedusers' => false,
+            'component' => 'moodle',
+            'downloadfiles' => false,
+            'uploadfiles' => false,
+        ]);
+
+        // Add a function to the service that does not declare any capability as required.
+        $wsman->add_external_function_to_service('core_webservice_get_site_info', $serviceid);
+
+        // Users can be provided as an array of objects, arrays or integers (ids).
+        $this->assertEmpty($wsman->get_missing_capabilities_by_users([$user1, array($user2), $user3->id], $serviceid));
+
+        // Add a function to the service that declares some capability as required, but that capability is common for
+        // any user. Here we use 'core_message_delete_conversation' which declares 'moodle/site:deleteownmessage' which
+        // in turn is granted to the authenticated user archetype by default.
+        $wsman->add_external_function_to_service('core_message_delete_conversation', $serviceid);
+
+        // So all three users should have this capability implicitly.
+        $this->assertEmpty($wsman->get_missing_capabilities_by_users([$user1, $user2, $user3], $serviceid));
+
+        // Add a function to the service that declares some non-common capability. Here we use
+        // 'core_group_add_group_members' that wants 'moodle/course:managegroups'.
+        $wsman->add_external_function_to_service('core_group_add_group_members', $serviceid);
+
+        // Make it so that the $user1 has the capability in some course.
+        $course1 = $this->getDataGenerator()->create_course();
+        $this->getDataGenerator()->enrol_user($user1->id, $course1->id, 'editingteacher');
+
+        // Check that no missing capability is reported for the $user1. We don't care at what actual context the
+        // external function call will evaluate the permission. We just check that there is a chance that the user has
+        // the capability somewhere.
+        $this->assertEmpty($wsman->get_missing_capabilities_by_users([$user1], $serviceid));
+
+        // But there is no place at the site where the capability would be granted to the other two users, so it is
+        // reported as missing.
+        $missing = $wsman->get_missing_capabilities_by_users([$user1, $user2, $user3], $serviceid);
+        $this->assertArrayNotHasKey($user1->id, $missing);
+        $this->assertContains('moodle/course:managegroups', $missing[$user2->id]);
+        $this->assertContains('moodle/course:managegroups', $missing[$user3->id]);
+    }
+
+    /**
+     * Data provider for {@see test_get_active_tokens}
+     *
+     * @return array
+     */
+    public static function get_active_tokens_provider(): array {
+        return [
+            'No expiration' => [0, true],
+            'Active' => [time() + DAYSECS, true],
+            'Expired' => [time() - DAYSECS, false],
+        ];
+    }
+
+    /**
+     * Test getting active tokens for a user
+     *
+     * @param int $validuntil
+     * @param bool $expectedactive
+     *
+     * @dataProvider get_active_tokens_provider
+     */
+    public function test_get_active_tokens(int $validuntil, bool $expectedactive): void {
+        $this->resetAfterTest();
+
+        $user = $this->getDataGenerator()->create_user();
+
+        /** @var \core_webservice_generator $generator */
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_webservice');
+
+        $service = $generator->create_service(['name' => 'My test service', 'shortname' => 'mytestservice']);
+        $generator->create_token(['userid' => $user->id, 'service' => $service->shortname, 'validuntil' => $validuntil]);
+
+        $tokens = webservice::get_active_tokens($user->id);
+        if ($expectedactive) {
+            $this->assertCount(1, $tokens);
+            $this->assertEquals($service->id, reset($tokens)->externalserviceid);
+        } else {
+            $this->assertEmpty($tokens);
         }
     }
 
@@ -201,14 +370,14 @@ class webservice_test extends advanced_testcase {
 /**
  * Class webservice_dummy.
  *
- * Dummy webservice class for testing the webservice_base_server class and enable us to expose variables we want to test.
+ * Dummy webservice class for testing the \webservice_base_server class and enable us to expose variables we want to test.
  *
  * @package    core_webservice
  * @category   test
  * @copyright  2016 Jun Pataleta <jun@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class webservice_dummy extends webservice_base_server {
+class webservice_dummy extends \webservice_base_server {
 
     /**
      * webservice_dummy constructor.
@@ -251,7 +420,7 @@ class webservice_dummy extends webservice_base_server {
     /**
      * Send the error information to the WS client.
      *
-     * @param exception $ex
+     * @param \Exception $ex
      */
     protected function send_error($ex = null) {
         // Just a method stub. No need to implement at the moment since it's not really being used for this test case for now.

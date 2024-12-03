@@ -124,10 +124,9 @@ function behat_get_error_string($errtype) {
  * @param string $errstr
  * @param string $errfile
  * @param int $errline
- * @param array $errcontext
  * @return bool
  */
-function behat_error_handler($errno, $errstr, $errfile, $errline, $errcontext) {
+function behat_error_handler($errno, $errstr, $errfile, $errline) {
 
     // If is preceded by an @ we don't show it.
     if (!error_reporting()) {
@@ -138,7 +137,7 @@ function behat_error_handler($errno, $errstr, $errfile, $errline, $errcontext) {
     // set to DEVELOPER and will always include E_NOTICE,E_USER_NOTICE... as part of E_ALL, if the current
     // error_reporting() value does not include one of those levels is because it has been forced through
     // the moodle code (see fix_utf8() for example) in that cases we respect the forced error level value.
-    $respect = array(E_NOTICE, E_USER_NOTICE, E_STRICT, E_WARNING, E_USER_WARNING);
+    $respect = array(E_NOTICE, E_USER_NOTICE, E_STRICT, E_WARNING, E_USER_WARNING, E_DEPRECATED, E_USER_DEPRECATED);
     foreach ($respect as $respectable) {
 
         // If the current value does not include this kind of errors and the reported error is
@@ -149,7 +148,7 @@ function behat_error_handler($errno, $errstr, $errfile, $errline, $errcontext) {
     }
 
     // Using the default one in case there is a fatal catchable error.
-    default_error_handler($errno, $errstr, $errfile, $errline, $errcontext);
+    default_error_handler($errno, $errstr, $errfile, $errline);
 
     $errnostr = behat_get_error_string($errno);
 
@@ -219,8 +218,8 @@ function behat_clean_init_config() {
         'wwwroot', 'dataroot', 'dirroot', 'admin', 'directorypermissions', 'filepermissions',
         'umaskpermissions', 'dbtype', 'dblibrary', 'dbhost', 'dbname', 'dbuser', 'dbpass', 'prefix',
         'dboptions', 'proxyhost', 'proxyport', 'proxytype', 'proxyuser', 'proxypassword',
-        'proxybypass', 'theme', 'pathtogs', 'pathtodu', 'aspellpath', 'pathtodot', 'skiplangupgrade',
-        'altcacheconfigpath', 'pathtounoconv'
+        'proxybypass', 'pathtogs', 'pathtophp', 'pathtodu', 'aspellpath', 'pathtodot', 'skiplangupgrade',
+        'altcacheconfigpath', 'pathtounoconv', 'alternative_file_system_class', 'pathtopython'
     ));
 
     // Add extra allowed settings.
@@ -244,18 +243,31 @@ function behat_clean_init_config() {
 function behat_check_config_vars() {
     global $CFG;
 
+    $moodleprefix = empty($CFG->prefix) ? '' : $CFG->prefix;
+    $behatprefix = empty($CFG->behat_prefix) ? '' : $CFG->behat_prefix;
+    $phpunitprefix = empty($CFG->phpunit_prefix) ? '' : $CFG->phpunit_prefix;
+    $behatdbname = empty($CFG->behat_dbname) ? $CFG->dbname : $CFG->behat_dbname;
+    $phpunitdbname = empty($CFG->phpunit_dbname) ? $CFG->dbname : $CFG->phpunit_dbname;
+    $behatdbhost = empty($CFG->behat_dbhost) ? $CFG->dbhost : $CFG->behat_dbhost;
+    $phpunitdbhost = empty($CFG->phpunit_dbhost) ? $CFG->dbhost : $CFG->phpunit_dbhost;
+
     // Verify prefix value.
     if (empty($CFG->behat_prefix)) {
         behat_error(BEHAT_EXITCODE_CONFIG,
             'Define $CFG->behat_prefix in config.php');
     }
-    if (!empty($CFG->prefix) and $CFG->behat_prefix == $CFG->prefix) {
+    if ($behatprefix == $moodleprefix && $behatdbname == $CFG->dbname && $behatdbhost == $CFG->dbhost) {
         behat_error(BEHAT_EXITCODE_CONFIG,
-            '$CFG->behat_prefix in config.php must be different from $CFG->prefix');
+            '$CFG->behat_prefix in config.php must be different from $CFG->prefix' .
+            ' when $CFG->behat_dbname and $CFG->behat_host are not set or when $CFG->behat_dbname equals $CFG->dbname' .
+            ' and $CFG->behat_dbhost equals $CFG->dbhost');
     }
-    if (!empty($CFG->phpunit_prefix) and $CFG->behat_prefix == $CFG->phpunit_prefix) {
+    if ($phpunitprefix !== '' && $behatprefix == $phpunitprefix && $behatdbname == $phpunitdbname &&
+            $behatdbhost == $phpunitdbhost) {
         behat_error(BEHAT_EXITCODE_CONFIG,
-            '$CFG->behat_prefix in config.php must be different from $CFG->phpunit_prefix');
+            '$CFG->behat_prefix in config.php must be different from $CFG->phpunit_prefix' .
+            ' when $CFG->behat_dbname equals $CFG->phpunit_dbname' .
+            ' and $CFG->behat_dbhost equals $CFG->phpunit_dbhost');
     }
 
     // Verify behat wwwroot value.
@@ -401,7 +413,9 @@ function behat_update_vars_for_process() {
 function behat_is_requested_url($url) {
 
     $parsedurl = parse_url($url . '/');
-    $parsedurl['port'] = isset($parsedurl['port']) ? $parsedurl['port'] : 80;
+    if (!isset($parsedurl['port'])) {
+        $parsedurl['port'] = ($parsedurl['scheme'] === 'https') ? 443 : 80;
+    }
     $parsedurl['path'] = rtrim($parsedurl['path'], '/');
 
     // Removing the port.
@@ -461,26 +475,40 @@ function behat_get_run_process() {
             }
         }
     } else if (defined('BEHAT_TEST') || defined('BEHAT_UTIL')) {
-        if ($match = preg_filter('#--run=(.+)#', '$1', $argv)) {
-            $behatrunprocess = reset($match);
-        } else if ($k = array_search('--config', $argv)) {
-            $behatconfig = str_replace("\\", "/", $argv[$k + 1]);
-            // Try get it from config if present.
-            if (!empty($CFG->behat_parallel_run)) {
-                foreach ($CFG->behat_parallel_run as $run => $parallelconfig) {
-                    if (!empty($parallelconfig['behat_dataroot']) &&
-                        $parallelconfig['behat_dataroot'] . '/behat/behat.yml' == $behatconfig) {
+        $behatconfig = '';
 
-                        $behatrunprocess = $run + 1; // We start process from 1.
-                        break;
+        if ($match = preg_filter('#--run=(.+)#', '$1', $argv)) {
+            // Try to guess the run from the existence of the --run arg.
+            $behatrunprocess = reset($match);
+
+        } else {
+            // Try to guess the run from the existence of the --config arg. Note there are 2 alternatives below.
+            if ($k = array_search('--config', $argv)) {
+                // Alternative 1: --config /path/to/config.yml => (next arg, pick it).
+                $behatconfig = str_replace("\\", "/", $argv[$k + 1]);
+
+            } else if ($config = preg_filter('#^(?:--config[ =]*)(.+)$#', '$1', $argv)) {
+                // Alternative 2: --config=/path/to/config.yml => (same arg, just get the path part).
+                $behatconfig = str_replace("\\", "/", reset($config));
+            }
+
+            // Try get it from config if present.
+            if ($behatconfig) {
+                if (!empty($CFG->behat_parallel_run)) {
+                    foreach ($CFG->behat_parallel_run as $run => $parallelconfig) {
+                        if (!empty($parallelconfig['behat_dataroot']) &&
+                                $parallelconfig['behat_dataroot'] . '/behat/behat.yml' == $behatconfig) {
+                            $behatrunprocess = $run + 1; // We start process from 1.
+                            break;
+                        }
                     }
                 }
-            }
-            // Check if default behat datroot increment was done.
-            if (empty($behatrunprocess)) {
-                $behatdataroot = str_replace("\\", "/", $CFG->behat_dataroot . '/' . BEHAT_PARALLEL_SITE_NAME);
-                $behatrunprocess = preg_filter("#^{$behatdataroot}" . "(.+?)[/|\\\]behat[/|\\\]behat\.yml#", '$1',
-                    $behatconfig);
+                // Check if default behat dataroot increment was done.
+                if (empty($behatrunprocess)) {
+                    $behatdataroot = str_replace("\\", "/", $CFG->behat_dataroot . '/' . BEHAT_PARALLEL_SITE_NAME);
+                    $behatrunprocess = preg_filter("#^{$behatdataroot}" . "(.+?)[/|\\\]behat[/|\\\]behat\.yml#", '$1',
+                        $behatconfig);
+                }
             }
         }
     }
@@ -493,16 +521,24 @@ function behat_get_run_process() {
  *
  * @param array $cmds list of commands to be executed.
  * @param string $cwd absolute path of working directory.
+ * @param int $delay time in seconds to add delay between each parallel process.
  * @return array list of processes.
  */
-function cli_execute_parallel($cmds, $cwd = null) {
+function cli_execute_parallel($cmds, $cwd = null, $delay = 0) {
     require_once(__DIR__ . "/../../vendor/autoload.php");
 
     $processes = array();
 
     // Create child process.
     foreach ($cmds as $name => $cmd) {
-        $process = new Symfony\Component\Process\Process($cmd);
+        if (method_exists('\\Symfony\\Component\\Process\\Process', 'fromShellCommandline')) {
+            // Process 4.2 and up.
+            $process = Symfony\Component\Process\Process::fromShellCommandline($cmd);
+        } else {
+            // Process 4.1 and older.
+            $process = new Symfony\Component\Process\Process(null);
+            $process->setCommandLine($cmd);
+        }
 
         $process->setWorkingDirectory($cwd);
         $process->setTimeout(null);
@@ -519,6 +555,32 @@ function cli_execute_parallel($cmds, $cwd = null) {
             }
             exit(1);
         }
+
+        // Sleep for specified delay.
+        if ($delay) {
+            sleep($delay);
+        }
     }
     return $processes;
+}
+
+/**
+ * Get command flags for an option/value combination
+ *
+ * @param string $option
+ * @param string|bool|null $value
+ * @return string
+ */
+function behat_get_command_flags(string $option, $value): string {
+    $commandoptions = '';
+    if (is_bool($value)) {
+        if ($value) {
+            return " --{$option}";
+        } else {
+            return " --no-{$option}";
+        }
+    } else if ($value !== null) {
+        return " --$option=\"$value\"";
+    }
+    return '';
 }

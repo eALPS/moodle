@@ -18,6 +18,8 @@ Feature: Displaying the link to the Participants page
     And I log in as "admin"
     And I am on site homepage
     And I turn editing mode on
+    And the following config values are set as admin:
+      | unaddableblocks | | theme_boost|
     And I add the "Navigation" block if not present
     And I configure the "Navigation" block
     And I set the following fields to these values:
@@ -34,6 +36,29 @@ Feature: Displaying the link to the Participants page
     And I should see "Participants"
     And "Student One" "link" should exist
     And "Student Two" "link" should not exist
+
+  @javascript
+  Scenario: Course participants link is displayed to users depending on role permissions settings
+    Given the following "activities" exist:
+      | activity | course | name            |
+      | forum    | C1     | Test forum name |
+    And I am on the "Course1" "enrolment methods" page logged in as admin
+    And I click on "Edit" "link" in the "Guest access" "table_row"
+    And I set the following fields to these values:
+      | Allow guest access | Yes |
+    And I press "Save changes"
+    When I am on the "Course1" course page logged in as guest
+    Then I should not see "Participants" in the "Navigation" "block"
+    And I am on the "Test forum name" "forum activity" page
+    And I should not see "Participants" in the "Navigation" "block"
+    And I log out
+    And the following "role capability" exists:
+      | role                           | guest |
+      | moodle/course:viewparticipants | allow |
+    And I am on the "Course1" course page logged in as guest
+    And I should see "Participants" in the "Navigation" "block"
+    And I am on the "Test forum name" "forum activity" page
+    And I should see "Participants" in the "Navigation" "block"
 
   Scenario: Site participants link is displayed to admins
     When I log in as "admin"

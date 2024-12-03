@@ -48,6 +48,8 @@ Y.extend(DRAGSECTION, M.core.dragdrop, {
         this.groups = [CSS.SECTIONDRAGGABLE];
         this.samenodeclass = M.course.format.get_sectionwrapperclass();
         this.parentnodeclass = M.course.format.get_containerclass();
+        // Detect the direction of travel.
+        this.detectkeyboarddirection = true;
 
         // Check if we are in single section mode
         if (Y.Node.one('.' + CSS.JUMPMENU)) {
@@ -147,6 +149,14 @@ Y.extend(DRAGSECTION, M.core.dragdrop, {
     drag_start: function(e) {
         // Get our drag object
         var drag = e.target;
+        // This is the node that the user started to drag.
+        var node = drag.get('node');
+        // This is the container node that will follow the mouse around,
+        // or during a keyboard drag and drop the original node.
+        var dragnode = drag.get('dragNode');
+        if (node === dragnode) {
+            return;
+        }
         // Creat a dummy structure of the outer elemnents for clean styles application
         var containernode = Y.Node.create('<' + M.course.format.get_containernode() +
                 '></' + M.course.format.get_containernode() + '>');
@@ -155,10 +165,10 @@ Y.extend(DRAGSECTION, M.core.dragdrop, {
                 '></' + M.course.format.get_sectionwrappernode() + '>');
         sectionnode.addClass(M.course.format.get_sectionwrapperclass());
         sectionnode.setStyle('margin', 0);
-        sectionnode.setContent(drag.get('node').get('innerHTML'));
+        sectionnode.setContent(node.get('innerHTML'));
         containernode.appendChild(sectionnode);
-        drag.get('dragNode').setContent(containernode);
-        drag.get('dragNode').addClass(CSS.COURSECONTENT);
+        dragnode.setContent(containernode);
+        dragnode.addClass(CSS.COURSECONTENT);
     },
 
     drag_dropmiss: function(e) {
@@ -276,6 +286,8 @@ Y.extend(DRAGSECTION, M.core.dragdrop, {
                                 // Update flag.
                                 swapped = true;
                             }
+                            sectionlist.item(index).setAttribute('data-sectionid',
+                                Y.Moodle.core_course.util.section.getId(sectionlist.item(index)));
                         }
                         loopend = loopend - 1;
                     } while (swapped);
@@ -283,6 +295,9 @@ Y.extend(DRAGSECTION, M.core.dragdrop, {
                     window.setTimeout(function() {
                         lightbox.hide();
                     }, 250);
+
+                    // Update course state.
+                    M.course.coursebase.invoke_function('updateMovedSectionState');
                 },
 
                 failure: function(tid, response) {
@@ -329,8 +344,6 @@ Y.extend(DRAGRESOURCE, M.core.dragdrop, {
         this.groups = ['resource'];
         this.samenodeclass = CSS.ACTIVITY;
         this.parentnodeclass = CSS.SECTION;
-        this.resourcedraghandle = this.get_drag_handle(M.util.get_string('movecoursemodule', 'moodle'),
-                CSS.EDITINGMOVE, CSS.ICONCLASS, true);
 
         this.samenodelabel = {
             identifier: 'afterresource',
@@ -423,8 +436,9 @@ Y.extend(DRAGRESOURCE, M.core.dragdrop, {
             // Replace move icons
             var move = resourcesnode.one('a.' + CSS.EDITINGMOVE);
             if (move) {
-                var sr = move.getData('sr');
-                move.replace(this.resourcedraghandle.cloneNode(true).setAttribute('data-sectionreturn', sr));
+                var sr = move.getData('sectionreturn');
+                move.replace(this.get_drag_handle(M.util.get_string('movecoursemodule', 'moodle'),
+                             CSS.EDITINGMOVE, CSS.ICONCLASS, true).setAttribute('data-sectionreturn', sr));
             }
         }, this);
     },
@@ -432,6 +446,11 @@ Y.extend(DRAGRESOURCE, M.core.dragdrop, {
     drag_start: function(e) {
         // Get our drag object
         var drag = e.target;
+        if (drag.get('dragNode') === drag.get('node')) {
+            // We do not want to modify the contents of the real node.
+            // They will be the same during a keyboard drag and drop.
+            return;
+        }
         drag.get('dragNode').setContent(drag.get('node').get('innerHTML'));
         drag.get('dragNode').all('img.iconsmall').setStyle('vertical-align', 'baseline');
     },
@@ -462,16 +481,21 @@ Y.extend(DRAGRESOURCE, M.core.dragdrop, {
             params[varname] = pageparams[varname];
         }
 
+        // Variables needed to update the course state.
+        var cmid = Number(Y.Moodle.core_course.util.cm.getId(dragnode));
+        var beforeid = null;
+
         // Prepare request parameters
         params.sesskey = M.cfg.sesskey;
         params.courseId = this.get('courseid');
         params['class'] = 'resource';
         params.field = 'move';
-        params.id = Number(Y.Moodle.core_course.util.cm.getId(dragnode));
+        params.id = cmid;
         params.sectionId = Y.Moodle.core_course.util.section.getId(dropnode.ancestor(M.course.format.get_section_wrapper(Y), true));
 
         if (dragnode.next()) {
-            params.beforeId = Number(Y.Moodle.core_course.util.cm.getId(dragnode.next()));
+            beforeid = Number(Y.Moodle.core_course.util.cm.getId(dragnode.next()));
+            params.beforeId = beforeid;
         }
 
         // Do AJAX request
@@ -487,6 +511,16 @@ Y.extend(DRAGRESOURCE, M.core.dragdrop, {
                 },
                 success: function(tid, response) {
                     var responsetext = Y.JSON.parse(response.responseText);
+                    // Update course state.
+                    M.course.coursebase.invoke_function(
+                        'updateMovedCmState',
+                        {
+                            cmid: cmid,
+                            beforeid: beforeid,
+                            visible: responsetext.visible,
+                        }
+                    );
+                    // Set visibility in course content.
                     var params = {element: dragnode, visible: responsetext.visible};
                     M.course.coursebase.invoke_function('set_visibility_resource_ui', params);
                     this.unlock_drag_handle(drag, CSS.EDITINGMOVE);

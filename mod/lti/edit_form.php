@@ -49,16 +49,32 @@
 
 defined('MOODLE_INTERNAL') || die;
 
+global $CFG;
 require_once($CFG->libdir.'/formslib.php');
 require_once($CFG->dirroot.'/mod/lti/locallib.php');
 
-class mod_lti_edit_types_form extends moodleform{
+/**
+ * LTI Edit Form
+ *
+ * @package    mod_lti
+ * @copyright  2009 Marc Alier, Jordi Piguillem, Nikolas Galanis
+ *  marc.alier@upc.edu
+ * @copyright  2009 Universitat Politecnica de Catalunya http://www.upc.edu
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class mod_lti_edit_types_form extends moodleform {
+
+    /**
+     * Define this form.
+     */
     public function definition() {
-        global $CFG;
+        global $CFG, $PAGE, $DB, $OUTPUT;
 
         $mform    =& $this->_form;
 
-        $istool = $this->_customdata && $this->_customdata->istool;
+        $istool = $this->_customdata && isset($this->_customdata->istool) && $this->_customdata->istool;
+        $typeid = $this->_customdata->id ?? '';
+        $clientid = $this->_customdata->clientid ?? '';
 
         // Add basiclti elements.
         $mform->addElement('header', 'setup', get_string('tool_settings', 'lti'));
@@ -82,14 +98,72 @@ class mod_lti_edit_types_form extends moodleform{
         }
 
         if (!$istool) {
+            $options = array(
+                LTI_VERSION_1 => get_string('oauthsecurity', 'lti'),
+                LTI_VERSION_1P3 => get_string('jwtsecurity', 'lti'),
+            );
+            $mform->addElement('select', 'lti_ltiversion', get_string('ltiversion', 'lti'), $options);
+            $mform->setType('lti_ltiversion', PARAM_TEXT);
+            $mform->addHelpButton('lti_ltiversion', 'ltiversion', 'lti');
+            $mform->setDefault('lti_ltiversion', LTI_VERSION_1);
+
             $mform->addElement('text', 'lti_resourcekey', get_string('resourcekey_admin', 'lti'));
             $mform->setType('lti_resourcekey', PARAM_TEXT);
             $mform->addHelpButton('lti_resourcekey', 'resourcekey_admin', 'lti');
+            $mform->hideIf('lti_resourcekey', 'lti_ltiversion', 'eq', LTI_VERSION_1P3);
             $mform->setForceLtr('lti_resourcekey');
 
             $mform->addElement('passwordunmask', 'lti_password', get_string('password_admin', 'lti'));
-            $mform->setType('lti_password', PARAM_TEXT);
+            $mform->setType('lti_password', PARAM_RAW);
             $mform->addHelpButton('lti_password', 'password_admin', 'lti');
+            $mform->hideIf('lti_password', 'lti_ltiversion', 'eq', LTI_VERSION_1P3);
+
+            if (!empty($typeid)) {
+                $mform->addElement('text', 'lti_clientid_disabled', get_string('clientidadmin', 'lti'));
+                $mform->setType('lti_clientid_disabled', PARAM_TEXT);
+                $mform->addHelpButton('lti_clientid_disabled', 'clientidadmin', 'lti');
+                $mform->hideIf('lti_clientid_disabled', 'lti_ltiversion', 'neq', LTI_VERSION_1P3);
+                $mform->disabledIf('lti_clientid_disabled', null);
+                $mform->setForceLtr('lti_clientid_disabled');
+                $mform->addElement('hidden', 'lti_clientid');
+                $mform->setType('lti_clientid', PARAM_TEXT);
+            }
+
+            $keyoptions = [
+                LTI_RSA_KEY => get_string('keytype_rsa', 'lti'),
+                LTI_JWK_KEYSET => get_string('keytype_keyset', 'lti'),
+            ];
+            $mform->addElement('select', 'lti_keytype', get_string('keytype', 'lti'), $keyoptions);
+            $mform->setType('lti_keytype', PARAM_TEXT);
+            $mform->addHelpButton('lti_keytype', 'keytype', 'lti');
+            $mform->setDefault('lti_keytype', LTI_JWK_KEYSET);
+            $mform->hideIf('lti_keytype', 'lti_ltiversion', 'neq', LTI_VERSION_1P3);
+
+            $mform->addElement('textarea', 'lti_publickey', get_string('publickey', 'lti'), ['rows' => 8, 'cols' => 60]);
+            $mform->setType('lti_publickey', PARAM_TEXT);
+            $mform->addHelpButton('lti_publickey', 'publickey', 'lti');
+            $mform->hideIf('lti_publickey', 'lti_keytype', 'neq', LTI_RSA_KEY);
+            $mform->hideIf('lti_publickey', 'lti_ltiversion', 'neq', LTI_VERSION_1P3);
+            $mform->setForceLtr('lti_publickey');
+
+            $mform->addElement('text', 'lti_publickeyset', get_string('publickeyset', 'lti'), ['size' => '64']);
+            $mform->setType('lti_publickeyset', PARAM_TEXT);
+            $mform->addHelpButton('lti_publickeyset', 'publickeyset', 'lti');
+            $mform->hideIf('lti_publickeyset', 'lti_keytype', 'neq', LTI_JWK_KEYSET);
+            $mform->hideIf('lti_publickeyset', 'lti_ltiversion', 'neq', LTI_VERSION_1P3);
+            $mform->setForceLtr('lti_publickeyset');
+
+            $mform->addElement('text', 'lti_initiatelogin', get_string('initiatelogin', 'lti'), array('size' => '64'));
+            $mform->setType('lti_initiatelogin', PARAM_URL);
+            $mform->addHelpButton('lti_initiatelogin', 'initiatelogin', 'lti');
+            $mform->hideIf('lti_initiatelogin', 'lti_ltiversion', 'neq', LTI_VERSION_1P3);
+
+            $mform->addElement('textarea', 'lti_redirectionuris', get_string('redirectionuris', 'lti'),
+                array('rows' => 3, 'cols' => 60));
+            $mform->setType('lti_redirectionuris', PARAM_TEXT);
+            $mform->addHelpButton('lti_redirectionuris', 'redirectionuris', 'lti');
+            $mform->hideIf('lti_redirectionuris', 'lti_ltiversion', 'neq', LTI_VERSION_1P3);
+            $mform->setForceLtr('lti_redirectionuris');
         }
 
         if ($istool) {
@@ -106,23 +180,26 @@ class mod_lti_edit_types_form extends moodleform{
         $mform->setForceLtr('lti_customparameters');
 
         if (!empty($this->_customdata->isadmin)) {
-            $options = array(
-                LTI_COURSEVISIBLE_NO => get_string('show_in_course_no', 'lti'),
-                LTI_COURSEVISIBLE_PRECONFIGURED => get_string('show_in_course_preconfigured', 'lti'),
-                LTI_COURSEVISIBLE_ACTIVITYCHOOSER => get_string('show_in_course_activity_chooser', 'lti'),
-            );
-            if ($istool) {
-                // LTI2 tools can not be matched by URL, they have to be either in preconfigured tools or in activity chooser.
-                unset($options[LTI_COURSEVISIBLE_NO]);
-                $stringname = 'show_in_course_lti2';
-            } else {
-                $stringname = 'show_in_course_lti1';
+            // Only site-level preconfigured tools allow the control of course visibility in the site admin tool type form.
+            if (empty($this->_customdata->iscoursetool) || !$this->_customdata->iscoursetool) {
+                $options = array(
+                    LTI_COURSEVISIBLE_NO => get_string('show_in_course_no', 'lti'),
+                    LTI_COURSEVISIBLE_PRECONFIGURED => get_string('show_in_course_preconfigured', 'lti'),
+                    LTI_COURSEVISIBLE_ACTIVITYCHOOSER => get_string('show_in_course_activity_chooser', 'lti'),
+                );
+                if ($istool) {
+                    // LTI2 tools can not be matched by URL, they have to be either in preconfigured tools or in activity chooser.
+                    unset($options[LTI_COURSEVISIBLE_NO]);
+                    $stringname = 'show_in_course_lti2';
+                } else {
+                    $stringname = 'show_in_course_lti1';
+                }
+                $mform->addElement('select', 'lti_coursevisible', get_string($stringname, 'lti'), $options);
+                $mform->addHelpButton('lti_coursevisible', $stringname, 'lti');
+                $mform->setDefault('lti_coursevisible', '1');
             }
-            $mform->addElement('select', 'lti_coursevisible', get_string($stringname, 'lti'), $options);
-            $mform->addHelpButton('lti_coursevisible', $stringname, 'lti');
-            $mform->setDefault('lti_coursevisible', '1');
         } else {
-            $mform->addElement('hidden', 'lti_coursevisible', LTI_COURSEVISIBLE_PRECONFIGURED);
+            $mform->addElement('hidden', 'lti_coursevisible', LTI_COURSEVISIBLE_ACTIVITYCHOOSER);
         }
         $mform->setType('lti_coursevisible', PARAM_INT);
 
@@ -140,11 +217,19 @@ class mod_lti_edit_types_form extends moodleform{
         $mform->addHelpButton('lti_launchcontainer', 'default_launch_container', 'lti');
         $mform->setType('lti_launchcontainer', PARAM_INT);
 
-        $mform->addElement('advcheckbox', 'lti_contentitem', get_string('contentitem', 'lti'));
-        $mform->addHelpButton('lti_contentitem', 'contentitem', 'lti');
-        $mform->setAdvanced('lti_contentitem');
+        $mform->addElement('advcheckbox', 'lti_contentitem', get_string('contentitem_deeplinking', 'lti'));
+        $mform->addHelpButton('lti_contentitem', 'contentitem_deeplinking', 'lti');
         if ($istool) {
             $mform->disabledIf('lti_contentitem', null);
+        }
+
+        $mform->addElement('text', 'lti_toolurl_ContentItemSelectionRequest',
+            get_string('toolurl_contentitemselectionrequest', 'lti'), array('size' => '64'));
+        $mform->setType('lti_toolurl_ContentItemSelectionRequest', PARAM_URL);
+        $mform->addHelpButton('lti_toolurl_ContentItemSelectionRequest', 'toolurl_contentitemselectionrequest', 'lti');
+        $mform->disabledIf('lti_toolurl_ContentItemSelectionRequest', 'lti_contentitem', 'notchecked');
+        if ($istool) {
+            $mform->disabledIf('lti_toolurl__ContentItemSelectionRequest', null);
         }
 
         $mform->addElement('hidden', 'oldicon');
@@ -160,6 +245,23 @@ class mod_lti_edit_types_form extends moodleform{
         $mform->setAdvanced('lti_secureicon');
         $mform->addHelpButton('lti_secureicon', 'secure_icon_url', 'lti');
 
+        // Restrict to course categories.
+        if (empty($this->_customdata->iscoursetool) || !$this->_customdata->iscoursetool) {
+            $mform->addElement('header', 'coursecategory', get_string('restricttocategory', 'lti'));
+            $mform->addHelpButton('coursecategory', 'restricttocategory', 'lti');
+            $records = $DB->get_records('course_categories', [], 'sortorder, id', 'id,parent,name');
+            // Convert array of objects to two dimentional array.
+            $tree = $this->lti_build_category_tree(array_map(fn($record) => (array)$record, $records));
+            $mform->addElement('html', $OUTPUT->render_from_template('mod_lti/categorynode', ['nodes' => $tree]));
+            $mform->addElement('hidden', 'lti_coursecategories');
+            $mform->setType('lti_coursecategories', PARAM_TEXT);
+        }
+
+        if (!$istool) {
+            // Display the lti advantage services.
+            $this->get_lti_advantage_services($mform);
+        }
+
         if (!$istool) {
             // Add privacy preferences fieldset where users choose whether to send their data.
             $mform->addElement('header', 'privacy', get_string('privacy', 'lti'));
@@ -167,27 +269,31 @@ class mod_lti_edit_types_form extends moodleform{
             $options = array();
             $options[0] = get_string('never', 'lti');
             $options[1] = get_string('always', 'lti');
-            $options[2] = get_string('delegate', 'lti');
 
             $mform->addElement('select', 'lti_sendname', get_string('share_name_admin', 'lti'), $options);
             $mform->setType('lti_sendname', PARAM_INT);
-            $mform->setDefault('lti_sendname', '2');
+            $mform->setDefault('lti_sendname', '0');
             $mform->addHelpButton('lti_sendname', 'share_name_admin', 'lti');
 
             $mform->addElement('select', 'lti_sendemailaddr', get_string('share_email_admin', 'lti'), $options);
             $mform->setType('lti_sendemailaddr', PARAM_INT);
-            $mform->setDefault('lti_sendemailaddr', '2');
+            $mform->setDefault('lti_sendemailaddr', '0');
             $mform->addHelpButton('lti_sendemailaddr', 'share_email_admin', 'lti');
 
             // LTI Extensions.
 
             // Add grading preferences fieldset where the tool is allowed to return grades.
-            $mform->addElement('select', 'lti_acceptgrades', get_string('accept_grades_admin', 'lti'), $options);
+            $gradeoptions = array();
+            $gradeoptions[] = get_string('never', 'lti');
+            $gradeoptions[] = get_string('always', 'lti');
+            $gradeoptions[] = get_string('delegate_tool', 'lti');
+
+            $mform->addElement('select', 'lti_acceptgrades', get_string('accept_grades_admin', 'lti'), $gradeoptions);
             $mform->setType('lti_acceptgrades', PARAM_INT);
             $mform->setDefault('lti_acceptgrades', '2');
             $mform->addHelpButton('lti_acceptgrades', 'accept_grades_admin', 'lti');
 
-            $mform->addElement('checkbox', 'lti_forcessl', '&nbsp;', ' ' . get_string('force_ssl', 'lti'), $options);
+            $mform->addElement('checkbox', 'lti_forcessl', get_string('force_ssl', 'lti'));
             $mform->setType('lti_forcessl', PARAM_BOOL);
             if (!empty($CFG->mod_lti_forcessl)) {
                 $mform->setDefault('lti_forcessl', '1');
@@ -201,14 +307,19 @@ class mod_lti_edit_types_form extends moodleform{
                 // Add setup parameters fieldset.
                 $mform->addElement('header', 'setupoptions', get_string('miscellaneous', 'lti'));
 
-                // Adding option to change id that is placed in context_id.
-                $idoptions = array();
-                $idoptions[0] = get_string('id', 'lti');
-                $idoptions[1] = get_string('courseid', 'lti');
+                $options = array(
+                    LTI_DEFAULT_ORGID_SITEID => get_string('siteid', 'lti'),
+                    LTI_DEFAULT_ORGID_SITEHOST => get_string('sitehost', 'lti'),
+                );
 
-                $mform->addElement('text', 'lti_organizationid', get_string('organizationid', 'lti'));
+                $mform->addElement('select', 'lti_organizationid_default', get_string('organizationid_default', 'lti'), $options);
+                $mform->setType('lti_organizationid_default', PARAM_TEXT);
+                $mform->setDefault('lti_organizationid_default', LTI_DEFAULT_ORGID_SITEID);
+                $mform->addHelpButton('lti_organizationid_default', 'organizationid_default', 'lti');
+
+                $mform->addElement('text', 'lti_organizationid', get_string('organizationidguid', 'lti'));
                 $mform->setType('lti_organizationid', PARAM_TEXT);
-                $mform->addHelpButton('lti_organizationid', 'organizationid', 'lti');
+                $mform->addHelpButton('lti_organizationid', 'organizationidguid', 'lti');
 
                 $mform->addElement('text', 'lti_organizationurl', get_string('organizationurl', 'lti'));
                 $mform->setType('lti_organizationurl', PARAM_URL);
@@ -252,5 +363,95 @@ class mod_lti_edit_types_form extends moodleform{
             unset($data->lti_contentitem);
         }
         return $data;
+    }
+
+    /**
+     * Generates the lti advantage extra configuration adding it to the mform
+     *
+     * @param MoodleQuickForm $mform
+     */
+    public function get_lti_advantage_services(&$mform) {
+        // For each service add the label and get the array of configuration.
+        $services = lti_get_services();
+        $mform->addElement('header', 'services', get_string('services', 'lti'));
+        foreach ($services as $service) {
+            /** @var \mod_lti\local\ltiservice\service_base $service */
+            $service->get_configuration_options($mform);
+        }
+    }
+
+    /**
+     * Validate the form data before we allow them to save the tool type.
+     *
+     * @param array $data
+     * @param array $files
+     * @return array Error messages
+     */
+    public function validation($data, $files) {
+        global $CFG;
+
+        $errors = parent::validation($data, $files);
+
+        // LTI2 tools do not contain a ltiversion field.
+        if (isset($data['lti_ltiversion']) && $data['lti_ltiversion'] == LTI_VERSION_1P3) {
+            require_once($CFG->dirroot . '/mod/lti/upgradelib.php');
+
+            $warning = mod_lti_verify_private_key();
+            if (!empty($warning)) {
+                $errors['lti_ltiversion'] = $warning;
+                return $errors;
+            }
+        }
+        return $errors;
+    }
+
+    /**
+     * Build category tree.
+     *
+     * @param array $elements
+     * @param int $parentid
+     * @return array category tree
+     */
+    public function lti_build_category_tree(array $elements, int $parentid = 0): array {
+        $branch = [];
+
+        foreach ($elements as $element) {
+            if ($element['parent'] == $parentid) {
+                $children = $this->lti_build_category_tree($elements, $element['id']);
+                if ($children) {
+                    $element['nodes'] = $children;
+                    $element['haschildren'] = true;
+                } else {
+                    $element['nodes'] = null;
+                    $element['haschildren'] = false;
+                }
+                $branch[] = $element;
+            }
+        }
+        return $branch;
+    }
+
+    public function definition_after_data() {
+        // Add the deprecated "Delegate to teacher" option to the "Share launcher's name" and "Share launcher's email" fields for
+        // existing types which are already using this setting value. This ensures that editing the tool type won't result in a
+        // change to the existing value. Add the option as a disabled to make this clear. Once changed, it cannot be set again.
+        // This isn't supported from 4.3 onward in the creation of new tool types.
+        foreach (['lti_sendname', 'lti_sendemailaddr'] as $elementname) {
+            if (!empty($this->_form->_defaultValues[$elementname])
+                    && $this->_form->_defaultValues[$elementname] == LTI_SETTING_DELEGATE) {
+
+                $elementarr = array_filter($this->_form->_elements, function ($element) use($elementname) {
+                    return !empty($element->_attributes['name']) && $element->_attributes['name'] == $elementname;
+                });
+                /** @var MoodleQuickForm_select $element */
+                $element = array_shift($elementarr);
+
+                $element->addOption(
+                    get_string('delegate', 'mod_lti'),
+                    LTI_SETTING_DELEGATE,
+                    ['disabled' => 'disabled', 'selected' => 'selected']
+                );
+            }
+        }
     }
 }

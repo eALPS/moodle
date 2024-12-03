@@ -1,6 +1,5 @@
 <?php
-
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Automatically generated strings for Moodle installer
@@ -34,13 +33,26 @@ $string['admindirname'] = 'دایرکتوری مدیر';
 $string['availablelangs'] = 'بسته‌های زبانی موجود';
 $string['chooselanguagehead'] = 'انتخاب زبان';
 $string['chooselanguagesub'] = 'لطفاً زبانی را به جهت استفاده در حین نصب انتخاب نمایید. زبانی که در این صفحه انتخاب می‌کنید به عنوان زبان پیش‌فرض سایت نیز مورد استفاده قرار خواهد گرفت. البته می‌توانید بعداً آن را تغییر دهید.<br />ترجمهٔ فارسی این نسخه با همکاری <a href="http://foodle.org" target="_blank">گروه فودل</a> آماده شده است.';
+$string['clialreadyconfigured'] = '.ﺩﺭﺍﺩ ﺩﻮﺟﻭ config.php ﯼﺪﻨﺑﺮﮑﯿﭘ ﻞﯾﺎﻓ
+ﺯﺍ ﺖﯾﺎﺳ ﻦﯾﺍ ﺭﺩ ﻝﺩﻮﻣ ﺐﺼﻧ ﯼﺍﺮﺑ ﺎﻔﻄﻟ
+.ﺪﯿﻨﮐ ﻩﺩﺎﻔﺘﺳﺍ admin/cli/database_install.php';
+$string['clialreadyinstalled'] = '.ﺩﺭﺍﺩ ﺩﻮﺟﻭ config.php ﯼﺪﻨﺑﺮﮑﯿﭘ ﻞﯾﺎﻓ
+ﺯﺍ ﺖﯾﺎﺳ ﻦﯾﺍ ﺭﺩ ﻝﺩﻮﻣ ﯼﺎﻘﺗﺭﺍ ﯼﺍﺮﺑ ﺎﻔﻄﻟ
+.ﺪﯿﻨﮐ ﻩﺩﺎﻔﺘﺳﺍ admin/cli/database_install.php';
+$string['cliinstallheader'] = 'ﻥﺎﻣﺮﻓ ﻂﺧ ﻖﯾﺮﻃ ﺯﺍ {$a} ﻝﺩﻮﻣ ﺐﺼﻧ ﻪﻣﺎﻧﺮﺑ';
+$string['clitablesexist'] = '.ﺪﻨﺘﺷﺍﺩ ﺩﻮﺟﻭ ﻞﺒﻗ ﺯﺍ ﻩﺩﺍﺩ ﻩﺎﮕﯾﺎﭘ ﯼﺎﻫ‌ﻝﻭﺪﺟ
+.ﺪﺑﺎﯾ ﻪﻣﺍﺩﺍ ﺪﻧﺍﻮﺗ‌ﯽﻤﻧ cli ﺐﺼﻧ';
 $string['databasehost'] = 'میزبان پایگاه داده';
 $string['databasename'] = 'نام پایگاه داده';
 $string['databasetypehead'] = 'راه‌انداز پایگاه داده را انتخاب کنید';
 $string['dataroot'] = 'دایرکتوری داده';
+$string['datarootpermission'] = 'ﺎﻫ‌ﻩﺩﺍﺩ ِﯼﺭﻮﺘﮐﺮﯾﺍﺩ ﺯﻮﺠﻣ';
 $string['dbprefix'] = 'پیشوند جدول‌ها';
 $string['dirroot'] = 'دایرکتوری مودل';
 $string['environmenthead'] = 'بررسی محیط شما ...';
+$string['environmentsub2'] = 'هر کدام از انتشارهای مودل حداقل نیازمندی مخصوص به خود را در مورد نسخهٔ PHP‌ و وجود داشتن برخی از افزونه‌های PHP دارد.
+پیش از هر نصب و ارتقا، بررسی کامل محیط انجام می‌شود. اگر نمی‌دانید چطور نسخهٔ جدید PHP را نصب کنید یا افزونه‌های PHP را فعال کنید، لطفا با مسئول کارگزار خود تماس بگیرید.';
+$string['errorsinenvironment'] = 'بررسی محیط ناموفق بود!';
 $string['installation'] = 'در حال نصب';
 $string['langdownloaderror'] = 'متأسفانه زبان «{$a}» نصب نشد. فرآیند نصب به زبان انگلیسی ادامه خواهد یافت.';
 $string['memorylimithelp'] = '<p>حد حافظهٔ PHP کارگزار شما هم‌اکنون {$a}  است.</p>
@@ -62,11 +74,32 @@ $string['memorylimithelp'] = '<p>حد حافظهٔ PHP کارگزار شما ه�
 <p>اگرچه، در برخی از کارگزارها انجام این کار موجب جلوگیری از کارکردن <b>همهٔ</b> صفحه‌های PHP خواهد شد
 (هنگام مشاهدهٔ صفحه‌ها خطاهایی خواهید دید) و مجبور خواهید بود که فایل <span dir="ltr">.htaccess</span> را پاک کنید.</p></li>
 </ol>';
+$string['paths'] = 'مسیرها';
+$string['pathserrcreatedataroot'] = 'دایرکتوری داده (<string dir="ltr" style="direction:ltr;display:inline-block;">{$a->dataroot}</span>) نمی‌تواند توسط برنامهٔ نصب ایجاد شود.';
+$string['pathshead'] = 'تایید مسیرها';
+$string['pathsrodataroot'] = 'دایرکتوری داده قابل نوشتن نیست.';
+$string['pathsroparentdataroot'] = 'دایرکتوری مادر (<string dir="ltr" style="direction:ltr;display:inline-block;">{$a->parent}</span>) قابل نوشتن نیست. دایرکتوری داده (<string dir="ltr" style="direction:ltr;display:inline-block;">{$a->dataroot}</span>) نمی‌تواند توسط برنامهٔ نصب ایجاد شود.';
+$string['pathssubadmindir'] = 'وب‌سایت‌های خیلی کمی از <span dir="ltr" style="display:inline-block;direction:ltr">/admin</span> به‌عنوان پیوند ویژه‌ای برای دستیابی به یک
+control panel یا چیز دیگری استفاده می‌کنند. متأسفانه این مسئله با
+محل استاندارد صفحه‌های مدیر در مودل تداخل دارد. این مشکل را می‌توانید
+با تغییر نام دایرکتوری admin در فایل‌های نصب و قرار دادن
+نام جدید در این قسمت برطرف نمائید. به‌عنوان مثال: <em>moodleadmin</em>. این کار پیوندهای مدیر در مودل را اصلاح خواهد کرد.';
+$string['pathssubdataroot'] = '<p>دایرکتوری‌ای مودل تمام فایل‌هایی که توسط کاربران ارسال می‌شود را نگهداری می‌کند.</p>
+<p>این دایرکتوری باید توسط کاربر کارگزار وب (معمولا www-data یا nobody یا apache) هم قابل خواندن و هم قابل نوشتن باشد.</p>
+<p>این دایرکتوری نباید مستقیما بر روی وب قابل دسترسی باشد.</p>
+<p>اگر دایرکتوری در حال حاضر وجود نداشته باشد، فرایند نصب سعی می‌کند که آن را بسازد.</p>';
+$string['pathssubdirroot'] = '<p>مسیر کامل دایرکتوری‌ای که محتوی کد مودل است.</p>';
+$string['pathssubwwwroot'] = '<p>آدرس کامل دسترسی به مودل؛ یعنی آدرسی که کاربران برای دسترسی به مودل در نوار آدرس مرورگرشان وارد می‌کنند.</p>
+<p>دسترسی به مودل از طریق چند آدرس امکان‌پذیر نیست. اگر سایت شما توسط آدرس‌های مختلفی قابل دسترسی است آنگاه ساده‌ترین آنها را انتخاب کنید و تمام آدرس‌های دیگر را روی آن ریدایرکت کنید (permanent redirect).</p>
+<p>اگر سایت شما هم از طریق اینترنت و هم از طریق شبکهٔ محلی (که گاهی به آن اینترانت هم می‌گویند) قابل دسترسی است، آنگاه آدرس عمومی را در این قسمت استفاده کنید.</p>
+<p>اگر آدرس فعلی درست نیست، لطفا آدرس را در نوار آدرس مرورگر خود تغییر دهید و فرایند نصب را از اول شروع کنید.</p>';
+$string['pathsunsecuredataroot'] = 'محل دایرکتوری داده امن نیست';
+$string['pathswrongadmindir'] = 'دایرکتوری مدیر وجود ندارد';
+$string['phpextension'] = 'افزونهٔ {$a} در PHP';
 $string['phpversion'] = 'نسخهٔ PHP';
-$string['phpversionhelp'] = '<p>مودل نیاز به PHP نسخهٔ حداقل 4.3.0 یا 5.1.0 دارد (<span dir="ltr">5.0.x</span> مشکلات شناخته‌شده‌ای دارد).</p>
+$string['phpversionhelp'] = '<p>مودل نیاز به PHP نسخهٔ حداقل 5.6.5 یا 7.1 دارد (<span dir="ltr" style="direction: ltr; display: inline-block">7.0.x</span> محدودیت‌هایی در engine اش دارد).</p>
 <p>شما در حال حاضر از نسخهٔ {$a} استفاده می‌کنید</p>
-<p>باید PHP را ارتقاء دهید یا از کارگزاری دارای نسخهٔ جدیدتر PHP استفاده نمائید!<br />
-(در صورت استفاده از <span dir="ltr">5.0.x</span> به نسخهٔ <span dir="ltr">4.4.x</span> هم می‌توانید برگردید)</p>';
+<p>باید PHP را ارتقاء دهید یا از کارگزاری دارای نسخهٔ جدیدتر PHP استفاده نمائید.</p>';
 $string['welcomep10'] = '{$a->installername} (<span dir="ltr">{$a->installerversion}</span>)';
 $string['welcomep20'] = 'دیدن این صفحه به معنی نصب و راه‌اندازی موفق بستهٔ
     <strong>{$a->packname} <span dir="ltr">{$a->packversion}</span></b></strong> است. تبریک!';

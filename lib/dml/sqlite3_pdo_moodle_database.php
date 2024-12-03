@@ -86,7 +86,7 @@ class sqlite3_pdo_moodle_database extends pdo_moodle_database {
      *
      * @return bool success
      */
-    public function create_database($dbhost, $dbuser, $dbpass, $dbname, array $dboptions=null) {
+    public function create_database($dbhost, $dbuser, $dbpass, $dbname, ?array $dboptions=null) {
         global $CFG;
 
         $this->dbhost = $dbhost;
@@ -193,25 +193,12 @@ class sqlite3_pdo_moodle_database extends pdo_moodle_database {
     }
 
     /**
-     * Returns detailed information about columns in table. This information is cached internally.
+     * Returns detailed information about columns in table.
+     *
      * @param string $table name
-     * @param bool $usecache
      * @return array array of database_column_info objects indexed with column names
      */
-    public function get_columns($table, $usecache=true) {
-
-        if ($usecache) {
-            if ($this->temptables->is_temptable($table)) {
-                if ($data = $this->get_temp_tables_cache()->get($table)) {
-                    return $data;
-                }
-            } else {
-                if ($data = $this->get_metacache()->get($table)) {
-                    return $data;
-                }
-            }
-        }
-
+    protected function fetch_columns(string $table): array {
         $structure = array();
 
         // get table's CREATE TABLE command (we'll need it for autoincrement fields)
@@ -303,14 +290,6 @@ class sqlite3_pdo_moodle_database extends pdo_moodle_database {
             $structure[$columninfo['name']] = new database_column_info($columninfo);
         }
 
-        if ($usecache) {
-            if ($this->temptables->is_temptable($table)) {
-                $this->get_temp_tables_cache()->set($table, $structure);
-            } else {
-                $this->get_metacache()->set($table, $structure);
-            }
-        }
-
         return $structure;
     }
 
@@ -350,7 +329,7 @@ class sqlite3_pdo_moodle_database extends pdo_moodle_database {
      * @param array $conditions optional array $fieldname=>requestedvalue with AND in between
      * @return returns success.
      */
-    public function delete_records($table, array $conditions=null) {
+    public function delete_records($table, ?array $conditions=null) {
         if (is_null($conditions)) {
             return $this->execute("DELETE FROM {{$table}}");
         }
@@ -362,11 +341,10 @@ class sqlite3_pdo_moodle_database extends pdo_moodle_database {
      * Returns the proper SQL to do CONCAT between the elements passed
      * Can take many parameters
      *
-     * @param string $element
+     * @param string $elements,...
      * @return string
      */
-    public function sql_concat() {
-        $elements = func_get_args();
+    public function sql_concat(...$elements) {
         return implode('||', $elements);
     }
 

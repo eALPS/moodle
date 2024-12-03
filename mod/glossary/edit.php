@@ -8,11 +8,11 @@ $cmid = required_param('cmid', PARAM_INT);            // Course Module ID
 $id   = optional_param('id', 0, PARAM_INT);           // EntryID
 
 if (!$cm = get_coursemodule_from_id('glossary', $cmid)) {
-    print_error('invalidcoursemodule');
+    throw new \moodle_exception('invalidcoursemodule');
 }
 
 if (!$course = $DB->get_record('course', array('id'=>$cm->course))) {
-    print_error('coursemisconf');
+    throw new \moodle_exception('coursemisconf');
 }
 
 require_login($course, false, $cm);
@@ -20,7 +20,7 @@ require_login($course, false, $cm);
 $context = context_module::instance($cm->id);
 
 if (!$glossary = $DB->get_record('glossary', array('id'=>$cm->instance))) {
-    print_error('invalidid', 'glossary');
+    throw new \moodle_exception('invalidid', 'glossary');
 }
 
 $url = new moodle_url('/mod/glossary/edit.php', array('cmid'=>$cm->id));
@@ -31,30 +31,17 @@ $PAGE->set_url($url);
 
 if ($id) { // if entry is specified
     if (isguestuser()) {
-        print_error('guestnoedit', 'glossary', "$CFG->wwwroot/mod/glossary/view.php?id=$cmid");
+        throw new \moodle_exception('guestnoedit', 'glossary', "$CFG->wwwroot/mod/glossary/view.php?id=$cmid");
     }
 
     if (!$entry = $DB->get_record('glossary_entries', array('id'=>$id, 'glossaryid'=>$glossary->id))) {
-        print_error('invalidentry');
+        throw new \moodle_exception('invalidentry');
     }
 
-    $ineditperiod = ((time() - $entry->timecreated <  $CFG->maxeditingtime) || $glossary->editalways);
-    if (!has_capability('mod/glossary:manageentries', $context) and !($entry->userid == $USER->id and ($ineditperiod and has_capability('mod/glossary:write', $context)))) {
-        if ($USER->id != $entry->userid) {
-            print_error('errcannoteditothers', 'glossary', "view.php?id=$cm->id&amp;mode=entry&amp;hook=$id");
-        } elseif (!$ineditperiod) {
-            print_error('erredittimeexpired', 'glossary', "view.php?id=$cm->id&amp;mode=entry&amp;hook=$id");
-        }
-    }
-
-    //prepare extra data
-    if ($aliases = $DB->get_records_menu("glossary_alias", array("entryid"=>$id), '', 'id, alias')) {
-        $entry->aliases = implode("\n", $aliases) . "\n";
-    }
-    if ($categoriesarr = $DB->get_records_menu("glossary_entries_categories", array('entryid'=>$id), '', 'id, categoryid')) {
-        // TODO: this fetches cats from both main and secondary glossary :-(
-        $entry->categories = array_values($categoriesarr);
-    }
+    // Check if the user can update the entry (trigger exception if he can't).
+    mod_glossary_can_update_entry($entry, $glossary, $context, $cm, false);
+    // Prepare extra data.
+    $entry = mod_glossary_prepare_entry_for_edition($entry);
 
 } else { // new entry
     require_capability('mod/glossary:write', $context);
@@ -81,8 +68,11 @@ if ($mform->is_cancelled()){
         redirect("view.php?id=$cm->id");
     }
 
-} else if ($entry = $mform->get_data()) {
-    $entry = glossary_edit_entry($entry, $course, $cm, $glossary, $context);
+} else if ($data = $mform->get_data()) {
+    $entry = glossary_edit_entry($data, $course, $cm, $glossary, $context);
+    if (core_tag_tag::is_enabled('mod_glossary', 'glossary_entries') && isset($data->tags)) {
+        core_tag_tag::set_item_tags('mod_glossary', 'glossary_entries', $data->id, $context, $data->tags);
+    }
     redirect("view.php?id=$cm->id&mode=entry&hook=$entry->id");
 }
 
@@ -92,11 +82,21 @@ if (!empty($id)) {
 
 $PAGE->set_title($glossary->name);
 $PAGE->set_heading($course->fullname);
+$PAGE->set_secondary_active_tab('modulepage');
+$PAGE->activityheader->set_attrs([
+    'hidecompletion' => true,
+    'description' => ''
+]);
 echo $OUTPUT->header();
-echo $OUTPUT->heading(format_string($glossary->name), 2);
-if ($glossary->intro) {
-    echo $OUTPUT->box(format_module_intro('glossary', $glossary, $cm->id), 'generalbox', 'intro');
+if (!$id) {
+    echo $OUTPUT->heading(get_string('addsingleentry', 'mod_glossary'));
+} else {
+    echo $OUTPUT->heading(get_string('editentry', 'mod_glossary'));
 }
+
+$data = new StdClass();
+$data->tags = core_tag_tag::get_item_tags_array('mod_glossary', 'glossary_entries', $id);
+$mform->set_data($data);
 
 $mform->display();
 

@@ -39,26 +39,29 @@ class backup_forum_activity_structure_step extends backup_activity_structure_ste
         // Define each element separated
 
         $forum = new backup_nested_element('forum', array('id'), array(
-            'type', 'name', 'intro', 'introformat',
+            'type', 'name', 'intro', 'introformat', 'duedate', 'cutoffdate',
             'assessed', 'assesstimestart', 'assesstimefinish', 'scale',
             'maxbytes', 'maxattachments', 'forcesubscribe', 'trackingtype',
             'rsstype', 'rssarticles', 'timemodified', 'warnafter',
             'blockafter', 'blockperiod', 'completiondiscussions', 'completionreplies',
-            'completionposts', 'displaywordcount', 'lockdiscussionafter'));
+            'completionposts', 'displaywordcount', 'lockdiscussionafter', 'grade_forum'));
 
         $discussions = new backup_nested_element('discussions');
 
         $discussion = new backup_nested_element('discussion', array('id'), array(
             'name', 'firstpost', 'userid', 'groupid',
             'assessed', 'timemodified', 'usermodified', 'timestart',
-            'timeend', 'pinned'));
+            'timeend', 'pinned', 'timelocked'));
 
         $posts = new backup_nested_element('posts');
 
         $post = new backup_nested_element('post', array('id'), array(
             'parent', 'userid', 'created', 'modified',
             'mailed', 'subject', 'message', 'messageformat',
-            'messagetrust', 'attachment', 'totalscore', 'mailnow'));
+            'messagetrust', 'attachment', 'totalscore', 'mailnow', 'privatereplyto'));
+
+        $tags = new backup_nested_element('poststags');
+        $tag = new backup_nested_element('tag', array('id'), array('itemid', 'rawname'));
 
         $ratings = new backup_nested_element('ratings');
 
@@ -93,6 +96,17 @@ class backup_forum_activity_structure_step extends backup_activity_structure_ste
         $track = new backup_nested_element('track', array('id'), array(
             'userid'));
 
+        $grades = new backup_nested_element('grades');
+
+        $grade = new backup_nested_element('grade', ['id'], [
+            'forum',
+            'itemnumber',
+            'userid',
+            'grade',
+            'timecreated',
+            'timemodified',
+        ]);
+
         // Build the tree
 
         $forum->add_child($discussions);
@@ -109,6 +123,12 @@ class backup_forum_activity_structure_step extends backup_activity_structure_ste
 
         $forum->add_child($trackedprefs);
         $trackedprefs->add_child($track);
+
+        $forum->add_child($tags);
+        $tags->add_child($tag);
+
+        $forum->add_child($grades);
+        $grades->add_child($grade);
 
         $discussion->add_child($posts);
         $posts->add_child($post);
@@ -147,6 +167,21 @@ class backup_forum_activity_structure_step extends backup_activity_structure_ste
                                                       'ratingarea' => backup_helper::is_sqlparam('post'),
                                                       'itemid'     => backup::VAR_PARENTID));
             $rating->set_source_alias('rating', 'value');
+
+            if (core_tag_tag::is_enabled('mod_forum', 'forum_posts')) {
+                // Backup all tags for all forum posts in this forum.
+                $tag->set_source_sql('SELECT t.id, ti.itemid, t.rawname
+                                        FROM {tag} t
+                                        JOIN {tag_instance} ti ON ti.tagid = t.id
+                                       WHERE ti.itemtype = ?
+                                         AND ti.component = ?
+                                         AND ti.contextid = ?', array(
+                    backup_helper::is_sqlparam('forum_posts'),
+                    backup_helper::is_sqlparam('mod_forum'),
+                    backup::VAR_CONTEXTID));
+            }
+
+            $grade->set_source_table('forum_grades', array('forum' => backup::VAR_PARENTID));
         }
 
         // Define id annotations
@@ -171,6 +206,9 @@ class backup_forum_activity_structure_step extends backup_activity_structure_ste
 
         $track->annotate_ids('user', 'userid');
 
+        $grade->annotate_ids('userid', 'userid');
+
+        $grade->annotate_ids('forum', 'forum');
         // Define file annotations
 
         $forum->annotate_files('mod_forum', 'intro', null); // This file area hasn't itemid

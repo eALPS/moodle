@@ -21,9 +21,11 @@
  * @copyright  2016 Damyon Wiese
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
+define('NO_OUTPUT_BUFFERING', true);
 require_once(__DIR__ . '/../../../config.php');
 require_once($CFG->libdir.'/adminlib.php');
+
+admin_externalpage_setup('toollpimportcsv');
 
 $pagetitle = get_string('pluginname', 'tool_lpimportcsv');
 

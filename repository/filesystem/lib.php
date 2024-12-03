@@ -99,7 +99,7 @@ class repository_filesystem extends repository {
         $fileslist = array();
         $dirslist = array();
         if ($dh = opendir($abspath)) {
-            while (($file = readdir($dh)) != false) {
+            while (false !== ($file = readdir($dh))) {
                 if ($file != '.' and $file != '..') {
                     if (is_file($abspath . $file)) {
                         $fileslist[] = $file;
@@ -108,6 +108,7 @@ class repository_filesystem extends repository {
                     }
                 }
             }
+            closedir($dh);
         }
         core_collator::asort($fileslist, core_collator::SORT_NATURAL);
         core_collator::asort($dirslist, core_collator::SORT_NATURAL);
@@ -311,14 +312,14 @@ class repository_filesystem extends repository {
 
         if ($isdir) {
             $node['children'] = array();
-            $node['thumbnail'] = $OUTPUT->pix_url(file_folder_icon(90))->out(false);
+            $node['thumbnail'] = $OUTPUT->image_url(file_folder_icon())->out(false);
             $node['path'] = $this->build_node_path('browse', $relpath, $name, $rootnodepath);
 
         } else {
             $node['source'] = $relpath;
             $node['size'] = filesize($abspath);
-            $node['thumbnail'] = $OUTPUT->pix_url(file_extension_icon($name, 90))->out(false);
-            $node['icon'] = $OUTPUT->pix_url(file_extension_icon($name, 24))->out(false);
+            $node['thumbnail'] = $OUTPUT->image_url(file_extension_icon($name))->out(false);
+            $node['icon'] = $OUTPUT->image_url(file_extension_icon($name))->out(false);
             $node['path'] = $relpath;
 
             if (file_extension_in_typegroup($name, 'image') && ($imageinfo = @getimagesize($abspath))) {
@@ -571,19 +572,22 @@ class repository_filesystem extends repository {
             $fs = get_file_storage();
             $issyncing = true;
             if (file_extension_in_typegroup($filepath, 'web_image')) {
-                $contenthash = sha1_file($filepath);
+                $contenthash = file_storage::hash_from_path($filepath);
                 if ($file->get_contenthash() == $contenthash) {
                     // File did not change since the last synchronisation.
                     $filesize = filesize($filepath);
                 } else {
                     // Copy file into moodle filepool (used to generate an image thumbnail).
-                    list($contenthash, $filesize, $newfile) = $fs->add_file_to_pool($filepath);
+                    $file->set_timemodified(filemtime($filepath));
+                    $file->set_synchronised_content_from_file($filepath);
+                    return true;
                 }
             } else {
                 // Update only file size so file will NOT be copied into moodle filepool.
-                $emptyfile = $contenthash = sha1('');
-                $currentcontenthash = $file->get_contenthash();
-                if ($currentcontenthash !== $emptyfile && $currentcontenthash === sha1_file($filepath)) {
+                if ($file->compare_to_string('') || !$file->compare_to_path($filepath)) {
+                    // File is not synchronized or the file has changed.
+                    $contenthash = file_storage::hash_from_string('');
+                } else {
                     // File content was synchronised and has not changed since then, leave it.
                     $contenthash = null;
                 }
@@ -609,7 +613,7 @@ class repository_filesystem extends repository {
      * @param bool $forcedownload If true (default false), forces download of file rather than view in browser/plugin
      * @param array $options additional options affecting the file serving
      */
-    public function send_file($storedfile, $lifetime=null , $filter=0, $forcedownload=false, array $options = null) {
+    public function send_file($storedfile, $lifetime=null , $filter=0, $forcedownload=false, ?array $options = null) {
         $reference = $storedfile->get_reference();
         $file = $this->get_rootpath() . ltrim($reference, '/');
         if ($this->is_in_repository($reference) && is_readable($file)) {
@@ -701,7 +705,7 @@ class repository_filesystem extends repository {
             // File is not found or is not readable.
             return null;
         }
-        $filename = sha1($filecontents);
+        $filename = file_storage::hash_from_string($filecontents);
 
         // Try to get generated thumbnail for this file.
         $fs = get_file_storage();
@@ -751,7 +755,7 @@ class repository_filesystem extends repository {
         foreach ($files as $filepath => $filesinpath) {
             if ($filecontents = @file_get_contents($this->get_rootpath() . trim($filepath, '/'))) {
                 // The 'filename' in Moodle file storage is contenthash of the file in filesystem repository.
-                $filename = sha1($filecontents);
+                $filename = file_storage::hash_from_string($filecontents);
                 foreach ($filesinpath as $file) {
                     if ($file->get_filename() !== $filename && $file->get_filename() !== '.') {
                         // Contenthash does not match, this is an old thumbnail.
@@ -844,7 +848,8 @@ function repository_filesystem_pluginfile($course, $cm, $context, $filearea, $ar
     // Find stored or generated thumbnail.
     if (!($file = $repo->get_thumbnail($filepath, $filearea))) {
         // Generation failed, redirect to default icon for file extension.
-        redirect($OUTPUT->pix_url(file_extension_icon($file, 90)));
+        // Do not use redirect() here because is not compatible with webservice/pluginfile.php.
+        header('Location: ' . $OUTPUT->image_url(file_extension_icon($file)));
     }
     // The thumbnails should not be changing much, but maybe the default lifetime is too long.
     $lifetime = $CFG->filelifetime;
@@ -852,37 +857,4 @@ function repository_filesystem_pluginfile($course, $cm, $context, $filearea, $ar
         $lifetime = 60*10;
     }
     send_stored_file($file, $lifetime, 0, $forcedownload, $options);
-}
-
-/**
- * Cron callback for repository_filesystem. Deletes the thumbnails for deleted or changed files.
- */
-function repository_filesystem_cron() {
-    $fs = get_file_storage();
-    // Find all generated thumbnails and group them in array by itemid (itemid == repository instance id).
-    $allfiles = array_merge(
-            $fs->get_area_files(SYSCONTEXTID, 'repository_filesystem', 'thumb'),
-            $fs->get_area_files(SYSCONTEXTID, 'repository_filesystem', 'icon')
-    );
-    $filesbyitem = array();
-    foreach ($allfiles as $file) {
-        if (!isset($filesbyitem[$file->get_itemid()])) {
-            $filesbyitem[$file->get_itemid()] = array();
-        }
-        $filesbyitem[$file->get_itemid()][] = $file;
-    }
-    // Find all instances of repository_filesystem.
-    $instances = repository::get_instances(array('type' => 'filesystem'));
-    // Loop through all itemids of generated thumbnails.
-    foreach ($filesbyitem as $itemid => $files) {
-        if (!isset($instances[$itemid]) || !($instances[$itemid] instanceof repository_filesystem)) {
-            // Instance was deleted.
-            $fs->delete_area_files(SYSCONTEXTID, 'repository_filesystem', 'thumb', $itemid);
-            $fs->delete_area_files(SYSCONTEXTID, 'repository_filesystem', 'icon', $itemid);
-            mtrace(" instance $itemid does not exist: deleted all thumbnails");
-        } else {
-            // Instance has some generated thumbnails, check that they are not outdated.
-            $instances[$itemid]->remove_obsolete_thumbnails($files);
-        }
-    }
 }

@@ -46,9 +46,10 @@ class testable_core_search extends \core_search\manager {
      * Auto enables global search.
      *
      * @param  \core_search\engine|bool $searchengine
+     * @param bool $ignored Second param just to make this compatible with base class
      * @return testable_core_search
      */
-    public static function instance($searchengine = false) {
+    public static function instance($searchengine = false, bool $ignored = false) {
 
         // One per request, this should be purged during testing.
         if (self::$instance !== null) {
@@ -72,8 +73,8 @@ class testable_core_search extends \core_search\manager {
      *
      * @return array
      */
-    public function get_areas_user_accesses($limitcourseids = false) {
-        return parent::get_areas_user_accesses($limitcourseids);
+    public function get_areas_user_accesses($limitcourseids = false, $limitcontextids = false) {
+        return parent::get_areas_user_accesses($limitcourseids, $limitcontextids);
     }
 
     /**
@@ -108,4 +109,27 @@ class testable_core_search extends \core_search\manager {
         return parent::is_search_area($classname);
     }
 
+    /**
+     * Fakes the current time for PHPunit. Turns off faking time if called with default parameter.
+     *
+     * Note: This should be replaced with core functionality once possible (see MDL-60644).
+     *
+     * @param float $faketime Current time
+     */
+    public static function fake_current_time($faketime = 0.0) {
+        static::$phpunitfaketime = $faketime;
+    }
+
+    /**
+     * Makes build_limitcourseids method public for testing.
+     *
+     * @param \stdClass $formdata Submitted search form data.
+     *
+     * @return array|bool
+     */
+    public function build_limitcourseids(\stdClass $formdata) {
+        $limitcourseids = parent::build_limitcourseids($formdata);
+
+        return $limitcourseids;
+    }
 }

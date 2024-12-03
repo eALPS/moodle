@@ -17,18 +17,12 @@
 {{!
     @template core_form/element-template
 
-    Moodle form element wrapper template.
-
-    The purpose of this template is to wrap a form element.
-
-    Classes required for JS:
-    * none
-
-    Data attributes required for JS:
-    * none
+    Template for the form element wrapper template.
 
     Context variables required for this template:
     * label
+    * required
+    * advanced
     * helpbutton
     * error
     * element
@@ -37,28 +31,51 @@
 
     Example context (json):
     {
-        "label": "Password",
-        "error": "No password set",
+        "label": "Course full name",
+        "required": true,
+        "advanced": false,
+        "error": null,
         "element": {
-            "id": "example_password_unmask",
-            "name": "example"
+            "wrapperid": "fitem_id_fullname",
+            "id": "id_fullname",
+            "name": "fullname"
         }
     }
-
 }}
-<div id="fitem_{{ element.id }}" class="fitem fitem_{{ element.type }}">
-    <div class="fitemtitle">
-      <label for="{{element.id}}">{{{ label }}}</label>
-        {{{ helpbutton }}}
+<div id="{{element.wrapperid}}" class="mb-3 row {{#error}}has-danger{{/error}} fitem {{#element.emptylabel}}femptylabel{{/element.emptylabel}} {{#advanced}}advanced{{/advanced}} {{{element.extraclasses}}} {{{element.parentclasses}}}" {{#element.groupname}}data-groupname="{{.}}"{{/element.groupname}}>
+    <div class="col-md-3 col-form-label d-flex pb-0 pe-md-0">
+        {{# label}}{{$ label }}
+            {{^element.staticlabel}}
+                <label id="{{element.id}}_label" class="d-inline word-break {{#element.hiddenlabel}}sr-only{{/element.hiddenlabel}}" for="{{element.id}}">
+                    {{{label}}}
+                </label>
+            {{/element.staticlabel}}
+            {{#element.staticlabel}}
+                <span class="d-inline-block {{#element.hiddenlabel}}sr-only{{/element.hiddenlabel}}">
+                    {{{label}}}
+                </span>
+            {{/element.staticlabel}}
+        {{/ label }}{{/ label}}
+        <div class="form-label-addon d-flex align-items-center align-self-start">
+            {{#required}}
+                <div class="text-danger" title="{{#str}}required{{/str}}">
+                {{#pix}}req, core, {{#str}}required{{/str}}{{/pix}}
+                </div>
+            {{/required}}
+            {{{helpbutton}}}
+        </div>
     </div>
-    <div class="felement {{# error }} error{{/ error }} f{{ element.type }}">
-        {{# error }}
-        <span class="error" tabindex="0" id="id_error_{{ element.name }}">
-            {{{ error }}}
-        </span>
-        {{/ error }}
+    <div class="col-md-9 d-flex flex-wrap align-items-start felement" data-fieldtype="{{element.type}}">
         {{$ element }}
             <!-- Element goes here -->
         {{/ element }}
+        <div class="form-control-feedback invalid-feedback" id="{{element.iderror}}" {{#error}} style="display: block;"{{/error}}>
+            {{{error}}}
+        </div>
     </div>
 </div>
+{{#js}}
+require(['theme_boost/form-display-errors'], function(module) {
+    module.enhance({{#quote}}{{element.id}}{{/quote}});
+});
+{{/js}}

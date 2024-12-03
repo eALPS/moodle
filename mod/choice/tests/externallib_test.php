@@ -14,14 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * External choice functions unit tests
- *
- * @package    mod_choice
- * @category   external
- * @copyright  2015 Costantino Cito <ccito@cvaconsulting.com>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace mod_choice;
+
+use core_external\external_api;
+use externallib_advanced_testcase;
+use mod_choice_external;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -38,18 +35,18 @@ require_once($CFG->dirroot . '/mod/choice/lib.php');
  * @copyright  2015 Costantino Cito <ccito@cvaconsulting.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class mod_choice_externallib_testcase extends externallib_advanced_testcase {
+class externallib_test extends externallib_advanced_testcase {
 
     /**
      * Test get_choice_results
      */
-    public function test_get_choice_results() {
+    public function test_get_choice_results(): void {
         global $DB;
 
         $this->resetAfterTest(true);
 
         $course = self::getDataGenerator()->create_course();
-        $params = new stdClass();
+        $params = new \stdClass();
         $params->course = $course->id;
         $params->option = array('fried rice', 'spring rolls', 'sweet and sour pork', 'satay beef', 'gyouza');
         $params->name = 'First Choice Activity';
@@ -150,7 +147,7 @@ class mod_choice_externallib_testcase extends externallib_advanced_testcase {
     /**
      * Test get_choice_options
      */
-    public function test_get_choice_options() {
+    public function test_get_choice_options(): void {
         global $DB;
 
         // Warningcodes.
@@ -259,13 +256,13 @@ class mod_choice_externallib_testcase extends externallib_advanced_testcase {
     /**
      * Test submit_choice_response
      */
-    public function test_submit_choice_response() {
+    public function test_submit_choice_response(): void {
         global $DB;
 
         $this->resetAfterTest(true);
 
         $course = self::getDataGenerator()->create_course();
-        $params = new stdClass();
+        $params = new \stdClass();
         $params->course = $course->id;
         $params->option = array('fried rice', 'spring rolls', 'sweet and sour pork', 'satay beef', 'gyouza');
         $params->name = 'First Choice Activity';
@@ -298,7 +295,7 @@ class mod_choice_externallib_testcase extends externallib_advanced_testcase {
     /**
      * Test view_choice
      */
-    public function test_view_choice() {
+    public function test_view_choice(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -306,14 +303,14 @@ class mod_choice_externallib_testcase extends externallib_advanced_testcase {
         // Setup test data.
         $course = $this->getDataGenerator()->create_course();
         $choice = $this->getDataGenerator()->create_module('choice', array('course' => $course->id));
-        $context = context_module::instance($choice->cmid);
+        $context = \context_module::instance($choice->cmid);
         $cm = get_coursemodule_from_instance('choice', $choice->id);
 
         // Test invalid instance id.
         try {
             mod_choice_external::view_choice(0);
             $this->fail('Exception expected due to invalid mod_choice instance id.');
-        } catch (moodle_exception $e) {
+        } catch (\moodle_exception $e) {
             $this->assertEquals('invalidcoursemodule', $e->errorcode);
         }
 
@@ -323,7 +320,7 @@ class mod_choice_externallib_testcase extends externallib_advanced_testcase {
         try {
             mod_choice_external::view_choice($choice->id);
             $this->fail('Exception expected due to not enrolled user.');
-        } catch (moodle_exception $e) {
+        } catch (\moodle_exception $e) {
             $this->assertEquals('requireloginerror', $e->errorcode);
         }
 
@@ -354,7 +351,7 @@ class mod_choice_externallib_testcase extends externallib_advanced_testcase {
     /**
      * Test get_choices_by_courses
      */
-    public function test_get_choices_by_courses() {
+    public function test_get_choices_by_courses(): void {
         global $DB;
         $this->resetAfterTest(true);
         // As admin.
@@ -406,7 +403,7 @@ class mod_choice_externallib_testcase extends externallib_advanced_testcase {
 
         // Now, prohibit capabilities.
         $this->setUser($student1);
-        $contextcourse1 = context_course::instance($course1->id);
+        $contextcourse1 = \context_course::instance($course1->id);
         // Prohibit capability = mod:choice:choose on Course1 for students.
         assign_capability('mod/choice:choose', CAP_PROHIBIT, $studentrole->id, $contextcourse1->id);
         accesslib_clear_all_caches_for_unit_testing();
@@ -419,13 +416,13 @@ class mod_choice_externallib_testcase extends externallib_advanced_testcase {
     /**
      * Test delete_choice_responses
      */
-    public function test_delete_choice_responses() {
+    public function test_delete_choice_responses(): void {
         global $DB;
 
         $this->resetAfterTest(true);
 
         $course = self::getDataGenerator()->create_course();
-        $params = new stdClass();
+        $params = new \stdClass();
         $params->course = $course->id;
         $params->option = array('fried rice', 'spring rolls', 'sweet and sour pork', 'satay beef', 'gyouza');
         $params->name = 'First Choice Activity';
@@ -454,7 +451,7 @@ class mod_choice_externallib_testcase extends externallib_advanced_testcase {
         try {
             mod_choice_external::delete_choice_responses($choice->id, array($myresponses[0], $myresponses[0]));
             $this->fail('Exception expected due to missing permissions.');
-        } catch (required_capability_exception $e) {
+        } catch (\required_capability_exception $e) {
             $this->assertEquals('nopermissions', $e->errorcode);
         }
 
@@ -464,7 +461,7 @@ class mod_choice_externallib_testcase extends externallib_advanced_testcase {
         try {
             mod_choice_external::delete_choice_responses($choice->id, array($myresponses[0], $myresponses[1]));
             $this->fail('Exception expected due to expired choice.');
-        } catch (moodle_exception $e) {
+        } catch (\moodle_exception $e) {
             $this->assertEquals('expired', $e->errorcode);
         }
 
@@ -502,6 +499,7 @@ class mod_choice_externallib_testcase extends externallib_advanced_testcase {
         $this->assertCount(0, choice_get_my_response($choice));
 
         // Now, as an admin we must be able to delete all the responses under any condition.
+        $this->setUser($student);
         // Submit again the responses.
         $results = mod_choice_external::submit_choice_response($choice->id, array($options[1], $options[2]));
         $results = external_api::clean_returnvalue(mod_choice_external::submit_choice_response_returns(), $results);
@@ -518,19 +516,48 @@ class mod_choice_externallib_testcase extends externallib_advanced_testcase {
         $this->assertCount(0, $results['warnings']);
 
         // Submit again the responses.
+        $this->setUser($student);
         $DB->set_field('choice', 'timeclose', 0, array('id' => $choice->id));
         $results = mod_choice_external::submit_choice_response($choice->id, array($options[1], $options[2]));
         $results = external_api::clean_returnvalue(mod_choice_external::submit_choice_response_returns(), $results);
-        // With other user account too, so we can test all the responses are deleted.
-        choice_user_submit_response( array($options[1], $options[2]), $choice, $student->id, $course, $cm);
 
-        // Test deleting all (not passing the answers ids), event not only mine.
+        // Test admin try to delete his own responses (he didn't respond so nothing should be deleted).
+        $this->setAdminUser();
         $results = mod_choice_external::delete_choice_responses($choice->id);
+        $results = external_api::clean_returnvalue(mod_choice_external::delete_choice_responses_returns(), $results);
+        $this->assertFalse($results['status']);
+        $this->assertCount(0, $results['warnings']);
+        $allresponses = choice_get_all_responses($choice);
+        $this->assertCount(2, $allresponses);   // No responses deleted (admin didn't submit any).
+
+        // Now admin submit a couple of responses more.
+        $results = mod_choice_external::submit_choice_response($choice->id, array($options[1], $options[2]));
+        $results = external_api::clean_returnvalue(mod_choice_external::submit_choice_response_returns(), $results);
+        $allresponses = choice_get_all_responses($choice);
+        $this->assertCount(4, $allresponses);
+        // Admin responses are deleted when passing an empty array.
+        $results = mod_choice_external::delete_choice_responses($choice->id);
+        $results = external_api::clean_returnvalue(mod_choice_external::delete_choice_responses_returns(), $results);
+        $this->assertTrue($results['status']);
+        $this->assertCount(0, $results['warnings']);
+        $allresponses = choice_get_all_responses($choice);
+        $this->assertCount(2, $allresponses);
+
+        // Now admin will delete all the other users responses.
+        $results = mod_choice_external::delete_choice_responses($choice->id, array_keys($allresponses));
         $results = external_api::clean_returnvalue(mod_choice_external::delete_choice_responses_returns(), $results);
 
         $this->assertTrue($results['status']);
         $this->assertCount(0, $results['warnings']);
-        $this->assertCount(0, choice_get_all_responses($choice));
+        $allresponses = choice_get_all_responses($choice);
+        $this->assertCount(0, $allresponses);   // Now all the responses were deleted.
+
+        // Admin try do delete an invalid response.
+        $results = mod_choice_external::delete_choice_responses($choice->id, array(-1));
+        $results = external_api::clean_returnvalue(mod_choice_external::delete_choice_responses_returns(), $results);
+
+        $this->assertFalse($results['status']);
+        $this->assertCount(1, $results['warnings']);
 
         // Now, in the DB 0 responses.
         $this->setUser($student);

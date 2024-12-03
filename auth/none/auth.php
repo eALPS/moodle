@@ -36,7 +36,7 @@ class auth_plugin_none extends auth_plugin_base {
      */
     public function __construct() {
         $this->authtype = 'none';
-        $this->config = get_config('auth/none');
+        $this->config = get_config('auth_none');
     }
 
     /**
@@ -57,7 +57,7 @@ class auth_plugin_none extends auth_plugin_base {
      * @param string $password The password
      * @return bool Authentication success or failure.
      */
-    function user_login ($username, $password) {
+    function user_login($username, $password) {
         global $CFG, $DB;
         if ($user = $DB->get_record('user', array('username'=>$username, 'mnethostid'=>$CFG->mnet_localhost_id))) {
             return validate_internal_user_password($user, $password);
@@ -131,25 +131,6 @@ class auth_plugin_none extends auth_plugin_base {
      * @return bool
      */
     function can_be_manually_set() {
-        return true;
-    }
-
-    /**
-     * Prints a form for configuring this authentication plugin.
-     *
-     * This function is called from admin/auth.php, and outputs a full page with
-     * a form for configuring this plugin.
-     *
-     * @param array $page An object containing all the data for this page.
-     */
-    function config_form($config, $err, $user_fields) {
-        include "config.html";
-    }
-
-    /**
-     * Processes and stores configuration data for this authentication plugin.
-     */
-    function process_config($config) {
         return true;
     }
 

@@ -3,7 +3,7 @@ YUI.add('moodle-mod_feedback-dragdrop', function(Y) {
     var CSS = {
         DRAGAREA: '#feedback_dragarea',
         DRAGITEMCLASS: 'feedback_itemlist',
-        DRAGITEM: 'div.feedback_itemlist',
+        DRAGITEM: '.row.feedback_itemlist',
         DRAGLIST: '#feedback_dragarea form',
         DRAGHANDLE: 'itemhandle'
     };
@@ -21,14 +21,14 @@ YUI.add('moodle-mod_feedback-dragdrop', function(Y) {
 
             var groups = ['feedbackitem'];
 
-            handletitle = M.util.get_string('move_item', 'feedback');
-            this.mydraghandle = this.get_drag_handle(handletitle, CSS.DRAGHANDLE, 'icon');
+            var handletitle = M.util.get_string('move_item', 'feedback');
 
             //Get the list of li's in the lists and add the drag handle.
             basenode = Y.Node.one(CSS.DRAGLIST);
             listitems = basenode.all(CSS.DRAGITEM).each(function(v) {
                 var item_id = this.get_node_id(v.get('id')); //Get the id of the feedback item.
-                v.append(this.mydraghandle.cloneNode(true)); // Insert the new handle into the item box.
+                var mydraghandle = this.get_drag_handle(handletitle, CSS.DRAGHANDLE, 'icon');
+                v.append(mydraghandle); // Insert the new handle into the item box.
             }, this);
 
             //We use a delegate to make all items draggable
@@ -171,7 +171,7 @@ YUI.add('moodle-mod_feedback-dragdrop', function(Y) {
                 var elementId;
                 var elements = [];
                 drop.all(CSS.DRAGITEM).each(function(v) {
-                    childElement = v.one('.felement').one('[id^="feedback_item_"]');
+                    childElement = v.one('.felement')?.one('[id^="feedback_item_"]');
                     if (childElement) {
                         elementId = this.get_node_id(childElement.get('id'));
                         if (elements.indexOf(elementId) == -1) {
@@ -215,6 +215,11 @@ YUI.add('moodle-mod_feedback-dragdrop', function(Y) {
                         window.setTimeout(function(e) {
                             spinner.hide();
                         }, 250);
+                        require(['core/notification', 'core/str', 'core/toast'], function(Notification, Strings, Toast) {
+                            Strings.get_string('changessaved', 'core').then(function(saveString) {
+                                return Toast.add(saveString);
+                            }).catch(Notification.exception);
+                        });
                     },
                     failure : function(transactionid, xhr) {
                         var msg = {

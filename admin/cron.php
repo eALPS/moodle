@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -36,6 +35,7 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+// phpcs:ignoreFile moodle.Files.MoodleInternal.MoodleInternalGlobalState
 
 if (defined('STDIN')) {
     fwrite(STDERR, "ERROR: This script no longer supports CLI, please use admin/cli/cron.php instead\n");
@@ -49,8 +49,7 @@ define('WEB_CRON_EMULATED_CLI', 'defined'); // ugly ugly hack, do not use elsewh
 define('NO_OUTPUT_BUFFERING', true);
 
 require('../config.php');
-require_once($CFG->libdir.'/clilib.php');
-require_once($CFG->libdir.'/cronlib.php');
+require_once($CFG->libdir . '/clilib.php');
 
 // extra safety
 \core\session\manager::write_close();
@@ -58,7 +57,7 @@ require_once($CFG->libdir.'/cronlib.php');
 // check if execution allowed
 if (!empty($CFG->cronclionly)) {
     // This script can only be run via the cli.
-    print_error('cronerrorclionly', 'admin');
+    throw new \moodle_exception('cronerrorclionly', 'admin');
     exit;
 }
 // This script is being called via the web, so check the password if there is one.
@@ -66,16 +65,16 @@ if (!empty($CFG->cronremotepassword)) {
     $pass = optional_param('password', '', PARAM_RAW);
     if ($pass != $CFG->cronremotepassword) {
         // wrong password.
-        print_error('cronerrorpassword', 'admin');
+        throw new \moodle_exception('cronerrorpassword', 'admin');
         exit;
     }
 }
 
-// send mime type and encoding
+// Send mime type and encoding.
 @header('Content-Type: text/plain; charset=utf-8');
 
-// we do not want html markup in emulated CLI
+// We do not want html markup in emulated CLI.
 @ini_set('html_errors', 'off');
 
-// execute the cron
-cron_run();
+// Execute the cron, disabling keepalive.
+\core\cron::run_main_process(0);

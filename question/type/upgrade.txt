@@ -1,4 +1,94 @@
+=== 4.5 Onwards ===
+
+This file has been replaced by UPGRADING.md. See MDL-81125 for further information.
+
+===
 This files describes API changes for question type plugins.
+
+=== 4.0.2, 4.1 ===
+
+* There was one issue caused by the changes in Moodle 4.0 which requires changes in question types,
+  and that is regrading. There are two new methods which some question types will need to implement,
+   - validate_can_regrade_with_other_version
+   - update_attempt_state_data_for_new_version
+  these methods are introduced in this commit, and there are details PHPdoc comments about what they
+  must do. Then the immediately following commits implement them in the core question types where
+  they are required.
+  Generally, you will need to implement one or both of these if you question type does something
+  significant in the apply_attempt_state method. If you have not implemented that method, then
+  almost certainly you don't need to worry about this.
+
+
+=== 4.0 ===
+
+* The major question bank changes should not affect most basic question type plugins.
+  The navigation changes may affect Behat tests. If you encounter this,
+  the best way to fix it is to use the new navigation steps in MDL-74130.
+
+* The qualification 'most' is because some question types do more complex things, which
+  will require changes related to question versionning. Some examples that come to mind:
+   - the way qtype_mulitanswer (or qtype_combined) aggregates several sub-questions into a parent question.
+   - the way some contrib plugins (e.g. qtype_stack, qtype_pmatch) store additional data (question tests)
+     linked to questions. That relationship will need to be updated.
+
+
+=== 3.11 ===
+
+* Introducing the following \question_type base class methods to save/fetch the last form values
+  that were used when creating questions as the new defaults when creating new questions:
+  - \question_type::get_default_value()
+    - Fetches the default value for a given question field from the user preference.
+      Question type plugins can use this in edit_{qtypename}_form.php when using $mform->setDefault().
+  - \question_type::set_default_value()
+    - Saves the default value for a given question form field in the user preferences.
+  - \question_type::save_defaults_for_new_questions()
+    - Saves the question type plugin's defined form defaults into the user preferences.
+      It calls \question_type::set_default_value() to save each form field default value
+      into the user preferences.
+    - Question type plugins using \question_type::get_default_value() for their form fields must implement
+      this in order to save the values from these form fields as defaults for new questions.
+
+  This will help teachers who repeatedly create questions and use the same values for the fields
+  (e.g. Default mark, Penalty for each incorrect try, etc.) in the question edit form.
+
+
+=== 3.8 ===
+
+* There is a new method for question types get_extra_question_bank_actions.
+  Assuming the question bank display is using the new 'edit_menu_column'
+  (which it will be by default) this method lets you add question-type-specific
+  actions to the menu. The question_type base class has extensive PHPdoc comments
+  on the method to explain what you should do, and there is an example of how to
+  use it in a question type at
+  https://github.com/moodleou/moodle-qtype_pmatch/commit/2aefa8b5dcc7bab768f4707a4ffb7befcf4c2540.
+
+
+=== 3.8, 3.7.3, 3.6.7 ===
+
+* Coming up in Moodle 3.8 are some changes to the question bank UI. These will break any
+  Behat automated tests which use the common pattern
+    When I click on "Duplicate" "link" in the "Test question" "table_row"
+  to trigger actions on questions when looking at the question bank screen. Therefore,
+  a new step has been introduced:
+    When I choose "Duplicate" action for "Test question" in the question bank
+  If you want your Behat tests to continue working with Moodle 3.8, you will need to use
+  the new step. The new step has been back-ported, so you can start updating your tests
+  and have them work with Moodle 3.6 and 3.7. In addition, if you want to trigger the
+  "Edit" action, you should change that to "Edit question".
+
+
+=== 3.5 ===
+
+  + Added new classes backup_qtype_extrafields_plugin and restore_qtype_extrafields_plugin
+   in order to use extra fields method in backup/restore question type. Require and inherit new classes for using it. See
+   backup_qtype_shortanswer_plugin and restore_qtype_shortanswer_plugin for an example of using this.
+  + The declaration of is_gradable_response has been moved from question_automatically_gradable to
+   question_manually_gradable.
+  + The default implementation of is_gradable_response has been moved from question_graded_automatically to
+   question_with_responses.
+  + Note that format_text() is no longer applied to the results of
+   qtype_elements_embedded_in_question_text_renderer::embedded_element(). If question type overrides
+   this method make sure you apply format_text() to any text that came from a user.
 
 === 3.1.5, 3.2.2, 3.3 ===
 

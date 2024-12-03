@@ -16,7 +16,7 @@
 /**
  * Custom auto-complete adapter to load users from the assignment list_participants webservice.
  *
- * @module     mod_assign/participants_selector
+ * @module     mod_assign/participant_selector
  * @copyright  2015 Damyon Wiese <damyon@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -59,7 +59,14 @@ define(['core/ajax', 'jquery', 'core/templates'], function(ajax, $, templates) {
 
             ajax.call([{
                 methodname: 'mod_assign_list_participants',
-                args: {assignid: assignmentid, groupid: groupid, filter: query, limit: 30, includeenrolments: false}
+                args: {
+                    assignid: assignmentid,
+                    groupid: groupid,
+                    filter: query,
+                    limit: 30,
+                    includeenrolments: false,
+                    tablesort: true
+                }
             }])[0].then(function(results) {
                 var promises = [];
                 var identityfields = $('[data-showuseridentity]').data('showuseridentity').split(',');
@@ -107,6 +114,7 @@ define(['core/ajax', 'jquery', 'core/templates'], function(ajax, $, templates) {
                 }
 
                 success(users);
+                return;
             }).catch(failure);
         }
     };

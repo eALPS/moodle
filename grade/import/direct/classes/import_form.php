@@ -49,7 +49,9 @@ class gradeimport_direct_import_form extends moodleform {
 
         $mform->addElement('header', 'general', get_string('pluginname', 'gradeimport_direct'));
         // Data upload from copy/paste.
-        $mform->addElement('textarea', 'userdata', 'Data', array('rows' => 10, 'class' => 'gradeimport_data_area'));
+        $mform->addElement('textarea', 'userdata', get_string('importdata', 'core_grades'),
+            array('rows' => 10, 'class' => 'gradeimport_data_area'));
+        $mform->addHelpButton('userdata', 'importdata', 'core_grades');
         $mform->addRule('userdata', null, 'required');
         $mform->setType('userdata', PARAM_RAW);
 
@@ -72,6 +74,6 @@ class gradeimport_direct_import_form extends moodleform {
         $mform->addElement('advcheckbox', 'forceimport', get_string('forceimport', 'grades'));
         $mform->addHelpButton('forceimport', 'forceimport', 'grades');
         $mform->setDefault('forceimport', false);
-        $this->add_action_buttons(false, get_string('uploadgrades', 'grades'));
+        $this->add_sticky_action_buttons(false, get_string('uploadgrades', 'grades'));
     }
 }

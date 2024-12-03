@@ -43,15 +43,15 @@ if ($newonly !== 0) {
 $PAGE->set_url($url);
 
 if (!$chat = $DB->get_record('chat', array('id' => $id))) {
-    print_error('invalidid', 'chat');
+    throw new \moodle_exception('invalidid', 'chat');
 }
 
 if (!$course = $DB->get_record('course', array('id' => $chat->course))) {
-    print_error('invalidcourseid');
+    throw new \moodle_exception('invalidcourseid');
 }
 
 if (!$cm = get_coursemodule_from_instance('chat', $chat->id, $course->id)) {
-    print_error('invalidcoursemodule');
+    throw new \moodle_exception('invalidcoursemodule');
 }
 
 $context = context_module::instance($cm->id);
@@ -64,7 +64,7 @@ $PAGE->set_popup_notification_allowed(false);
 if ($groupmode = groups_get_activity_groupmode($cm)) { // Groups are being used.
     if ($groupid = groups_get_activity_group($cm)) {
         if (!$group = groups_get_group($groupid)) {
-            print_error('invalidgroupid');
+            throw new \moodle_exception('invalidgroupid');
         }
         $groupname = ': '.$group->name;
     } else {
@@ -79,11 +79,11 @@ $strchat  = get_string('modulename', 'chat'); // Must be before current_language
 $strchats = get_string('modulenameplural', 'chat');
 $stridle  = get_string('idle', 'chat');
 if (!$chatsid = chat_login_user($chat->id, 'basic', $groupid, $course)) {
-    print_error('cantlogin', 'chat');
+    throw new \moodle_exception('cantlogin', 'chat');
 }
 
 if (!$chatusers = chat_get_users($chat->id, $groupid, $cm->groupingid)) {
-    print_error('errornousers', 'chat');
+    throw new \moodle_exception('errornousers', 'chat');
 }
 
 $DB->set_field('chat_users', 'lastping', time(), array('sid' => $chatsid));
@@ -149,17 +149,19 @@ echo $OUTPUT->box_end();
 echo '<div id="send">';
 echo '<form id="editing" method="post" action="index.php">';
 
-echo '<h2><label for="message">'.get_string('sendmessage', 'message').'</label></h2>';
-echo '<div class="m-b-1">';
+echo '<h2><label for="message">' . get_string('sendmessage', 'message');
+echo $OUTPUT->help_icon('usingchat', 'chat');
+echo '</label></h2>';
+echo '<div class="mb-1">';
 echo '<input type="text" id="message" class="form-control" name="message" value="'.s($refreshedmessage, true).'" size="60" />';
-echo '</div><div class="m-b-1">';
+echo '</div><div class="mb-1">';
 echo '<input type="hidden" name="id" value="'.$id.'" />';
 echo '<input type="hidden" name="groupid" value="'.$groupid.'" />';
 echo '<input type="hidden" name="last" value="'.time().'" />';
 echo '<input type="hidden" name="sesskey" value="'.sesskey().'" />';
 echo '<input type="submit" class="btn btn-primary" value="'.get_string('submit').'" />&nbsp;';
 echo '<input type="submit" class="btn btn-secondary" name="refresh" value="'.get_string('refresh').'" />';
-echo '<input type="checkbox" class="m-x-1" name="newonly" id="newonly" '.($newonly ? 'checked="checked" ' : '').'/>';
+echo '<input type="checkbox" class="mx-1" name="newonly" id="newonly" '.($newonly ? 'checked="checked" ' : '').'/>';
 echo '<label for="newonly">'.get_string('newonlymsg', 'message').'</label>';
 echo '</div>';
 echo '</form>';
@@ -194,7 +196,7 @@ if ($messages) {
 }
 echo '<table class="generaltable"><tbody>';
 echo '<tr>
-        <th scope="col" class="cell">' . get_string('from') . '</th>
+        <th scope="col" class="cell">' . get_string('fromsender') . '</th>
         <th scope="col" class="cell">' . get_string('message', 'message') . '</th>
         <th scope="col" class="cell">' . get_string('time') . '</th>
       </tr>';

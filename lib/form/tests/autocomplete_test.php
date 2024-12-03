@@ -14,15 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for autocomplete forms element.
- *
- * This file contains all unit test related to autocomplete forms element.
- *
- * @package    core_form
- * @copyright  2015 Damyon Wiese <damyon@moodle.com>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core_form;
+
+use MoodleQuickForm_autocomplete;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -38,18 +32,18 @@ require_once($CFG->libdir . '/form/autocomplete.php');
  * @copyright  2015 Damyon Wiese <damyon@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_form_autocomplete_testcase extends basic_testcase {
+class autocomplete_test extends \basic_testcase {
     /**
      * Testcase for validation
      */
-    public function test_validation() {
+    public function test_validation(): void {
         // A default select with single values validates the data.
         $options = array('1' => 'One', 2 => 'Two');
         $element = new MoodleQuickForm_autocomplete('testel', null, $options);
         $submission = array('testel' => 2);
         $this->assertEquals($element->exportValue($submission), 2);
         $submission = array('testel' => 3);
-        $this->assertNull($element->exportValue($submission));
+        $this->assertEquals('', $element->exportValue($submission));
 
         // A select with multiple values validates the data.
         $options = array('1' => 'One', 2 => 'Two');
@@ -61,6 +55,18 @@ class core_form_autocomplete_testcase extends basic_testcase {
         $element = new MoodleQuickForm_autocomplete('testel', null, array(), array('multiple'=>'multiple', 'ajax'=>'anything'));
         $submission = array('testel' => array(2, 3));
         $this->assertEquals($element->exportValue($submission), array(2, 3));
+
+        // A select with single value without anything selected.
+        $options = array('1' => 'One', 2 => 'Two');
+        $element = new MoodleQuickForm_autocomplete('testel', null, $options);
+        $submission = array();
+        $this->assertEquals('', $element->exportValue($submission));
+
+        // A select with multiple values without anything selected.
+        $options = array('1' => 'One', 2 => 'Two');
+        $element = new MoodleQuickForm_autocomplete('testel', null, $options, array('multiple' => 'multiple'));
+        $submission = array();
+        $this->assertEquals([], $element->exportValue($submission));
     }
 
 }

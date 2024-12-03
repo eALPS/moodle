@@ -23,7 +23,7 @@
  * @category  files
  * @param stdClass $course course object
  * @param stdClass $birecord_or_cm block instance record
- * @param stdClass $context context object
+ * @param context $context context object
  * @param string $filearea file area
  * @param array $args extra arguments
  * @param bool $forcedownload whether or not force download
@@ -48,9 +48,8 @@ function block_html_pluginfile($course, $birecord_or_cm, $context, $filearea, $a
         $parentcontext = $context->get_parent_context();
         if ($parentcontext->contextlevel === CONTEXT_COURSECAT) {
             // Check if category is visible and user can view this category.
-            $category = $DB->get_record('course_categories', array('id' => $parentcontext->instanceid), '*', MUST_EXIST);
-            if (!$category->visible) {
-                require_capability('moodle/category:viewhiddencategories', $parentcontext);
+            if (!core_course_category::get($parentcontext->instanceid, IGNORE_MISSING)) {
+                send_file_not_found();
             }
         } else if ($parentcontext->contextlevel === CONTEXT_USER && $parentcontext->instanceid != $USER->id) {
             // The block is in the context of a user, it is only visible to the user who it belongs to.
@@ -101,11 +100,36 @@ function block_html_global_db_replace($search, $replace) {
     $instances = $DB->get_recordset('block_instances', array('blockname' => 'html'));
     foreach ($instances as $instance) {
         // TODO: intentionally hardcoded until MDL-26800 is fixed
-        $config = unserialize(base64_decode($instance->configdata));
+        $config = unserialize_object(base64_decode($instance->configdata));
         if (isset($config->text) and is_string($config->text)) {
             $config->text = str_replace($search, $replace, $config->text);
-            $DB->set_field('block_instances', 'configdata', base64_encode(serialize($config)), array('id' => $instance->id));
+            $DB->update_record('block_instances', ['id' => $instance->id,
+                    'configdata' => base64_encode(serialize($config)), 'timemodified' => time()]);
         }
     }
     $instances->close();
+}
+
+/**
+ * Given an array with a file path, it returns the itemid and the filepath for the defined filearea.
+ *
+ * @param  string $filearea The filearea.
+ * @param  array  $args The path (the part after the filearea and before the filename).
+ * @return array The itemid and the filepath inside the $args path, for the defined filearea.
+ */
+function block_html_get_path_from_pluginfile(string $filearea, array $args): array {
+    // This block never has an itemid (the number represents the revision but it's not stored in database).
+    array_shift($args);
+
+    // Get the filepath.
+    if (empty($args)) {
+        $filepath = '/';
+    } else {
+        $filepath = '/' . implode('/', $args) . '/';
+    }
+
+    return [
+        'itemid' => 0,
+        'filepath' => $filepath,
+    ];
 }

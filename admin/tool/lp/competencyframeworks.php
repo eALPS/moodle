@@ -31,7 +31,7 @@ $context = context::instance_by_id($pagecontextid);
 $url = new moodle_url("/admin/tool/lp/competencyframeworks.php");
 $url->param('pagecontextid', $pagecontextid);
 
-require_login();
+require_login(null, false);
 \core_competency\api::require_enabled();
 
 if (!\core_competency\competency_framework::can_read_context($context)) {
@@ -45,8 +45,20 @@ $pagetitle = get_string('competencyframeworks', 'tool_lp');
 $PAGE->set_context($context);
 $PAGE->set_pagelayout('admin');
 $PAGE->set_url($url);
+
+if ($context->contextlevel == CONTEXT_COURSECAT) {
+    core_course_category::page_setup();
+    // Set the competency frameworks node active in the settings navigation block.
+    if ($competencyframeworksnode = $PAGE->settingsnav->find('competencyframeworks', navigation_node::TYPE_SETTING)) {
+        $competencyframeworksnode->make_active();
+    }
+} else if ($context->contextlevel == CONTEXT_SYSTEM) {
+    $PAGE->set_heading($SITE->fullname);
+} else {
+    $PAGE->set_heading($title);
+}
+
 $PAGE->set_title($title);
-$PAGE->set_heading($title);
 $output = $PAGE->get_renderer('tool_lp');
 echo $output->header();
 echo $output->heading($pagetitle, 2);

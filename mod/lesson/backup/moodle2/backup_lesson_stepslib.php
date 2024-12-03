@@ -77,7 +77,7 @@ class backup_lesson_activity_structure_step extends backup_activity_structure_st
             'mediafile', 'mediaheight', 'mediawidth', 'mediaclose', 'slideshow',
             'width', 'height', 'bgcolor', 'displayleft', 'displayleftif', 'progressbar',
             'available', 'deadline', 'timemodified',
-            'completionendreached', 'completiontimespent'
+            'completionendreached', 'completiontimespent', 'allowofflineattempts'
         ));
 
         // The lesson_pages table
@@ -131,7 +131,7 @@ class backup_lesson_activity_structure_step extends backup_activity_structure_st
         // Grouped by a `timers` element this is relational to the lesson and user.
         $timers = new backup_nested_element('timers');
         $timer = new backup_nested_element('timer', array('id'), array(
-            'userid', 'starttime', 'lessontime', 'completed'
+            'userid', 'starttime', 'lessontime', 'completed', 'timemodifiedoffline'
         ));
 
         $overrides = new backup_nested_element('overrides');
@@ -180,6 +180,12 @@ class backup_lesson_activity_structure_step extends backup_activity_structure_st
             $overrideparams['userid'] = backup_helper::is_sqlparam(null); //  Without userinfo, skip user overrides.
         }
 
+        // Skip group overrides if not including groups.
+        $groupinfo = $this->get_setting_value('groups');
+        if (!$groupinfo) {
+            $overrideparams['groupid'] = backup_helper::is_sqlparam(null);
+        }
+
         $override->set_source_table('lesson_overrides', $overrideparams);
 
         // Annotate the user id's where required.
@@ -197,6 +203,7 @@ class backup_lesson_activity_structure_step extends backup_activity_structure_st
         $answer->annotate_files('mod_lesson', 'page_answers', 'id');
         $answer->annotate_files('mod_lesson', 'page_responses', 'id');
         $attempt->annotate_files('mod_lesson', 'essay_responses', 'id');
+        $attempt->annotate_files('mod_lesson', 'essay_answers', 'id');
 
         // Prepare and return the structure we have just created for the lesson module.
         return $this->prepare_activity_structure($lesson);

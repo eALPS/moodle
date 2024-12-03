@@ -36,13 +36,25 @@ $string['dropbackground'] = 'Background image for dragging markers onto';
 $string['dropzone'] = 'Drop zone {$a}';
 $string['dropzoneheader'] = 'Drop zones';
 $string['dropzones'] = 'Drop zones';
-$string['dropzones_help'] = 'The drop zones are defined by typing coordinates. As you type, the preview above is immediately updated, so you can position things by trial and improvement.
+$string['dropzones_help'] = 'Drop zones may be defined by coordinates, or dragged into position in the preview above.
 
-* Circle: centre_x, centre_y; radius<br>for example: <code>80, 100; 50</code>
-* Polygon: x1, y1; x2, y2; ...; xn, yn<br>for example: <code>20, 60; 100, 60; 20, 100</code>
-* Rectangle: left, top, width, height<br>for example: <code>20, 60; 80, 40</code>';
-$string['followingarewrong'] = 'The following markers have been placed in the wrong area : {$a}.';
-$string['followingarewrongandhighlighted'] = 'The following markers were incorrectly placed :  {$a}. Highlighted marker(s) are now shown with the correct placement(s).<br /> Click on the marker to highlight the allowed area.';
+First selecting a shape (circle, rectangle or polygon) will add a new drop zone shape to the top left of the preview. It may be useful to minimise the Markers section so you can see the preview while editing the Drop zones.
+
+Editing a shape starts with a click on the shape in the preview to show the editing handles. You can move the shape using the center handle, or adjust the shape\'s dimensions with the vertex handles.
+
+For polygons only, holding the control button (command button on a Mac) while clicking on a vertex handle will add a new vertex to the polygon. Please keep a polygon shape as simple as possible, without crossing lines.
+
+For information the three shapes use coordinates in this way:
+
+* Circle: centre_x, centre_y; radius<br />for example: <code>80,100;50</code>
+* Rectangle: top_left_x, top_left_y; width, height<br />for example: <code>20,60;80,40</code>
+* Polygon: x1, y1; x2, y2; ...; xn, yn<br />for example: <code>20,60;100,60;20,100</code>
+
+Selecting a Marker text will add that text to the shape in the preview.';
+$string['formerror_dragrequired'] = 'You must add at least one marker to this question.';
+$string['formerror_droprequired'] = 'You must define at least one drop zone for this question.';
+$string['followingarewrong'] = 'Markers placed in the wrong area: {$a}.';
+$string['followingarewrongandhighlighted'] = 'Incorrectly placed markers: {$a}. Highlighted markers are now shown with the correct placements. Click on the marker to highlight the allowed area.';
 $string['formerror_nobgimage'] = 'You need to select an image to use as the background for the drag and drop area.';
 $string['formerror_noitemselected'] = 'You have specified a drop zone but not chosen a marker that must be dragged to the zone.';
 $string['formerror_nosemicolons'] = 'There are no semicolons in your coordinates string. Your coordinates for a {$a->shape} should be expressed as - {$a->coordsstring}.';
@@ -66,9 +78,15 @@ $string['pluginname_help'] = 'Drag and drop markers require the respondent to dr
 $string['pluginname_link'] = 'question/type/ddmarker';
 $string['pluginnameadding'] = 'Adding drag and drop markers';
 $string['pluginnameediting'] = 'Editing drag and drop markers';
-$string['pluginnamesummary'] = 'Markers are dragged and dropped onto a background image.';
+$string['pluginnamesummary'] = 'Markers are dragged and dropped onto a background image.
+
+Note: This question type is not accessible to users who are visually impaired.';
 $string['previewareaheader'] = 'Preview';
 $string['previewareamessage'] = 'Select a background image file, enter text labels for markers and define the drop zones on the background image to which they must be dragged.';
+$string['privacy:metadata'] = 'Drag and drop markers question type plugin allows question authors to set default options as user preferences.';
+$string['privacy:preference:defaultmark'] = 'The default mark set for a given question.';
+$string['privacy:preference:penalty'] = 'The penalty for each incorrect try when questions are run using the \'Interactive with multiple tries\' or \'Adaptive mode\' behaviour.';
+$string['privacy:preference:shuffleanswers'] = 'Whether the answers should be automatically shuffled.';
 $string['refresh'] = 'Refresh preview';
 $string['clearwrongparts'] = 'Move incorrectly placed markers back to default start position below image';
 $string['shape'] = 'Shape';

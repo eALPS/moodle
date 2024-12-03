@@ -14,16 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * This file contains tests that walks a question through the manual graded
- * behaviour.
- *
- * @package    qbehaviour
- * @subpackage manualgraded
- * @copyright  2009 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace qbehaviour_manualgraded;
 
+use question_display_options;
+use question_state;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -35,11 +29,12 @@ require_once(__DIR__ . '/../../../engine/tests/helpers.php');
 /**
  * Unit tests for the manual graded behaviour.
  *
+ * @package    qbehaviour_manualgraded
  * @copyright  2009 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthrough_test_base {
-    public function test_manual_graded_essay() {
+class walkthrough_test extends \qbehaviour_walkthrough_test_base {
+    public function test_manual_graded_essay(): void {
         global $PAGE;
 
         // The current text editor depends on the users profile setting - so it needs a valid user.
@@ -48,7 +43,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $PAGE->set_url('/');
 
         // Create an essay question.
-        $essay = test_question_maker::make_an_essay_question();
+        $essay = \test_question_maker::make_an_essay_question();
         $this->start_attempt_at_question($essay, 'deferredfeedback', 10);
 
         // Check the right model is being used.
@@ -68,7 +63,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_state(question_state::$complete);
         $this->check_current_mark(null);
         $this->check_current_output(
-                new question_contains_tag_with_attribute('textarea', 'name',
+                new \question_contains_tag_with_attribute('textarea', 'name',
                 $this->quba->get_question_attempt($this->slot)->get_qt_field_name('answer')),
                 $this->get_does_not_contain_feedback_expectation());
 
@@ -102,7 +97,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_state(question_state::$mangrright);
         $this->check_current_mark(10);
         $this->check_current_output(
-                new question_pattern_expectation('/' . preg_quote('Not good enough!', '/') . '/'));
+                new \question_pattern_expectation('/' . preg_quote('Not good enough!', '/') . '/'));
 
         // Now change the max mark for the question and regrade.
         $this->quba->regrade_question($this->slot, true, 1);
@@ -112,7 +107,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_mark(1);
     }
 
-    public function test_manual_graded_essay_not_answered() {
+    public function test_manual_graded_essay_not_answered(): void {
         global $PAGE;
 
         // The current text editor depends on the users profile setting - so it needs a valid user.
@@ -121,7 +116,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $PAGE->set_url('/');
 
         // Create an essay question.
-        $essay = test_question_maker::make_an_essay_question();
+        $essay = \test_question_maker::make_an_essay_question();
         $this->start_attempt_at_question($essay, 'deferredfeedback', 10);
 
         // Check the right model is being used.
@@ -150,7 +145,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_state(question_state::$mangrpartial);
         $this->check_current_mark(1);
         $this->check_current_output(
-                new question_pattern_expectation('/' . preg_quote('Not good enough!') . '/'));
+                new \question_pattern_expectation('/' . preg_quote('Not good enough!') . '/'));
 
         // Now change the max mark for the question and regrade.
         $this->quba->regrade_question($this->slot, true, 1);
@@ -160,10 +155,10 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_mark(0.1);
     }
 
-    public function test_manual_graded_truefalse() {
+    public function test_manual_graded_truefalse(): void {
 
         // Create a true-false question with correct answer true.
-        $tf = test_question_maker::make_question('truefalse', 'true');
+        $tf = \test_question_maker::make_question('truefalse', 'true');
         $this->start_attempt_at_question($tf, 'manualgraded', 2);
 
         // Check the initial state.
@@ -201,10 +196,10 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_output(
             $this->get_does_not_contain_correctness_expectation(),
             $this->get_does_not_contain_specific_feedback_expectation(),
-            new question_pattern_expectation('/' . preg_quote('Not good enough!', '/') . '/'));
+            new \question_pattern_expectation('/' . preg_quote('Not good enough!', '/') . '/'));
     }
 
-    public function test_manual_grade_ungraded_question() {
+    public function test_manual_grade_ungraded_question(): void {
         global $PAGE;
 
         // The current text editor depends on the users profile setting - so it needs a valid user.
@@ -213,7 +208,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $PAGE->set_url('/');
 
         // Create an essay question.
-        $essay = test_question_maker::make_an_essay_question();
+        $essay = \test_question_maker::make_an_essay_question();
         $this->start_attempt_at_question($essay, 'deferredfeedback', 0);
 
         // Check the right model is being used.
@@ -233,7 +228,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_state(question_state::$complete);
         $this->check_current_mark(null);
         $this->check_current_output(
-                new question_contains_tag_with_attribute('textarea', 'name',
+                new \question_contains_tag_with_attribute('textarea', 'name',
                 $this->quba->get_question_attempt($this->slot)->get_qt_field_name('answer')),
                 $this->get_does_not_contain_feedback_expectation());
 
@@ -258,12 +253,12 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_state(question_state::$needsgrading);
         $this->check_current_mark(null);
         $this->check_current_output(
-                new question_pattern_expectation('/' . preg_quote('Not good enough!', '/') . '/'));
+                new \question_pattern_expectation('/' . preg_quote('Not good enough!', '/') . '/'));
     }
 
-    public function test_manual_graded_ignore_repeat_sumbission() {
+    public function test_manual_graded_ignore_repeat_sumbission(): void {
         // Create an essay question.
-        $essay = test_question_maker::make_an_essay_question();
+        $essay = \test_question_maker::make_an_essay_question();
         $this->start_attempt_at_question($essay, 'deferredfeedback', 10);
 
         // Check the right model is being used.
@@ -304,7 +299,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_state(question_state::$needsgrading);
         $this->check_current_mark(null);
         $this->check_current_output(
-                new question_pattern_expectation('/' .
+                new \question_pattern_expectation('/' .
                         preg_quote('I am not sure what grade to award.', '/') . '/'));
 
         // Now grade it.
@@ -313,7 +308,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_state(question_state::$mangrpartial);
         $this->check_current_mark(9);
         $this->check_current_output(
-                new question_pattern_expectation('/' . preg_quote('Pretty good!', '/') . '/'));
+                new \question_pattern_expectation('/' . preg_quote('Pretty good!', '/') . '/'));
 
         // Process the same data again, and make sure it does not add a step.
         $this->manual_grade('Pretty good!', '9.00000', FORMAT_HTML);
@@ -327,7 +322,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_state(question_state::$needsgrading);
         $this->check_current_mark(null);
         $this->check_current_output(
-                new question_pattern_expectation('/' .
+                new \question_pattern_expectation('/' .
                         preg_quote('Actually, I am not sure any more.', '/') . '/'));
 
         $qa = $this->quba->get_question_attempt($this->slot);
@@ -335,9 +330,9 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
                 $qa->summarise_action($qa->get_last_step()));
     }
 
-    public function test_manual_graded_ignore_repeat_sumbission_commas() {
+    public function test_manual_graded_ignore_repeat_sumbission_commas(): void {
         // Create an essay question.
-        $essay = test_question_maker::make_an_essay_question();
+        $essay = \test_question_maker::make_an_essay_question();
         $this->start_attempt_at_question($essay, 'deferredfeedback', 10);
 
         // Check the right model is being used.
@@ -374,7 +369,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->assertEquals('Manually graded 9 with comment: Pretty good!',
                 $qa->summarise_action($qa->get_last_step()));
         $this->check_current_output(
-                new question_pattern_expectation('/' . preg_quote('Pretty good!', '/') . '/'));
+                new \question_pattern_expectation('/' . preg_quote('Pretty good!', '/') . '/'));
 
         // Process the same mark with a dot. Verify it does not add a new step.
         $this->manual_grade('Pretty good!', '9.00000', FORMAT_HTML);
@@ -383,7 +378,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_mark(9);
     }
 
-    public function test_manual_graded_essay_can_grade_0() {
+    public function test_manual_graded_essay_can_grade_0(): void {
         global $PAGE;
 
         // The current text editor depends on the users profile setting - so it needs a valid user.
@@ -392,7 +387,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $PAGE->set_url('/');
 
         // Create an essay question.
-        $essay = test_question_maker::make_an_essay_question();
+        $essay = \test_question_maker::make_an_essay_question();
         $this->start_attempt_at_question($essay, 'deferredfeedback', 10);
 
         // Check the right model is being used.
@@ -412,7 +407,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_state(question_state::$complete);
         $this->check_current_mark(null);
         $this->check_current_output(
-                new question_contains_tag_with_attribute('textarea', 'name',
+                new \question_contains_tag_with_attribute('textarea', 'name',
                 $this->quba->get_question_attempt($this->slot)->get_qt_field_name('answer')),
                 $this->get_does_not_contain_feedback_expectation());
 
@@ -433,7 +428,36 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_mark(0);
     }
 
-    public function test_manual_graded_respects_display_options() {
+    public function test_manual_graded_change_comment_format(): void {
+        global $PAGE;
+
+        // The current text editor depends on the users profile setting - so it needs a valid user.
+        $this->setAdminUser();
+        // Required to init a text editor.
+        $PAGE->set_url('/');
+
+        // Create an essay question.
+        $essay = \test_question_maker::make_an_essay_question();
+        $this->start_attempt_at_question($essay, 'deferredfeedback', 10);
+
+        // Simulate some data submitted by the student.
+        $this->process_submission(array('answer' => 'This is my wonderful essay!', 'answerformat' => FORMAT_HTML));
+
+        // Finish the attempt.
+        $this->quba->finish_all_questions();
+
+        // Process an example comment and a grade of 0.
+        $this->manual_grade('example', 0, FORMAT_HTML);
+        // Verify the format is FORMAT_HTML.
+        $this->check_comment('example', FORMAT_HTML);
+
+        // Process the same grade and comment with different format.
+        $this->manual_grade('example', 0, FORMAT_MARKDOWN);
+        // Verify the format is FORMAT_MARKDOWN.
+        $this->check_comment('example', FORMAT_MARKDOWN);
+    }
+
+    public function test_manual_graded_respects_display_options(): void {
         // This test is for MDL-43874. Manual comments were not respecting the
         // Display options for feedback.
         global $PAGE;
@@ -444,7 +468,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $PAGE->set_url('/');
 
         // Create an essay question.
-        $essay = test_question_maker::make_an_essay_question();
+        $essay = \test_question_maker::make_an_essay_question();
         $this->start_attempt_at_question($essay, 'deferredfeedback', 10);
 
         // Check the right model is being used.
@@ -464,7 +488,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_state(question_state::$complete);
         $this->check_current_mark(null);
         $this->check_current_output(
-                new question_contains_tag_with_attribute('textarea', 'name',
+                new \question_contains_tag_with_attribute('textarea', 'name',
                 $this->quba->get_question_attempt($this->slot)->get_qt_field_name('answer')),
                 $this->get_does_not_contain_feedback_expectation());
 
@@ -490,7 +514,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_output_contains('This should only appear if the displya options allow it');
     }
 
-    public function test_manual_graded_invalid_value_throws_exception() {
+    public function test_manual_graded_invalid_value_throws_exception(): void {
         global $PAGE;
 
         // The current text editor depends on the users profile setting - so it needs a valid user.
@@ -499,7 +523,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $PAGE->set_url('/');
 
         // Create an essay question.
-        $essay = test_question_maker::make_an_essay_question();
+        $essay = \test_question_maker::make_an_essay_question();
         $this->start_attempt_at_question($essay, 'deferredfeedback', 10);
 
         // Check the right model is being used.
@@ -519,7 +543,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_state(question_state::$complete);
         $this->check_current_mark(null);
         $this->check_current_output(
-                new question_contains_tag_with_attribute('textarea', 'name',
+                new \question_contains_tag_with_attribute('textarea', 'name',
                 $this->quba->get_question_attempt($this->slot)->get_qt_field_name('answer')),
                 $this->get_does_not_contain_feedback_expectation());
 
@@ -537,7 +561,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->manual_grade('Comment', 'frog', FORMAT_HTML);
     }
 
-    public function test_manual_graded_out_of_range_throws_exception() {
+    public function test_manual_graded_out_of_range_throws_exception(): void {
         global $PAGE;
 
         // The current text editor depends on the users profile setting - so it needs a valid user.
@@ -546,7 +570,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $PAGE->set_url('/');
 
         // Create an essay question.
-        $essay = test_question_maker::make_an_essay_question();
+        $essay = \test_question_maker::make_an_essay_question();
         $this->start_attempt_at_question($essay, 'deferredfeedback', 10);
 
         // Check the right model is being used.
@@ -566,7 +590,7 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         $this->check_current_state(question_state::$complete);
         $this->check_current_mark(null);
         $this->check_current_output(
-                new question_contains_tag_with_attribute('textarea', 'name',
+                new \question_contains_tag_with_attribute('textarea', 'name',
                 $this->quba->get_question_attempt($this->slot)->get_qt_field_name('answer')),
                 $this->get_does_not_contain_feedback_expectation());
 
@@ -582,5 +606,112 @@ class qbehaviour_manualgraded_walkthrough_testcase extends qbehaviour_walkthroug
         // Try to process a an invalid grade.
         $this->expectException('coding_exception');
         $this->manual_grade('Comment', '10.1', FORMAT_HTML);
+    }
+
+    public function test_manual_graded_displays_proper_comment_format(): void {
+
+        global $PAGE;
+
+        // The current text editor depends on the users profile setting - so it needs a valid user.
+        $this->setAdminUser();
+        // Required to init a text editor.
+        $PAGE->set_url('/');
+
+        // Create an essay question.
+        $essay = \test_question_maker::make_an_essay_question();
+        $this->start_attempt_at_question($essay, 'deferredfeedback', 10);
+
+        // Check the right model is being used.
+        $this->assertEquals('manualgraded', $this->quba->get_question_attempt(
+                $this->slot)->get_behaviour_name());
+
+        // Simulate some data submitted by the student.
+        $this->process_submission(
+                array(
+                    'answer' => "A submission!",
+                    'answerformat' => FORMAT_PLAIN
+                )
+        );
+
+        // Finish the attempt.
+        $this->quba->finish_all_questions();
+
+        // Write a manual comment in markdown.
+        $this->manual_grade("*one\n*two\n*three\n", 10, FORMAT_MARKDOWN);
+
+        // Check that feedback contains the original markdown format.
+        $preg = '/<textarea [^>]+name="[^"]+-comment"[^>]+>\*one\n\*two\n\*three\n/';
+        $this->displayoptions->manualcomment = question_display_options::EDITABLE;
+        $this->check_current_output(
+            new \question_pattern_expectation($preg)
+        );
+    }
+
+    public function test_manual_grading_reshows_exactly_the_mark_input(): void {
+        global $PAGE;
+
+        // The current text editor depends on the users profile setting - so it needs a valid user.
+        $this->setAdminUser();
+        // Required to init a text editor.
+        $PAGE->set_url('/');
+
+        // Create an essay question graded out of 15 and attempt it.
+        $essay = \test_question_maker::make_an_essay_question();
+        $this->start_attempt_at_question($essay, 'deferredfeedback', 15);
+        $this->process_submission(array('answer' => 'This is my wonderful essay!', 'answerformat' => FORMAT_HTML));
+        $this->quba->finish_all_questions();
+
+        // Verify.
+        $this->check_current_state(question_state::$needsgrading);
+        $this->check_current_mark(null);
+        $this->assertEquals('This is my wonderful essay!',
+                $this->quba->get_response_summary($this->slot));
+
+        // Try to process a grade where the score will be stored rounded.
+        $this->manual_grade('Comment', '5.0', FORMAT_HTML);
+
+        // Verify.
+        $this->check_current_state(question_state::$mangrpartial);
+        $this->check_current_mark(5);
+        $this->displayoptions->manualcomment = question_display_options::EDITABLE;
+        $this->render();
+        $this->check_output_contains_text_input('-mark', '5.0');
+
+        // Rescale what the question is worth, and verify the display.
+        $this->get_question_attempt()->set_max_mark(1);
+        $this->render();
+        $this->check_output_contains_text_input('-mark', '0.3333333');
+    }
+
+    public function test_manual_grading_history_display(): void {
+        global $PAGE;
+
+        // The current text editor depends on the users profile setting - so it needs a valid user.
+        $this->setAdminUser();
+        // Required to init a text editor.
+        $PAGE->set_url('/');
+
+        // Create an essay question graded out of 15 and attempt it.
+        $essay = \test_question_maker::make_an_essay_question();
+        $this->start_attempt_at_question($essay, 'deferredfeedback', 10);
+        $this->process_submission(array('answer' => 'This is my wonderful essay!', 'answerformat' => FORMAT_HTML));
+        $this->quba->finish_all_questions();
+
+        // Verify.
+        $this->check_current_state(question_state::$needsgrading);
+
+        // Process an initial grade and comment.
+        $this->manual_grade('First comment', '5.0', FORMAT_HTML);
+
+        // Process a second grade and comment.
+        $this->manual_grade('Second comment', '7.0', FORMAT_HTML);
+
+        // Verify.
+        $this->check_current_state(question_state::$mangrpartial);
+        $this->check_current_mark(7);
+        $this->displayoptions->history = question_display_options::VISIBLE;
+        $this->render();
+        $this->check_output_contains('Manually graded 5 with comment: First comment');
+        $this->check_output_contains('Manually graded 7 with comment: Second comment');
     }
 }

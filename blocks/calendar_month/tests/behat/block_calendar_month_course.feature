@@ -5,7 +5,7 @@ Feature: Enable the calendar block in a course
   I can add the calendar block to a course
 
   @javascript
-  Scenario: View a global event in the calendar block in a course
+  Scenario: View a site event in the calendar block in a course
     Given the following "users" exist:
       | username | firstname | lastname | email | idnumber |
       | teacher1 | Teacher | 1 | teacher1@example.com | T1 |
@@ -21,8 +21,7 @@ Feature: Enable the calendar block in a course
       | id_name | Site Event |
     And I log out
     Then I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
+    And I am on "Course 1" course homepage with editing mode on
     And I add the "Calendar" block
-    And I hover over today in the calendar
+    And I hover over today in the mini-calendar block
     And I should see "Site Event"

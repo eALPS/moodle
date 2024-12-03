@@ -48,15 +48,17 @@ class mod_forum_renderer extends plugin_renderer_base {
             if ($prev) {
                 $url = new moodle_url('/mod/forum/discuss.php', array('d' => $prev->id));
                 $html .= html_writer::start_tag('li', array('class' => 'prev-discussion'));
-                $html .= html_writer::link($url, format_string($prev->name),
-                    array('aria-label' => get_string('prevdiscussiona', 'mod_forum', format_string($prev->name))));
+                $html .= html_writer::link($url, $this->output->larrow() . ' ' . format_string($prev->name),
+                    array('aria-label' => get_string('prevdiscussiona', 'mod_forum', format_string($prev->name)),
+                    'class' => 'btn btn-link'));
                 $html .= html_writer::end_tag('li');
             }
             if ($next) {
                 $url = new moodle_url('/mod/forum/discuss.php', array('d' => $next->id));
                 $html .= html_writer::start_tag('li', array('class' => 'next-discussion'));
-                $html .= html_writer::link($url, format_string($next->name),
-                    array('aria-label' => get_string('nextdiscussiona', 'mod_forum', format_string($next->name))));
+                $html .= html_writer::link($url, format_string($next->name) . ' ' . $this->output->rarrow(),
+                    array('aria-label' => get_string('nextdiscussiona', 'mod_forum', format_string($next->name)),
+                    'class' => 'btn btn-link'));
                 $html .= html_writer::end_tag('li');
             }
             $html .= html_writer::end_tag('ul');
@@ -118,17 +120,27 @@ class mod_forum_renderer extends plugin_renderer_base {
         $output = '';
         $modinfo = get_fast_modinfo($course);
         if (!$users || !is_array($users) || count($users)===0) {
-            $output .= $this->output->heading(get_string("nosubscribers", "forum"));
+            $output .= $this->output->notification(
+                get_string("nosubscribers", "forum"),
+                \core\output\notification::NOTIFY_INFO, false);
         } else if (!isset($modinfo->instances['forum'][$forum->id])) {
             $output .= $this->output->heading(get_string("invalidmodule", "error"));
         } else {
             $cm = $modinfo->instances['forum'][$forum->id];
-            $canviewemail = in_array('email', get_extra_user_fields(context_module::instance($cm->id)));
+            // TODO Does not support custom user profile fields (MDL-70456).
+            $canviewemail = in_array('email', \core_user\fields::get_identity_fields(context_module::instance($cm->id), false));
             $strparams = new stdclass();
             $strparams->name = format_string($forum->name);
             $strparams->count = count($users);
             $output .= $this->output->heading(get_string("subscriberstowithcount", "forum", $strparams));
             $table = new html_table();
+            $table->id = 'subscribers-table';
+            $table->head = [];
+            $table->head[] = get_string('pictureofuser');
+            $table->head[] = get_string('fullname');
+            if ($canviewemail) {
+                $table->head[] = get_string('email');
+            }
             $table->cellpadding = 5;
             $table->cellspacing = 5;
             $table->tablealign = 'center';
@@ -231,10 +243,35 @@ class mod_forum_renderer extends plugin_renderer_base {
      * Render quick search form.
      *
      * @param \mod_forum\output\quick_search_form $form The renderable.
-     * @return string
+     * @return string rendered HTML string from the template.
      */
     public function render_quick_search_form(\mod_forum\output\quick_search_form $form) {
-        return $this->render_from_template('mod_forum/quick_search_form', $form->export_for_template($this));
+        if (strpos($this->page->url->get_path(), "index.php")) {
+            return $this->render_from_template('mod_forum/quick_search_form', $form->export_for_template($this));
+        }
+
+        return $this->render_from_template('mod_forum/forum_new_discussion_actionbar', $form->export_for_template($this));
+    }
+
+    /**
+     * Render the view action area.
+     *
+     * @param \mod_forum\output\forum_actionbar $actionbar forum_actionbar object.
+     * @return string rendered HTML string
+     */
+    public function render_activity_actionbar(\mod_forum\output\forum_actionbar $actionbar): string {
+        return $this->render_from_template('mod_forum/forum_actionbar', $actionbar->export_for_template($this));
+    }
+
+    /**
+     * Render the subscription action area.
+     *
+     * @param \mod_forum\output\subscription_actionbar $subscriptionactionbar subscription_actionbar object.
+     * @return bool|string rendered HTML string.
+     */
+    public function subscription_actionbar(\mod_forum\output\subscription_actionbar $subscriptionactionbar): string {
+        return $this->render_from_template('mod_forum/forum_subscription_action',
+            $subscriptionactionbar->export_for_template($this));
     }
 
     /**

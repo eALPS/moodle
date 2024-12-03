@@ -28,7 +28,7 @@ class progress_display_test extends \advanced_testcase {
     /**
      * Test basic function of progress_display, updating status and outputting wibbler.
      */
-    public function test_progress_display_update() {
+    public function test_progress_display_update(): void {
         ob_start();
         $progress = new core_mock_progress_display();
         $progress->start_progress('');
@@ -42,15 +42,15 @@ class progress_display_test extends \advanced_testcase {
         $this->assertEquals(1, $progress->get_direction());
         $this->assertTimeCurrent($progress->get_last_wibble());
         $output = ob_get_clean();
-        $this->assertContains('wibbler', $output);
-        $this->assertContains('wibble state0', $output);
-        $this->assertContains('wibble state1', $output);
+        $this->assertStringContainsString('wibbler', $output);
+        $this->assertStringContainsString('wibble state0', $output);
+        $this->assertStringContainsString('wibble state1', $output);
     }
 
     /**
      * Test wibbler states. Wibbler should reverse direction at the start and end of its sequence.
      */
-    public function test_progress_display_wibbler() {
+    public function test_progress_display_wibbler(): void {
         ob_start();
         $progress = new core_mock_progress_display();
         $progress->start_progress('');
@@ -70,9 +70,9 @@ class progress_display_test extends \advanced_testcase {
         $this->assertEquals(1, $progress->get_current_state());
         $this->assertEquals(1, $progress->get_direction());
         $output = ob_get_clean();
-        $this->assertContains('wibbler', $output);
-        $this->assertContains('wibble state0', $output);
-        $this->assertContains('wibble state13', $output);
+        $this->assertStringContainsString('wibbler', $output);
+        $this->assertStringContainsString('wibble state0', $output);
+        $this->assertStringContainsString('wibble state13', $output);
 
     }
 

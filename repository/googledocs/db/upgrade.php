@@ -14,40 +14,25 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * @param int $oldversion the version we are upgrading from
  * @return bool result
  */
 function xmldb_repository_googledocs_upgrade($oldversion) {
-    global $CFG;
-
-    // Moodle v2.8.0 release upgrade line.
+    // Automatically generated Moodle v4.1.0 release upgrade line.
     // Put any upgrade step following this.
 
-    // Moodle v2.9.0 release upgrade line.
+    // Automatically generated Moodle v4.2.0 release upgrade line.
     // Put any upgrade step following this.
 
-    // Moodle v3.0.0 release upgrade line.
+    // Automatically generated Moodle v4.3.0 release upgrade line.
     // Put any upgrade step following this.
 
-    // Moodle v3.1.0 release upgrade line.
+    // Automatically generated Moodle v4.4.0 release upgrade line.
     // Put any upgrade step following this.
 
-    // Automatically generated Moodle v3.2.0 release upgrade line.
+    // Automatically generated Moodle v4.5.0 release upgrade line.
     // Put any upgrade step following this.
-
-    if ($oldversion < 2017011100) {
-        // Set default import formats from Google.
-        set_config('documentformat', 'rtf', 'googledocs');
-        set_config('drawingformat', 'pdf', 'googledocs');
-        set_config('presentationformat', 'pptx', 'googledocs');
-        set_config('spreadsheetformat', 'xlsx', 'googledocs');
-
-        // Plugin savepoint reached.
-        upgrade_plugin_savepoint(true, 2017011100, 'repository', 'googledocs');
-    }
 
     return true;
 }

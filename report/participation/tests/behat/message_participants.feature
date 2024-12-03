@@ -1,5 +1,5 @@
-@report @report_participation @javascript
-Feature: Use the particiaption report to message groups of students
+@report @report_participation
+Feature: Use the participation report to message groups of students
   In order to engage with students based on participation
   As a teacher
   I need to be able to message students who have not participated in an activity
@@ -7,39 +7,47 @@ Feature: Use the particiaption report to message groups of students
   Background:
     Given the following "courses" exist:
       | fullname | shortname | category | groupmode |
-      | Course 1 | C1 | 0 | 1 |
+      | Course 1 | C1        | 0        | 1         |
     And the following "users" exist:
-      | username | firstname | lastname | email |
-      | teacher1 | Teacher | 1 | teacher1@example.com |
-      | student1 | Student | 1 | student1@example.com |
-      | student2 | Student | 2 | student2@example.com |
-      | student3 | Student | 3 | student3@example.com |
+      | username | firstname | lastname |
+      | teacher1 | Teacher   | 1        |
+      | student1 | Student   | 1        |
+      | student2 | Student   | 2        |
+      | student3 | Student   | 3        |
     And the following "course enrolments" exist:
-      | user | course | role |
-      | teacher1 | C1 | editingteacher |
-      | student1 | C1 | student |
-      | student2 | C1 | student |
-      | student3 | C1 | student |
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Book" to section "1" and I fill the form with:
-      | Name | Test book name |
-      | Description | Test book |
-    And I follow "Test book name"
-    And I set the following fields to these values:
-      | Chapter title | Test chapter |
-      | Content | Test chapter content |
-    And I log out
-    And I log in as "student1"
-    And I follow "Course 1"
-    And I follow "Test book name"
-    And I log out
+      | user     | course | role           |
+      | teacher1 | C1     | editingteacher |
+      | student1 | C1     | student        |
+      | student2 | C1     | student        |
+      | student3 | C1     | student        |
+    And the following "activity" exists:
+      | course      | C1             |
+      | activity    | book           |
+      | name        | Test book name |
+      | idnumber    | Test book name |
+      | idnumber    | book1          |
+    And I am on the "Test book name" "book activity" page logged in as student1
 
+  @javascript
+  Scenario: Message all students from the participation report
+    Given I am on the "Course 1" course page logged in as teacher1
+    And I navigate to "Reports" in current page administration
+    And I click on "Course participation" "link"
+    And I set the field "instanceid" to "Test book name"
+    And I set the field "roleid" to "Student"
+    And I press "Go"
+    When I click on "select-all-participants" "checkbox"
+    And I choose "Send a message" from the participants page bulk action menu
+    Then "Send message to 3 people" "dialogue" should exist
+    And I set the field "Message" to "Hi there"
+    And I press "Send message to 3 people"
+    And I should see "Message sent to 3 people"
+
+  @javascript
   Scenario: Message students who have not participated in book
-    Given I log in as "teacher1"
-    And I follow "Course 1"
-    And I navigate to "Course participation" node in "Course administration > Reports"
+    Given I am on the "Course 1" course page logged in as teacher1
+    And I navigate to "Reports" in current page administration
+    And I click on "Course participation" "link"
     And I set the field "instanceid" to "Test book name"
     And I set the field "roleid" to "Student"
     And I press "Go"
@@ -47,23 +55,20 @@ Feature: Use the particiaption report to message groups of students
     And I should see "No" in the "Student 2" "table_row"
     And I should see "No" in the "Student 3" "table_row"
     When I press "Select all 'No'"
-    And I set the field "With selected users..." to "Send a message"
-    And I press "OK"
-    Then I should see "Added 2 new recipients"
-    And I should see "Student 2" in the "Currently selected users" "table"
-    And I should see "Student 3" in the "Currently selected users" "table"
-    And I should not see "Student 1" in the "Currently selected users" "table"
+    And I choose "Send a message" from the participants page bulk action menu
+    Then "Send message to 2 people" "dialogue" should exist
+    And I set the field "Message" to "Hi there"
+    And I press "Send message to 2 people"
+    And I should see "Message sent to 2 people"
 
-  Scenario: Ensure no message options when messaging is disabled
-    Given I log in as "admin"
-    And I set the following administration settings values:
+  Scenario: When messaging is disabled no message options should be displayed
+    Given the following config values are set as admin:
       | messaging | 0 |
-    And I log out
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I navigate to "Course participation" node in "Course administration > Reports"
+    And I am on the "Course 1" course page logged in as teacher1
+    And I navigate to "Reports" in current page administration
+    And I click on "Course participation" "link"
     When I set the field "instanceid" to "Test book name"
     And I set the field "roleid" to "Student"
     And I press "Go"
     Then I should not see "With selected users..."
-    And I should not see "Select all"
+    And "select-all-participants" "checkbox" should not exist

@@ -77,7 +77,9 @@ define('COMPLETION_CRITERIA_TYPE_ROLE',         7);
 define('COMPLETION_CRITERIA_TYPE_COURSE',       8);
 
 /**
- * Criteria type constant to class name mapping
+ * Criteria type constant to class name mapping.
+ *
+ * This global variable would be improved if it was implemented as a cache.
  */
 global $COMPLETION_CRITERIA_TYPES;
 $COMPLETION_CRITERIA_TYPES = array(
@@ -150,6 +152,12 @@ abstract class completion_criteria extends data_object {
     /* @var int Role ID that has the ability to mark a user as complete (for role completion) */
     public $role;
 
+    /** @var string course instance. */
+    public $courseinstance;
+
+    /** @var mixed time end. */
+    public $timeend;
+
     /**
      * Finds and returns all data_object instances based on params.
      *
@@ -168,7 +176,7 @@ abstract class completion_criteria extends data_object {
         global $CFG, $COMPLETION_CRITERIA_TYPES;
 
         if (!isset($params['criteriatype']) || !isset($COMPLETION_CRITERIA_TYPES[$params['criteriatype']])) {
-            print_error('invalidcriteriatype', 'completion');
+            throw new \moodle_exception('invalidcriteriatype', 'completion');
         }
 
         $class = 'completion_criteria_'.$COMPLETION_CRITERIA_TYPES[$params['criteriatype']];
@@ -239,7 +247,7 @@ abstract class completion_criteria extends data_object {
      * @param array $attributes html attributes
      * @return pix_icon
      */
-    public function get_icon($alt, array $attributes = null) {
+    public function get_icon($alt, ?array $attributes = null) {
         global $COMPLETION_CRITERIA_TYPES;
 
         $criteriatype = $COMPLETION_CRITERIA_TYPES[$this->criteriatype];

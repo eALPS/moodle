@@ -22,8 +22,11 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+define('NO_OUTPUT_BUFFERING', true);
+
 require_once(__DIR__ . '/../config.php');
 require_once($CFG->dirroot . '/course/lib.php');
+require_once($CFG->dirroot . '/backup/util/includes/backup_includes.php');
 
 $id = required_param('id', PARAM_INT); // Course ID.
 $delete = optional_param('delete', '', PARAM_ALPHANUM); // Confirmation hash.
@@ -35,7 +38,7 @@ require_login();
 
 if ($SITE->id == $course->id || !can_delete_course($id)) {
     // Can not delete frontpage or don't have permission to delete the course.
-    print_error('cannotdeletecourse');
+    throw new \moodle_exception('cannotdeletecourse');
 }
 
 $categorycontext = context_coursecat::instance($course->category);
@@ -56,34 +59,51 @@ if ($delete === md5($course->timemodified)) {
     $strdeletingcourse = get_string("deletingcourse", "", $courseshortname);
 
     $PAGE->navbar->add($strdeletingcourse);
-    $PAGE->set_title("$SITE->shortname: $strdeletingcourse");
+    $PAGE->set_title($strdeletingcourse);
     $PAGE->set_heading($SITE->fullname);
 
     echo $OUTPUT->header();
     echo $OUTPUT->heading($strdeletingcourse);
     // This might take a while. Raise the execution time limit.
     core_php_time_limit::raise();
+
     // We do this here because it spits out feedback as it goes.
+    echo $OUTPUT->footer();
+    echo $OUTPUT->select_element_for_append();
+
+    // Preemptively reset the navcache before closing, so it remains the same on shutdown.
+    navigation_cache::destroy_volatile_caches();
+    \core\session\manager::write_close();
+
     delete_course($course);
     echo $OUTPUT->heading( get_string("deletedcourse", "", $courseshortname) );
     // Update course count in categories.
     fix_course_sortorder();
     echo $OUTPUT->continue_button($categoryurl);
-    echo $OUTPUT->footer();
     exit; // We must exit here!!!
 }
 
 $strdeletecheck = get_string("deletecheck", "", $courseshortname);
-$strdeletecoursecheck = get_string("deletecoursecheck");
-$message = "{$strdeletecoursecheck}<br /><br />{$coursefullname} ({$courseshortname})";
-
-$continueurl = new moodle_url('/course/delete.php', array('id' => $course->id, 'delete' => md5($course->timemodified)));
-$continuebutton = new single_button($continueurl, get_string('delete'), 'post');
 
 $PAGE->navbar->add($strdeletecheck);
-$PAGE->set_title("$SITE->shortname: $strdeletecheck");
+$PAGE->set_title($strdeletecheck);
 $PAGE->set_heading($SITE->fullname);
 echo $OUTPUT->header();
-echo $OUTPUT->confirm($message, $continuebutton, $categoryurl);
+
+// Only let user delete this course if there is not an async backup in progress.
+if (!async_helper::is_async_pending($id, 'course', 'backup')) {
+    $strdeletecoursecheck = get_string("deletecoursecheck");
+    $message = "{$strdeletecoursecheck}<br /><br />{$coursefullname} ({$courseshortname})";
+
+    $continueurl = new moodle_url('/course/delete.php', array('id' => $course->id, 'delete' => md5($course->timemodified)));
+    $continuebutton = new single_button($continueurl, get_string('delete'), 'post');
+    echo $OUTPUT->confirm($message, $continuebutton, $categoryurl);
+} else {
+    // Async backup is pending, don't let user delete course.
+    echo $OUTPUT->notification(get_string('pendingasyncerror', 'backup'), 'error');
+    echo $OUTPUT->container(get_string('pendingasyncdeletedetail', 'backup'));
+    echo $OUTPUT->continue_button($categoryurl);
+}
+
 echo $OUTPUT->footer();
 exit;

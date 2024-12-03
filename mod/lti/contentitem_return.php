@@ -28,17 +28,52 @@ require_once($CFG->dirroot . '/mod/lti/locallib.php');
 
 $id = required_param('id', PARAM_INT);
 $courseid = required_param('course', PARAM_INT);
-$messagetype = required_param('lti_message_type', PARAM_TEXT);
-$version = required_param('lti_version', PARAM_TEXT);
-$consumerkey = required_param('oauth_consumer_key', PARAM_RAW);
-$items = optional_param('content_items', '', PARAM_RAW);
-$errormsg = optional_param('lti_errormsg', '', PARAM_TEXT);
-$msg = optional_param('lti_msg', '', PARAM_TEXT);
+
+$jwt = optional_param('JWT', '', PARAM_RAW);
+
+$context = context_course::instance($courseid);
+
+$pageurl = new moodle_url('/mod/lti/contentitem_return.php');
+$PAGE->set_url($pageurl);
+$PAGE->set_pagelayout('popup');
+$PAGE->set_context($context);
+
+// Cross-Site causes the cookie to be lost if not POSTed from same site.
+global $_POST;
+if (!empty($_POST["repost"])) {
+    // Unset the param so that LTI 1.1 signature validation passes.
+    unset($_POST["repost"]);
+} else if (!isloggedin()) {
+    header_remove("Set-Cookie");
+    $output = $PAGE->get_renderer('mod_lti');
+    $page = new \mod_lti\output\repost_crosssite_page($_SERVER['REQUEST_URI'], $_POST);
+    echo $output->header();
+    echo $output->render($page);
+    echo $output->footer();
+    return;
+}
+
+if (!empty($jwt)) {
+    $params = lti_convert_from_jwt($id, $jwt);
+    $consumerkey = $params['oauth_consumer_key'] ?? '';
+    $messagetype = $params['lti_message_type'] ?? '';
+    $version = $params['lti_version'] ?? '';
+    $items = $params['content_items'] ?? '';
+    $errormsg = $params['lti_errormsg'] ?? '';
+    $msg = $params['lti_msg'] ?? '';
+} else {
+    $consumerkey = required_param('oauth_consumer_key', PARAM_RAW);
+    $messagetype = required_param('lti_message_type', PARAM_TEXT);
+    $version = required_param('lti_version', PARAM_TEXT);
+    $items = optional_param('content_items', '', PARAM_RAW);
+    $errormsg = optional_param('lti_errormsg', '', PARAM_TEXT);
+    $msg = optional_param('lti_msg', '', PARAM_TEXT);
+    lti_verify_oauth_signature($id, $consumerkey);
+}
 
 $course = $DB->get_record('course', array('id' => $courseid), '*', MUST_EXIST);
 require_login($course);
 require_sesskey();
-$context = context_course::instance($courseid);
 require_capability('moodle/course:manageactivities', $context);
 require_capability('mod/lti:addcoursetool', $context);
 
@@ -52,9 +87,6 @@ if (empty($errormsg) && !empty($items)) {
     }
 }
 
-$pageurl = new moodle_url('/mod/lti/contentitem_return.php');
-$PAGE->set_url($pageurl);
-$PAGE->set_pagelayout('popup');
 echo $OUTPUT->header();
 
 // Call JS module to redirect the user to the course page or close the dialogue on error/cancel.

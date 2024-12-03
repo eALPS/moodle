@@ -14,16 +14,16 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace qtype_numerical;
 
-/**
- * Unit tests for the numerical question definition class.
- *
- * @package    qtype
- * @subpackage numerical
- * @copyright  2008 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+use qtype_numerical;
+use qtype_numerical_answer_processor;
+use question_attempt_step;
+use question_classified_response;
+use question_display_options;
+use question_state;
 
+defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/question/engine/tests/helpers.php');
@@ -32,12 +32,13 @@ require_once($CFG->dirroot . '/question/engine/tests/helpers.php');
 /**
  * Unit tests for the numerical question definition class.
  *
+ * @package qtype_numerical
  * @copyright 2008 The Open University
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class qtype_numerical_question_test extends advanced_testcase {
-    public function test_is_complete_response() {
-        $question = test_question_maker::make_question('numerical');
+class question_test extends \advanced_testcase {
+    public function test_is_complete_response(): void {
+        $question = \test_question_maker::make_question('numerical');
 
         $this->assertFalse($question->is_complete_response(array()));
         $this->assertTrue($question->is_complete_response(array('answer' => '0')));
@@ -45,8 +46,8 @@ class qtype_numerical_question_test extends advanced_testcase {
         $this->assertFalse($question->is_complete_response(array('answer' => 'test')));
     }
 
-    public function test_is_gradable_response() {
-        $question = test_question_maker::make_question('numerical');
+    public function test_is_gradable_response(): void {
+        $question = \test_question_maker::make_question('numerical');
 
         $this->assertFalse($question->is_gradable_response(array()));
         $this->assertTrue($question->is_gradable_response(array('answer' => '0')));
@@ -54,8 +55,8 @@ class qtype_numerical_question_test extends advanced_testcase {
         $this->assertTrue($question->is_gradable_response(array('answer' => 'test')));
     }
 
-    public function test_grading() {
-        $question = test_question_maker::make_question('numerical');
+    public function test_grading(): void {
+        $question = \test_question_maker::make_question('numerical');
 
         $this->assertEquals(array(0, question_state::$gradedwrong),
                 $question->grade_response(array('answer' => '1.0')));
@@ -63,8 +64,8 @@ class qtype_numerical_question_test extends advanced_testcase {
                 $question->grade_response(array('answer' => '3.14')));
     }
 
-    public function test_grading_with_units() {
-        $question = test_question_maker::make_question('numerical');
+    public function test_grading_with_units(): void {
+        $question = \test_question_maker::make_question('numerical');
         $question->unitgradingtype = qtype_numerical::UNITOPTIONAL;
         $question->ap = new qtype_numerical_answer_processor(
                 array('m' => 1, 'cm' => 100), false, '.', ',');
@@ -81,8 +82,8 @@ class qtype_numerical_question_test extends advanced_testcase {
                 $question->grade_response(array('answer' => '314000000x10^-8m')));
     }
 
-    public function test_grading_with_units_graded() {
-        $question = test_question_maker::make_question('numerical');
+    public function test_grading_with_units_graded(): void {
+        $question = \test_question_maker::make_question('numerical');
         $question->unitgradingtype = qtype_numerical::UNITGRADED;
         $question->ap = new qtype_numerical_answer_processor(
                 array('m' => 1, 'cm' => 100), false, '.', ',');
@@ -103,8 +104,8 @@ class qtype_numerical_question_test extends advanced_testcase {
                 $question->grade_response(array('answer' => '314 m')));
     }
 
-    public function test_grading_unit() {
-        $question = test_question_maker::make_question('numerical', 'unit');
+    public function test_grading_unit(): void {
+        $question = \test_question_maker::make_question('numerical', 'unit');
 
         $this->assertEquals(array(0, question_state::$gradedwrong),
                 $question->grade_response(array('answer' => '2', 'unit' => 'm')));
@@ -128,8 +129,8 @@ class qtype_numerical_question_test extends advanced_testcase {
                 $question->grade_response(array('answer' => '1.23', 'unit' => '')));
     }
 
-    public function test_grading_currency() {
-        $question = test_question_maker::make_question('numerical', 'currency');
+    public function test_grading_currency(): void {
+        $question = \test_question_maker::make_question('numerical', 'currency');
 
         $this->assertEquals(array(1, question_state::$gradedright),
                 $question->grade_response(array('answer' => '$1332')));
@@ -149,60 +150,60 @@ class qtype_numerical_question_test extends advanced_testcase {
                 $question->grade_response(array('answer' => '$1')));
     }
 
-    public function test_get_correct_response() {
-        $question = test_question_maker::make_question('numerical');
+    public function test_get_correct_response(): void {
+        $question = \test_question_maker::make_question('numerical');
 
         $this->assertEquals(array('answer' => '3.14'),
                 $question->get_correct_response());
     }
 
-    public function test_get_correct_response_units() {
-        $question = test_question_maker::make_question('numerical', 'unit');
+    public function test_get_correct_response_units(): void {
+        $question = \test_question_maker::make_question('numerical', 'unit');
 
         $this->assertEquals(array('answer' => '1.25', 'unit' => 'm'),
                 $question->get_correct_response());
     }
 
-    public function test_get_correct_response_currency() {
-        $question = test_question_maker::make_question('numerical', 'currency');
+    public function test_get_correct_response_currency(): void {
+        $question = \test_question_maker::make_question('numerical', 'currency');
 
         $this->assertEquals(array('answer' => '$ 1332'),
                 $question->get_correct_response());
     }
 
-    public function test_get_question_summary() {
-        $num = test_question_maker::make_question('numerical');
+    public function test_get_question_summary(): void {
+        $num = \test_question_maker::make_question('numerical');
         $qsummary = $num->get_question_summary();
         $this->assertEquals('What is pi to two d.p.?', $qsummary);
     }
 
-    public function test_summarise_response() {
-        $num = test_question_maker::make_question('numerical');
+    public function test_summarise_response(): void {
+        $num = \test_question_maker::make_question('numerical');
         $this->assertEquals('3.1', $num->summarise_response(array('answer' => '3.1')));
     }
 
-    public function test_summarise_response_zero() {
-        $num = test_question_maker::make_question('numerical');
+    public function test_summarise_response_zero(): void {
+        $num = \test_question_maker::make_question('numerical');
         $this->assertEquals('0', $num->summarise_response(array('answer' => '0')));
     }
 
-    public function test_summarise_response_unit() {
-        $num = test_question_maker::make_question('numerical', 'unit');
+    public function test_summarise_response_unit(): void {
+        $num = \test_question_maker::make_question('numerical', 'unit');
         $this->assertEquals('3.1', $num->summarise_response(array('answer' => '3.1')));
         $this->assertEquals('3.1m', $num->summarise_response(array('answer' => '3.1m')));
         $this->assertEquals('3.1 cm', $num->summarise_response(array('answer' => '3.1 cm')));
     }
 
-    public function test_summarise_response_currency() {
-        $num = test_question_maker::make_question('numerical', 'currency');
+    public function test_summarise_response_currency(): void {
+        $num = \test_question_maker::make_question('numerical', 'currency');
         $this->assertEquals('100', $num->summarise_response(array('answer' => '100')));
         $this->assertEquals('$100', $num->summarise_response(array('answer' => '$100')));
         $this->assertEquals('$ 100', $num->summarise_response(array('answer' => '$ 100')));
         $this->assertEquals('100 frogs', $num->summarise_response(array('answer' => '100 frogs')));
     }
 
-    public function test_classify_response() {
-        $num = test_question_maker::make_question('numerical');
+    public function test_classify_response(): void {
+        $num = \test_question_maker::make_question('numerical');
         $num->start_attempt(new question_attempt_step(), 1);
 
         $this->assertEquals(array(
@@ -220,8 +221,8 @@ class qtype_numerical_question_test extends advanced_testcase {
                 $num->classify_response(array('answer' => 'abc')));
     }
 
-    public function test_classify_response_no_star() {
-        $num = test_question_maker::make_question('numerical');
+    public function test_classify_response_no_star(): void {
+        $num = \test_question_maker::make_question('numerical');
         unset($num->answers[17]);
         $num->start_attempt(new question_attempt_step(), 1);
 
@@ -237,8 +238,8 @@ class qtype_numerical_question_test extends advanced_testcase {
                 $num->classify_response(array('answer' => 'abc')));
     }
 
-    public function test_classify_response_unit() {
-        $num = test_question_maker::make_question('numerical', 'unit');
+    public function test_classify_response_unit(): void {
+        $num = \test_question_maker::make_question('numerical', 'unit');
         $num->start_attempt(new question_attempt_step(), 1);
 
         $this->assertEquals(array(
@@ -268,8 +269,8 @@ class qtype_numerical_question_test extends advanced_testcase {
                 $num->classify_response(array('answer' => 'abc', 'unit' => 'm')));
     }
 
-    public function test_classify_response_unit_no_star() {
-        $num = test_question_maker::make_question('numerical', 'unit');
+    public function test_classify_response_unit_no_star(): void {
+        $num = \test_question_maker::make_question('numerical', 'unit');
         unset($num->answers[17]);
         $num->start_attempt(new question_attempt_step(), 1);
 
@@ -291,8 +292,8 @@ class qtype_numerical_question_test extends advanced_testcase {
                             $num->classify_response(array('answer' => 'abc', 'unit' => 'm')));
     }
 
-    public function test_classify_response_currency() {
-        $num = test_question_maker::make_question('numerical', 'currency');
+    public function test_classify_response_currency(): void {
+        $num = \test_question_maker::make_question('numerical', 'currency');
         $num->start_attempt(new question_attempt_step(), 1);
 
         $this->assertEquals(array(
@@ -305,5 +306,24 @@ class qtype_numerical_question_test extends advanced_testcase {
         $this->assertEquals(array(
                 new question_classified_response(null, '$abc', 0.0)),
                 $num->classify_response(array('answer' => '$abc')));
+    }
+
+    /**
+     * test_get_question_definition_for_external_rendering
+     */
+    public function test_get_question_definition_for_external_rendering(): void {
+        $this->resetAfterTest();
+
+        $question = \test_question_maker::make_question('numerical', 'unit');
+        $question->start_attempt(new question_attempt_step(), 1);
+        $qa = \test_question_maker::get_a_qa($question);
+        $displayoptions = new question_display_options();
+
+        $options = $question->get_question_definition_for_external_rendering($qa, $displayoptions);
+        $this->assertNotEmpty($options);
+        $this->assertEquals(1, $options['unitgradingtype']);
+        $this->assertEquals(0.5, $options['unitpenalty']);
+        $this->assertEquals(qtype_numerical::UNITSELECT, $options['unitdisplay']);
+        $this->assertEmpty($options['unitsleft']);
     }
 }

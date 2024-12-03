@@ -23,14 +23,19 @@
  */
 namespace core\plugininfo;
 
-use moodle_url, part_of_admin_tree, admin_settingpage;
-
-defined('MOODLE_INTERNAL') || die();
+use admin_settingpage;
+use moodle_url;
+use part_of_admin_tree;
 
 /**
  * Class for messaging processors
  */
 class message extends base {
+
+    public static function plugintype_supports_disabling(): bool {
+        return true;
+    }
+
     /**
      * Finds all enabled plugins, the result may include missing plugins.
      * @return array|null of enabled plugins $pluginname=>$pluginname, null means unknown
@@ -40,12 +45,37 @@ class message extends base {
         return $DB->get_records_menu('message_processors', array('enabled'=>1), 'name ASC', 'name, name AS val');
     }
 
+    public static function enable_plugin(string $pluginname, int $enabled): bool {
+        global $DB;
+
+        if (!$plugin = $DB->get_record('message_processors', ['name' => $pluginname])) {
+            throw new \moodle_exception('invalidplugin', 'message', '', $pluginname);
+        }
+
+        $haschanged = false;
+
+        // Only set visibility if it's different from the current value.
+        if ($plugin->enabled != $enabled) {
+            $haschanged = true;
+            $processor = \core_message\api::get_processed_processor_object($plugin);
+
+            // Include this information into config changes table.
+            add_to_config_log($processor->name, $processor->enabled, $enabled, 'core');
+
+            // Save processor enabled/disabled status.
+            \core_message\api::update_processor_status($processor, $enabled);
+        }
+
+        return $haschanged;
+    }
+
     public function get_settings_section_name() {
         return 'messagesetting' . $this->name;
     }
 
     public function load_settings(part_of_admin_tree $adminroot, $parentnodename, $hassiteconfig) {
         global $CFG, $USER, $DB, $OUTPUT, $PAGE; // In case settings.php wants to refer to them.
+        /** @var \admin_root $ADMIN */
         $ADMIN = $adminroot; // May be used in settings.php.
         $plugininfo = $this; // Also can be used inside settings.php.
 

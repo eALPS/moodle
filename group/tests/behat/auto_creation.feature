@@ -37,8 +37,7 @@ Feature: Automatic creation of groups
       | student10 | C1 | student | 0 |
       | suspendedstudent11 | C1 | student | 1 |
     And I log in as "teacher1"
-    And I follow "Course 1"
-    And I navigate to "Users > Groups" in current page administration
+    And I am on the "Course 1" "groups" page
     When I press "Auto-create groups"
     And I expand all fieldsets
 
@@ -57,7 +56,17 @@ Feature: Automatic creation of groups
     And I press "Submit"
     And the "groups" select box should contain "Group A (5)"
     And the "groups" select box should contain "Group B (5)"
-    And I follow "Groupings"
+    # Check that group messaging is not enabled for the auto-created groups.
+    And I set the field "groups" to "Group A"
+    And I press "Edit group settings"
+    And I should see "No" in the "Group messaging" "select"
+    And I press "Cancel"
+    And I set the field "groups" to "Group B"
+    And I press "Edit group settings"
+    And I should see "No" in the "Group messaging" "select"
+    And I press "Cancel"
+    # Check groupings.
+    And I set the field "Participants tertiary navigation" to "Groupings"
     And I should see "Grouping name"
     And I click on "Show groups in grouping" "link" in the "Grouping name" "table_row"
     And the "removeselect" select box should contain "Group A"
@@ -70,15 +79,13 @@ Feature: Automatic creation of groups
       | Group/member count | 4 |
       | Grouping of auto-created groups | New grouping |
       | Grouping name | Grouping name |
+      | Allocate members | Alphabetically by last name, first name |
     And I press "Preview"
-    Then I should see "Group members"
-    And I should see "User count"
-    And I should see "Group A" in the ".generaltable" "css_element"
-    And I should see "Group B" in the ".generaltable" "css_element"
-    And I should see "Group C" in the ".generaltable" "css_element"
-    And I should see "4" in the "Group A" "table_row"
-    And I should see "4" in the "Group B" "table_row"
-    And I should see "2" in the "Group C" "table_row"
+    Then the following should exist in the "generaltable" table:
+      | Groups (3)   | Group members                    | User count (10) |
+      | Group A      | Student 1 (student1@example.com) | 4               |
+      | Group B      | Student 5 (student5@example.com) | 4               |
+      | Group C      | Student 9 (student9@example.com) | 2               |
     And I set the field "Prevent last small group" to "1"
     And I press "Preview"
     And I should see "Group A" in the ".generaltable" "css_element"
@@ -153,20 +160,34 @@ Feature: Automatic creation of groups
     And I set the field "Auto create based on" to "Members per group"
     When I set the field "Group/member count" to "11"
     And I press "Preview"
-    Then I should see "Suspended student 11"
+    Then I should see "Suspended student 11 (suspendedstudent11@example.com)"
 
   Scenario: Do not display 'Include only active enrolments' if user does not have the 'moodle/course:viewsuspendedusers' capability
     Given I log out
-    And I log in as "admin"
-    And I set the following system permissions of "Teacher" role:
-      | capability | permission |
-      | moodle/course:viewsuspendedusers | Prevent |
-    And I log out
+    And the following "role capability" exists:
+      | role                             | editingteacher |
+      | moodle/course:viewsuspendedusers | prevent        |
     And I log in as "teacher1"
-    And I follow "Course 1"
-    And I navigate to "Users > Groups" in current page administration
+    And I am on the "Course 1" "groups" page
     When I press "Auto-create groups"
     Then I should not see "Include only active enrolments"
     And I set the field "Group/member count" to "11"
     And I press "Preview"
     And I should not see "Suspended Student 11"
+
+  @javascript
+  Scenario: Auto-create groups with group messaging
+    Given I set the following fields to these values:
+      | Naming scheme | Group @ |
+      | Auto create based on | Number of groups |
+      | Group/member count | 2 |
+      | Grouping of auto-created groups | No grouping |
+      | Group messaging | Yes |
+    And I press "Submit"
+    And I set the field "groups" to "Group A"
+    When I press "Edit group settings"
+    Then I should see "Yes" in the "Group messaging" "select"
+    And I press "Cancel"
+    And I set the field "groups" to "Group B"
+    And I press "Edit group settings"
+    And I should see "Yes" in the "Group messaging" "select"

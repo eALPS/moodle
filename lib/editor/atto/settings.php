@@ -34,15 +34,14 @@ if ($ADMIN->fulltree) {
     $desc = new lang_string('toolbarconfig_desc', 'editor_atto');
     $default = 'collapse = collapse
 style1 = title, bold, italic
-list = unorderedlist, orderedlist
+list = unorderedlist, orderedlist, indent
 links = link
-files = image, media, managefiles
+files = emojipicker, image, media, recordrtc, managefiles, h5p
+accessibility = accessibilitychecker, accessibilityhelper
 style2 = underline, strike, subscript, superscript
 align = align
-indent = indent
 insert = equation, charmap, table, clear
 undo = undo
-accessibility = accessibilitychecker, accessibilityhelper
 other = html';
     $setting = new editor_atto_toolbar_setting('editor_atto/toolbar', $name, $desc, $default);
 

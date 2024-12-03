@@ -38,6 +38,13 @@ defined('MOODLE_INTERNAL') || die();
  * @property string $store short plugin name initialised in store trait.
  */
 trait reader {
+
+    /** @var string Frankenstyle plugin name initialised in store trait. */
+    protected $component;
+
+    /** @var string short plugin name initialised in store trait. */
+    protected $store;
+
     /**
      * Default get name api.
      *
@@ -60,6 +67,25 @@ trait reader {
             return get_string('pluginname_desc', $this->component);
         }
         return $this->store;
+    }
+
+    /**
+     * Function decodes the other field into an array using either PHP serialisation or JSON.
+     *
+     * Note that this does not rely on the config setting, it supports both formats, so you can
+     * use it for data before/after making a change to the config setting.
+     *
+     * The return value is usually an array but it can also be null or a boolean or something.
+     *
+     * @param string $other Other value
+     * @return mixed Decoded value
+     */
+    public static function decode_other(?string $other) {
+        if ($other === 'N;' || preg_match('~^.:~', $other ?? '')) {
+            return unserialize($other, ['allowed_classes' => [stdClass::class]]);
+        } else {
+            return json_decode($other ?? '', true);
+        }
     }
 
     /**

@@ -44,6 +44,10 @@ abstract class qtype_multichoice_base extends question_graded_automatically {
 
     public $shuffleanswers;
     public $answernumbering;
+    /**
+     * @var int standard instruction to be displayed if enabled.
+     */
+    public $showstandardinstruction = 0;
     public $layout = self::LAYOUT_VERTICAL;
 
     public $correctfeedback;
@@ -85,6 +89,35 @@ abstract class qtype_multichoice_base extends question_graded_automatically {
         }
     }
 
+    public function validate_can_regrade_with_other_version(question_definition $otherversion): ?string {
+        $basemessage = parent::validate_can_regrade_with_other_version($otherversion);
+        if ($basemessage) {
+            return $basemessage;
+        }
+
+        if (count($this->answers) != count($otherversion->answers)) {
+            return get_string('regradeissuenumchoiceschanged', 'qtype_multichoice');
+        }
+
+        return null;
+    }
+
+    public function update_attempt_state_data_for_new_version(
+            question_attempt_step $oldstep, question_definition $otherversion) {
+        $startdata = parent::update_attempt_state_data_for_new_version($oldstep, $otherversion);
+
+        $mapping = array_combine(array_keys($otherversion->answers), array_keys($this->answers));
+
+        $oldorder = explode(',', $oldstep->get_qt_var('_order'));
+        $neworder = [];
+        foreach ($oldorder as $oldid) {
+            $neworder[] = $mapping[$oldid] ?? $oldid;
+        }
+        $startdata['_order'] = implode(',', $neworder);
+
+        return $startdata;
+    }
+
     public function get_question_summary() {
         $question = $this->html_to_text($this->questiontext, $this->questiontextformat);
         $choices = array();
@@ -106,9 +139,9 @@ abstract class qtype_multichoice_base extends question_graded_automatically {
         }
     }
 
-    public abstract function get_response(question_attempt $qa);
+    abstract public function get_response(question_attempt $qa);
 
-    public abstract function is_choice_selected($response, $value);
+    abstract public function is_choice_selected($response, $value);
 
     public function check_file_access($qa, $options, $component, $filearea, $args, $forcedownload) {
         if ($component == 'question' && in_array($filearea,
@@ -129,10 +162,9 @@ abstract class qtype_multichoice_base extends question_graded_automatically {
                     break;
                 }
             }
-            // Param $options->suppresschoicefeedback is a hack specific to the
-            // oumultiresponse question type. It would be good to refactor to
-            // avoid refering to it here.
-            return $options->feedback && empty($options->suppresschoicefeedback) &&
+            qtype_multichoice::support_legacy_review_options_hack($options);
+            return $options->feedback &&
+                    $options->feedback !== qtype_multichoice::COMBINED_BUT_NOT_CHOICE_FEEDBACK &&
                     $isselected;
 
         } else if ($component == 'question' && $filearea == 'hint') {
@@ -142,6 +174,26 @@ abstract class qtype_multichoice_base extends question_graded_automatically {
             return parent::check_file_access($qa, $options, $component, $filearea,
                     $args, $forcedownload);
         }
+    }
+
+    /**
+     * Return the question settings that define this question as structured data.
+     *
+     * @param question_attempt $qa the current attempt for which we are exporting the settings.
+     * @param question_display_options $options the question display options which say which aspects of the question
+     * should be visible.
+     * @return mixed structure representing the question settings. In web services, this will be JSON-encoded.
+     */
+    public function get_question_definition_for_external_rendering(question_attempt $qa, question_display_options $options) {
+        // This is a partial implementation, returning only the most relevant question settings for now,
+        // ideally, we should return as much as settings as possible (depending on the state and display options).
+
+        return [
+            'shuffleanswers' => $this->shuffleanswers,
+            'answernumbering' => $this->answernumbering,
+            'showstandardinstruction' => $this->showstandardinstruction,
+            'layout' => $this->layout,
+        ];
     }
 }
 
@@ -176,18 +228,26 @@ class qtype_multichoice_single_question extends qtype_multichoice_base {
     }
 
     public function summarise_response(array $response) {
-        if (!array_key_exists('answer', $response) ||
-                !array_key_exists($response['answer'], $this->order)) {
+        if (!$this->is_complete_response($response)) {
             return null;
         }
-        $ansid = $this->order[$response['answer']];
-        return $this->html_to_text($this->answers[$ansid]->answer,
-                $this->answers[$ansid]->answerformat);
+        $answerid = $this->order[$response['answer']];
+        return $this->html_to_text($this->answers[$answerid]->answer,
+                $this->answers[$answerid]->answerformat);
+    }
+
+    public function un_summarise_response(string $summary) {
+        foreach ($this->order as $key => $answerid) {
+            if ($summary === $this->html_to_text($this->answers[$answerid]->answer,
+                    $this->answers[$answerid]->answerformat)) {
+                return ['answer' => $key];
+            }
+        }
+        return [];
     }
 
     public function classify_response(array $response) {
-        if (!array_key_exists('answer', $response) ||
-                !array_key_exists($response['answer'], $this->order)) {
+        if (!$this->is_complete_response($response)) {
             return array($this->id => question_classified_response::no_response());
         }
         $choiceid = $this->order[$response['answer']];
@@ -230,11 +290,18 @@ class qtype_multichoice_single_question extends qtype_multichoice_base {
     }
 
     public function is_same_response(array $prevresponse, array $newresponse) {
+        if (!$this->is_complete_response($prevresponse)) {
+            $prevresponse = [];
+        }
+        if (!$this->is_complete_response($newresponse)) {
+            $newresponse = [];
+        }
         return question_utils::arrays_same_at_key($prevresponse, $newresponse, 'answer');
     }
 
     public function is_complete_response(array $response) {
-        return array_key_exists('answer', $response) && $response['answer'] !== '';
+        return array_key_exists('answer', $response) && $response['answer'] !== ''
+                && (string) $response['answer'] !== '-1';
     }
 
     public function is_gradable_response(array $response) {
@@ -339,6 +406,20 @@ class qtype_multichoice_multi_question extends qtype_multichoice_base {
             return null;
         }
         return implode('; ', $selectedchoices);
+    }
+
+    public function un_summarise_response(string $summary) {
+        // This implementation is not perfect. It will fail if an answer contains '; ',
+        // but this method is only for testing, so it is good enough.
+        $selectedchoices = explode('; ', $summary);
+        $response = [];
+        foreach ($this->order as $key => $answerid) {
+            if (in_array($this->html_to_text($this->answers[$answerid]->answer,
+                    $this->answers[$answerid]->answerformat), $selectedchoices)) {
+                $response[$this->field($key)] = '1';
+            }
+        }
+        return $response;
     }
 
     public function classify_response(array $response) {

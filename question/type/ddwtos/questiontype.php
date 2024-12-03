@@ -49,13 +49,27 @@ class qtype_ddwtos extends qtype_gapselect_base {
         return serialize($output);
     }
 
+    /**
+     * Safely convert given serialized feedback string into valid feedback object
+     *
+     * @param string $feedback
+     * @return stdClass
+     */
+    protected function unserialize_feedback(string $feedback): stdClass {
+        $feedbackobject = unserialize_object($feedback);
+
+        return (object) [
+            'draggroup' => $feedbackobject->draggroup ?? 1,
+            'infinite' => !empty($feedbackobject->infinite),
+        ];
+    }
+
     protected function feedback_to_choice_options($feedback) {
-        $feedbackobj = unserialize($feedback);
-        return array('draggroup' => $feedbackobj->draggroup, 'infinite' => $feedbackobj->infinite);
+        return (array) $this->unserialize_feedback($feedback);
     }
 
     protected function make_choice($choicedata) {
-        $options = unserialize($choicedata->feedback);
+        $options = $this->unserialize_feedback($choicedata->feedback);
         return new qtype_ddwtos_choice(
                 $choicedata->answer, $options->draggroup, $options->infinite);
     }
@@ -71,32 +85,17 @@ class qtype_ddwtos extends qtype_gapselect_base {
         $question->shuffleanswers = $format->trans_single(
                 $format->getpath($data, array('#', 'shuffleanswers', 0, '#'), 1));
 
-        if (!empty($data['#']['dragbox'])) {
-            // Modern XML format.
-            $dragboxes = $data['#']['dragbox'];
-            $question->answer = array();
-            $question->draggroup = array();
-            $question->infinite = array();
+        // Import the choices.
+        $question->answer = array();
+        $question->draggroup = array();
+        $question->infinite = array();
 
-            foreach ($data['#']['dragbox'] as $dragboxxml) {
-                $question->choices[] = array(
-                    'answer' => $format->getpath($dragboxxml, array('#', 'text', 0, '#'), '', true),
-                    'choicegroup' => $format->getpath($dragboxxml, array('#', 'group', 0, '#'), 1),
-                    'infinite' => array_key_exists('infinite', $dragboxxml['#']),
-                );
-            }
-
-        } else {
-            // Legacy format containing PHP serialisation.
-            foreach ($data['#']['answer'] as $answerxml) {
-                $ans = $format->import_answer($answerxml);
-                $options = unserialize(stripslashes($ans->feedback['text']));
-                $question->choices[] = array(
-                    'answer' => $ans->answer,
-                    'choicegroup' => $options->draggroup,
-                    'infinite' => $options->infinite,
-                );
-            }
+        foreach ($data['#']['dragbox'] as $dragboxxml) {
+            $question->choices[] = array(
+                'answer' => $format->getpath($dragboxxml, array('#', 'text', 0, '#'), '', true),
+                'choicegroup' => $format->getpath($dragboxxml, array('#', 'group', 0, '#'), 1),
+                'infinite' => array_key_exists('infinite', $dragboxxml['#']),
+            );
         }
 
         $format->import_combined_feedback($question, $data, true);
@@ -117,7 +116,7 @@ class qtype_ddwtos extends qtype_gapselect_base {
                                                     $question->contextid);
 
         foreach ($question->options->answers as $answer) {
-            $options = unserialize($answer->feedback);
+            $options = $this->unserialize_feedback($answer->feedback);
 
             $output .= "    <dragbox>\n";
             $output .= $format->writetext($answer->answer, 3);

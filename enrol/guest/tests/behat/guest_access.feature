@@ -15,37 +15,28 @@ Feature: Guest users can auto-enrol themself in courses where guest access is al
     And the following "course enrolments" exist:
       | user | course | role |
       | teacher1 | C1 | editingteacher |
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Forum" to section "1" and I fill the form with:
-      | Forum name | Test forum name |
-      | Description | Test forum description |
+    And the following "activity" exists:
+      | activity                      | forum                  |
+      | course                        | C1                     |
+      | idnumber                      | 0001                   |
+      | name                          | Test forum name        |
+    And I am on the "Course 1" "enrolment methods" page logged in as teacher1
 
   Scenario: Allow guest access without password
-    Given I navigate to "Enrolment methods" node in "Course administration > Users"
-    And I click on "Edit" "link" in the "Guest access" "table_row"
+    Given I click on "Edit" "link" in the "Guest access" "table_row"
     And I set the following fields to these values:
       | Allow guest access | Yes |
     And I press "Save changes"
-    And I log out
-    And I log in as "student1"
-    And I am on site homepage
-    And I follow "Course 1"
-    When I follow "Test forum name"
+    When I am on the "Test forum name" "forum activity" page logged in as student1
     Then I should not see "Subscribe to this forum"
 
   Scenario: Allow guest access with password
-    Given I navigate to "Enrolment methods" node in "Course administration > Users"
-    And I click on "Edit" "link" in the "Guest access" "table_row"
+    Given I click on "Edit" "link" in the "Guest access" "table_row"
     And I set the following fields to these values:
       | Allow guest access | Yes |
       | Password | moodle_rules |
     And I press "Save changes"
-    And I log out
-    And I log in as "student1"
-    And I am on site homepage
-    When I follow "Course 1"
+    When I am on the "Course 1" course page logged in as student1
     Then I should see "Guest access"
     And I set the following fields to these values:
       | Password | moodle_rules |

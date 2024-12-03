@@ -40,19 +40,9 @@ define('BOOK_NUM_BULLETS',  '2');
 define('BOOK_NUM_INDENTED', '3');
 
 /**
- * The following defines are used to define the navigation style used within a book.
- * BOOK_LINK_TOCONLY    Only the table of contents is shown, in a side region.
- * BOOK_LINK_IMAGE      Arrows link to previous/next/exit pages, in addition to the TOC.
- * BOOK_LINK_TEXT       Page names and arrows link to previous/next/exit pages, in addition to the TOC.
- */
-define ('BOOK_LINK_TOCONLY', '0');
-define ('BOOK_LINK_IMAGE', '1');
-define ('BOOK_LINK_TEXT', '2');
-
-/**
  * Preload book chapters and fix toc structure if necessary.
  *
- * Returns array of chapters with standard 'pagenum', 'id, pagenum, subchapter, title, hidden'
+ * Returns array of chapters with standard 'pagenum', 'id, pagenum, subchapter, title, content, contentformat, hidden'
  * and extra 'parent, number, subchapters, prev, next'.
  * Please note the content/text of chapters is not included.
  *
@@ -61,7 +51,8 @@ define ('BOOK_LINK_TEXT', '2');
  */
 function book_preload_chapters($book) {
     global $DB;
-    $chapters = $DB->get_records('book_chapters', array('bookid'=>$book->id), 'pagenum', 'id, pagenum, subchapter, title, hidden');
+    $chapters = $DB->get_records('book_chapters', array('bookid' => $book->id), 'pagenum', 'id, pagenum,
+            subchapter, title, content, contentformat, hidden');
     if (!$chapters) {
         return array();
     }
@@ -167,7 +158,7 @@ function book_get_chapter_title($chid, $chapters, $book, $context) {
  * @param   stdClass    $chapter    The current chapter
  * @param   stdClass    $book       The book
  * @param   stdClass    $cm         The course module
- * @param   bool        $edit       Whether the user is editing
+ * @param   bool|null   $edit       Whether the user is editing
  */
 function book_add_fake_block($chapters, $chapter, $book, $cm, $edit = null) {
     global $PAGE, $USER;
@@ -184,7 +175,7 @@ function book_add_fake_block($chapters, $chapter, $book, $cm, $edit = null) {
         }
     }
 
-    $toc = book_get_toc($chapters, $chapter, $book, $cm, $edit, 0);
+    $toc = book_get_toc($chapters, $chapter, $book, $cm, $edit);
 
     $bc = new block_contents();
     $bc->title = get_string('toc', 'mod_book');
@@ -214,23 +205,24 @@ function book_get_toc($chapters, $chapter, $book, $cm, $edit) {
     $first = 1;
 
     $context = context_module::instance($cm->id);
+    $viewhidden = has_capability('mod/book:viewhiddenchapters', $context);
 
     switch ($book->numbering) {
         case BOOK_NUM_NONE:
-            $toc .= html_writer::start_tag('div', array('class' => 'book_toc_none clearfix'));
+            $toc .= html_writer::start_tag('div', array('class' => 'book_toc book_toc_none clearfix'));
             break;
         case BOOK_NUM_NUMBERS:
-            $toc .= html_writer::start_tag('div', array('class' => 'book_toc_numbered clearfix'));
+            $toc .= html_writer::start_tag('div', array('class' => 'book_toc book_toc_numbered clearfix'));
             break;
         case BOOK_NUM_BULLETS:
-            $toc .= html_writer::start_tag('div', array('class' => 'book_toc_bullets clearfix'));
+            $toc .= html_writer::start_tag('div', array('class' => 'book_toc book_toc_bullets clearfix'));
             break;
         case BOOK_NUM_INDENTED:
-            $toc .= html_writer::start_tag('div', array('class' => 'book_toc_indented clearfix'));
+            $toc .= html_writer::start_tag('div', array('class' => 'book_toc book_toc_indented clearfix'));
             break;
     }
 
-    if ($edit) { // Teacher's TOC
+    if ($edit) { // Editing on (Teacher's TOC).
         $toc .= html_writer::start_tag('ul');
         $i = 0;
         foreach ($chapters as $ch) {
@@ -242,11 +234,11 @@ function book_get_toc($chapters, $chapter, $book, $cm, $edit) {
             if (!$ch->subchapter) {
 
                 if ($first) {
-                    $toc .= html_writer::start_tag('li', array('class' => 'clearfix'));
+                    $toc .= html_writer::start_tag('li');
                 } else {
                     $toc .= html_writer::end_tag('ul');
                     $toc .= html_writer::end_tag('li');
-                    $toc .= html_writer::start_tag('li', array('class' => 'clearfix'));
+                    $toc .= html_writer::start_tag('li');
                 }
 
                 if (!$ch->hidden) {
@@ -265,11 +257,11 @@ function book_get_toc($chapters, $chapter, $book, $cm, $edit) {
             } else {
 
                 if ($first) {
-                    $toc .= html_writer::start_tag('li', array('class' => 'clearfix'));
+                    $toc .= html_writer::start_tag('li');
                     $toc .= html_writer::start_tag('ul');
-                    $toc .= html_writer::start_tag('li', array('class' => 'clearfix'));
+                    $toc .= html_writer::start_tag('li');
                 } else {
-                    $toc .= html_writer::start_tag('li', array('class' => 'clearfix'));
+                    $toc .= html_writer::start_tag('li');
                 }
 
                 if (!$ch->hidden) {
@@ -289,15 +281,15 @@ function book_get_toc($chapters, $chapter, $book, $cm, $edit) {
                     $titleout = html_writer::tag('span', $title, array('class' => 'dimmed_text'));
                 }
             }
-
+            $toc .= html_writer::start_tag('div', array('class' => 'd-flex'));
             if ($ch->id == $chapter->id) {
-                $toc .= html_writer::tag('strong', $titleout);
+                $toc .= html_writer::tag('strong', $titleout, array('class' => 'text-truncate'));
             } else {
                 $toc .= html_writer::link(new moodle_url('view.php', array('id' => $cm->id, 'chapterid' => $ch->id)), $titleout,
-                    array('title' => $titleunescaped));
+                    array('title' => $titleunescaped, 'class' => 'text-truncate'));
             }
 
-            $toc .= html_writer::start_tag('div', array('class' => 'action-list'));
+            $toc .= html_writer::start_tag('div', array('class' => 'action-list d-flex ms-auto'));
             if ($i != 1) {
                 $toc .= html_writer::link(new moodle_url('move.php', array('id' => $cm->id, 'chapterid' => $ch->id, 'up' => '1', 'sesskey' => $USER->sesskey)),
                         $OUTPUT->pix_icon('t/up', get_string('movechapterup', 'mod_book', $title)),
@@ -334,8 +326,11 @@ function book_get_toc($chapters, $chapter, $book, $cm, $edit) {
                         $OUTPUT->pix_icon('t/hide', get_string('hidechapter', 'mod_book', $title)),
                         array('title' => get_string('hidechapter', 'mod_book', $titleunescaped)));
             }
+
+            $buttontitle = get_string('addafterchapter', 'mod_book', ['title' => $ch->title]);
             $toc .= html_writer::link(new moodle_url('edit.php', array('cmid' => $cm->id, 'pagenum' => $ch->pagenum, 'subchapter' => $ch->subchapter)),
-                                            $OUTPUT->pix_icon('add', get_string('addafter', 'mod_book'), 'mod_book'), array('title' => get_string('addafter', 'mod_book')));
+                                            $OUTPUT->pix_icon('add', $buttontitle, 'mod_book'), array('title' => $buttontitle));
+            $toc .= html_writer::end_tag('div');
             $toc .= html_writer::end_tag('div');
 
             if (!$ch->subchapter) {
@@ -350,22 +345,22 @@ function book_get_toc($chapters, $chapter, $book, $cm, $edit) {
         $toc .= html_writer::end_tag('li');
         $toc .= html_writer::end_tag('ul');
 
-    } else { // Normal students view
+    } else { // Editing off. Normal students, teachers view.
         $toc .= html_writer::start_tag('ul');
         foreach ($chapters as $ch) {
             $title = trim(format_string($ch->title, true, array('context'=>$context)));
             $titleunescaped = trim(format_string($ch->title, true, array('context' => $context, 'escape' => false)));
-            if (!$ch->hidden) {
+            if (!$ch->hidden || ($ch->hidden && $viewhidden)) {
                 if (!$ch->subchapter) {
                     $nch++;
                     $ns = 0;
 
                     if ($first) {
-                        $toc .= html_writer::start_tag('li', array('class' => 'clearfix'));
+                        $toc .= html_writer::start_tag('li');
                     } else {
                         $toc .= html_writer::end_tag('ul');
                         $toc .= html_writer::end_tag('li');
-                        $toc .= html_writer::start_tag('li', array('class' => 'clearfix'));
+                        $toc .= html_writer::start_tag('li');
                     }
 
                     if ($book->numbering == BOOK_NUM_NUMBERS) {
@@ -375,23 +370,26 @@ function book_get_toc($chapters, $chapter, $book, $cm, $edit) {
                     $ns++;
 
                     if ($first) {
-                        $toc .= html_writer::start_tag('li', array('class' => 'clearfix'));
+                        $toc .= html_writer::start_tag('li');
                         $toc .= html_writer::start_tag('ul');
-                        $toc .= html_writer::start_tag('li', array('class' => 'clearfix'));
+                        $toc .= html_writer::start_tag('li');
                     } else {
-                        $toc .= html_writer::start_tag('li', array('class' => 'clearfix'));
+                        $toc .= html_writer::start_tag('li');
                     }
 
                     if ($book->numbering == BOOK_NUM_NUMBERS) {
                           $title = "$nch.$ns. $title";
                     }
                 }
+
+                $cssclass = ($ch->hidden && $viewhidden) ? 'dimmed_text' : '';
+
                 if ($ch->id == $chapter->id) {
-                    $toc .= html_writer::tag('strong', $title);
+                    $toc .= html_writer::tag('strong', $title, array('class' => $cssclass));
                 } else {
                     $toc .= html_writer::link(new moodle_url('view.php',
                                               array('id' => $cm->id, 'chapterid' => $ch->id)),
-                                              $title, array('title' => s($titleunescaped)));
+                                              $title, array('title' => s($titleunescaped), 'class' => $cssclass));
                 }
 
                 if (!$ch->subchapter) {
@@ -417,6 +415,120 @@ function book_get_toc($chapters, $chapter, $book, $cm, $edit) {
     return $toc;
 }
 
+/**
+ * Returns book chapters tagged with a specified tag.
+ *
+ * This is a callback used by the tag area mod_book/book_chapters to search for book chapters
+ * tagged with a specific tag.
+ *
+ * @param core_tag_tag $tag
+ * @param bool $exclusivemode if set to true it means that no other entities tagged with this tag
+ *             are displayed on the page and the per-page limit may be bigger
+ * @param int $fromctx context id where the link was displayed, may be used by callbacks
+ *            to display items in the same context first
+ * @param int $ctx context id where to search for records
+ * @param bool $rec search in subcontexts as well
+ * @param int $page 0-based number of page being displayed
+ * @return \core_tag\output\tagindex
+ */
+function mod_book_get_tagged_chapters($tag, $exclusivemode = false, $fromctx = 0, $ctx = 0, $rec = true, $page = 0) {
+    global $OUTPUT;
+    $perpage = $exclusivemode ? 20 : 5;
+
+    // Build the SQL query.
+    $ctxselect = context_helper::get_preload_record_columns_sql('ctx');
+    $query = "SELECT bc.id, bc.title, bc.bookid, bc.hidden,
+                    cm.id AS cmid, c.id AS courseid, c.shortname, c.fullname, $ctxselect
+                FROM {book_chapters} bc
+                JOIN {book} b ON b.id = bc.bookid
+                JOIN {modules} m ON m.name='book'
+                JOIN {course_modules} cm ON cm.module = m.id AND cm.instance = b.id
+                JOIN {tag_instance} tt ON bc.id = tt.itemid
+                JOIN {course} c ON cm.course = c.id
+                JOIN {context} ctx ON ctx.instanceid = cm.id AND ctx.contextlevel = :coursemodulecontextlevel
+               WHERE tt.itemtype = :itemtype AND tt.tagid = :tagid AND tt.component = :component
+                 AND cm.deletioninprogress = 0
+                 AND bc.id %ITEMFILTER% AND c.id %COURSEFILTER%";
+
+    $params = array('itemtype' => 'book_chapters', 'tagid' => $tag->id, 'component' => 'mod_book',
+                    'coursemodulecontextlevel' => CONTEXT_MODULE);
+
+    if ($ctx) {
+        $context = $ctx ? context::instance_by_id($ctx) : context_system::instance();
+        $query .= $rec ? ' AND (ctx.id = :contextid OR ctx.path LIKE :path)' : ' AND ctx.id = :contextid';
+        $params['contextid'] = $context->id;
+        $params['path'] = $context->path.'/%';
+    }
+
+    $query .= " ORDER BY ";
+    if ($fromctx) {
+        // In order-clause specify that modules from inside "fromctx" context should be returned first.
+        $fromcontext = context::instance_by_id($fromctx);
+        $query .= ' (CASE WHEN ctx.id = :fromcontextid OR ctx.path LIKE :frompath THEN 0 ELSE 1 END),';
+        $params['fromcontextid'] = $fromcontext->id;
+        $params['frompath'] = $fromcontext->path.'/%';
+    }
+    $query .= ' c.sortorder, cm.id, bc.id';
+
+    $totalpages = $page + 1;
+
+    // Use core_tag_index_builder to build and filter the list of items.
+    $builder = new core_tag_index_builder('mod_book', 'book_chapters', $query, $params, $page * $perpage, $perpage + 1);
+    while ($item = $builder->has_item_that_needs_access_check()) {
+        context_helper::preload_from_record($item);
+        $courseid = $item->courseid;
+        if (!$builder->can_access_course($courseid)) {
+            $builder->set_accessible($item, false);
+            continue;
+        }
+        $modinfo = get_fast_modinfo($builder->get_course($courseid));
+        // Set accessibility of this item and all other items in the same course.
+        $builder->walk(function ($taggeditem) use ($courseid, $modinfo, $builder) {
+            if ($taggeditem->courseid == $courseid) {
+                $accessible = false;
+                if (($cm = $modinfo->get_cm($taggeditem->cmid)) && $cm->uservisible) {
+                    if (empty($taggeditem->hidden)) {
+                        $accessible = true;
+                    } else {
+                        $accessible = has_capability('mod/book:viewhiddenchapters', context_module::instance($cm->id));
+                    }
+                }
+                $builder->set_accessible($taggeditem, $accessible);
+            }
+        });
+    }
+
+    $items = $builder->get_items();
+    if (count($items) > $perpage) {
+        $totalpages = $page + 2; // We don't need exact page count, just indicate that the next page exists.
+        array_pop($items);
+    }
+
+    // Build the display contents.
+    if ($items) {
+        $tagfeed = new core_tag\output\tagfeed();
+        foreach ($items as $item) {
+            context_helper::preload_from_record($item);
+            $modinfo = get_fast_modinfo($item->courseid);
+            $cm = $modinfo->get_cm($item->cmid);
+            $pageurl = new moodle_url('/mod/book/view.php', array('chapterid' => $item->id, 'b' => $item->bookid));
+            $pagename = format_string($item->title, true, array('context' => context_module::instance($item->cmid)));
+            $pagename = html_writer::link($pageurl, $pagename);
+            $courseurl = course_get_url($item->courseid, $cm->sectionnum);
+            $cmname = html_writer::link($cm->url, $cm->get_formatted_name());
+            $coursename = format_string($item->fullname, true, array('context' => context_course::instance($item->courseid)));
+            $coursename = html_writer::link($courseurl, $coursename);
+            $icon = html_writer::link($pageurl, html_writer::empty_tag('img', array('src' => $cm->get_icon_url())));
+            $tagfeed->add($icon, $pagename, $cmname.'<br>'.$coursename);
+        }
+
+        $content = $OUTPUT->render_from_template('core_tag/tagfeed',
+            $tagfeed->export_for_template($OUTPUT));
+
+        return new core_tag\output\tagindex($tag, 'mod_book', 'book_chapters', $content,
+            $exclusivemode, $fromctx, $ctx, $rec, $page, $totalpages);
+    }
+}
 
 /**
  * File browsing support class

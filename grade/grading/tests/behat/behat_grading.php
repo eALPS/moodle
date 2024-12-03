@@ -47,7 +47,11 @@ class behat_grading extends behat_base {
      */
     public function i_go_to_advanced_grading_page($activityname) {
 
-        $this->execute('behat_general::click_link', $this->escape($activityname));
+        try {
+            $this->execute("behat_general::i_click_on_in_the", [$this->escape($activityname), 'link', 'page', 'region']);
+        } catch (Exception $e) {
+            $this->execute('behat_navigation::go_to_breadcrumb_location', $this->escape($activityname));
+        }
 
         $this->execute('behat_navigation::i_navigate_to_in_current_page_administration',
             get_string('gradingmanagement', 'grading'));
@@ -66,7 +70,7 @@ class behat_grading extends behat_base {
         $editactionliteral = behat_context_helper::escape(get_string("manageactionedit", "grading"));
 
         // Working both when adding and editing.
-        $definitionxpath = "//a[@class='action']" .
+        $definitionxpath = "//a[@class='action btn btn-lg']" .
             "[./descendant::*[contains(., $newactionliteral) or contains(., $editactionliteral)]]";
 
         $this->execute('behat_grading::i_go_to_advanced_grading_page', $this->escape($activityname));
@@ -83,20 +87,19 @@ class behat_grading extends behat_base {
     public function i_go_to_activity_advanced_grading_page($userfullname, $activityname) {
 
         // Step to access the user grade page from the grading page.
-        $gradetext = get_string('grade');
+        $this->execute('behat_navigation::go_to_breadcrumb_location', $this->escape($activityname));
 
-        $this->execute('behat_general::click_link', $this->escape($activityname));
-
-        $this->execute('behat_navigation::i_navigate_to_in_current_page_administration',
-            get_string('viewgrading', 'mod_assign'));
+        $this->execute('behat_general::click_link', get_string('gradeitem:submissions', 'mod_assign'));
 
         $this->execute('behat_general::i_click_on_in_the',
                        array(
-                           $this->escape($gradetext),
-                           'link',
+                           $this->escape(get_string('gradeactions', 'assign')),
+                           'actionmenu',
                            $this->escape($userfullname),
                            'table_row'
                        ));
+
+        $this->execute('behat_action_menu::i_choose_in_the_open_action_menu', get_string('gradeverb'));
     }
 
     /**
@@ -156,11 +159,9 @@ class behat_grading extends behat_base {
     public function i_save_the_advanced_grading_form() {
 
         $this->execute('behat_forms::press_button', get_string('savechanges'));
-        $this->execute('behat_forms::press_button', 'Ok');
         $this->execute('behat_general::i_click_on', array($this->escape(get_string('editsettings')), 'link'));
         $this->execute('behat_forms::press_button', get_string('cancel'));
-        $this->execute('behat_navigation::i_navigate_to_in_current_page_administration',
-            get_string('viewgrading', 'mod_assign'));
+        $this->execute('behat_general::click_link', get_string('gradeitem:submissions', 'mod_assign'));
     }
 
     /**

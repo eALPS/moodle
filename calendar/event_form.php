@@ -42,7 +42,7 @@ class event_form extends moodleform {
     /**
      * The form definition
      */
-    function definition () {
+    function definition() {
         global $CFG, $USER, $OUTPUT;
         $mform = $this->_form;
         $newevent = (empty($this->_customdata->event) || empty($this->_customdata->event->id));
@@ -72,7 +72,8 @@ class event_form extends moodleform {
             if (!empty($eventtypes->groups) && is_array($eventtypes->groups)) {
                 $groupoptions = array();
                 foreach ($eventtypes->groups as $group) {
-                    $groupoptions[$group->id] = $group->name;
+                    $groupoptions[$group->id] = format_string($group->name, true,
+                        array('context' => context_course::instance($group->courseid)));
                 }
                 $mform->addElement('select', 'groupid', get_string('typegroup', 'calendar'), $groupoptions);
                 $mform->disabledIf('groupid', 'eventtype', 'noteq', 'group');

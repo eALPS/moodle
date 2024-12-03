@@ -24,9 +24,19 @@
  * @since      Moodle 3.1
  */
 
+use core_course\external\helper_for_get_mods_by_courses;
+use core_external\external_api;
+use core_external\external_files;
+use core_external\external_format_value;
+use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
+use core_external\external_warnings;
+use core_external\util;
+
 defined('MOODLE_INTERNAL') || die;
 
-require_once($CFG->libdir . '/externallib.php');
 require_once($CFG->dirroot . '/mod/wiki/lib.php');
 require_once($CFG->dirroot . '/mod/wiki/locallib.php');
 
@@ -81,7 +91,7 @@ class mod_wiki_external extends external_api {
         // Ensure there are courseids to loop through.
         if (!empty($params['courseids'])) {
 
-            list($courses, $warnings) = external_util::validate_courses($params['courseids'], $mycourses);
+            list($courses, $warnings) = util::validate_courses($params['courseids'], $mycourses);
 
             // Get the wikis in this course, this function checks users visibility permissions.
             // We can avoid then additional validate_context calls.
@@ -92,20 +102,11 @@ class mod_wiki_external extends external_api {
                 $context = context_module::instance($wiki->coursemodule);
 
                 // Entry to return.
-                $module = array();
-
-                // First, we return information that any user can see in (or can deduce from) the web interface.
-                $module['id'] = $wiki->id;
-                $module['coursemodule'] = $wiki->coursemodule;
-                $module['course'] = $wiki->course;
-                $module['name']  = external_format_string($wiki->name, $context->id);
+                $module = helper_for_get_mods_by_courses::standard_coursemodule_element_values(
+                        $wiki, 'mod_wiki', 'mod/wiki:viewpage', 'mod/wiki:viewpage');
 
                 $viewablefields = [];
                 if (has_capability('mod/wiki:viewpage', $context)) {
-                    list($module['intro'], $module['introformat']) =
-                        external_format_text($wiki->intro, $wiki->introformat, $context->id, 'mod_wiki', 'intro', null);
-                    $module['introfiles'] = external_util::get_area_files($context->id, 'mod_wiki', 'intro', false, false);
-
                     $viewablefields = array('firstpagetitle', 'wikimode', 'defaultformat', 'forceformat', 'editbegin', 'editend',
                                             'section', 'visible', 'groupmode', 'groupingid');
                 }
@@ -144,15 +145,9 @@ class mod_wiki_external extends external_api {
         return new external_single_structure(
             array(
                 'wikis' => new external_multiple_structure(
-                    new external_single_structure(
-                        array(
-                            'id' => new external_value(PARAM_INT, 'Wiki ID.'),
-                            'coursemodule' => new external_value(PARAM_INT, 'Course module ID.'),
-                            'course' => new external_value(PARAM_INT, 'Course ID.'),
-                            'name' => new external_value(PARAM_RAW, 'Wiki name.'),
-                            'intro' => new external_value(PARAM_RAW, 'Wiki intro.', VALUE_OPTIONAL),
-                            'introformat' => new external_format_value('Wiki intro format.', VALUE_OPTIONAL),
-                            'introfiles' => new external_files('Files in the introduction text', VALUE_OPTIONAL),
+                    new external_single_structure(array_merge(
+                        helper_for_get_mods_by_courses::standard_coursemodule_elements_returns(true),
+                        [
                             'timecreated' => new external_value(PARAM_INT, 'Time of creation.', VALUE_OPTIONAL),
                             'timemodified' => new external_value(PARAM_INT, 'Time of last modification.', VALUE_OPTIONAL),
                             'firstpagetitle' => new external_value(PARAM_RAW, 'First page title.', VALUE_OPTIONAL),
@@ -163,13 +158,9 @@ class mod_wiki_external extends external_api {
                                                                             VALUE_OPTIONAL),
                             'editbegin' => new external_value(PARAM_INT, 'Edit begin.', VALUE_OPTIONAL),
                             'editend' => new external_value(PARAM_INT, 'Edit end.', VALUE_OPTIONAL),
-                            'section' => new external_value(PARAM_INT, 'Course section ID.', VALUE_OPTIONAL),
-                            'visible' => new external_value(PARAM_INT, '1 if visible, 0 otherwise.', VALUE_OPTIONAL),
-                            'groupmode' => new external_value(PARAM_INT, 'Group mode.', VALUE_OPTIONAL),
-                            'groupingid' => new external_value(PARAM_INT, 'Group ID.', VALUE_OPTIONAL),
                             'cancreatepages' => new external_value(PARAM_BOOL, 'True if user can create pages.'),
-                        ), 'Wikis'
-                    )
+                        ]
+                    ), 'Wikis')
                 ),
                 'warnings' => new external_warnings(),
             )
@@ -466,15 +457,17 @@ class mod_wiki_external extends external_api {
             throw new moodle_exception('cannotviewpage', 'wiki');
         } else if ($subwiki->id != -1) {
 
-            // Set sort param.
             $options = $params['options'];
-            if (!empty($options['sortby'])) {
-                if ($options['sortdirection'] != 'ASC' && $options['sortdirection'] != 'DESC') {
-                    // Invalid sort direction. Use default.
-                    $options['sortdirection'] = 'ASC';
-                }
-                $sort = $options['sortby'] . ' ' . $options['sortdirection'];
-            }
+
+            // Set sort param.
+            $sort = get_safe_orderby([
+                'id' => 'id',
+                'title' => 'title',
+                'timecreated' => 'timecreated',
+                'timemodified' => 'timemodified',
+                'pageviews' => 'pageviews',
+                'default' => 'title',
+            ], $options['sortby'], $options['sortdirection'], false);
 
             $pages = wiki_get_page_list($subwiki->id, $sort);
             $caneditpages = wiki_user_can_edit($subwiki);
@@ -484,7 +477,7 @@ class mod_wiki_external extends external_api {
                 $retpage = array(
                         'id' => $page->id,
                         'subwikiid' => $page->subwikiid,
-                        'title' => external_format_string($page->title, $context->id),
+                        'title' => \core_external\util::format_string($page->title, $context),
                         'timecreated' => $page->timecreated,
                         'timemodified' => $page->timemodified,
                         'timerendered' => $page->timerendered,
@@ -492,7 +485,8 @@ class mod_wiki_external extends external_api {
                         'pageviews' => $page->pageviews,
                         'readonly' => $page->readonly,
                         'caneditpage' => $caneditpages,
-                        'firstpage' => $page->id == $firstpage->id
+                        'firstpage' => $page->id == $firstpage->id,
+                        'tags' => \core_tag\external\util::get_item_tags('mod_wiki', 'wiki_pages', $page->id),
                     );
 
                 // Refresh page cached content if needed.
@@ -501,8 +495,14 @@ class mod_wiki_external extends external_api {
                         $page = $content['page'];
                     }
                 }
-                list($cachedcontent, $contentformat) = external_format_text(
-                            $page->cachedcontent, FORMAT_HTML, $context->id, 'mod_wiki', 'attachments', $subwiki->id);
+                list($cachedcontent, $contentformat) = \core_external\util::format_text(
+                    $page->cachedcontent,
+                    FORMAT_HTML,
+                    $context,
+                    'mod_wiki',
+                    'attachments',
+                    $subwiki->id
+                );
 
                 if ($options['includecontent']) {
                     // Return the page content.
@@ -510,11 +510,7 @@ class mod_wiki_external extends external_api {
                     $retpage['contentformat'] = $contentformat;
                 } else {
                     // Return the size of the content.
-                    if (function_exists('mb_strlen') && ((int)ini_get('mbstring.func_overload') & 2)) {
-                        $retpage['contentsize'] = mb_strlen($cachedcontent, '8bit');
-                    } else {
-                        $retpage['contentsize'] = strlen($cachedcontent);
-                    }
+                    $retpage['contentsize'] = \core_text::strlen($cachedcontent);
                 }
 
                 $returnedpages[] = $retpage;
@@ -555,6 +551,9 @@ class mod_wiki_external extends external_api {
                             'contentformat' => new external_format_value('cachedcontent', VALUE_OPTIONAL),
                             'contentsize' => new external_value(PARAM_INT, 'Size of page contents in bytes (doesn\'t include'.
                                                                             ' size of attached files).', VALUE_OPTIONAL),
+                            'tags' => new external_multiple_structure(
+                                \core_tag\external\tag_item_exporter::get_read_structure(), 'Tags', VALUE_OPTIONAL
+                            ),
                         ), 'Pages'
                     )
                 ),
@@ -623,6 +622,7 @@ class mod_wiki_external extends external_api {
         $returnedpage['groupid'] = $subwiki->groupid;
         $returnedpage['userid'] = $subwiki->userid;
         $returnedpage['title'] = $page->title;
+        $returnedpage['tags'] = \core_tag\external\util::get_item_tags('mod_wiki', 'wiki_pages', $page->id);
 
         // Refresh page cached content if needed.
         if ($page->timerendered + WIKI_REFRESH_CACHE_TIME < time()) {
@@ -631,8 +631,14 @@ class mod_wiki_external extends external_api {
             }
         }
 
-        list($returnedpage['cachedcontent'], $returnedpage['contentformat']) = external_format_text(
-                            $page->cachedcontent, FORMAT_HTML, $context->id, 'mod_wiki', 'attachments', $subwiki->id);
+        list($returnedpage['cachedcontent'], $returnedpage['contentformat']) = \core_external\util::format_text(
+            $page->cachedcontent,
+            FORMAT_HTML,
+            $context,
+            'mod_wiki',
+            'attachments',
+            $subwiki->id
+        );
         $returnedpage['caneditpage'] = wiki_user_can_edit($subwiki);
 
         // Get page version.
@@ -668,6 +674,9 @@ class mod_wiki_external extends external_api {
                         'contentformat' => new external_format_value('cachedcontent', VALUE_OPTIONAL),
                         'caneditpage' => new external_value(PARAM_BOOL, 'True if user can edit the page.'),
                         'version' => new external_value(PARAM_INT, 'Latest version of the page.', VALUE_OPTIONAL),
+                        'tags' => new external_multiple_structure(
+                            \core_tag\external\tag_item_exporter::get_read_structure(), 'Tags', VALUE_OPTIONAL
+                        ),
                     ), 'Page'
                 ),
                 'warnings' => new external_warnings()
@@ -735,7 +744,7 @@ class mod_wiki_external extends external_api {
             throw new moodle_exception('cannotviewfiles', 'wiki');
         } else if ($subwiki->id != -1) {
             // The subwiki exists, let's get the files.
-            $returnedfiles = external_util::get_area_files($context->id, 'mod_wiki', 'attachments', $subwiki->id);
+            $returnedfiles = util::get_area_files($context->id, 'mod_wiki', 'attachments', $subwiki->id);
         }
 
         $result = array();

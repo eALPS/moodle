@@ -32,22 +32,27 @@ $overrideid = required_param('id', PARAM_INT);
 $confirm = optional_param('confirm', false, PARAM_BOOL);
 
 if (! $override = $DB->get_record('assign_overrides', array('id' => $overrideid))) {
-    print_error('invalidoverrideid', 'assign');
+    throw new \moodle_exception('invalidoverrideid', 'assign');
 }
 
-$assign = new assign($DB->get_record('assign', array('id' => $override->assignid), '*', MUST_EXIST), null, null);
-
-if (! $cm = get_coursemodule_from_instance("assign", $assign->get_context()->id, $assign->get_context()->course)) {
-    print_error('invalidcoursemodule');
-}
-$course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST);
-
+list($course, $cm) = get_course_and_cm_from_instance($override->assignid, 'assign');
 $context = context_module::instance($cm->id);
+$assign = new assign($context, null, null);
 
 require_login($course, false, $cm);
 
 // Check the user has the required capabilities to modify an override.
 require_capability('mod/assign:manageoverrides', $context);
+
+if ($override->groupid) {
+    if (!groups_group_visible($override->groupid, $course, $cm)) {
+        throw new \moodle_exception('invalidoverrideid', 'assign');
+    }
+} else {
+    if (!groups_user_groups_visible($course, $override->userid, $cm)) {
+        throw new \moodle_exception('invalidoverrideid', 'assign');
+    }
+}
 
 $url = new moodle_url('/mod/assign/overridedelete.php', array('id' => $override->id));
 $confirmurl = new moodle_url($url, array('id' => $override->id, 'confirm' => 1));
@@ -63,7 +68,7 @@ if ($confirm) {
 
     $assign->delete_override($override->id);
 
-    reorder_group_overrides($assign->get_context()->id);
+    reorder_group_overrides($assign->get_instance()->id);
 
     redirect($cancelurl);
 }
@@ -74,18 +79,25 @@ $title = get_string('deletecheck', null, $stroverride);
 
 $PAGE->set_url($url);
 $PAGE->set_pagelayout('admin');
+$PAGE->add_body_class('limitedwidth');
 $PAGE->navbar->add($title);
 $PAGE->set_title($title);
 $PAGE->set_heading($course->fullname);
+$PAGE->activityheader->set_attrs([
+    "title" => format_string($assign->get_instance()->name, true, ['context' => $context]),
+    "description" => "",
+    "hidecompletion" => true
+]);
+$PAGE->set_secondary_active_tab('mod_assign_useroverrides');
 
 echo $OUTPUT->header();
-echo $OUTPUT->heading(format_string($assign->get_context()->name, true, array('context' => $context)));
 
 if ($override->groupid) {
     $group = $DB->get_record('groups', array('id' => $override->groupid), 'id, name');
-    $confirmstr = get_string("overridedeletegroupsure", "assign", $group->name);
+    $confirmstr = get_string("overridedeletegroupsure", "assign", format_string($group->name, true, ['context' => $context]));
 } else {
-    $namefields = get_all_user_name_fields(true);
+    $userfieldsapi = \core_user\fields::for_name();
+    $namefields = $userfieldsapi->get_sql('', false, '', '', false)->selects;
     $user = $DB->get_record('user', array('id' => $override->userid),
             'id, ' . $namefields);
     $confirmstr = get_string("overridedeleteusersure", "assign", fullname($user));

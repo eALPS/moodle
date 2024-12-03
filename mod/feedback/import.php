@@ -31,7 +31,7 @@ $id = required_param('id', PARAM_INT);
 $choosefile = optional_param('choosefile', false, PARAM_PATH);
 $action = optional_param('action', false, PARAM_ALPHA);
 
-$url = new moodle_url('/mod/feedback/import.php', array('id'=>$id));
+$url = new moodle_url('/mod/feedback/import.php', ['id' => $id]);
 if ($choosefile !== false) {
     $url->param('choosefile', $choosefile);
 }
@@ -39,17 +39,18 @@ if ($action !== false) {
     $url->param('action', $action);
 }
 $PAGE->set_url($url);
+navigation_node::override_active_url(new moodle_url('/mod/feedback/edit.php'));
 
 if (! $cm = get_coursemodule_from_id('feedback', $id)) {
-    print_error('invalidcoursemodule');
+    throw new \moodle_exception('invalidcoursemodule');
 }
 
-if (! $course = $DB->get_record("course", array("id"=>$cm->course))) {
-    print_error('coursemisconf');
+if (! $course = $DB->get_record("course", ["id" => $cm->course])) {
+    throw new \moodle_exception('coursemisconf');
 }
 
-if (! $feedback = $DB->get_record("feedback", array("id"=>$cm->instance))) {
-    print_error('invalidcoursemodule');
+if (! $feedback = $DB->get_record("feedback", ["id" => $cm->instance])) {
+    throw new \moodle_exception('invalidcoursemodule');
 }
 
 $context = context_module::instance($cm->id);
@@ -59,11 +60,13 @@ require_login($course, true, $cm);
 require_capability('mod/feedback:edititems', $context);
 
 $mform = new feedback_import_form();
-$newformdata = array('id'=>$id,
-                    'deleteolditems'=>'1',
-                    'action'=>'choosefile',
-                    'confirmadd'=>'1',
-                    'do_show'=>'templates');
+$newformdata = [
+    'id' => $id,
+    'deleteolditems' => '1',
+    'action' => 'choosefile',
+    'confirmadd' => '1',
+    'do_show' => 'templates',
+];
 $mform->set_data($newformdata);
 $formdata = $mform->get_data();
 
@@ -76,7 +79,7 @@ if ($choosefile) {
     $xmlcontent = $mform->get_file_content('choosefile');
 
     if (!$xmldata = feedback_load_xml_data($xmlcontent)) {
-        print_error('cannotloadxml', 'feedback', 'edit.php?id='.$id);
+        throw new \moodle_exception('cannotloadxml', 'feedback', 'edit.php?id='.$id);
     }
 
     $importerror = feedback_import_loaded_data($xmldata, $feedback->id);
@@ -94,11 +97,15 @@ $strfeedback  = get_string("modulename", "feedback");
 
 $PAGE->set_heading($course->fullname);
 $PAGE->set_title($feedback->name);
+$PAGE->activityheader->set_attrs([
+    "hidecompletion" => true,
+    "description" => ''
+]);
+$PAGE->add_body_class('limitedwidth');
+
 echo $OUTPUT->header();
-echo $OUTPUT->heading(format_string($feedback->name));
-/// print the tabs
-$current_tab = 'templates';
-require('tabs.php');
+/** @var \mod_feedback\output\renderer $renderer */
+$renderer = $PAGE->get_renderer('mod_feedback');
 
 /// Print the main part of the page
 ///////////////////////////////////////////////////////////////////////////
@@ -144,7 +151,7 @@ function feedback_import_loaded_data(&$data, $feedbackid) {
 
     $error = new stdClass();
     $error->stat = true;
-    $error->msg = array();
+    $error->msg = [];
 
     if (!is_array($data)) {
         $error->msg[] = get_string('data_is_not_an_array', 'feedback');
@@ -157,13 +164,13 @@ function feedback_import_loaded_data(&$data, $feedbackid) {
         $position = 0;
     } else {
         //items will be add to the end of the existing items
-        $position = $DB->count_records('feedback_item', array('feedback'=>$feedbackid));
+        $position = $DB->count_records('feedback_item', ['feedback' => $feedbackid]);
     }
 
-    //depend items we are storing temporary in an mapping list array(new id => dependitem)
-    //we also store a mapping of all items array(oldid => newid)
-    $dependitemsmap = array();
-    $itembackup = array();
+    // Depend items we are storing temporary in an mapping list [new id => dependitem].
+    // We also store a mapping of all items [oldid => newid].
+    $dependitemsmap = [];
+    $itembackup = [];
     foreach ($data as $item) {
         $position++;
         //check the typ
@@ -263,7 +270,7 @@ function feedback_import_loaded_data(&$data, $feedbackid) {
     }
     //remapping the dependency
     foreach ($dependitemsmap as $key => $dependitem) {
-        $newitem = $DB->get_record('feedback_item', array('id'=>$key));
+        $newitem = $DB->get_record('feedback_item', ['id' => $key]);
         $newitem->dependitem = $itembackup[$newitem->dependitem];
         $DB->update_record('feedback_item', $newitem);
     }

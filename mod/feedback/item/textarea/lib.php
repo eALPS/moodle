@@ -76,9 +76,10 @@ class feedback_item_textarea extends feedback_item_base {
     public function save_item() {
         global $DB;
 
-        if (!$item = $this->item_form->get_data()) {
+        if (!$this->get_data()) {
             return false;
         }
+        $item = $this->item;
 
         if (isset($item->clone_item) AND $item->clone_item) {
             $item->id = ''; //to clone this item
@@ -101,9 +102,10 @@ class feedback_item_textarea extends feedback_item_base {
      * @param stdClass $item the db-object from feedback_item
      * @param int $groupid
      * @param int $courseid
+     * @param bool $excel Indicate if being used for Excel
      * @return stdClass
      */
-    protected function get_analysed($item, $groupid = false, $courseid = false) {
+    protected function get_analysed($item, $groupid = false, $courseid = false, bool $excel = false) {
         global $DB;
 
         $analysed_val = new stdClass();
@@ -114,7 +116,8 @@ class feedback_item_textarea extends feedback_item_base {
         if ($values) {
             $data = array();
             foreach ($values as $value) {
-                $data[] = str_replace("\n", '<br />', $value->value);
+                // Convert line breaks except for Excel.
+                $data[] = $excel ? $value->value : str_replace("\n", '<br />', $value->value);
             }
             $analysed_val->data = $data;
         }
@@ -134,7 +137,7 @@ class feedback_item_textarea extends feedback_item_base {
         $values = feedback_get_group_values($item, $groupid, $courseid);
         if ($values) {
             echo "<table class=\"analysis itemtype_{$item->typ}\">";
-            echo '<tr><th colspan="2" align="left">';
+            echo '<tr><th class="text-start">';
             echo $itemnr . ' ';
             if (strval($item->label) !== '') {
                 echo '('. format_string($item->label).') ';
@@ -144,7 +147,7 @@ class feedback_item_textarea extends feedback_item_base {
             foreach ($values as $value) {
                 $class = strlen(trim($value->value)) ? '' : ' class="isempty"';
                 echo '<tr'.$class.'>';
-                echo '<td colspan="2" class="singlevalue">';
+                echo '<td class="singlevalue">';
                 echo str_replace("\n", '<br />', $value->value);
                 echo '</td>';
                 echo '</tr>';
@@ -157,11 +160,11 @@ class feedback_item_textarea extends feedback_item_base {
                              $xls_formats, $item,
                              $groupid, $courseid = false) {
 
-        $analysed_item = $this->get_analysed($item, $groupid, $courseid);
+        $analyseditem = $this->get_analysed($item, $groupid, $courseid, true);
 
         $worksheet->write_string($row_offset, 0, $item->label, $xls_formats->head2);
         $worksheet->write_string($row_offset, 1, $item->name, $xls_formats->head2);
-        $data = $analysed_item->data;
+        $data = $analyseditem->data;
         if (is_array($data)) {
             if (isset($data[0])) {
                 $worksheet->write_string($row_offset, 2, htmlspecialchars_decode($data[0], ENT_QUOTES), $xls_formats->value_bold);
@@ -194,5 +197,25 @@ class feedback_item_textarea extends feedback_item_base {
 
     public function create_value($data) {
         return s($data);
+    }
+
+    /**
+     * Return the analysis data ready for external functions.
+     *
+     * @param stdClass $item     the item (question) information
+     * @param int      $groupid  the group id to filter data (optional)
+     * @param int      $courseid the course id (optional)
+     * @return array an array of data with non scalar types json encoded
+     * @since  Moodle 3.3
+     */
+    public function get_analysed_for_external($item, $groupid = false, $courseid = false) {
+
+        $externaldata = array();
+        $data = $this->get_analysed($item, $groupid, $courseid);
+
+        if (is_array($data->data)) {
+            return $data->data; // No need to json, scalar type.
+        }
+        return $externaldata;
     }
 }

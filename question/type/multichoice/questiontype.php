@@ -37,11 +37,89 @@ require_once($CFG->libdir . '/questionlib.php');
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class qtype_multichoice extends question_type {
+    /**
+     * @var int a special value that can be set for {@see question_display_options::$feedback}.
+     *
+     * This is not used by the core question type, but is used by some variants of this question
+     * types in the plugins database, including qtype_oumultiresponse and qtype_answersselect.
+     *
+     * If ->feedback is set to this value, then the renderer will display the combined feebdack,
+     * but not the feedback for each specific choice.
+     */
+    const COMBINED_BUT_NOT_CHOICE_FEEDBACK = 0x100;
+
+    /**
+     * Helper to catch and update if a plugin is using the old version of the COMBINED_BUT_NOT_CHOICE_FEEDBACK thing.
+     *
+     * @param question_display_options $options to be updated before being used.
+     */
+    public static function support_legacy_review_options_hack(question_display_options $options): void {
+        if (empty($options->suppresschoicefeedback)) {
+            return; // Nothing to do.
+        }
+
+        debugging('$options->suppresschoicefeedback should no longer be used. To get a similar effect, ' .
+            'instead set $options->feedback = $options->feedback && qtype_multichoice::COMBINED_BUT_NOT_CHOICE_FEEDBACK.');
+        if ($options->feedback) {
+            $options->feedback = self::COMBINED_BUT_NOT_CHOICE_FEEDBACK;
+        }
+        unset($options->suppresschoicefeedback);
+    }
+
     public function get_question_options($question) {
         global $DB, $OUTPUT;
-        $question->options = $DB->get_record('qtype_multichoice_options',
-                array('questionid' => $question->id), '*', MUST_EXIST);
+
+        $question->options = $DB->get_record('qtype_multichoice_options', ['questionid' => $question->id]);
+
+        if ($question->options === false) {
+            // If this has happened, then we have a problem.
+            // For the user to be able to edit or delete this question, we need options.
+            debugging("Question ID {$question->id} was missing an options record. Using default.", DEBUG_DEVELOPER);
+
+            $question->options = $this->create_default_options($question);
+        }
+
         parent::get_question_options($question);
+    }
+
+    /**
+     * Create a default options object for the provided question.
+     *
+     * @param object $question The queston we are working with.
+     * @return object The options object.
+     */
+    protected function create_default_options($question) {
+        // Create a default question options record.
+        $options = new stdClass();
+        $options->questionid = $question->id;
+
+        // Get the default strings and just set the format.
+        $options->correctfeedback = get_string('correctfeedbackdefault', 'question');
+        $options->correctfeedbackformat = FORMAT_HTML;
+        $options->partiallycorrectfeedback = get_string('partiallycorrectfeedbackdefault', 'question');;
+        $options->partiallycorrectfeedbackformat = FORMAT_HTML;
+        $options->incorrectfeedback = get_string('incorrectfeedbackdefault', 'question');
+        $options->incorrectfeedbackformat = FORMAT_HTML;
+
+        $config = get_config('qtype_multichoice');
+        $options->single = $config->answerhowmany;
+        if (isset($question->layout)) {
+            $options->layout = $question->layout;
+        }
+        $options->answernumbering = $config->answernumbering;
+        $options->shuffleanswers = $config->shuffleanswers;
+        $options->showstandardinstruction = 0;
+        $options->shownumcorrect = 1;
+
+        return $options;
+    }
+
+    public function save_defaults_for_new_questions(stdClass $fromform): void {
+        parent::save_defaults_for_new_questions($fromform);
+        $this->set_default_value('single', $fromform->single);
+        $this->set_default_value('shuffleanswers', $fromform->shuffleanswers);
+        $this->set_default_value('answernumbering', $fromform->answernumbering);
+        $this->set_default_value('showstandardinstruction', $fromform->showstandardinstruction);
     }
 
     public function save_question_options($question) {
@@ -60,7 +138,7 @@ class qtype_multichoice extends question_type {
             }
         }
         if ($answercount < 2) { // Check there are at lest 2 answers for multiple choice.
-            $result->notice = get_string('notenoughanswers', 'qtype_multichoice', '2');
+            $result->error = get_string('notenoughanswers', 'qtype_multichoice', '2');
             return $result;
         }
 
@@ -115,6 +193,7 @@ class qtype_multichoice extends question_type {
             $options->correctfeedback = '';
             $options->partiallycorrectfeedback = '';
             $options->incorrectfeedback = '';
+            $options->showstandardinstruction = 0;
             $options->id = $DB->insert_record('qtype_multichoice_options', $options);
         }
 
@@ -124,6 +203,7 @@ class qtype_multichoice extends question_type {
         }
         $options->answernumbering = $question->answernumbering;
         $options->shuffleanswers = $question->shuffleanswers;
+        $options->showstandardinstruction = !empty($question->showstandardinstruction);
         $options = $this->save_combined_feedback_helper($options, $question, $context, true);
         $DB->update_record('qtype_multichoice_options', $options);
 
@@ -164,6 +244,7 @@ class qtype_multichoice extends question_type {
         parent::initialise_question_instance($question, $questiondata);
         $question->shuffleanswers = $questiondata->options->shuffleanswers;
         $question->answernumbering = $questiondata->options->answernumbering;
+        $question->showstandardinstruction = $questiondata->options->showstandardinstruction;
         if (!empty($questiondata->options->layout)) {
             $question->layout = $questiondata->options->layout;
         } else {
@@ -189,6 +270,13 @@ class qtype_multichoice extends question_type {
     public function get_random_guess_score($questiondata) {
         if (!$questiondata->options->single) {
             // Pretty much impossible to compute for _multi questions. Don't try.
+            return null;
+        }
+
+        if (empty($questiondata->options->answers)) {
+            // A multi-choice question with no choices is senseless,
+            // but, seemingly, it can happen (presumably as a side-effect of bugs).
+            // Therefore, ensure it does not lead to errors here.
             return null;
         }
 

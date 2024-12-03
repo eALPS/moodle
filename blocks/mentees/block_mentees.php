@@ -50,7 +50,8 @@ class block_mentees extends block_base {
         $this->content = new stdClass();
 
         // get all the mentees, i.e. users you have a direct assignment to
-        $allusernames = get_all_user_name_fields(true, 'u');
+        $userfieldsapi = \core_user\fields::for_name();
+        $allusernames = $userfieldsapi->get_sql('u', false, '', '', false)->selects;
         if ($usercontexts = $DB->get_records_sql("SELECT c.instanceid, c.instanceid, $allusernames
                                                     FROM {role_assignments} ra, {context} c, {user} u
                                                    WHERE ra.userid = ?
@@ -77,6 +78,22 @@ class block_mentees extends block_base {
      */
     public function instance_can_be_docked() {
         return parent::instance_can_be_docked() && isset($this->config->title) && !empty($this->config->title);
+    }
+
+    /**
+     * Return the plugin config settings for external functions.
+     *
+     * @return stdClass the configs for both the block instance and plugin
+     * @since Moodle 3.8
+     */
+    public function get_config_for_external() {
+        // Return all settings for all users since it is safe (no private keys, etc..).
+        $configs = !empty($this->config) ? $this->config : new stdClass();
+
+        return (object) [
+            'instance' => $configs,
+            'plugin' => new stdClass(),
+        ];
     }
 }
 

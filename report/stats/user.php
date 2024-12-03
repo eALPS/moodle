@@ -51,9 +51,9 @@ if ($USER->id != $user->id and has_capability('moodle/user:viewuseractivitiesrep
     require_login($course);
 }
 
-if (!report_stats_can_access_user_report($user, $course, true)) {
+if (!report_stats_can_access_user_report($user, $course)) {
     // this should never happen
-    print_error('nocapability', 'report_stats');
+    throw new \moodle_exception('nocapability', 'report_stats');
 }
 
 $stractivityreport = get_string('activityreport');
@@ -73,12 +73,16 @@ $PAGE->set_title("$course->shortname: $stractivityreport");
 $PAGE->set_heading($pageheading);
 echo $OUTPUT->header();
 if ($courseid != SITEID) {
+    $backurl = new moodle_url('/user/view.php', ['id' => $userid, 'course' => $courseid]);
+    echo $OUTPUT->single_button($backurl, get_string('back'), 'get', ['class' => 'mb-3']);
+
     echo $OUTPUT->context_header(
             array(
             'heading' => $userfullname,
             'user' => $user,
             'usercontext' => $personalcontext
         ), 2);
+    echo $OUTPUT->heading(get_string('statistics', 'moodle'), 2, 'main mt-4 mb-4');
 }
 
 // Trigger a user report viewed event.
@@ -86,7 +90,7 @@ $event = \report_stats\event\user_report_viewed::create(array('context' => $cour
 $event->trigger();
 
 if (empty($CFG->enablestats)) {
-    print_error('statsdisable', 'error');
+    throw new \moodle_exception('statsdisable', 'error');
 }
 
 $statsstatus = stats_check_uptodate($course->id);
@@ -115,7 +119,8 @@ $lastmonthend = stats_get_base_monthly();
 $timeoptions = stats_get_time_options($now,$lastweekend,$lastmonthend,$earliestday,$earliestweek,$earliestmonth);
 
 if (empty($timeoptions)) {
-    print_error('nostatstodisplay', '', $CFG->wwwroot.'/course/user.php?id='.$course->id.'&user='.$user->id.'&mode=outline');
+    throw new \moodle_exception('nostatstodisplay', '',
+        $CFG->wwwroot.'/course/user.php?id='.$course->id.'&user='.$user->id.'&mode=outline');
 }
 
 // use the earliest.
@@ -124,17 +129,39 @@ $time = array_pop($timekeys);
 
 $param = stats_get_parameters($time,STATS_REPORT_USER_VIEW,$course->id,STATS_MODE_DETAILED);
 $params = $param->params;
-
 $param->table = 'user_'.$param->table;
 
-$sql = 'SELECT id, timeend,'.$param->fields.' FROM {stats_'.$param->table.'} WHERE '
-.(($course->id == SITEID) ? '' : ' courseid = '.$course->id.' AND ')
-    .' userid = '.$user->id.' AND timeend >= '.$param->timeafter .$param->extras
-    .' ORDER BY timeend DESC';
-$stats = $DB->get_records_sql($sql, $params); //TODO: improve these params!!
+// Build the conditions and parameters.
+$wheres = [
+    "userid = :userid",
+    "timeend >= :timeend",
+    "stattype = :stattype",
+];
+$params['userid'] = $user->id;
+$params['timeend'] = $param->timeafter;
+$params['stattype'] = $param->stattype;
+// Add condition for course ID when specified.
+if ($course->id != SITEID) {
+    $wheres[] = "courseid = :courseid";
+    $params['courseid'] = $course->id;
+}
+// Combine the conditions.
+$wheresql = implode(" AND ", $wheres);
+
+// Build the query.
+$sql = "
+    SELECT {$param->fields}
+      FROM {stats_{$param->table}}
+     WHERE {$wheresql}
+    {$param->extras}
+  ORDER BY timeend DESC";
+
+// Fetch the stats data.
+$stats = $DB->get_records_sql($sql, $params);
 
 if (empty($stats)) {
-    print_error('nostatstodisplay', '', $CFG->wwwroot.'/course/user.php?id='.$course->id.'&user='.$user->id.'&mode=outline');
+    throw new \moodle_exception('nostatstodisplay', '',
+        $CFG->wwwroot.'/course/user.php?id='.$course->id.'&user='.$user->id.'&mode=outline');
 }
 
 report_stats_print_chart($course->id, STATS_REPORT_USER_VIEW, $time, STATS_MODE_DETAILED, $user->id);
@@ -156,7 +183,7 @@ foreach ($stats as $stat) {
     if (!empty($stat->zerofixed)) {  // Don't know why this is necessary, see stats_fix_zeros above - MD
         continue;
     }
-    $a = array(userdate($stat->timeend,get_string('strftimedate'),$CFG->timezone),$stat->line1);
+    $a = array(userdate($stat->timeend - DAYSECS, get_string('strftimedate'), $CFG->timezone), $stat->line1);
     $a[] = $stat->line2;
     $a[] = $stat->line3;
     $table->data[] = $a;

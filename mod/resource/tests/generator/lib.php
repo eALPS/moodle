@@ -39,13 +39,14 @@ class mod_resource_generator extends testing_module_generator {
      * text file.
      *
      * @param array|stdClass $record data for module being generated. Requires 'course' key
-     *     (an id or the full object). Also can have any fields from add module form.
+     *     (an id or the full object). Also can have any fields from add module form, and a
+     *     'defaultfilename' to set the name of the file created if no draft ID is supplied.
      * @param null|array $options general options for course module. Since 2.6 it is
      *     possible to omit this argument by merging options into $record
      * @return stdClass record from module-defined table with additional field
      *     cmid (corresponding id in course_modules table)
      */
-    public function create_instance($record = null, array $options = null) {
+    public function create_instance($record = null, ?array $options = null) {
         global $CFG, $USER;
         require_once($CFG->dirroot . '/lib/resourcelib.php');
         // Ensure the record can be modified without affecting calling code.
@@ -64,6 +65,9 @@ class mod_resource_generator extends testing_module_generator {
         if (!isset($record->showtype)) {
             $record->showtype = 0;
         }
+        if (!isset($record->uploaded)) {
+            $record->uploaded = 0;
+        }
 
         // The 'files' value corresponds to the draft file area ID. If not
         // specified, create a default file.
@@ -72,19 +76,37 @@ class mod_resource_generator extends testing_module_generator {
                 throw new coding_exception('resource generator requires a current user');
             }
             $usercontext = context_user::instance($USER->id);
+            $filename = $record->defaultfilename ?? 'resource' . ($this->instancecount + 1) . '.txt';
 
             // Pick a random context id for specified user.
             $record->files = file_get_unused_draft_itemid();
 
             // Add actual file there.
-            $filerecord = array('component' => 'user', 'filearea' => 'draft',
+            $filerecord = ['component' => 'user', 'filearea' => 'draft',
                     'contextid' => $usercontext->id, 'itemid' => $record->files,
-                    'filename' => 'resource' . ($this->instancecount+1) . '.txt', 'filepath' => '/');
+                    'filename' => basename($filename), 'filepath' => '/'];
             $fs = get_file_storage();
-            $fs->create_file_from_string($filerecord, 'Test resource ' . ($this->instancecount+1) . ' file');
+            if ($record->uploaded == 1) {
+                // For uploading a file, it's required to specify a file, how not!
+                if (!isset($record->defaultfilename)) {
+                    throw new coding_exception(
+                        'The $record->defaultfilename option is required in order to upload a file');
+                }
+                // We require the full file path to exist when uploading a real file (fixture or whatever).
+                $fullfilepath = $CFG->dirroot . '/' . $record->defaultfilename;
+                if (!is_readable($fullfilepath)) {
+                    throw new coding_exception(
+                        'The $record->defaultfilename option must point to an existing file within dirroot');
+                }
+                // Create file using pathname (defaultfilename) set.
+                $fs->create_file_from_pathname($filerecord, $fullfilepath);
+            } else {
+                // If defaultfilename is not set, create file from string "resource 1.txt".
+                $fs->create_file_from_string($filerecord, 'Test resource ' . $filename . ' file');
+            }
         }
 
         // Do work to actually add the instance.
-        return parent::create_instance($record, (array)$options);
+        return parent::create_instance($record, $options);
     }
 }

@@ -23,6 +23,7 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @since      Moodle 3.0
  */
+namespace mod_resource;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -36,22 +37,23 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @since      Moodle 3.0
  */
-class mod_resource_lib_testcase extends advanced_testcase {
+class lib_test extends \advanced_testcase {
 
     /**
      * Prepares things before this test case is initialised
      * @return void
      */
-    public static function setUpBeforeClass() {
+    public static function setUpBeforeClass(): void {
         global $CFG;
         require_once($CFG->dirroot . '/mod/resource/lib.php');
+        parent::setUpBeforeClass();
     }
 
     /**
      * Test resource_view
      * @return void
      */
-    public function test_resource_view() {
+    public function test_resource_view(): void {
         global $CFG;
 
         $CFG->enablecompletion = 1;
@@ -62,7 +64,7 @@ class mod_resource_lib_testcase extends advanced_testcase {
         $course = $this->getDataGenerator()->create_course(array('enablecompletion' => 1));
         $resource = $this->getDataGenerator()->create_module('resource', array('course' => $course->id),
                                                             array('completion' => 2, 'completionview' => 1));
-        $context = context_module::instance($resource->cmid);
+        $context = \context_module::instance($resource->cmid);
         $cm = get_coursemodule_from_instance('resource', $resource->id);
 
         // Trigger and capture the event.
@@ -84,7 +86,7 @@ class mod_resource_lib_testcase extends advanced_testcase {
         $this->assertNotEmpty($event->get_name());
 
         // Check completion status.
-        $completion = new completion_info($course);
+        $completion = new \completion_info($course);
         $completiondata = $completion->get_data($cm);
         $this->assertEquals(1, $completiondata->completionstate);
 
@@ -95,7 +97,7 @@ class mod_resource_lib_testcase extends advanced_testcase {
      *
      * Note: This currently doesn't test every aspect of the function, mainly focusing on the icon.
      */
-    public function test_get_coursemodule_info() {
+    public function test_get_coursemodule_info(): void {
         global $DB, $USER;
 
         $this->resetAfterTest();
@@ -112,7 +114,7 @@ class mod_resource_lib_testcase extends advanced_testcase {
 
         // Create a resource with one file.
         $draftid = file_get_unused_draft_itemid();
-        $contextid = context_user::instance($USER->id)->id;
+        $contextid = \context_user::instance($USER->id)->id;
         $filerecord = array('component' => 'user', 'filearea' => 'draft', 'contextid' => $contextid,
                 'itemid' => $draftid, 'filename' => 'r2.txt', 'filepath' => '/');
         $fs = get_file_storage();
@@ -143,12 +145,142 @@ class mod_resource_lib_testcase extends advanced_testcase {
         $info = resource_get_coursemodule_info(
                 $DB->get_record('course_modules', array('id' => $resource2->cmid)));
         $this->assertEquals('R2', $info->name);
-        $this->assertEquals('f/text-24', $info->icon);
+        $this->assertEquals('f/text', $info->icon);
 
         // For third one, it should use the highest sortorder icon.
         $info = resource_get_coursemodule_info(
                 $DB->get_record('course_modules', array('id' => $resource3->cmid)));
         $this->assertEquals('R3', $info->name);
-        $this->assertEquals('f/document-24', $info->icon);
+        $this->assertEquals('f/document', $info->icon);
+    }
+
+    public function test_resource_core_calendar_provide_event_action(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // Create the activity.
+        $course = $this->getDataGenerator()->create_course();
+        $resource = $this->getDataGenerator()->create_module('resource', array('course' => $course->id));
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $resource->id,
+            \core_completion\api::COMPLETION_EVENT_TYPE_DATE_COMPLETION_EXPECTED);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event.
+        $actionevent = mod_resource_core_calendar_provide_event_action($event, $factory);
+
+        // Confirm the event was decorated.
+        $this->assertInstanceOf('\core_calendar\local\event\value_objects\action', $actionevent);
+        $this->assertEquals(get_string('view'), $actionevent->get_name());
+        $this->assertInstanceOf('moodle_url', $actionevent->get_url());
+        $this->assertEquals(1, $actionevent->get_item_count());
+        $this->assertTrue($actionevent->is_actionable());
+    }
+
+    public function test_resource_core_calendar_provide_event_action_already_completed(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $CFG->enablecompletion = 1;
+
+        // Create the activity.
+        $course = $this->getDataGenerator()->create_course(array('enablecompletion' => 1));
+        $resource = $this->getDataGenerator()->create_module('resource', array('course' => $course->id),
+            array('completion' => 2, 'completionview' => 1, 'completionexpected' => time() + DAYSECS));
+
+        // Get some additional data.
+        $cm = get_coursemodule_from_instance('resource', $resource->id);
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $resource->id,
+            \core_completion\api::COMPLETION_EVENT_TYPE_DATE_COMPLETION_EXPECTED);
+
+        // Mark the activity as completed.
+        $completion = new \completion_info($course);
+        $completion->set_module_viewed($cm);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event.
+        $actionevent = mod_resource_core_calendar_provide_event_action($event, $factory);
+
+        // Ensure result was null.
+        $this->assertNull($actionevent);
+    }
+
+    /**
+     * Test mod_resource_core_calendar_provide_event_action with user override
+     */
+    public function test_resource_core_calendar_provide_event_action_user_override(): void {
+        global $CFG, $USER;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $user = $this->getDataGenerator()->create_user();
+        $CFG->enablecompletion = 1;
+
+        // Create the activity.
+        $course = $this->getDataGenerator()->create_course(array('enablecompletion' => 1));
+        $resource = $this->getDataGenerator()->create_module('resource', array('course' => $course->id),
+            array('completion' => 2, 'completionview' => 1, 'completionexpected' => time() + DAYSECS));
+
+        // Get some additional data.
+        $cm = get_coursemodule_from_instance('resource', $resource->id);
+
+        // Create a calendar event.
+        $event = $this->create_action_event($course->id, $resource->id,
+            \core_completion\api::COMPLETION_EVENT_TYPE_DATE_COMPLETION_EXPECTED);
+
+        // Mark the activity as completed.
+        $completion = new \completion_info($course);
+        $completion->set_module_viewed($cm);
+
+        // Create an action factory.
+        $factory = new \core_calendar\action_factory();
+
+        // Decorate action event.
+        $actionevent = mod_resource_core_calendar_provide_event_action($event, $factory, $USER->id);
+
+        // Decorate action with a userid override.
+        $actionevent2 = mod_resource_core_calendar_provide_event_action($event, $factory, $user->id);
+
+        // Ensure result was null because it has been marked as completed for the associated user.
+        // Logic was brought across from the "_already_completed" function.
+        $this->assertNull($actionevent);
+
+        // Confirm the event was decorated.
+        $this->assertNotNull($actionevent2);
+        $this->assertInstanceOf('\core_calendar\local\event\value_objects\action', $actionevent2);
+        $this->assertEquals(get_string('view'), $actionevent2->get_name());
+        $this->assertInstanceOf('moodle_url', $actionevent2->get_url());
+        $this->assertEquals(1, $actionevent2->get_item_count());
+        $this->assertTrue($actionevent2->is_actionable());
+    }
+
+    /**
+     * Creates an action event.
+     *
+     * @param int $courseid The course id.
+     * @param int $instanceid The instance id.
+     * @param string $eventtype The event type.
+     * @return bool|calendar_event
+     */
+    private function create_action_event($courseid, $instanceid, $eventtype) {
+        $event = new \stdClass();
+        $event->name = 'Calendar event';
+        $event->modulename  = 'resource';
+        $event->courseid = $courseid;
+        $event->instance = $instanceid;
+        $event->type = CALENDAR_EVENT_TYPE_ACTION;
+        $event->eventtype = $eventtype;
+        $event->timestart = time();
+
+        return \calendar_event::create($event);
     }
 }

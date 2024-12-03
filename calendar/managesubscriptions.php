@@ -26,94 +26,128 @@ require_once('../config.php');
 require_once($CFG->libdir.'/bennu/bennu.inc.php');
 require_once($CFG->dirroot.'/course/lib.php');
 require_once($CFG->dirroot.'/calendar/lib.php');
-require_once($CFG->dirroot.'/calendar/managesubscriptions_form.php');
 
 // Required use.
-$courseid = optional_param('course', SITEID, PARAM_INT);
-// Used for processing subscription actions.
-$subscriptionid = optional_param('id', 0, PARAM_INT);
-$pollinterval  = optional_param('pollinterval', 0, PARAM_INT);
-$action = optional_param('action', '', PARAM_INT);
+$courseid = optional_param('course', null, PARAM_INT);
+$categoryid = optional_param('category', null, PARAM_INT);
 
 $url = new moodle_url('/calendar/managesubscriptions.php');
-if ($courseid != SITEID) {
+if ($courseid != SITEID && !empty($courseid)) {
     $url->param('course', $courseid);
+    navigation_node::override_active_url(new moodle_url('/course/view.php', ['id' => $courseid]));
+    $PAGE->navbar->add(
+        get_string('calendar', 'calendar'),
+        new moodle_url('/calendar/view.php', ['view' => 'month', 'course' => $courseid])
+    );
+} else if ($categoryid) {
+    $url->param('categoryid', $categoryid);
+    navigation_node::override_active_url(new moodle_url('/course/index.php', ['categoryid' => $categoryid]));
+    $PAGE->set_category_by_id($categoryid);
+    $PAGE->navbar->add(
+        get_string('calendar', 'calendar'),
+        new moodle_url('/calendar/view.php', ['view' => 'month', 'category' => $categoryid])
+    );
+} else {
+    $PAGE->navbar->add(get_string('calendar', 'calendar'), new moodle_url('/calendar/view.php', ['view' => 'month']));
 }
-navigation_node::override_active_url(new moodle_url('/calendar/view.php', array('view' => 'month')));
+
 $PAGE->set_url($url);
 $PAGE->set_pagelayout('admin');
-$PAGE->navbar->add(get_string('managesubscriptions', 'calendar'));
+$PAGE->set_secondary_navigation(false);
 
 if ($courseid != SITEID && !empty($courseid)) {
-    $course = $DB->get_record('course', array('id' => $courseid));
+    // Course ID must be valid and existing.
+    $course = $DB->get_record('course', array('id' => $courseid), '*', MUST_EXIST);
     $courses = array($course->id => $course);
 } else {
     $course = get_site();
     $courses = calendar_get_default_courses();
 }
-require_course_login($course);
+require_login($course, false);
+
 if (!calendar_user_can_add_event($course)) {
-    print_error('errorcannotimport', 'calendar');
+    throw new \moodle_exception('errorcannotimport', 'calendar');
+}
+$PAGE->navbar->add(get_string('managesubscriptions', 'calendar'), $PAGE->url);
+
+$types = calendar_get_allowed_event_types($courseid);
+
+$searches = [];
+$params = [];
+
+$usedefaultfilters = true;
+
+if (!empty($types['site'])) {
+    $searches[] = "(eventtype = 'site')";
+    $usedefaultfilters = false;
 }
 
-$form = new calendar_addsubscription_form(null);
-$form->set_data(array(
-    'course' => $course->id
-));
+if (!empty($types['user'])) {
+    $searches[] = "(eventtype = 'user' AND userid = :userid)";
+    $params['userid'] = $USER->id;
+    $usedefaultfilters = false;
+}
 
-$importresults = '';
+if (!empty($courseid) && !empty($types['course'])) {
+    $searches[] = "((eventtype = 'course' OR eventtype = 'group') AND courseid = :courseid)";
+    $params += ['courseid' => $courseid];
+    $usedefaultfilters = false;
+}
 
-$formdata = $form->get_data();
-if (!empty($formdata)) {
-    require_sesskey(); // Must have sesskey for all actions.
-    $subscriptionid = calendar_add_subscription($formdata);
-    if ($formdata->importfrom == CALENDAR_IMPORT_FROM_FILE) {
-        // Blank the URL if it's a file import.
-        $formdata->url = '';
-        $calendar = $form->get_file_content('importfile');
-        $ical = new iCalendar();
-        $ical->unserialize($calendar);
-        $importresults = calendar_import_icalendar_events($ical, $courseid, $subscriptionid);
+if (!empty($types['category'])) {
+    if (!empty($categoryid)) {
+        $searches[] = "(eventtype = 'category' AND categoryid = :categoryid)";
+        $params += ['categoryid' => $categoryid];
     } else {
-        try {
-            $importresults = calendar_update_subscription_events($subscriptionid);
-        } catch (moodle_exception $e) {
-            // Delete newly added subscription and show invalid url error.
-            calendar_delete_subscription($subscriptionid);
-            print_error($e->errorcode, $e->module, $PAGE->url);
+        $searches[] = "(eventtype = 'category')";
+    }
+
+    $usedefaultfilters = false;
+}
+
+if ($usedefaultfilters) {
+    $searches[] = "(eventtype = 'user' AND userid = :userid)";
+    $params['userid'] = $USER->id;
+
+    if (!empty($types['site'])) {
+        $searches[] = "(eventtype = 'site' AND courseid  = :siteid)";
+        $params += ['siteid' => SITEID];
+    }
+
+    if (!empty($types['course'])) {
+        $courses = calendar_get_default_courses(null, 'id', true);
+        if (!empty($courses)) {
+            $courseids = array_map(function ($c) {
+                return $c->id;
+            }, $courses);
+
+            list($courseinsql, $courseparams) = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'course');
+            $searches[] = "((eventtype = 'course' OR eventtype = 'group') AND courseid {$courseinsql})";
+            $params += $courseparams;
         }
     }
-    // Redirect to prevent refresh issues.
-    redirect($PAGE->url, $importresults);
-} else if (!empty($subscriptionid)) {
-    // The user is wanting to perform an action upon an existing subscription.
-    require_sesskey(); // Must have sesskey for all actions.
-    if (calendar_can_edit_subscription($subscriptionid)) {
-        try {
-            $importresults = calendar_process_subscription_row($subscriptionid, $pollinterval, $action);
-        } catch (moodle_exception $e) {
-            // If exception caught, then user should be redirected to page where he/she came from.
-            print_error($e->errorcode, $e->module, $PAGE->url);
-        }
-    } else {
-        print_error('nopermissions', 'error', $PAGE->url, get_string('managesubscriptions', 'calendar'));
+
+    if (!empty($types['category'])) {
+        list($categoryinsql, $categoryparams) = $DB->get_in_or_equal(
+                array_keys(\core_course_category::make_categories_list('moodle/category:manage')), SQL_PARAMS_NAMED, 'category');
+        $searches[] = "(eventtype = 'category' AND categoryid {$categoryinsql})";
+        $params += $categoryparams;
     }
 }
 
-$sql = 'SELECT *
-          FROM {event_subscriptions}
-         WHERE courseid = :courseid
-            OR (courseid = 0 AND userid = :userid)';
-$params = array('courseid' => $courseid, 'userid' => $USER->id);
+$sql = "SELECT * FROM {event_subscriptions} WHERE " . implode(' OR ', $searches);;
 $subscriptions = $DB->get_records_sql($sql, $params);
 
 // Print title and header.
 $PAGE->set_title("$course->shortname: ".get_string('calendar', 'calendar').": ".get_string('subscriptions', 'calendar'));
-$PAGE->set_heading($course->fullname);
+$heading = get_string('calendar', 'core_calendar');
+$heading = ($courseid != SITEID && !empty($courseid)) ? "{$heading}: {$COURSE->shortname}" : $heading;
+$PAGE->set_heading($heading);
 
 $renderer = $PAGE->get_renderer('core_calendar');
 
 echo $OUTPUT->header();
+echo $renderer->render_subscriptions_header();
 
 // Filter subscriptions which user can't edit.
 foreach($subscriptions as $subscription) {
@@ -123,7 +157,9 @@ foreach($subscriptions as $subscription) {
 }
 
 // Display a table of subscriptions.
-echo $renderer->subscription_details($courseid, $subscriptions, $importresults);
-// Display the add subscription form.
-$form->display();
+if (empty($subscription)) {
+    echo $renderer->render_no_calendar_subscriptions();
+} else {
+    echo $renderer->subscription_details($courseid, $subscriptions);
+}
 echo $OUTPUT->footer();

@@ -86,6 +86,7 @@ class qtype_truefalse_test_helper extends question_test_helper {
         $form->feedbackfalse['text'] = 'This is the wrong answer.';
 
         $form->penalty = 1;
+        $form->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
 
         return $form;
     }
@@ -102,7 +103,7 @@ class qtype_truefalse_test_helper extends question_test_helper {
         $q->penalty = 1;
         $q->qtype = 'truefalse';
         $q->length = '1';
-        $q->hidden = '0';
+        $q->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
         $q->createdby = '2';
         $q->modifiedby = '2';
         $q->options = new stdClass();
@@ -111,13 +112,13 @@ class qtype_truefalse_test_helper extends question_test_helper {
         $q->options->answers = array();
         $q->options->answers[0] = new stdClass();
         $q->options->answers[0]->answer = 'True';
-        $q->options->answers[0]->fraction = '1.0000000';
+        $q->options->answers[0]->fraction = 1.0;
         $q->options->answers[0]->feedback = 'This is the right answer.';
         $q->options->answers[0]->feedbackformat = FORMAT_HTML;
 
         $q->options->answers[1] = new stdClass();
         $q->options->answers[1]->answer = 'False';
-        $q->options->answers[1]->fraction = '0.0000000';
+        $q->options->answers[1]->fraction = 0.0;
         $q->options->answers[1]->feedback = 'This is the wrong answer.';
         $q->options->answers[1]->feedbackformat = FORMAT_HTML;
 

@@ -16,30 +16,42 @@
 
 /**
  * @package   core_backup
- * @category  phpunit
+ * @category  test
  * @copyright 2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+namespace core_backup;
+
+use backup;
+use backup_controller;
+use restore_controller;
+
 defined('MOODLE_INTERNAL') || die();
 
-// Include all the needed stuff
+// Include all the needed stuff.
 global $CFG;
 require_once($CFG->dirroot . '/backup/util/includes/backup_includes.php');
 require_once($CFG->dirroot . '/backup/util/includes/restore_includes.php');
 
-/*
- * controller tests (all)
+/**
+ * Tests for the backup and restore controller classes.
+ *
+ * @package   core_backup
+ * @category  test
+ * @copyright 2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_backup_controller_testcase extends advanced_testcase {
+class controller_test extends \advanced_testcase {
 
     protected $moduleid;  // course_modules id used for testing
     protected $sectionid; // course_sections id used for testing
     protected $courseid;  // course id used for testing
     protected $userid;    // user used if for testing
 
-    protected function setUp() {
+    protected function setUp(): void {
         global $DB, $CFG;
+        parent::setUp();
 
         $this->resetAfterTest(true);
 
@@ -60,10 +72,35 @@ class core_backup_controller_testcase extends advanced_testcase {
         $CFG->backup_file_logger_level_extra = backup::LOG_NONE;
     }
 
+    /**
+     * Test get_copy
+     *
+     * @covers \restore_controller::get_copy
+     */
+    public function test_restore_controller_get_copy(): void {
+        $copydata = (object)["some" => "copydata"];
+        $rc = new \restore_controller(1729, $this->courseid, backup::INTERACTIVE_NO, backup::MODE_COPY,
+                $this->userid, backup::TARGET_NEW_COURSE, null, backup::RELEASESESSION_NO, $copydata);
+
+        $this->assertEquals($copydata, $rc->get_copy());
+    }
+
+    /**
+     * Test instantiating a restore controller for a course copy without providing copy data.
+     *
+     * @covers \restore_controller::__construct
+     */
+    public function test_restore_controller_copy_without_copydata(): void {
+        $this->expectException(\restore_controller_exception::class);
+
+        new \restore_controller(1729, $this->courseid, backup::INTERACTIVE_NO, backup::MODE_COPY,
+                $this->userid, backup::TARGET_NEW_COURSE);
+    }
+
     /*
      * test base_setting class
      */
-    public function test_backup_controller() {
+    public function test_backup_controller(): void {
         // Instantiate non interactive backup_controller
         $bc = new mock_backup_controller(backup::TYPE_1ACTIVITY, $this->moduleid, backup::FORMAT_MOODLE,
             backup::INTERACTIVE_NO, backup::MODE_GENERAL, $this->userid);
@@ -84,7 +121,7 @@ class core_backup_controller_testcase extends advanced_testcase {
         $this->assertTrue($newbc instanceof backup_controller); // This means checksum and load worked ok
     }
 
-    public function test_backup_controller_include_files() {
+    public function test_backup_controller_include_files(): void {
         // A MODE_GENERAL controller - this should include files
         $bc = new mock_backup_controller(backup::TYPE_1ACTIVITY, $this->moduleid, backup::FORMAT_MOODLE,
             backup::INTERACTIVE_NO, backup::MODE_GENERAL, $this->userid);
@@ -104,13 +141,26 @@ class core_backup_controller_testcase extends advanced_testcase {
     }
 
     /**
+     * Test set kept roles method.
+     */
+    public function test_backup_controller_set_kept_roles(): void {
+        $this->expectException(\backup_controller_exception::class);
+
+        // Set up controller as a non-copy operation.
+        $bc = new \backup_controller(backup::TYPE_1COURSE, $this->courseid, backup::FORMAT_MOODLE,
+            backup::INTERACTIVE_NO, backup::MODE_GENERAL, $this->userid, backup::RELEASESESSION_YES);
+
+        $bc->set_kept_roles(array(1, 3, 5));
+    }
+
+    /**
      * Tests the restore_controller.
      */
-    public function test_restore_controller_is_executing() {
+    public function test_restore_controller_is_executing(): void {
         global $CFG;
 
         // Make a backup.
-        check_dir_exists($CFG->tempdir . '/backup');
+        make_backup_temp_directory('');
         $bc = new backup_controller(backup::TYPE_1ACTIVITY, $this->moduleid, backup::FORMAT_MOODLE,
             backup::INTERACTIVE_NO, backup::MODE_IMPORT, $this->userid);
         $backupid = $bc->get_backupid();
@@ -148,6 +198,55 @@ class core_backup_controller_testcase extends advanced_testcase {
             }
         }
         $this->assertTrue($alltrue);
+    }
+
+    /**
+     * Test prepare copy method.
+     */
+    public function test_restore_controller_prepare_copy(): void {
+        $this->expectException(\restore_controller_exception::class);
+
+        global $CFG;
+
+        // Make a backup.
+        make_backup_temp_directory('');
+        $bc = new backup_controller(backup::TYPE_1ACTIVITY, $this->moduleid, backup::FORMAT_MOODLE,
+            backup::INTERACTIVE_NO, backup::MODE_IMPORT, $this->userid);
+        $backupid = $bc->get_backupid();
+        $bc->execute_plan();
+        $bc->destroy();
+
+        // Set up restore.
+        $rc = new restore_controller($backupid, $this->courseid,
+            backup::INTERACTIVE_NO, backup::MODE_SAMESITE, $this->userid,
+            backup::TARGET_EXISTING_ADDING);
+        $rc->prepare_copy();
+    }
+
+    /**
+     * Test restore of deadlock causing backup.
+     */
+    public function test_restore_of_deadlock_causing_backup(): void {
+        global $USER, $CFG;
+        $this->preventResetByRollback();
+
+        $foldername = 'deadlock';
+        $fp = get_file_packer('application/vnd.moodle.backup');
+        $tempdir = make_backup_temp_directory($foldername);
+        $files = $fp->extract_to_pathname($CFG->dirroot . '/backup/controller/tests/fixtures/deadlock.mbz', $tempdir);
+
+        $this->setAdminUser();
+        $controller = new restore_controller(
+            'deadlock',
+            $this->courseid,
+            backup::INTERACTIVE_NO,
+            backup::MODE_GENERAL,
+            $USER->id,
+            backup::TARGET_NEW_COURSE
+        );
+        $this->assertTrue($controller->execute_precheck());
+        $controller->execute_plan();
+        $controller->destroy();
     }
 }
 

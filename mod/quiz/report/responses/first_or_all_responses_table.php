@@ -23,6 +23,8 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use mod_quiz\quiz_attempt;
+
 defined('MOODLE_INTERNAL') || die();
 
 /**
@@ -66,8 +68,17 @@ class quiz_first_or_all_responses_table extends quiz_last_responses_table {
         $this->questionusagesbyactivity = $dm->load_questions_usages_by_activity($qubaids);
 
         // Insert an extra field in attempt data and extra rows where necessary.
-        $newrawdata = array();
+        $newrawdata = [];
         foreach ($this->rawdata as $attempt) {
+            if (!isset($this->questionusagesbyactivity[$attempt->usageid])) {
+                // This is a user without attempts.
+                $attempt->try = 0;
+                $attempt->lasttryforallparts = true;
+                $newrawdata[] = $attempt;
+                continue;
+            }
+
+            // We have an attempt, which may require several rows.
             $maxtriesinanyslot = 1;
             foreach ($this->questionusagesbyactivity[$attempt->usageid]->get_slots() as $slot) {
                 $tries = $this->get_no_of_tries($attempt, $slot);
@@ -103,7 +114,7 @@ class quiz_first_or_all_responses_table extends quiz_last_responses_table {
     /**
      * Find the state for $slot given after this try.
      *
-     * @param object $tablerow row data
+     * @param stdClass $tablerow row data
      * @param int $slot Slot number.
      * @return question_state The question state after the attempt.
      */
@@ -126,13 +137,13 @@ class quiz_first_or_all_responses_table extends quiz_last_responses_table {
     /**
      * Get the summary of the response after the try.
      *
-     * @param object $tablerow row data
+     * @param stdClass $tablerow row data
      * @param int $slot Slot number.
      * @return string summary for the question after this try.
      */
     public function get_summary_after_try($tablerow, $slot) {
         $qa = $this->get_question_attempt($tablerow->usageid, $slot);
-        if (!($qa->get_question() instanceof question_manually_gradable)) {
+        if (!($qa->get_question(false) instanceof question_manually_gradable)) {
             // No responses, and we cannot call summarise_response below.
             return null;
         }
@@ -159,7 +170,7 @@ class quiz_first_or_all_responses_table extends quiz_last_responses_table {
     /**
      * The grade for this slot after this try.
      *
-     * @param object $tablerow attempt data from db.
+     * @param stdClass $tablerow attempt data from db.
      * @param int $slot Slot number.
      * @return float The fraction.
      */
@@ -181,7 +192,7 @@ class quiz_first_or_all_responses_table extends quiz_last_responses_table {
     /**
      * Is this the last try in the question attempt?
      *
-     * @param object $tablerow attempt data from db.
+     * @param stdClass $tablerow attempt data from db.
      * @param int $slot Slot number
      * @param int $tryno try no
      * @return bool Is it the last try?
@@ -193,7 +204,7 @@ class quiz_first_or_all_responses_table extends quiz_last_responses_table {
     /**
      * How many tries were attempted at this question in this slot, during this usage?
      *
-     * @param object $tablerow attempt data from db.
+     * @param stdClass $tablerow attempt data from db.
      * @param int $slot Slot number
      * @return int the number of tries in the question attempt for slot $slot.
      */
@@ -226,11 +237,11 @@ class quiz_first_or_all_responses_table extends quiz_last_responses_table {
     /**
      * Cell value function for email column. This extracts the contents for any cell in the email column from the row data.
      *
-     * @param object $tablerow Row data.
+     * @param stdClass $tablerow Row data.
      * @return string   What to put in the cell for this column, for this row data.
      */
     public function col_email($tablerow) {
-        if ($tablerow->try != 1) {
+        if ($tablerow->try > 1) {
             return '';
         } else {
             return $tablerow->email;
@@ -240,22 +251,31 @@ class quiz_first_or_all_responses_table extends quiz_last_responses_table {
     /**
      * Cell value function for sumgrades column. This extracts the contents for any cell in the sumgrades column from the row data.
      *
-     * @param object $tablerow Row data.
+     * @param stdClass $tablerow Row data.
      * @return string   What to put in the cell for this column, for this row data.
      */
     public function col_sumgrades($tablerow) {
-        if (!$tablerow->lasttryforallparts) {
+        if ($tablerow->try == 0) {
+            // We are showing a user without a quiz attempt.
+            return '-';
+        } else if (!$tablerow->lasttryforallparts) {
+            // There are more rows to come for this quiz attempt, so we will show this later.
             return '';
         } else {
+            // Last row for this attempt. Now is the time to show attempt-related data.
             return parent::col_sumgrades($tablerow);
         }
     }
 
-
     public function col_state($tablerow) {
-        if (!$tablerow->lasttryforallparts) {
+        if ($tablerow->try == 0) {
+            // We are showing a user without a quiz attempt.
+            return '-';
+        } else if (!$tablerow->lasttryforallparts) {
+            // There are more rows to come for this quiz attempt, so we will show this later.
             return '';
         } else {
+            // Last row for this attempt. Now is the time to show attempt-related data.
             return parent::col_state($tablerow);
         }
     }

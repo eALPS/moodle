@@ -85,6 +85,32 @@ class upgrade_requires_exception extends moodle_exception {
 }
 
 /**
+ * Exception thrown when attempting to install a plugin that declares incompatibility with moodle version
+ *
+ * @package    core
+ * @subpackage upgrade
+ * @copyright  2019 Peter Burnett <peterburnett@catalyst-au.net>
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class plugin_incompatible_exception extends moodle_exception {
+    /**
+     * Constructor function for exception
+     *
+     * @param \core\plugininfo\base $plugin The plugin causing the exception
+     * @param int $pluginversion The version of the plugin causing the exception
+     */
+    public function __construct($plugin, $pluginversion) {
+        global $CFG;
+        $a = new stdClass();
+        $a->pluginname      = $plugin;
+        $a->pluginversion   = $pluginversion;
+        $a->moodleversion   = $CFG->branch;
+
+        parent::__construct('pluginunsupported', 'error', "$CFG->wwwroot/$CFG->admin/index.php", $a);
+    }
+}
+
+/**
  * @package    core
  * @subpackage upgrade
  * @copyright  2009 Petr Skoda {@link http://skodak.org}
@@ -138,6 +164,109 @@ class plugin_misplaced_exception extends moodle_exception {
 }
 
 /**
+ * Static class monitors performance of upgrade steps.
+ */
+class core_upgrade_time {
+    /** @var float Time at start of current upgrade (plugin/system) */
+    protected static $before;
+    /** @var float Time at end of last recorded savepoint or detail */
+    protected static $lastdetail;
+    /** @var bool Flag to indicate whether we are recording timestamps or not. */
+    protected static $isrecording = false;
+    /** @var bool Flag indicates whether this is an installation (=no savepoints) */
+    protected static $installation = false;
+
+    /** @var float For details, only show if they take longer than a second. */
+    const THRESHOLD = 1.0;
+
+    /**
+     * Records current time at the start of the current upgrade item, e.g. plugin.
+     *
+     * @param bool $installation True if this is an installation (of this item) not upgrade
+     */
+    public static function record_start(bool $installation = false): void {
+        self::$before = microtime(true);
+        self::$lastdetail = self::$before;
+        self::$isrecording = true;
+        self::$installation = $installation;
+    }
+
+    /**
+     * Records the end of the current upgrade item.
+     *
+     * @param bool $verbose If true, displays output
+     */
+    public static function record_end(bool $verbose = true): void {
+        global $OUTPUT;
+
+        if ($verbose) {
+            $duration = self::get_elapsed();
+            $message = get_string('successduration', '', format_float($duration, 2));
+            $notification = new \core\output\notification($message, \core\output\notification::NOTIFY_SUCCESS);
+            $notification->set_show_closebutton(false);
+            echo $OUTPUT->render($notification);
+        }
+
+        self::$isrecording = false;
+    }
+
+    /**
+     * Records current time at the end of a given numbered step.
+     *
+     * @param float $version Version number (may have decimals, or not)
+     */
+    public static function record_savepoint($version) {
+        // Skip savepoints during installation because there is always exactly one and it's not
+        // interesting.
+        if (self::$installation) {
+            return;
+        }
+        // We show the time taken by each savepoint even if it's quick, because it could be useful
+        // just to see the list of upgrade steps completed, so pass $showalways = true.
+        self::record_detail($version, true);
+    }
+
+    /**
+     * Records time taken by a detail of the install process. Time is only displayed if longer than
+     * threshold, and if in developer debug mode.
+     *
+     * @param string $detail Text e.g. file or function name
+     * @param bool $showalways If true, shows time even if quick
+     */
+    public static function record_detail(string $detail, bool $showalways = false): void {
+        global $CFG, $OUTPUT;
+
+        // In developer debug mode we show a notification after each detail.
+        if ($CFG->debugdeveloper && self::$isrecording) {
+            // Calculate time taken since previous detail.
+            $time = microtime(true);
+            $duration = $time - self::$lastdetail;
+
+            // Display the time if significant, and always for savepoints.
+            if ($duration > self::THRESHOLD || $showalways) {
+                $notification = new \core\output\notification($detail . ': ' .
+                        get_string('successduration', '', format_float($duration, 2)),
+                        \core\output\notification::NOTIFY_SUCCESS);
+                $notification->set_show_closebutton(false);
+                echo $OUTPUT->render($notification);
+            }
+
+            // Record the time.
+            self::$lastdetail = $time;
+        }
+    }
+
+    /**
+     * Gets the time since the record_start function was called, rounded to 2 digits.
+     *
+     * @return float Elapsed time
+     */
+    public static function get_elapsed() {
+        return microtime(true) - self::$before;
+    }
+}
+
+/**
  * Sets maximum expected time needed for upgrade task.
  * Please always make sure that upgrade will not run longer!
  *
@@ -148,6 +277,11 @@ class plugin_misplaced_exception extends moodle_exception {
  */
 function upgrade_set_timeout($max_execution_time=300) {
     global $CFG;
+
+    // Support outageless upgrades.
+    if (defined('CLI_UPGRADE_RUNNING') && CLI_UPGRADE_RUNNING) {
+        return;
+    }
 
     if (!isset($CFG->upgraderunning) or $CFG->upgraderunning < time()) {
         $upgraderunning = get_config(null, 'upgraderunning');
@@ -161,7 +295,7 @@ function upgrade_set_timeout($max_execution_time=300) {
             $upgraderunning = 0;
         } else {
             // web upgrade not running or aborted
-            print_error('upgradetimedout', 'admin', "$CFG->wwwroot/$CFG->admin/");
+            throw new \moodle_exception('upgradetimedout', 'admin', "$CFG->wwwroot/$CFG->admin/");
         }
     }
 
@@ -224,6 +358,8 @@ function upgrade_main_savepoint($result, $version, $allowabort=true) {
     // reset upgrade timeout to default
     upgrade_set_timeout();
 
+    core_upgrade_time::record_savepoint($version);
+
     // this is a safe place to stop upgrades if user aborts page loading
     if ($allowabort and connection_aborted()) {
         die;
@@ -237,41 +373,12 @@ function upgrade_main_savepoint($result, $version, $allowabort=true) {
  *
  * @category upgrade
  * @param bool $result false if upgrade step failed, true if completed
- * @param string or float $version main version
+ * @param string|float $version main version
  * @param string $modname name of module
  * @param bool $allowabort allow user to abort script execution here
- * @return void
  */
 function upgrade_mod_savepoint($result, $version, $modname, $allowabort=true) {
-    global $DB;
-
-    $component = 'mod_'.$modname;
-
-    if (!$result) {
-        throw new upgrade_exception($component, $version);
-    }
-
-    $dbversion = $DB->get_field('config_plugins', 'value', array('plugin'=>$component, 'name'=>'version'));
-
-    if (!$module = $DB->get_record('modules', array('name'=>$modname))) {
-        print_error('modulenotexist', 'debug', '', $modname);
-    }
-
-    if ($dbversion >= $version) {
-        // something really wrong is going on in upgrade script
-        throw new downgrade_exception($component, $dbversion, $version);
-    }
-    set_config('version', $version, $component);
-
-    upgrade_log(UPGRADE_LOG_NORMAL, $component, 'Upgrade savepoint reached');
-
-    // reset upgrade timeout to default
-    upgrade_set_timeout();
-
-    // this is a safe place to stop upgrades if user aborts page loading
-    if ($allowabort and connection_aborted()) {
-        die;
-    }
+    upgrade_plugin_savepoint($result, $version, 'mod', $modname, $allowabort);
 }
 
 /**
@@ -281,55 +388,25 @@ function upgrade_mod_savepoint($result, $version, $modname, $allowabort=true) {
  *
  * @category upgrade
  * @param bool $result false if upgrade step failed, true if completed
- * @param string or float $version main version
+ * @param string|float $version main version
  * @param string $blockname name of block
  * @param bool $allowabort allow user to abort script execution here
- * @return void
  */
 function upgrade_block_savepoint($result, $version, $blockname, $allowabort=true) {
-    global $DB;
-
-    $component = 'block_'.$blockname;
-
-    if (!$result) {
-        throw new upgrade_exception($component, $version);
-    }
-
-    $dbversion = $DB->get_field('config_plugins', 'value', array('plugin'=>$component, 'name'=>'version'));
-
-    if (!$block = $DB->get_record('block', array('name'=>$blockname))) {
-        print_error('blocknotexist', 'debug', '', $blockname);
-    }
-
-    if ($dbversion >= $version) {
-        // something really wrong is going on in upgrade script
-        throw new downgrade_exception($component, $dbversion, $version);
-    }
-    set_config('version', $version, $component);
-
-    upgrade_log(UPGRADE_LOG_NORMAL, $component, 'Upgrade savepoint reached');
-
-    // reset upgrade timeout to default
-    upgrade_set_timeout();
-
-    // this is a safe place to stop upgrades if user aborts page loading
-    if ($allowabort and connection_aborted()) {
-        die;
-    }
+    upgrade_plugin_savepoint($result, $version, 'block', $blockname, $allowabort);
 }
 
 /**
- * Plugins upgrade savepoint, marks end of blocks upgrade blocks
+ * Plugins upgrade savepoint, marks end of plugin upgrade blocks
  * It stores plugin version, resets upgrade timeout
  * and abort upgrade if user cancels page loading.
  *
  * @category upgrade
  * @param bool $result false if upgrade step failed, true if completed
- * @param string or float $version main version
- * @param string $type name of plugin
- * @param string $dir location of plugin
+ * @param string|float $version main version
+ * @param string $type The type of the plugin.
+ * @param string $plugin The name of the plugin.
  * @param bool $allowabort allow user to abort script execution here
- * @return void
  */
 function upgrade_plugin_savepoint($result, $version, $type, $plugin, $allowabort=true) {
     global $DB;
@@ -338,6 +415,11 @@ function upgrade_plugin_savepoint($result, $version, $type, $plugin, $allowabort
 
     if (!$result) {
         throw new upgrade_exception($component, $version);
+    }
+
+    // Ensure we're dealing with a real component.
+    if (core_component::get_component_directory($component) === null) {
+        throw new moodle_exception('pluginnotexist', 'error', '', $component);
     }
 
     $dbversion = $DB->get_field('config_plugins', 'value', array('plugin'=>$component, 'name'=>'version'));
@@ -351,6 +433,8 @@ function upgrade_plugin_savepoint($result, $version, $type, $plugin, $allowabort
 
     // Reset upgrade timeout to default
     upgrade_set_timeout();
+
+    core_upgrade_time::record_savepoint($version);
 
     // This is a safe place to stop upgrades if user aborts page loading
     if ($allowabort and connection_aborted()) {
@@ -367,10 +451,100 @@ function upgrade_plugin_savepoint($result, $version, $type, $plugin, $allowabort
  *
  * @return bool true means borked upgrade, false means previous PHP files were properly removed
  */
-function upgrade_stale_php_files_present() {
+function upgrade_stale_php_files_present(): bool {
     global $CFG;
 
-    $someexamplesofremovedfiles = array(
+    $someexamplesofremovedfiles = [
+        // Removed in 4.5.
+        '/backup/util/ui/classes/copy/copy.php',
+        '/backup/util/ui/yui/build/moodle-backup-backupselectall/moodle-backup-backupselectall.js',
+        '/cache/classes/interfaces.php',
+        '/cache/disabledlib.php',
+        '/cache/lib.php',
+        // Removed in 4.4.
+        '/README.txt',
+        '/lib/dataformatlib.php',
+        '/lib/horde/readme_moodle.txt',
+        '/lib/yui/src/formchangechecker/js/formchangechecker.js',
+        '/mod/forum/pix/monologo.png',
+        '/question/tests/behat/behat_question.php',
+        // Removed in 4.3.
+        '/badges/ajax.php',
+        '/course/editdefaultcompletion.php',
+        '/grade/amd/src/searchwidget/group.js',
+        '/lib/behat/extension/Moodle/BehatExtension/Locator/FilesystemSkipPassedListLocator.php',
+        '/lib/classes/task/legacy_plugin_cron_task.php',
+        '/mod/lti/ajax.php',
+        '/pix/f/archive.png',
+        '/user/repository.php',
+        // Removed in 4.2.
+        '/admin/auth_config.php',
+        '/auth/yui/passwordunmask/passwordunmask.js',
+        '/lib/spout/readme_moodle.txt',
+        '/lib/yui/src/tooltip/js/tooltip.js',
+        // Removed in 4.1.
+        '/mod/forum/classes/task/refresh_forum_post_counts.php',
+        '/user/amd/build/participantsfilter.min.js',
+        '/user/amd/src/participantsfilter.js',
+        // Removed in 4.0.
+        '/admin/classes/task_log_table.php',
+        '/admin/cli/mysql_engine.php',
+        '/lib/babel-polyfill/polyfill.js',
+        '/lib/typo3/class.t3lib_cs.php',
+        '/question/tests/category_class_test.php',
+        // Removed in 3.11.
+        '/customfield/edit.php',
+        '/lib/phpunit/classes/autoloader.php',
+        '/lib/xhprof/README',
+        '/message/defaultoutputs.php',
+        '/user/files_form.php',
+        // Removed in 3.10.
+        '/grade/grading/classes/privacy/gradingform_provider.php',
+        '/lib/coursecatlib.php',
+        '/lib/form/htmleditor.php',
+        '/message/classes/output/messagearea/contact.php',
+        // Removed in 3.9.
+        '/course/classes/output/modchooser_item.php',
+        '/course/yui/build/moodle-course-modchooser/moodle-course-modchooser-min.js',
+        '/course/yui/src/modchooser/js/modchooser.js',
+        '/h5p/classes/autoloader.php',
+        '/lib/adodb/readme.txt',
+        '/lib/maxmind/GeoIp2/Compat/JsonSerializable.php',
+        // Removed in 3.8.
+        '/lib/amd/src/modal_confirm.js',
+        '/lib/fonts/font-awesome-4.7.0/css/font-awesome.css',
+        '/lib/jquery/jquery-3.2.1.min.js',
+        '/lib/recaptchalib.php',
+        '/lib/sessionkeepalive_ajax.php',
+        '/lib/yui/src/checknet/js/checknet.js',
+        '/question/amd/src/qbankmanager.js',
+        // Removed in 3.7.
+        '/lib/form/yui/src/showadvanced/js/showadvanced.js',
+        '/lib/tests/output_external_test.php',
+        '/message/amd/src/message_area.js',
+        '/message/templates/message_area.mustache',
+        '/question/yui/src/qbankmanager/build.json',
+        // Removed in 3.6.
+        '/lib/classes/session/memcache.php',
+        '/lib/eventslib.php',
+        '/lib/form/submitlink.php',
+        '/lib/medialib.php',
+        '/lib/password_compat/lib/password.php',
+        // Removed in 3.5.
+        '/lib/dml/mssql_native_moodle_database.php',
+        '/lib/dml/mssql_native_moodle_recordset.php',
+        '/lib/dml/mssql_native_moodle_temptables.php',
+        // Removed in 3.4.
+        '/auth/README.txt',
+        '/calendar/set.php',
+        '/enrol/users.php',
+        '/enrol/yui/rolemanager/assets/skins/sam/rolemanager.css',
+        // Removed in 3.3.
+        '/badges/backpackconnect.php',
+        '/calendar/yui/src/info/assets/skins/sam/moodle-calendar-info.css',
+        '/competency/classes/external/exporter.php',
+        '/mod/forum/forum.js',
+        '/user/pixgroup.php',
         // Removed in 3.2.
         '/calendar/preferences.php',
         '/lib/alfresco/',
@@ -383,7 +557,6 @@ function upgrade_stale_php_files_present() {
         '/mod/forum/pix/icon.gif',
         '/tag/templates/tagname.mustache',
         // Removed in 3.0.
-        '/mod/lti/grade.php',
         '/tag/coursetagslib.php',
         // Removed in 2.9.
         '/lib/timezone.txt',
@@ -414,7 +587,7 @@ function upgrade_stale_php_files_present() {
         // Removed in 2.0.
         '/blocks/admin/block_admin.php',
         '/blocks/admin_tree/block_admin_tree.php',
-    );
+    ];
 
     foreach ($someexamplesofremovedfiles as $file) {
         if (file_exists($CFG->dirroot.$file)) {
@@ -423,6 +596,46 @@ function upgrade_stale_php_files_present() {
     }
 
     return false;
+}
+
+/**
+ * After upgrading a module, block, or generic plugin, various parts of the system need to be
+ * informed.
+ *
+ * @param string $component Frankenstyle component or 'moodle' for core
+ * @param string $messageplug Set to the name of a message plugin if this is one
+ * @param bool $coreinstall Set to true if this is the core install
+ */
+function upgrade_component_updated(string $component, string $messageplug = '',
+        bool $coreinstall = false): void {
+    if (!$coreinstall) {
+        update_capabilities($component);
+        core_upgrade_time::record_detail('update_capabilities');
+    }
+    log_update_descriptions($component);
+    core_upgrade_time::record_detail('log_update_descriptions');
+    external_update_descriptions($component);
+    core_upgrade_time::record_detail('external_update_descriptions');
+    \core\task\manager::reset_scheduled_tasks_for_component($component);
+    core_upgrade_time::record_detail('\core\task\manager::reset_scheduled_tasks_for_component');
+    \core_analytics\manager::update_default_models_for_component($component);
+    core_upgrade_time::record_detail('\core_analytics\manager::update_default_models_for_component');
+    message_update_providers($component);
+    core_upgrade_time::record_detail('message_update_providers');
+    \core\message\inbound\manager::update_handlers_for_component($component);
+    core_upgrade_time::record_detail('\core\message\inbound\manager::update_handlers_for_component');
+    if ($messageplug !== '') {
+        // Ugly hack!
+        message_update_processors($messageplug);
+        core_upgrade_time::record_detail('message_update_processors');
+    }
+    if ($component !== 'moodle') {
+        // This one is not run for core upgrades.
+        upgrade_plugin_mnet_functions($component);
+        core_upgrade_time::record_detail('upgrade_plugin_mnet_functions');
+    }
+    core_tag_area::reset_definitions_for_component($component);
+    core_upgrade_time::record_detail('core_tag_area::reset_definitions_for_component');
 }
 
 /**
@@ -485,6 +698,13 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
             }
         }
 
+        // Throw exception if plugin is incompatible with moodle version.
+        if (!empty($plugin->incompatible)) {
+            if ($CFG->branch >= $plugin->incompatible) {
+                throw new plugin_incompatible_exception($component, $plugin->version);
+            }
+        }
+
         // try to recover from interrupted install.php if needed
         if (file_exists($fullplug.'/db/install.php')) {
             if (get_config($plugin->fullname, 'installrunning')) {
@@ -494,18 +714,7 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
                     $startcallback($component, true, $verbose);
                     $recover_install_function();
                     unset_config('installrunning', $plugin->fullname);
-                    update_capabilities($component);
-                    log_update_descriptions($component);
-                    external_update_descriptions($component);
-                    events_update_definition($component);
-                    \core\task\manager::reset_scheduled_tasks_for_component($component);
-                    message_update_providers($component);
-                    \core\message\inbound\manager::update_handlers_for_component($component);
-                    if ($type === 'message') {
-                        message_update_processors($plug);
-                    }
-                    upgrade_plugin_mnet_functions($component);
-                    core_tag_area::reset_definitions_for_component($component);
+                    upgrade_component_updated($component, $type === 'message' ? $plug : '');
                     $endcallback($component, true, $verbose);
                 }
             }
@@ -518,6 +727,7 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
         /// Install tables if defined
             if (file_exists($fullplug.'/db/install.xml')) {
                 $DB->get_manager()->install_from_xmldb_file($fullplug.'/db/install.xml');
+                core_upgrade_time::record_detail('install.xml');
             }
 
         /// store version
@@ -530,21 +740,11 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
                 $post_install_function = 'xmldb_'.$plugin->fullname.'_install';
                 $post_install_function();
                 unset_config('installrunning', $plugin->fullname);
+                core_upgrade_time::record_detail('install.php');
             }
 
         /// Install various components
-            update_capabilities($component);
-            log_update_descriptions($component);
-            external_update_descriptions($component);
-            events_update_definition($component);
-            \core\task\manager::reset_scheduled_tasks_for_component($component);
-            message_update_providers($component);
-            \core\message\inbound\manager::update_handlers_for_component($component);
-            if ($type === 'message') {
-                message_update_processors($plug);
-            }
-            upgrade_plugin_mnet_functions($component);
-            core_tag_area::reset_definitions_for_component($component);
+            upgrade_component_updated($component, $type === 'message' ? $plug : '');
             $endcallback($component, true, $verbose);
 
         } else if ($installedversion < $plugin->version) { // upgrade
@@ -556,6 +756,7 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
 
                 $newupgrade_function = 'xmldb_'.$plugin->fullname.'_upgrade';
                 $result = $newupgrade_function($installedversion);
+                core_upgrade_time::record_detail('upgrade.php');
             } else {
                 $result = true;
             }
@@ -567,19 +768,7 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
             }
 
         /// Upgrade various components
-            update_capabilities($component);
-            log_update_descriptions($component);
-            external_update_descriptions($component);
-            events_update_definition($component);
-            \core\task\manager::reset_scheduled_tasks_for_component($component);
-            message_update_providers($component);
-            \core\message\inbound\manager::update_handlers_for_component($component);
-            if ($type === 'message') {
-                // Ugly hack!
-                message_update_processors($plug);
-            }
-            upgrade_plugin_mnet_functions($component);
-            core_tag_area::reset_definitions_for_component($component);
+            upgrade_component_updated($component, $type === 'message' ? $plug : '');
             $endcallback($component, false, $verbose);
 
         } else if ($installedversion > $plugin->version) {
@@ -675,15 +864,7 @@ function upgrade_plugins_modules($startcallback, $endcallback, $verbose) {
                     $recover_install_function();
                     unset_config('installrunning', $module->name);
                     // Install various components too
-                    update_capabilities($component);
-                    log_update_descriptions($component);
-                    external_update_descriptions($component);
-                    events_update_definition($component);
-                    \core\task\manager::reset_scheduled_tasks_for_component($component);
-                    message_update_providers($component);
-                    \core\message\inbound\manager::update_handlers_for_component($component);
-                    upgrade_plugin_mnet_functions($component);
-                    core_tag_area::reset_definitions_for_component($component);
+                    upgrade_component_updated($component);
                     $endcallback($component, true, $verbose);
                 }
             }
@@ -694,9 +875,11 @@ function upgrade_plugins_modules($startcallback, $endcallback, $verbose) {
 
         /// Execute install.xml (XMLDB) - must be present in all modules
             $DB->get_manager()->install_from_xmldb_file($fullmod.'/db/install.xml');
+            core_upgrade_time::record_detail('install.xml');
 
         /// Add record into modules table - may be needed in install.php already
             $module->id = $DB->insert_record('modules', $module);
+            core_upgrade_time::record_detail('insert_record');
             upgrade_mod_savepoint(true, $plugin->version, $module->name, false);
 
         /// Post installation hook - optional
@@ -707,18 +890,11 @@ function upgrade_plugins_modules($startcallback, $endcallback, $verbose) {
                 $post_install_function = 'xmldb_'.$module->name.'_install';
                 $post_install_function();
                 unset_config('installrunning', $module->name);
+                core_upgrade_time::record_detail('install.php');
             }
 
         /// Install various components
-            update_capabilities($component);
-            log_update_descriptions($component);
-            external_update_descriptions($component);
-            events_update_definition($component);
-            \core\task\manager::reset_scheduled_tasks_for_component($component);
-            message_update_providers($component);
-            \core\message\inbound\manager::update_handlers_for_component($component);
-            upgrade_plugin_mnet_functions($component);
-            core_tag_area::reset_definitions_for_component($component);
+            upgrade_component_updated($component);
 
             $endcallback($component, true, $verbose);
 
@@ -730,6 +906,7 @@ function upgrade_plugins_modules($startcallback, $endcallback, $verbose) {
                 require_once($fullmod.'/db/upgrade.php');  // defines new upgrading function
                 $newupgrade_function = 'xmldb_'.$module->name.'_upgrade';
                 $result = $newupgrade_function($installedversion, $module);
+                core_upgrade_time::record_detail('upgrade.php');
             } else {
                 $result = true;
             }
@@ -747,15 +924,7 @@ function upgrade_plugins_modules($startcallback, $endcallback, $verbose) {
             }
 
             // Upgrade various components
-            update_capabilities($component);
-            log_update_descriptions($component);
-            external_update_descriptions($component);
-            events_update_definition($component);
-            \core\task\manager::reset_scheduled_tasks_for_component($component);
-            message_update_providers($component);
-            \core\message\inbound\manager::update_handlers_for_component($component);
-            upgrade_plugin_mnet_functions($component);
-            core_tag_area::reset_definitions_for_component($component);
+            upgrade_component_updated($component);
 
             $endcallback($component, false, $verbose);
 
@@ -869,15 +1038,7 @@ function upgrade_plugins_blocks($startcallback, $endcallback, $verbose) {
                     $recover_install_function();
                     unset_config('installrunning', 'block_'.$blockname);
                     // Install various components
-                    update_capabilities($component);
-                    log_update_descriptions($component);
-                    external_update_descriptions($component);
-                    events_update_definition($component);
-                    \core\task\manager::reset_scheduled_tasks_for_component($component);
-                    message_update_providers($component);
-                    \core\message\inbound\manager::update_handlers_for_component($component);
-                    upgrade_plugin_mnet_functions($component);
-                    core_tag_area::reset_definitions_for_component($component);
+                    upgrade_component_updated($component);
                     $endcallback($component, true, $verbose);
                 }
             }
@@ -894,8 +1055,10 @@ function upgrade_plugins_blocks($startcallback, $endcallback, $verbose) {
 
             if (file_exists($fullblock.'/db/install.xml')) {
                 $DB->get_manager()->install_from_xmldb_file($fullblock.'/db/install.xml');
+                core_upgrade_time::record_detail('install.xml');
             }
             $block->id = $DB->insert_record('block', $block);
+            core_upgrade_time::record_detail('insert_record');
             upgrade_block_savepoint(true, $plugin->version, $block->name, false);
 
             if (file_exists($fullblock.'/db/install.php')) {
@@ -905,20 +1068,13 @@ function upgrade_plugins_blocks($startcallback, $endcallback, $verbose) {
                 $post_install_function = 'xmldb_block_'.$blockname.'_install';
                 $post_install_function();
                 unset_config('installrunning', 'block_'.$blockname);
+                core_upgrade_time::record_detail('install.php');
             }
 
             $blocktitles[$block->name] = $blocktitle;
 
             // Install various components
-            update_capabilities($component);
-            log_update_descriptions($component);
-            external_update_descriptions($component);
-            events_update_definition($component);
-            \core\task\manager::reset_scheduled_tasks_for_component($component);
-            message_update_providers($component);
-            \core\message\inbound\manager::update_handlers_for_component($component);
-            core_tag_area::reset_definitions_for_component($component);
-            upgrade_plugin_mnet_functions($component);
+            upgrade_component_updated($component);
 
             $endcallback($component, true, $verbose);
 
@@ -929,6 +1085,7 @@ function upgrade_plugins_blocks($startcallback, $endcallback, $verbose) {
                 require_once($fullblock.'/db/upgrade.php');  // defines new upgrading function
                 $newupgrade_function = 'xmldb_block_'.$blockname.'_upgrade';
                 $result = $newupgrade_function($installedversion, $block);
+                core_upgrade_time::record_detail('upgrade.php');
             } else {
                 $result = true;
             }
@@ -946,15 +1103,7 @@ function upgrade_plugins_blocks($startcallback, $endcallback, $verbose) {
             }
 
             // Upgrade various components
-            update_capabilities($component);
-            log_update_descriptions($component);
-            external_update_descriptions($component);
-            events_update_definition($component);
-            \core\task\manager::reset_scheduled_tasks_for_component($component);
-            message_update_providers($component);
-            \core\message\inbound\manager::update_handlers_for_component($component);
-            upgrade_plugin_mnet_functions($component);
-            core_tag_area::reset_definitions_for_component($component);
+            upgrade_component_updated($component);
 
             $endcallback($component, false, $verbose);
 
@@ -981,7 +1130,7 @@ function upgrade_plugins_blocks($startcallback, $endcallback, $verbose) {
 /**
  * Log_display description function used during install and upgrade.
  *
- * @param string $component name of component (moodle, mod_assignment, etc.)
+ * @param string $component name of component (moodle, etc.)
  * @return void
  */
 function log_update_descriptions($component) {
@@ -1038,7 +1187,7 @@ function log_update_descriptions($component) {
 
 /**
  * Web service discovery function used during install and upgrade.
- * @param string $component name of component (moodle, mod_assignment, etc.)
+ * @param string $component name of component (moodle, etc.)
  * @return void
  */
 function external_update_descriptions($component) {
@@ -1047,8 +1196,7 @@ function external_update_descriptions($component) {
     $defpath = core_component::get_component_directory($component).'/db/services.php';
 
     if (!file_exists($defpath)) {
-        require_once($CFG->dirroot.'/lib/externallib.php');
-        external_delete_descriptions($component);
+        \core_external\util::delete_service_descriptions($component);
         return;
     }
 
@@ -1072,6 +1220,7 @@ function external_update_descriptions($component) {
         $function = $functions[$dbfunction->name];
         unset($functions[$dbfunction->name]);
         $function['classpath'] = empty($function['classpath']) ? null : $function['classpath'];
+        $function['methodname'] = $function['methodname'] ?? 'execute';
 
         $update = false;
         if ($dbfunction->classname != $function['classname']) {
@@ -1102,7 +1251,9 @@ function external_update_descriptions($component) {
 
         if ($dbfunction->services != $functionservices) {
             // Now, we need to check if services were removed, in that case we need to remove the function from them.
-            $servicesremoved = array_diff(explode(",", $dbfunction->services), explode(",", $functionservices));
+            $oldservices = $dbfunction->services ? explode(',', $dbfunction->services) : [];
+            $newservices = $functionservices ? explode(',', $functionservices) : [];
+            $servicesremoved = array_diff($oldservices, $newservices);
             foreach ($servicesremoved as $removedshortname) {
                 if ($externalserviceid = $DB->get_field('external_services', 'id', array("shortname" => $removedshortname))) {
                     $DB->delete_records('external_services_functions', array('functionname' => $dbfunction->name,
@@ -1121,7 +1272,7 @@ function external_update_descriptions($component) {
         $dbfunction = new stdClass();
         $dbfunction->name       = $fname;
         $dbfunction->classname  = $function['classname'];
-        $dbfunction->methodname = $function['methodname'];
+        $dbfunction->methodname = $function['methodname'] ?? 'execute';
         $dbfunction->classpath  = empty($function['classpath']) ? null : $function['classpath'];
         $dbfunction->component  = $component;
         $dbfunction->capabilities = array_key_exists('capabilities', $function)?$function['capabilities']:'';
@@ -1399,7 +1550,7 @@ function upgrade_started($preinstall=false) {
             $strupgrade  = get_string('upgradingversion', 'admin');
             $PAGE->set_pagelayout('maintenance');
             upgrade_init_javascript();
-            $PAGE->set_title($strupgrade.' - Moodle '.$CFG->target_release);
+            $PAGE->set_title($strupgrade . moodle_page::TITLE_SEPARATOR . 'Moodle ' . $CFG->target_release);
             $PAGE->set_heading($strupgrade);
             $PAGE->navbar->add($strupgrade);
             $PAGE->set_cacheable(false);
@@ -1409,7 +1560,10 @@ function upgrade_started($preinstall=false) {
         ignore_user_abort(true);
         core_shutdown_manager::register_function('upgrade_finished_handler');
         upgrade_setup_debug(true);
-        set_config('upgraderunning', time()+300);
+        // Support no-maintenance upgrades.
+        if (!defined('CLI_UPGRADE_RUNNING') || !CLI_UPGRADE_RUNNING) {
+            set_config('upgraderunning', time() + 300);
+        }
         $started = true;
     }
 }
@@ -1495,6 +1649,7 @@ function print_upgrade_part_start($plugin, $installation, $verbose) {
             echo $OUTPUT->heading($plugin);
         }
     }
+    core_upgrade_time::record_start($installation);
     if ($installation) {
         if (empty($plugin) or $plugin == 'moodle') {
             // no need to log - log table not yet there ;-)
@@ -1532,9 +1687,7 @@ function print_upgrade_part_end($plugin, $installation, $verbose) {
         }
     }
     if ($verbose) {
-        $notification = new \core\output\notification(get_string('success'), \core\output\notification::NOTIFY_SUCCESS);
-        $notification->set_show_closebutton(false);
-        echo $OUTPUT->render($notification);
+        core_upgrade_time::record_end();
         print_upgrade_separator();
     }
 }
@@ -1593,6 +1746,31 @@ function upgrade_language_pack($lang = null) {
 }
 
 /**
+ * Build the current theme so that the user doesn't have to wait for it
+ * to build on the first page load after the install / upgrade.
+ */
+function upgrade_themes() {
+    global $CFG;
+
+    require_once("{$CFG->libdir}/outputlib.php");
+
+    // Build the current theme so that the user can immediately
+    // browse the site without having to wait for the theme to build.
+    $themeconfig = theme_config::load($CFG->theme);
+    $direction = right_to_left() ? 'rtl' : 'ltr';
+    theme_build_css_for_themes([$themeconfig], [$direction]);
+
+    // Only queue the task if there isn't already one queued.
+    if (empty(\core\task\manager::get_adhoc_tasks('\\core\\task\\build_installed_themes_task'))) {
+        // Queue a task to build all of the site themes at some point
+        // later. These can happen offline because it doesn't block the
+        // user unless they quickly change theme.
+        $adhoctask = new \core\task\build_installed_themes_task();
+        \core\task\manager::queue_adhoc_task($adhoctask);
+    }
+}
+
+/**
  * Install core moodle tables and initialize
  * @param float $version target version
  * @param bool $verbose
@@ -1611,6 +1789,9 @@ function install_core($version, $verbose) {
     remove_dir($CFG->tempdir.'', true);
     make_temp_directory('', true);
 
+    remove_dir($CFG->backuptempdir.'', true);
+    make_backup_temp_directory('', true);
+
     remove_dir($CFG->dataroot.'/muc', true);
     make_writable_directory($CFG->dataroot.'/muc', true);
 
@@ -1619,26 +1800,25 @@ function install_core($version, $verbose) {
         print_upgrade_part_start('moodle', true, $verbose); // does not store upgrade running flag
 
         $DB->get_manager()->install_from_xmldb_file("$CFG->libdir/db/install.xml");
+        core_upgrade_time::record_detail('install.xml');
         upgrade_started();     // we want the flag to be stored in config table ;-)
+        core_upgrade_time::record_detail('upgrade_started');
 
         // set all core default records and default settings
         require_once("$CFG->libdir/db/install.php");
+        core_upgrade_time::record_detail('install.php');
         xmldb_main_install(); // installs the capabilities too
+        core_upgrade_time::record_detail('xmldb_main_install');
 
         // store version
         upgrade_main_savepoint(true, $version, false);
 
         // Continue with the installation
-        log_update_descriptions('moodle');
-        external_update_descriptions('moodle');
-        events_update_definition('moodle');
-        \core\task\manager::reset_scheduled_tasks_for_component('moodle');
-        message_update_providers('moodle');
-        \core\message\inbound\manager::update_handlers_for_component('moodle');
-        core_tag_area::reset_definitions_for_component('moodle');
+        upgrade_component_updated('moodle', '', true);
 
         // Write default settings unconditionally
         admin_apply_default_settings(NULL, true);
+        core_upgrade_time::record_detail('admin_apply_default_settings');
 
         print_upgrade_part_end(null, true, $verbose);
 
@@ -1667,9 +1847,11 @@ function upgrade_core($version, $verbose) {
     require_once($CFG->libdir.'/db/upgrade.php');    // Defines upgrades
 
     try {
-        // Reset caches before any output.
-        cache_helper::purge_all(true);
-        purge_all_caches();
+        // If we are in maintenance, we can purge all our caches here.
+        if (!defined('CLI_UPGRADE_RUNNING') || !CLI_UPGRADE_RUNNING) {
+            cache_helper::purge_all(true);
+            purge_all_caches();
+        }
 
         // Upgrade current language pack if we can
         upgrade_language_pack();
@@ -1683,9 +1865,11 @@ function upgrade_core($version, $verbose) {
             require($preupgradefile);
             // Reset upgrade timeout to default.
             upgrade_set_timeout();
+            core_upgrade_time::record_detail('local/preupgrade.php');
         }
 
         $result = xmldb_main_upgrade($CFG->version);
+        core_upgrade_time::record_detail('xmldb_main_upgrade');
         if ($version > $CFG->version) {
             // store version if not already there
             upgrade_main_savepoint($result, $version, false);
@@ -1696,27 +1880,29 @@ function upgrade_core($version, $verbose) {
         $COURSE = clone($SITE);
 
         // perform all other component upgrade routines
-        update_capabilities('moodle');
-        log_update_descriptions('moodle');
-        external_update_descriptions('moodle');
-        events_update_definition('moodle');
-        \core\task\manager::reset_scheduled_tasks_for_component('moodle');
-        message_update_providers('moodle');
-        \core\message\inbound\manager::update_handlers_for_component('moodle');
-        core_tag_area::reset_definitions_for_component('moodle');
+        upgrade_component_updated('moodle');
         // Update core definitions.
         cache_helper::update_definitions(true);
+        core_upgrade_time::record_detail('cache_helper::update_definitions');
 
         // Purge caches again, just to be sure we arn't holding onto old stuff now.
-        cache_helper::purge_all(true);
-        purge_all_caches();
+        if (!defined('CLI_UPGRADE_RUNNING') || !CLI_UPGRADE_RUNNING) {
+            cache_helper::purge_all(true);
+            core_upgrade_time::record_detail('cache_helper::purge_all');
+            purge_all_caches();
+            core_upgrade_time::record_detail('purge_all_caches');
+        }
 
         // Clean up contexts - more and more stuff depends on existence of paths and contexts
         context_helper::cleanup_instances();
+        core_upgrade_time::record_detail('context_helper::cleanup_instance');
         context_helper::create_instances(null, false);
+        core_upgrade_time::record_detail('context_helper::create_instances');
         context_helper::build_all_paths(false);
+        core_upgrade_time::record_detail('context_helper::build_all_paths');
         $syscontext = context_system::instance();
         $syscontext->mark_dirty();
+        core_upgrade_time::record_detail('context_system::mark_dirty');
 
         print_upgrade_part_end('moodle', false, $verbose);
     } catch (Exception $ex) {
@@ -1733,33 +1919,57 @@ function upgrade_core($version, $verbose) {
  * @return void, may throw exception
  */
 function upgrade_noncore($verbose) {
-    global $CFG;
+    global $CFG, $OUTPUT;
 
     raise_memory_limit(MEMORY_EXTRA);
 
     // upgrade all plugins types
     try {
-        // Reset caches before any output.
-        cache_helper::purge_all(true);
-        purge_all_caches();
+        // Reset caches before any output, unless we are not in maintenance.
+        if (!defined('CLI_UPGRADE_RUNNING') || !CLI_UPGRADE_RUNNING) {
+            cache_helper::purge_all(true);
+            purge_all_caches();
+        }
 
         $plugintypes = core_component::get_plugin_types();
+        upgrade_started();
         foreach ($plugintypes as $type=>$location) {
             upgrade_plugins($type, 'print_upgrade_part_start', 'print_upgrade_part_end', $verbose);
         }
+        if ($CFG->debugdeveloper) {
+            // Only show this heading in developer mode to go with the times below.
+            echo $OUTPUT->heading('upgrade_noncore()');
+        }
+        core_upgrade_time::record_start();
         // Upgrade services.
         // This function gives plugins and subsystems a chance to add functions to existing built-in services.
         external_update_services();
+        core_upgrade_time::record_detail('external_update_services');
 
         // Update cache definitions. Involves scanning each plugin for any changes.
         cache_helper::update_definitions();
+        core_upgrade_time::record_detail('cache_helper::update_definitions');
+
         // Mark the site as upgraded.
         set_config('allversionshash', core_component::get_all_versions_hash());
+        core_upgrade_time::record_detail('core_component::get_all_versions_hash');
+        set_config('allcomponenthash', core_component::get_all_component_hash());
+        core_upgrade_time::record_detail('core_component::get_all_component_hash');
+
+        // Prompt admin to register site. Reminder flow handles sites already registered, so admin won't be prompted if registered.
+        // Defining for non-core upgrades also covers core upgrades.
+        set_config('registrationpending', true);
 
         // Purge caches again, just to be sure we arn't holding onto old stuff now.
-        cache_helper::purge_all(true);
-        purge_all_caches();
+        if (!defined('CLI_UPGRADE_RUNNING') || !CLI_UPGRADE_RUNNING) {
+            cache_helper::purge_all(true);
+            core_upgrade_time::record_detail('cache_helper::purge_all');
+            purge_all_caches();
+            core_upgrade_time::record_detail('purge_all_caches');
+        }
 
+        // Only display the final 'Success' if we also showed the heading.
+        core_upgrade_time::record_end($CFG->debugdeveloper);
     } catch (Exception $ex) {
         upgrade_handle_exception($ex);
     } catch (Throwable $ex) {
@@ -2045,36 +2255,6 @@ function admin_mnet_method_get_help(ReflectionFunctionAbstract $function) {
 }
 
 /**
- * Detect draft file areas with missing root directory records and add them.
- */
-function upgrade_fix_missing_root_folders_draft() {
-    global $DB;
-
-    $transaction = $DB->start_delegated_transaction();
-
-    $sql = "SELECT contextid, itemid, MAX(timecreated) AS timecreated, MAX(timemodified) AS timemodified
-              FROM {files}
-             WHERE (component = 'user' AND filearea = 'draft')
-          GROUP BY contextid, itemid
-            HAVING MAX(CASE WHEN filename = '.' AND filepath = '/' THEN 1 ELSE 0 END) = 0";
-
-    $rs = $DB->get_recordset_sql($sql);
-    $defaults = array('component' => 'user',
-        'filearea' => 'draft',
-        'filepath' => '/',
-        'filename' => '.',
-        'userid' => 0, // Don't rely on any particular user for these system records.
-        'filesize' => 0,
-        'contenthash' => sha1(''));
-    foreach ($rs as $r) {
-        $r->pathnamehash = sha1("/$r->contextid/user/draft/$r->itemid/.");
-        $DB->insert_record('files', (array)$r + $defaults);
-    }
-    $rs->close();
-    $transaction->allow_commit();
-}
-
-/**
  * This function verifies that the database is not using an unsupported storage engine.
  *
  * @param environment_results $result object to update, if relevant
@@ -2247,55 +2427,115 @@ function check_mysql_incomplete_unicode_support(environment_results $result) {
 }
 
 /**
- * Upgrade the minmaxgrade setting.
+ * Check if the site is being served using an ssl url.
  *
- * This step should only be run for sites running 2.8 or later. Sites using 2.7 will be fine
- * using the new default system setting $CFG->grade_minmaxtouse.
+ * Note this does not really perform any request neither looks for proxies or
+ * other situations. Just looks to wwwroot and warn if it's not using https.
  *
- * @return void
+ * @param  environment_results $result $result
+ * @return environment_results|null updated results object, or null if the site is https.
  */
-function upgrade_minmaxgrade() {
-    global $CFG, $DB;
+function check_is_https(environment_results $result) {
+    global $CFG;
 
-    // 2 is a copy of GRADE_MIN_MAX_FROM_GRADE_GRADE.
-    $settingvalue = 2;
-
-    // Set the course setting when:
-    // - The system setting does not exist yet.
-    // - The system seeting is not set to what we'd set the course setting.
-    $setcoursesetting = !isset($CFG->grade_minmaxtouse) || $CFG->grade_minmaxtouse != $settingvalue;
-
-    // Identify the courses that have inconsistencies grade_item vs grade_grade.
-    $sql = "SELECT DISTINCT(gi.courseid)
-              FROM {grade_grades} gg
-              JOIN {grade_items} gi
-                ON gg.itemid = gi.id
-             WHERE gi.itemtype NOT IN (?, ?)
-               AND (gg.rawgrademax != gi.grademax OR gg.rawgrademin != gi.grademin)";
-
-    $rs = $DB->get_recordset_sql($sql, array('course', 'category'));
-    foreach ($rs as $record) {
-        // Flag the course to show a notice in the gradebook.
-        set_config('show_min_max_grades_changed_' . $record->courseid, 1);
-
-        // Set the appropriate course setting so that grades displayed are not changed.
-        $configname = 'minmaxtouse';
-        if ($setcoursesetting &&
-                !$DB->record_exists('grade_settings', array('courseid' => $record->courseid, 'name' => $configname))) {
-            // Do not set the setting when the course already defines it.
-            $data = new stdClass();
-            $data->courseid = $record->courseid;
-            $data->name     = $configname;
-            $data->value    = $settingvalue;
-            $DB->insert_record('grade_settings', $data);
-        }
-
-        // Mark the grades to be regraded.
-        $DB->set_field('grade_items', 'needsupdate', 1, array('courseid' => $record->courseid));
+    // Only if is defined, non-empty and whatever core tell us.
+    if (!empty($CFG->wwwroot) && !is_https()) {
+        $result->setInfo('site not https');
+        $result->setStatus(false);
+        return $result;
     }
-    $rs->close();
+    return null;
 }
 
+/**
+ * Check if the site is using 64 bits PHP.
+ *
+ * @param  environment_results $result
+ * @return environment_results|null updated results object, or null if the site is using 64 bits PHP.
+ */
+function check_sixtyfour_bits(environment_results $result) {
+
+    if (PHP_INT_SIZE === 4) {
+         $result->setInfo('php not 64 bits');
+         $result->setStatus(false);
+         return $result;
+    }
+    return null;
+}
+
+/**
+ * Check if the igbinary extension installed is buggy one
+ *
+ * There are a few php-igbinary versions that are buggy and
+ * return any unserialised array with wrong index. This defeats
+ * key() and next() operations on them.
+ *
+ * This library is used by MUC and also by memcached and redis
+ * when available.
+ *
+ * Let's inform if there is some problem when:
+ *   - php 7.2 is being used (php 7.3 and up are immune).
+ *   - the igbinary extension is installed.
+ *   - the version of the extension is between 3.2.2 and 3.2.4.
+ *   - the buggy behaviour is reproduced.
+ *
+ * @param environment_results $result object to update, if relevant.
+ * @return environment_results|null updated results or null.
+ */
+function check_igbinary322_version(environment_results $result) {
+
+    // No problem if using PHP version 7.3 and up.
+    $phpversion = normalize_version(phpversion());
+    if (version_compare($phpversion, '7.3', '>=')) {
+        return null;
+    }
+
+    // No problem if igbinary is not installed..
+    if (!function_exists('igbinary_serialize')) {
+        return null;
+    }
+
+    // No problem if using igbinary < 3.2.2 or > 3.2.4.
+    $igbinaryversion = normalize_version(phpversion('igbinary'));
+    if (version_compare($igbinaryversion, '3.2.2', '<') or version_compare($igbinaryversion, '3.2.4', '>')) {
+        return null;
+    }
+
+    // Let's verify the real behaviour to see if the bug is around.
+    // Note that we need this extra check because they released 3.2.5 with 3.2.4 version number, so
+    // over the paper, there are 3.2.4 working versions (3.2.5 ones with messed reflection version).
+    $data = [1, 2, 3];
+    $data = igbinary_unserialize(igbinary_serialize($data));
+    if (key($data) === 0) {
+        return null;
+    }
+
+    // Arrived here, we are using PHP 7.2 and a buggy verified igbinary version, let's inform and don't allow to continue.
+    $result->setInfo('igbinary version problem');
+    $result->setStatus(false);
+    return $result;
+}
+
+/**
+ * This function checks that the database prefix ($CFG->prefix) is <= xmldb_table::PREFIX_MAX_LENGTH
+ *
+ * @param environment_results $result
+ * @return environment_results|null updated results object, or null if the prefix check is passing ok.
+ */
+function check_db_prefix_length(environment_results $result) {
+    global $CFG;
+
+    require_once($CFG->libdir.'/ddllib.php');
+    $prefixlen = strlen($CFG->prefix) ?? 0;
+    if ($prefixlen > xmldb_table::PREFIX_MAX_LENGTH) {
+        $parameters = (object)['current' => $prefixlen, 'maximum' => xmldb_table::PREFIX_MAX_LENGTH];
+        $result->setFeedbackStr(['dbprefixtoolong', 'admin', $parameters]);
+        $result->setInfo('db prefix too long');
+        $result->setStatus(false);
+        return $result;
+    }
+    return null; // All, good. By returning null we hide the check.
+}
 
 /**
  * Assert the upgrade key is provided, if it is defined.
@@ -2314,6 +2554,7 @@ function check_upgrade_key($upgradekeyhash) {
     if (isset($CFG->config_php_settings['upgradekey'])) {
         if ($upgradekeyhash === null or $upgradekeyhash !== sha1($CFG->config_php_settings['upgradekey'])) {
             if (!$PAGE->headerprinted) {
+                $PAGE->set_title(get_string('upgradekeyreq', 'admin'));
                 $output = $PAGE->get_renderer('core', 'admin');
                 echo $output->upgradekey_form_page(new moodle_url('/admin/index.php', array('cache' => 0)));
                 die();
@@ -2481,6 +2722,150 @@ function check_libcurl_version(environment_results $result) {
         $result->setNeededVersion($supportedversionstring);
         $result->setCurrentVersion($curlinfo['version']);
         $result->setStatus(false);
+        return $result;
+    }
+
+    return null;
+}
+
+/**
+ * Environment check for the php setting max_input_vars
+ *
+ * @param environment_results $result
+ * @return environment_results|null
+ */
+function check_max_input_vars(environment_results $result) {
+    $max = (int)ini_get('max_input_vars');
+    if ($max < 5000) {
+        $result->setInfo('max_input_vars');
+        $result->setStatus(false);
+        if (PHP_VERSION_ID >= 80000) {
+            // For PHP8 this check is required.
+            $result->setLevel('required');
+            $result->setFeedbackStr('settingmaxinputvarsrequired');
+        } else {
+            // For PHP7 this check is optional (recommended).
+            $result->setFeedbackStr('settingmaxinputvars');
+        }
+        return $result;
+    }
+    return null;
+}
+
+/**
+ * Check whether the admin directory has been configured and warn if so.
+ *
+ * The admin directory has been deprecated since Moodle 4.0.
+ *
+ * @param environment_results $result
+ * @return null|environment_results
+ */
+function check_admin_dir_usage(environment_results $result): ?environment_results {
+    global $CFG;
+
+    if (empty($CFG->admin)) {
+        return null;
+    }
+
+    if ($CFG->admin === 'admin') {
+        return null;
+    }
+
+    $result->setInfo('admin_dir_usage');
+    $result->setStatus(false);
+
+    return $result;
+}
+
+/**
+ * Check whether the XML-RPC protocol is enabled and warn if so.
+ *
+ * The XML-RPC protocol will be removed in a future version (4.1) as it is no longer supported by PHP.
+ *
+ * See MDL-70889 for further information.
+ *
+ * @param environment_results $result
+ * @return null|environment_results
+ */
+function check_xmlrpc_usage(environment_results $result): ?environment_results {
+    global $CFG;
+
+    // Checking Web Service protocols.
+    if (!empty($CFG->webserviceprotocols)) {
+        $plugins = array_flip(explode(',', $CFG->webserviceprotocols));
+        if (array_key_exists('xmlrpc', $plugins)) {
+            $result->setInfo('xmlrpc_webservice_usage');
+            $result->setFeedbackStr('xmlrpcwebserviceenabled');
+            return $result;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Check whether the mod_assignment is currently being used.
+ *
+ * @param environment_results $result
+ * @return environment_results|null
+ */
+function check_mod_assignment(environment_results $result): ?environment_results {
+    global $CFG, $DB;
+
+    if (!file_exists("{$CFG->dirroot}/mod/assignment/version.php")) {
+        // Check for mod_assignment instances.
+        if ($DB->get_manager()->table_exists('assignment') && $DB->count_records('assignment') > 0) {
+            $result->setInfo('Assignment 2.2 is in use');
+            $result->setFeedbackStr('modassignmentinuse');
+            return $result;
+        }
+
+        // Check for mod_assignment subplugins.
+        if (is_dir($CFG->dirroot . '/mod/assignment/type')) {
+            $result->setInfo('Assignment 2.2 subplugins present');
+            $result->setFeedbackStr('modassignmentsubpluginsexist');
+            return $result;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Check whether the Oracle database is currently being used and warn if so.
+ *
+ * The Oracle database support will be removed in a future version (4.5) as it is no longer supported by PHP.
+ *
+ * @param environment_results $result object to update, if relevant
+ * @return environment_results|null updated results or null if the current database is not Oracle.
+ *
+ * @see https://tracker.moodle.org/browse/MDL-80166 for further information.
+ */
+function check_oracle_usage(environment_results $result): ?environment_results {
+    global $CFG;
+
+    // Checking database type.
+    if ($CFG->dbtype === 'oci') {
+        $result->setInfo('oracle_database_usage');
+        $result->setFeedbackStr('oracledatabaseinuse');
+        return $result;
+    }
+
+    return null;
+}
+
+/**
+ * Check if asynchronous backups are enabled.
+ *
+ * @param environment_results $result
+ * @return environment_results|null
+ */
+function check_async_backup(environment_results $result): ?environment_results {
+    global $CFG;
+
+    if (!during_initial_install() && empty($CFG->enableasyncbackup)) { // Have to use $CFG as config table may not be available.
+        $result->setInfo('Asynchronous backups disabled');
+        $result->setFeedbackStr('asyncbackupdisabled');
         return $result;
     }
 

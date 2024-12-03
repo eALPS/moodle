@@ -14,92 +14,103 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for the moodle1 converter
- *
- * @package    core_backup
- * @subpackage backup-convert
- * @category   phpunit
- * @copyright  2011 Mark Nielsen <mark@moodlerooms.com>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core_backup;
+
+use backup;
+use convert_path;
+use convert_path_exception;
+use convert_factory;
+use convert_helper;
+use moodle1_converter;
+use moodle1_convert_empty_storage_exception;
+use moodle1_convert_exception;
+use moodle1_convert_storage_exception;
 
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/backup/converter/moodle1/lib.php');
 
-
-class core_backup_moodle1_converter_testcase extends advanced_testcase {
+/**
+ * Unit tests for the moodle1 converter
+ *
+ * @package    core_backup
+ * @subpackage backup-convert
+ * @category   test
+ * @copyright  2011 Mark Nielsen <mark@moodlerooms.com>
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class moodle1_converter_test extends \advanced_testcase {
 
     /** @var string the name of the directory containing the unpacked Moodle 1.9 backup */
     protected $tempdir;
 
+    /** @var string the full name of the directory containing the unpacked Moodle 1.9 backup */
+    protected $tempdirpath;
+
     /** @var string saved hash of an icon file used during testing */
     protected $iconhash;
 
-    protected function setUp() {
+    protected function setUp(): void {
         global $CFG;
+        parent::setUp();
 
         $this->tempdir = convert_helper::generate_id('unittest');
-        check_dir_exists("$CFG->tempdir/backup/$this->tempdir/course_files/sub1");
-        check_dir_exists("$CFG->tempdir/backup/$this->tempdir/moddata/unittest/4/7");
+        $this->tempdirpath = make_backup_temp_directory($this->tempdir);
+        check_dir_exists("$this->tempdirpath/course_files/sub1");
+        check_dir_exists("$this->tempdirpath/moddata/unittest/4/7");
         copy(
             "$CFG->dirroot/backup/converter/moodle1/tests/fixtures/moodle.xml",
-            "$CFG->tempdir/backup/$this->tempdir/moodle.xml"
+            "$this->tempdirpath/moodle.xml"
         );
         copy(
             "$CFG->dirroot/backup/converter/moodle1/tests/fixtures/icon.gif",
-            "$CFG->tempdir/backup/$this->tempdir/course_files/file1.gif"
+            "$this->tempdirpath/course_files/file1.gif"
         );
         copy(
             "$CFG->dirroot/backup/converter/moodle1/tests/fixtures/icon.gif",
-            "$CFG->tempdir/backup/$this->tempdir/course_files/sub1/file2.gif"
+            "$this->tempdirpath/course_files/sub1/file2.gif"
         );
         copy(
             "$CFG->dirroot/backup/converter/moodle1/tests/fixtures/icon.gif",
-            "$CFG->tempdir/backup/$this->tempdir/moddata/unittest/4/file1.gif"
+            "$this->tempdirpath/moddata/unittest/4/file1.gif"
         );
         copy(
             "$CFG->dirroot/backup/converter/moodle1/tests/fixtures/icon.gif",
-            "$CFG->tempdir/backup/$this->tempdir/moddata/unittest/4/icon.gif"
+            "$this->tempdirpath/moddata/unittest/4/icon.gif"
         );
-        $this->iconhash = sha1_file($CFG->tempdir.'/backup/'.$this->tempdir.'/moddata/unittest/4/icon.gif');
+        $this->iconhash = \file_storage::hash_from_path($this->tempdirpath.'/moddata/unittest/4/icon.gif');
         copy(
             "$CFG->dirroot/backup/converter/moodle1/tests/fixtures/icon.gif",
-            "$CFG->tempdir/backup/$this->tempdir/moddata/unittest/4/7/icon.gif"
+            "$this->tempdirpath/moddata/unittest/4/7/icon.gif"
         );
     }
 
-    protected function tearDown() {
+    protected function tearDown(): void {
         global $CFG;
         if (empty($CFG->keeptempdirectoriesonbackup)) {
-            fulldelete("$CFG->tempdir/backup/$this->tempdir");
+            fulldelete($this->tempdirpath);
         }
+        parent::tearDown();
     }
 
-    public function test_detect_format() {
+    public function test_detect_format(): void {
         $detected = moodle1_converter::detect_format($this->tempdir);
         $this->assertEquals(backup::FORMAT_MOODLE1, $detected);
     }
 
-    public function test_convert_factory() {
+    public function test_convert_factory(): void {
         $converter = convert_factory::get_converter('moodle1', $this->tempdir);
         $this->assertInstanceOf('moodle1_converter', $converter);
     }
 
-    /**
-     * @expectedException moodle1_convert_storage_exception
-     */
-    public function test_stash_storage_not_created() {
+    public function test_stash_storage_not_created(): void {
         $converter = convert_factory::get_converter('moodle1', $this->tempdir);
+        $this->expectException(moodle1_convert_storage_exception::class);
         $converter->set_stash('tempinfo', 12);
     }
 
-    /**
-     * @expectedException moodle1_convert_empty_storage_exception
-     */
-    public function test_stash_requiring_empty_stash() {
+    public function test_stash_requiring_empty_stash(): void {
         $this->resetAfterTest(true);
         $converter = convert_factory::get_converter('moodle1', $this->tempdir);
         $converter->create_stash_storage();
@@ -109,12 +120,13 @@ class core_backup_moodle1_converter_testcase extends advanced_testcase {
 
         } catch (moodle1_convert_empty_storage_exception $e) {
             // we must drop the storage here so we are able to re-create it in the next test
+            $this->expectException(moodle1_convert_empty_storage_exception::class);
             $converter->drop_stash_storage();
             throw new moodle1_convert_empty_storage_exception('rethrowing');
         }
     }
 
-    public function test_stash_storage() {
+    public function test_stash_storage(): void {
         $this->resetAfterTest(true);
         $converter = convert_factory::get_converter('moodle1', $this->tempdir);
         $converter->create_stash_storage();
@@ -170,7 +182,7 @@ class core_backup_moodle1_converter_testcase extends advanced_testcase {
         $converter->drop_stash_storage();
     }
 
-    public function test_get_stash_or_default() {
+    public function test_get_stash_or_default(): void {
         $this->resetAfterTest(true);
         $converter = convert_factory::get_converter('moodle1', $this->tempdir);
         $converter->create_stash_storage();
@@ -203,7 +215,7 @@ class core_backup_moodle1_converter_testcase extends advanced_testcase {
         $converter->drop_stash_storage();
     }
 
-    public function test_get_contextid() {
+    public function test_get_contextid(): void {
         $this->resetAfterTest(true);
 
         $converter = convert_factory::get_converter('moodle1', $this->tempdir);
@@ -244,7 +256,7 @@ class core_backup_moodle1_converter_testcase extends advanced_testcase {
         $converter->drop_stash_storage();
     }
 
-    public function test_get_nextid() {
+    public function test_get_nextid(): void {
         $this->resetAfterTest(true);
 
         $converter = convert_factory::get_converter('moodle1', $this->tempdir);
@@ -258,7 +270,7 @@ class core_backup_moodle1_converter_testcase extends advanced_testcase {
         $this->assertTrue($id2 < $id3);
     }
 
-    public function test_migrate_file() {
+    public function test_migrate_file(): void {
         $this->resetAfterTest(true);
 
         // set-up the file manager
@@ -311,7 +323,7 @@ class core_backup_moodle1_converter_testcase extends advanced_testcase {
         $converter->drop_stash_storage();
     }
 
-    public function test_migrate_directory() {
+    public function test_migrate_directory(): void {
         $this->resetAfterTest(true);
 
         // Set-up the file manager.
@@ -351,15 +363,15 @@ class core_backup_moodle1_converter_testcase extends advanced_testcase {
         $this->assertEquals('array', gettype($files['/file1.gif']));
         $this->assertEquals('array', gettype($files['/sub1/.']));
         $this->assertEquals('array', gettype($files['/sub1/file2.gif']));
-        $this->assertEquals(sha1(''), $files['/.']['contenthash']);
-        $this->assertEquals(sha1(''), $files['/sub1/.']['contenthash']);
+        $this->assertEquals(\file_storage::hash_from_string(''), $files['/.']['contenthash']);
+        $this->assertEquals(\file_storage::hash_from_string(''), $files['/sub1/.']['contenthash']);
         $this->assertEquals($this->iconhash, $files['/file1.gif']['contenthash']);
         $this->assertEquals($this->iconhash, $files['/sub1/file2.gif']['contenthash']);
 
         $converter->drop_stash_storage();
     }
 
-    public function test_migrate_directory_with_trailing_slash() {
+    public function test_migrate_directory_with_trailing_slash(): void {
         $this->resetAfterTest(true);
 
         // Set-up the file manager.
@@ -377,7 +389,7 @@ class core_backup_moodle1_converter_testcase extends advanced_testcase {
         $converter->drop_stash_storage();
     }
 
-    public function test_convert_path() {
+    public function test_convert_path(): void {
         $path = new convert_path('foo_bar', '/ROOT/THINGS/FOO/BAR');
         $this->assertEquals('foo_bar', $path->get_name());
         $this->assertEquals('/ROOT/THINGS/FOO/BAR', $path->get_path());
@@ -386,7 +398,7 @@ class core_backup_moodle1_converter_testcase extends advanced_testcase {
         $this->assertEquals('on_foo_bar_end', $path->get_end_method());
     }
 
-    public function test_convert_path_implicit_recipes() {
+    public function test_convert_path_implicit_recipes(): void {
         $path = new convert_path('foo_bar', '/ROOT/THINGS/FOO/BAR');
         $data = array(
             'ID' => 76,
@@ -403,7 +415,7 @@ class core_backup_moodle1_converter_testcase extends advanced_testcase {
         $this->assertSame(null, $data['empty']);
     }
 
-    public function test_convert_path_explicit_recipes() {
+    public function test_convert_path_explicit_recipes(): void {
         $path = new convert_path(
             'foo_bar', '/ROOT/THINGS/FOO/BAR',
             array(
@@ -436,10 +448,7 @@ class core_backup_moodle1_converter_testcase extends advanced_testcase {
         $this->assertSame(null, $data['nothing']);
     }
 
-    /**
-     * @expectedException convert_path_exception
-     */
-    public function test_grouped_data_on_nongrouped_convert_path() {
+    public function test_grouped_data_on_nongrouped_convert_path(): void {
         // prepare some grouped data
         $data = array(
             'ID' => 77,
@@ -464,13 +473,11 @@ class core_backup_moodle1_converter_testcase extends advanced_testcase {
         $path = new convert_path('beer_style', '/ROOT/BEER_STYLES/BEER_STYLE');
 
         // an attempt to apply recipes throws exception because we do not expect grouped data
+        $this->expectException(convert_path_exception::class);
         $data = $path->apply_recipes($data);
     }
 
-    /**
-     * @expectedException convert_path_exception
-     */
-    public function test_grouped_convert_path_with_recipes() {
+    public function test_grouped_convert_path_with_recipes(): void {
         // prepare some grouped data
         $data = array(
             'ID' => 77,
@@ -497,6 +504,7 @@ class core_backup_moodle1_converter_testcase extends advanced_testcase {
         $this->assertEquals('Heineken', $data['beers'][1]['beer']['name']);
 
         // an attempt to provide explicit recipes on grouped elements throws exception
+        $this->expectException(convert_path_exception::class);
         $path = new convert_path(
             'beer_style', '/ROOT/BEER_STYLES/BEER_STYLE',
             array(
@@ -507,7 +515,7 @@ class core_backup_moodle1_converter_testcase extends advanced_testcase {
             ), true);
     }
 
-    public function test_referenced_course_files() {
+    public function test_referenced_course_files(): void {
 
         $text = 'This is a text containing links to file.php
 as it is parsed from the backup file. <br /><br /><img border="0" width="110" vspace="0" hspace="0" height="92" title="News" alt="News" src="$@FILEPHP@$$@SLASH@$pics$@SLASH@$news.gif" /><a href="$@FILEPHP@$$@SLASH@$pics$@SLASH@$news.gif$@FORCEDOWNLOAD@$">download image</a><br />
@@ -529,7 +537,7 @@ as it is parsed from the backup file. <br /><br /><img border="0" width="110" vs
     <br /><a href=\'$@FILEPHP@$$@SLASH@$MANUAL.DOC$@FORCEDOWNLOAD@$\'>download manual</a><br />');
     }
 
-    public function test_referenced_files_urlencoded() {
+    public function test_referenced_files_urlencoded(): void {
 
         $text = 'This is a text containing links to file.php
 as it is parsed from the backup file. <br /><br /><img border="0" width="110" vspace="0" hspace="0" height="92" title="News" alt="News" src="$@FILEPHP@$$@SLASH@$pics$@SLASH@$news.gif" /><a href="$@FILEPHP@$$@SLASH@$pics$@SLASH@$news.gif$@FORCEDOWNLOAD@$">no space</a><br />
@@ -556,26 +564,26 @@ as it is parsed from the backup file. <br /><br /><img border="0" width="110" vs
 <a href="$@FILEPHP@$$@SLASH@$illegal pics%2Bmovies$@SLASH@$romeo%2Bjuliet.avi">Download the full AVI for free! (only plus)</a>', $text);
     }
 
-    public function test_question_bank_conversion() {
+    public function test_question_bank_conversion(): void {
         global $CFG;
 
         $this->resetAfterTest(true);
 
         copy(
             "$CFG->dirroot/backup/converter/moodle1/tests/fixtures/questions.xml",
-            "$CFG->tempdir/backup/$this->tempdir/moodle.xml"
+            "$this->tempdirpath/moodle.xml"
         );
         $converter = convert_factory::get_converter('moodle1', $this->tempdir);
         $converter->convert();
     }
 
-    public function test_convert_run_convert() {
+    public function test_convert_run_convert(): void {
         $this->resetAfterTest(true);
         $converter = convert_factory::get_converter('moodle1', $this->tempdir);
         $converter->convert();
     }
 
-    public function test_inforef_manager() {
+    public function test_inforef_manager(): void {
         $converter = convert_factory::get_converter('moodle1', $this->tempdir);
         $inforef = $converter->get_inforef_manager('unittest');
         $inforef->add_ref('file', 45);

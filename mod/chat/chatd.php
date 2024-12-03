@@ -97,6 +97,45 @@ class ChatDaemon {
     public $setsinfo = array(); // Keyed by sessionid exactly like conn_sets, one of these for each of those.
     public $chatrooms = array(); // Keyed by chatid, holding arrays of data.
 
+    /** @var int error reporting level. */
+    public $_trace_level;
+
+    /** @var bool true if function_name exists and is a function, false otherwise. */
+    public $_pcntl_exists;
+
+    /** @var int */
+    public $_time_rest_socket;
+
+    /** @var string beep file location. */
+    public $_beepsoundsrc;
+
+    /** @var int update frequency records. */
+    public $_freq_update_records;
+
+    /** @var int upper limit value in seconds to detect a user has disconnected or not. */
+    public $_freq_poll_idle_chat;
+
+    /** @var resource|false a file pointer resource on success, or false on error. */
+    public $_stdout;
+
+    /** @var array user data with session ID as the key. */
+    public $sets_info = [];
+
+    /** @var array connection data with session ID as the key. */
+    public $conn_sets = [];
+
+    /** @var array connection data. */
+    public $conn_side = [];
+
+    /** @var array connection data. */
+    public $conn_half = [];
+
+    /** @var array connection data. */
+    public $conn_ufo = [];
+
+    /** @var resource|Socket socket resource. */
+    public $listen_socket;
+
     // IMPORTANT: $connectionssets, $setsinfo and $chatrooms must remain synchronized!
     //            Pay extra attention when you write code that affects any of them!
 
@@ -104,7 +143,7 @@ class ChatDaemon {
         $this->_trace_level         = E_ALL ^ E_USER_NOTICE;
         $this->_pcntl_exists        = function_exists('pcntl_fork');
         $this->_time_rest_socket    = 20;
-        $this->_beepsoundsrc        = $GLOBALS['CFG']->wwwroot.'/mod/chat/beep.wav';
+        $this->_beepsoundsrc        = $GLOBALS['CFG']->wwwroot.'/mod/chat/beep.mp3';
         $this->_freq_update_records = 20;
         $this->_freq_poll_idle_chat = $GLOBALS['CFG']->chat_old_ping;
         $this->_stdout = fopen('php://stdout', 'w');
@@ -114,7 +153,7 @@ class ChatDaemon {
         }
     }
 
-    public function error_handler ($errno, $errmsg, $filename, $linenum, $vars) {
+    public function error_handler($errno, $errmsg, $filename, $linenum, $vars) {
         // Checks if an error needs to be suppressed due to @.
         if (error_reporting() != 0) {
             $this->trace($errmsg.' on line '.$linenum, $errno);
@@ -342,7 +381,7 @@ EOD;
                 $msg->chatid    = $this->sets_info[$sessionid]['chatid'];
                 $msg->userid    = $this->sets_info[$sessionid]['userid'];
                 $msg->groupid   = $this->sets_info[$sessionid]['groupid'];
-                $msg->system    = 0;
+                $msg->issystem  = 0;
                 $msg->message   = 'beep '.$customdata['beep'];
                 $msg->timestamp = time();
 
@@ -428,7 +467,7 @@ EOD;
                 $msg->chatid    = $this->sets_info[$sessionid]['chatid'];
                 $msg->userid    = $this->sets_info[$sessionid]['userid'];
                 $msg->groupid   = $this->sets_info[$sessionid]['groupid'];
-                $msg->system    = 0;
+                $msg->issystem  = 0;
                 $msg->message   = urldecode($customdata['message']); // Have to undo the browser's encoding.
                 $msg->timestamp = time();
 
@@ -570,7 +609,7 @@ EOD;
         $msg->chatid = $chatuser->chatid;
         $msg->userid = $chatuser->userid;
         $msg->groupid = $chatuser->groupid;
-        $msg->system = 1;
+        $msg->issystem = 1;
         $msg->message = 'enter';
         $msg->timestamp = time();
 
@@ -754,8 +793,11 @@ EOD;
                         $this->conn_sets[$sessionid][CHAT_CONNECTION_CHANNEL]);
 
                     if ($output->beep) {
+                        $playscript = '(function() { var audioElement = document.createElement("audio");' . "\n";
+                        $playscript .= 'audioElement.setAttribute("src", "'.$this->_beepsoundsrc.'");' . "\n";
+                        $playscript .= 'audioElement.play(); })();' . "\n";
                         $this->write_data($this->conn_sets[$sessionid][CHAT_CONNECTION_CHANNEL],
-                                          '<embed src="'.$this->_beepsoundsrc.'" autostart="true" hidden="true" />');
+                                          '<script>' . $playscript . '</script>');
                     }
 
                     if ($info['quirks'] & QUIRK_CHUNK_UPDATE) {
@@ -782,7 +824,7 @@ EOD;
         $msg->chatid = $info['chatid'];
         $msg->userid = $info['userid'];
         $msg->groupid = $info['groupid'];
-        $msg->system = 1;
+        $msg->issystem = 1;
         $msg->message = 'exit';
         $msg->timestamp = time();
 
@@ -892,7 +934,9 @@ if (strpos($commandline, '-') === false) {
     $numswitches = count($switches);
 
     // Fancy way to give a "hyphen" boolean flag to each "switch".
-    $switches = array_map(create_function('$x', 'return array("str" => $x, "hyphen" => (substr($x, 0, 1) == "-"));'), $switches);
+    $switches = array_map(function($x) {
+        return array("str" => $x, "hyphen" => (substr($x, 0, 1) == "-"));
+    }, $switches);
 
     for ($i = 0; $i < $numswitches; ++$i) {
 
@@ -1002,7 +1046,7 @@ while (true) {
                         if (!preg_match('/beep=([^&]*)[& ]/', $data, $info)) {
                             $daemon->trace('Beep sidekick did not contain a valid userid', E_USER_WARNING);
                             $daemon->dismiss_ufo($handle, true, 'Request with malformed data; connection closed');
-                            continue;
+                            continue 2;
                         } else {
                             $customdata = array('beep' => intval($info[1]));
                         }
@@ -1012,7 +1056,7 @@ while (true) {
                         if (!preg_match('/chat_message=([^&]*)[& ]chat_msgidnr=([^&]*)[& ]/', $data, $info)) {
                             $daemon->trace('Message sidekick did not contain a valid message', E_USER_WARNING);
                             $daemon->dismiss_ufo($handle, true, 'Request with malformed data; connection closed');
-                            continue;
+                            continue 2;
                         } else {
                             $customdata = array('message' => $info[1], 'index' => $info[2]);
                         }
@@ -1020,7 +1064,7 @@ while (true) {
                     default:
                         $daemon->trace('UFO with '.$handle.': Request with unknown type; connection closed', E_USER_WARNING);
                         $daemon->dismiss_ufo($handle, true, 'Request with unknown type; connection closed');
-                        continue;
+                        continue 2;
                     break;
                 }
 

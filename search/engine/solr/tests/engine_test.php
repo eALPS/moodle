@@ -14,8 +14,17 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace search_solr;
+
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+require_once($CFG->dirroot . '/search/tests/fixtures/testable_core_search.php');
+require_once($CFG->dirroot . '/search/tests/fixtures/mock_search_area.php');
+require_once($CFG->dirroot . '/search/engine/solr/tests/fixtures/testable_engine.php');
+
 /**
- * Solr earch engine base unit tests.
+ * Solr search engine base unit tests.
  *
  * Required params:
  * - define('TEST_SEARCH_SOLR_HOSTNAME', '127.0.0.1');
@@ -30,31 +39,16 @@
  * - define('TEST_SEARCH_SOLR_KEYPASSWORD', '');
  * - define('TEST_SEARCH_SOLR_CAINFOCERT', '');
  *
- * @package     core_search
- * @category    phpunit
+ * @package     search_solr
+ * @category    test
  * @copyright   2015 David Monllao {@link http://www.davidmonllao.com}
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
-require_once($CFG->dirroot . '/search/tests/fixtures/testable_core_search.php');
-require_once($CFG->dirroot . '/search/tests/fixtures/mock_search_area.php');
-require_once($CFG->dirroot . '/search/engine/solr/tests/fixtures/testable_engine.php');
-
-/**
- * Solr search engine base unit tests.
  *
- * @package     core_search
- * @category    phpunit
- * @copyright   2015 David Monllao {@link http://www.davidmonllao.com}
- * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @runTestsInSeparateProcesses
  */
-class search_solr_engine_testcase extends advanced_testcase {
-
+final class engine_test extends \advanced_testcase {
     /**
-     * @var \core_search::manager
+     * @var \core_search\manager
      */
     protected $search = null;
 
@@ -68,9 +62,11 @@ class search_solr_engine_testcase extends advanced_testcase {
      */
     protected $engine = null;
 
-    public function setUp() {
+    public function setUp(): void {
+        parent::setUp();
         $this->resetAfterTest();
         set_config('enableglobalsearch', true);
+        set_config('searchengine', 'solr');
 
         if (!function_exists('solr_get_version')) {
             $this->markTestSkipped('Solr extension is not loaded.');
@@ -121,9 +117,9 @@ class search_solr_engine_testcase extends advanced_testcase {
         // Inject search solr engine into the testable core search as we need to add the mock
         // search component to it.
         $this->engine = new \search_solr\testable_engine();
-        $this->search = testable_core_search::instance($this->engine);
+        $this->search = \testable_core_search::instance($this->engine);
         $areaid = \core_search\manager::generate_areaid('core_mocksearch', 'mock_search_area');
-        $this->search->add_search_area($areaid, new core_mocksearch\search\mock_search_area());
+        $this->search->add_search_area($areaid, new \core_mocksearch\search\mock_search_area());
 
         $this->setAdminUser();
 
@@ -131,37 +127,77 @@ class search_solr_engine_testcase extends advanced_testcase {
         $this->search->delete_index();
 
         // Add moodle fields if they don't exist.
-        $schema = new \search_solr\schema();
+        $schema = new \search_solr\schema($this->engine);
         $schema->setup(false);
     }
 
-    public function tearDown() {
+    public function tearDown(): void {
         // For unit tests before PHP 7, teardown is called even on skip. So only do our teardown if we did setup.
         if ($this->generator) {
             // Moodle DML freaks out if we don't teardown the temp table after each run.
             $this->generator->teardown();
             $this->generator = null;
         }
+        parent::tearDown();
     }
 
     /**
      * Simple data provider to allow tests to be run with file indexing on and off.
      */
-    public function file_indexing_provider() {
+    public static function file_indexing_provider(): array {
         return array(
             'file-indexing-on' => array(1),
             'file-indexing-off' => array(0)
         );
     }
 
-    public function test_connection() {
+    public function test_connection(): void {
         $this->assertTrue($this->engine->is_server_ready());
+    }
+
+    /**
+     * Tests that the alternate settings are used when configured.
+     */
+    public function test_alternate_settings(): void {
+        // Index a couple of things.
+        $this->generator->create_record();
+        $this->generator->create_record();
+        $this->search->index();
+
+        // By default settings, alternates are not set.
+        $this->assertFalse($this->engine->has_alternate_configuration());
+
+        // Set up all the config the same as normal.
+        foreach (['server_hostname', 'indexname', 'secure', 'server_port',
+                'server_username', 'server_password'] as $setting) {
+            set_config('alternate' . $setting, get_config('search_solr', $setting), 'search_solr');
+        }
+        // Also mess up the normal config.
+        set_config('indexname', 'not_the_right_index_name', 'search_solr');
+
+        // Construct a new engine using normal settings.
+        $engine = new engine();
+
+        // Now alternates are available.
+        $this->assertTrue($engine->has_alternate_configuration());
+
+        // But it won't actually work because of the bogus index name.
+        $this->assertFalse($engine->is_server_ready() === true);
+        $this->assertDebuggingCalled();
+
+        // But if we construct one using alternate settings, it will work as normal.
+        $engine = new engine(true);
+        $this->assertTrue($engine->is_server_ready());
+
+        // Including finding the search results.
+        $this->assertCount(2, $engine->execute_query(
+                (object)['q' => 'message'], (object)['everything' => true]));
     }
 
     /**
      * @dataProvider file_indexing_provider
      */
-    public function test_index($fileindexing) {
+    public function test_index($fileindexing): void {
         global $DB;
 
         $this->engine->test_set_config('fileindexing', $fileindexing);
@@ -190,7 +226,7 @@ class search_solr_engine_testcase extends advanced_testcase {
      *
      * @return void
      */
-    public function test_search($fileindexing) {
+    public function test_search($fileindexing): void {
         global $USER, $DB;
 
         $this->engine->test_set_config('fileindexing', $fileindexing);
@@ -202,14 +238,14 @@ class search_solr_engine_testcase extends advanced_testcase {
 
         $this->search->index();
 
-        $querydata = new stdClass();
+        $querydata = new \stdClass();
         $querydata->q = 'message';
         $results = $this->search->search($querydata);
         $this->assertCount(2, $results);
 
         // Based on core_mocksearch\search\indexer.
         $this->assertEquals($USER->id, $results[0]->get('userid'));
-        $this->assertEquals(\context_system::instance()->id, $results[0]->get('contextid'));
+        $this->assertEquals(\context_course::instance(SITEID)->id, $results[0]->get('contextid'));
 
         // Do a test to make sure we aren't searching non-query fields, like areaid.
         $querydata->q = \core_search\manager::generate_areaid('core_mocksearch', 'mock_search_area');
@@ -272,14 +308,14 @@ class search_solr_engine_testcase extends advanced_testcase {
     /**
      * @dataProvider file_indexing_provider
      */
-    public function test_delete($fileindexing) {
+    public function test_delete($fileindexing): void {
         $this->engine->test_set_config('fileindexing', $fileindexing);
 
         $this->generator->create_record();
         $this->generator->create_record();
         $this->search->index();
 
-        $querydata = new stdClass();
+        $querydata = new \stdClass();
         $querydata->q = 'message';
 
         $this->assertCount(2, $this->search->search($querydata));
@@ -292,10 +328,10 @@ class search_solr_engine_testcase extends advanced_testcase {
     /**
      * @dataProvider file_indexing_provider
      */
-    public function test_alloweduserid($fileindexing) {
+    public function test_alloweduserid($fileindexing): void {
         $this->engine->test_set_config('fileindexing', $fileindexing);
 
-        $area = new core_mocksearch\search\mock_search_area();
+        $area = new \core_mocksearch\search\mock_search_area();
 
         $record = $this->generator->create_record();
 
@@ -321,7 +357,7 @@ class search_solr_engine_testcase extends advanced_testcase {
 
         $this->engine->area_index_complete($area->get_area_id());
 
-        $querydata = new stdClass();
+        $querydata = new \stdClass();
         $querydata->q = 'message';
         $querydata->title = $doc->get('title');
 
@@ -367,7 +403,7 @@ class search_solr_engine_testcase extends advanced_testcase {
     /**
      * @dataProvider file_indexing_provider
      */
-    public function test_highlight($fileindexing) {
+    public function test_highlight($fileindexing): void {
         global $PAGE;
 
         $this->engine->test_set_config('fileindexing', $fileindexing);
@@ -375,7 +411,7 @@ class search_solr_engine_testcase extends advanced_testcase {
         $this->generator->create_record();
         $this->search->index();
 
-        $querydata = new stdClass();
+        $querydata = new \stdClass();
         $querydata->q = 'message';
 
         $results = $this->search->search($querydata);
@@ -384,16 +420,16 @@ class search_solr_engine_testcase extends advanced_testcase {
         $result = reset($results);
 
         $regex = '|'.\search_solr\engine::HIGHLIGHT_START.'message'.\search_solr\engine::HIGHLIGHT_END.'|';
-        $this->assertRegExp($regex, $result->get('content'));
+        $this->assertMatchesRegularExpression($regex, $result->get('content'));
 
         $searchrenderer = $PAGE->get_renderer('core_search');
         $exported = $result->export_for_template($searchrenderer);
 
         $regex = '|<span class="highlight">message</span>|';
-        $this->assertRegExp($regex, $exported['content']);
+        $this->assertMatchesRegularExpression($regex, $exported['content']);
     }
 
-    public function test_export_file_for_engine() {
+    public function test_export_file_for_engine(): void {
         // Get area to work with.
         $areaid = \core_search\manager::generate_areaid('core_mocksearch', 'mock_search_area');
         $area = \core_search\manager::get_search_area($areaid);
@@ -401,7 +437,7 @@ class search_solr_engine_testcase extends advanced_testcase {
         $record = $this->generator->create_record();
 
         $doc = $area->get_document($record);
-        $filerecord = new stdClass();
+        $filerecord = new \stdClass();
         $filerecord->timemodified  = 978310800;
         $file = $this->generator->create_file($filerecord);
         $doc->add_stored_file($file);
@@ -416,7 +452,7 @@ class search_solr_engine_testcase extends advanced_testcase {
         $this->assertEquals(978310800, \search_solr\document::import_time_from_engine($filearray['modified']));
     }
 
-    public function test_index_file() {
+    public function test_index_file(): void {
         // Very simple test.
         $file = $this->generator->create_file();
 
@@ -425,13 +461,13 @@ class search_solr_engine_testcase extends advanced_testcase {
         $this->generator->create_record($record);
 
         $this->search->index();
-        $querydata = new stdClass();
+        $querydata = new \stdClass();
         $querydata->q = '"File contents"';
 
         $this->assertCount(1, $this->search->search($querydata));
     }
 
-    public function test_reindexing_files() {
+    public function test_reindexing_files(): void {
         // Get area to work with.
         $areaid = \core_search\manager::generate_areaid('core_mocksearch', 'mock_search_area');
         $area = \core_search\manager::get_search_area($areaid);
@@ -478,7 +514,7 @@ class search_solr_engine_testcase extends advanced_testcase {
             ((int)($boundary * 1.05)) => 1
         );
 
-        $querydata = new stdClass();
+        $querydata = new \stdClass();
 
         // First, check that all the files are currently there.
         foreach ($checkfiles as $key => $unused) {
@@ -526,7 +562,7 @@ class search_solr_engine_testcase extends advanced_testcase {
     /**
      * Test indexing a file we don't consider indexable.
      */
-    public function test_index_filtered_file() {
+    public function test_index_filtered_file(): void {
         // Get area to work with.
         $areaid = \core_search\manager::generate_areaid('core_mocksearch', 'mock_search_area');
         $area = \core_search\manager::get_search_area($areaid);
@@ -561,7 +597,7 @@ class search_solr_engine_testcase extends advanced_testcase {
         $this->engine->add_document($doc, true);
         $this->engine->area_index_complete($area->get_area_id());
 
-        $querydata = new stdClass();
+        $querydata = new \stdClass();
         // We shouldn't be able to find the large file contents.
         $querydata->q = 'LargeFindContent';
         $this->assertCount(0, $this->search->search($querydata));
@@ -579,7 +615,7 @@ class search_solr_engine_testcase extends advanced_testcase {
         $this->assertCount(1, $this->search->search($querydata));
     }
 
-    public function test_delete_by_id() {
+    public function test_delete_by_id(): void {
         // First get files in the index.
         $file = $this->generator->create_file();
         $record = new \stdClass();
@@ -588,7 +624,7 @@ class search_solr_engine_testcase extends advanced_testcase {
         $this->generator->create_record($record);
         $this->search->index();
 
-        $querydata = new stdClass();
+        $querydata = new \stdClass();
 
         // Then search to make sure they are there.
         $querydata->q = '"File contents"';
@@ -612,7 +648,7 @@ class search_solr_engine_testcase extends advanced_testcase {
      *
      * @dataProvider file_indexing_provider
      */
-    public function test_solr_filling($fileindexing) {
+    public function test_solr_filling($fileindexing): void {
         $this->engine->test_set_config('fileindexing', $fileindexing);
 
         $user1 = self::getDataGenerator()->create_user();
@@ -644,7 +680,7 @@ class search_solr_engine_testcase extends advanced_testcase {
 
         // Check that user 1 sees all their results.
         $this->setUser($user1);
-        $querydata = new stdClass();
+        $querydata = new \stdClass();
         $querydata->q = 'Something1 Something2';
         $results = $this->search->search($querydata);
         $this->assertCount($maxresults, $results);
@@ -695,7 +731,7 @@ class search_solr_engine_testcase extends advanced_testcase {
      *
      * @dataProvider file_indexing_provider
      */
-    public function test_get_query_total_count($fileindexing) {
+    public function test_get_query_total_count($fileindexing): void {
         $this->engine->test_set_config('fileindexing', $fileindexing);
 
         $user = self::getDataGenerator()->create_user();
@@ -703,22 +739,22 @@ class search_solr_engine_testcase extends advanced_testcase {
         $this->search->index();
 
         $this->setUser($user);
-        $querydata = new stdClass();
+        $querydata = new \stdClass();
         $querydata->q = 'Something1 Something2 Something3 Something4';
 
         // In this first set, it should have determined the first 10 of 40 are bad, so there could be up to 30 left.
-        $results = $this->engine->execute_query($querydata, true, 5);
+        $results = $this->engine->execute_query($querydata, (object)['everything' => true], 5);
         $this->assertEquals(30, $this->engine->get_query_total_count());
         $this->assertCount(5, $results);
 
         // To get to 15, it has to process the first 10 that are bad, 10 that are good, 10 that are bad, then 5 that are good.
         // So we now know 20 are bad out of 40.
-        $results = $this->engine->execute_query($querydata, true, 15);
+        $results = $this->engine->execute_query($querydata, (object)['everything' => true], 15);
         $this->assertEquals(20, $this->engine->get_query_total_count());
         $this->assertCount(15, $results);
 
         // Try to get more then all, make sure we still see 20 count and 20 returned.
-        $results = $this->engine->execute_query($querydata, true, 30);
+        $results = $this->engine->execute_query($querydata, (object)['everything' => true], 30);
         $this->assertEquals(20, $this->engine->get_query_total_count());
         $this->assertCount(20, $results);
     }
@@ -728,7 +764,7 @@ class search_solr_engine_testcase extends advanced_testcase {
      *
      * @dataProvider file_indexing_provider
      */
-    public function test_manager_paged_search($fileindexing) {
+    public function test_manager_paged_search($fileindexing): void {
         $this->engine->test_set_config('fileindexing', $fileindexing);
 
         $user = self::getDataGenerator()->create_user();
@@ -737,7 +773,7 @@ class search_solr_engine_testcase extends advanced_testcase {
 
         // Check that user 1 sees all their results.
         $this->setUser($user);
-        $querydata = new stdClass();
+        $querydata = new \stdClass();
         $querydata->q = 'Something1 Something2 Something3 Something4';
 
         // On this first page, it should have determined the first 10 of 40 are bad, so there could be up to 30 left.
@@ -757,5 +793,704 @@ class search_solr_engine_testcase extends advanced_testcase {
         $this->assertEquals(20, $results->totalcount);
         $this->assertCount(10, $results->results);
         $this->assertEquals(1, $results->actualpage);
+    }
+
+    /**
+     * Tests searching for results restricted to context id.
+     */
+    public function test_context_restriction(): void {
+        // Use real search areas.
+        $this->search->clear_static();
+        $this->search->add_core_search_areas();
+
+        // Create 2 courses and some forums.
+        $generator = $this->getDataGenerator();
+        $course1 = $generator->create_course(['fullname' => 'Course 1', 'summary' => 'xyzzy']);
+        $contextc1 = \context_course::instance($course1->id);
+        $course1forum1 = $generator->create_module('forum', ['course' => $course1,
+                'name' => 'C1F1', 'intro' => 'xyzzy']);
+        $contextc1f1 = \context_module::instance($course1forum1->cmid);
+        $course1forum2 = $generator->create_module('forum', ['course' => $course1,
+                'name' => 'C1F2', 'intro' => 'xyzzy']);
+        $contextc1f2 = \context_module::instance($course1forum2->cmid);
+        $course2 = $generator->create_course(['fullname' => 'Course 2', 'summary' => 'xyzzy']);
+        $contextc2 = \context_course::instance($course1->id);
+        $course2forum = $generator->create_module('forum', ['course' => $course2,
+                'name' => 'C2F', 'intro' => 'xyzzy']);
+        $contextc2f = \context_module::instance($course2forum->cmid);
+
+        // Index the courses and forums.
+        $this->search->index();
+
+        // Search as admin user should find everything.
+        $querydata = new \stdClass();
+        $querydata->q = 'xyzzy';
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(
+                ['Course 1', 'Course 2', 'C1F1', 'C1F2', 'C2F'], $results);
+
+        // Admin user manually restricts results by context id to include one course and one forum.
+        $querydata->contextids = [$contextc2f->id, $contextc1->id];
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['Course 1', 'C2F'], $results);
+
+        // Student enrolled in only one course, same restriction, only has the available results.
+        $student2 = $generator->create_user();
+        $generator->enrol_user($student2->id, $course2->id, 'student');
+        $this->setUser($student2);
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['C2F'], $results);
+
+        // Student enrolled in both courses, same restriction, same results as admin.
+        $student1 = $generator->create_user();
+        $generator->enrol_user($student1->id, $course1->id, 'student');
+        $generator->enrol_user($student1->id, $course2->id, 'student');
+        $this->setUser($student1);
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['Course 1', 'C2F'], $results);
+
+        // Restrict both course and context.
+        $querydata->courseids = [$course2->id];
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['C2F'], $results);
+        unset($querydata->courseids);
+
+        // Restrict both area and context.
+        $querydata->areaids = ['core_course-course'];
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['Course 1'], $results);
+
+        // Restrict area and context, incompatibly - this has no results (and doesn't do a query).
+        $querydata->contextids = [$contextc2f->id];
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles([], $results);
+    }
+
+    /**
+     * Tests searching for results in groups, either by specified group ids or based on user
+     * access permissions.
+     */
+    public function test_groups(): void {
+        global $USER;
+
+        // Use real search areas.
+        $this->search->clear_static();
+        $this->search->add_core_search_areas();
+
+        // Create 2 courses and a selection of forums with different group mode.
+        $generator = $this->getDataGenerator();
+        $course1 = $generator->create_course(['fullname' => 'Course 1']);
+        $forum1nogroups = $generator->create_module('forum', ['course' => $course1, 'groupmode' => NOGROUPS]);
+        $forum1separategroups = $generator->create_module('forum', ['course' => $course1, 'groupmode' => SEPARATEGROUPS]);
+        $forum1visiblegroups = $generator->create_module('forum', ['course' => $course1, 'groupmode' => VISIBLEGROUPS]);
+        $course2 = $generator->create_course(['fullname' => 'Course 2']);
+        $forum2separategroups = $generator->create_module('forum', ['course' => $course2, 'groupmode' => SEPARATEGROUPS]);
+
+        // Create two groups on each course.
+        $group1a = $generator->create_group(['courseid' => $course1->id]);
+        $group1b = $generator->create_group(['courseid' => $course1->id]);
+        $group2a = $generator->create_group(['courseid' => $course2->id]);
+        $group2b = $generator->create_group(['courseid' => $course2->id]);
+
+        // Create search records in each activity and (where relevant) in each group.
+        $forumgenerator = $generator->get_plugin_generator('mod_forum');
+        $forumgenerator->create_discussion(['course' => $course1->id, 'userid' => $USER->id,
+                'forum' => $forum1nogroups->id, 'name' => 'F1NG', 'message' => 'xyzzy']);
+        $forumgenerator->create_discussion(['course' => $course1->id, 'userid' => $USER->id,
+                'forum' => $forum1separategroups->id, 'name' => 'F1SG-A',  'message' => 'xyzzy',
+                'groupid' => $group1a->id]);
+        $forumgenerator->create_discussion(['course' => $course1->id, 'userid' => $USER->id,
+                'forum' => $forum1separategroups->id, 'name' => 'F1SG-B', 'message' => 'xyzzy',
+                'groupid' => $group1b->id]);
+        $forumgenerator->create_discussion(['course' => $course1->id, 'userid' => $USER->id,
+                'forum' => $forum1visiblegroups->id, 'name' => 'F1VG-A', 'message' => 'xyzzy',
+                'groupid' => $group1a->id]);
+        $forumgenerator->create_discussion(['course' => $course1->id, 'userid' => $USER->id,
+                'forum' => $forum1visiblegroups->id, 'name' => 'F1VG-B', 'message' => 'xyzzy',
+                'groupid' => $group1b->id]);
+        $forumgenerator->create_discussion(['course' => $course2->id, 'userid' => $USER->id,
+                'forum' => $forum2separategroups->id, 'name' => 'F2SG-A', 'message' => 'xyzzy',
+                'groupid' => $group2a->id]);
+        $forumgenerator->create_discussion(['course' => $course2->id, 'userid' => $USER->id,
+                'forum' => $forum2separategroups->id, 'name' => 'F2SG-B', 'message' => 'xyzzy',
+                'groupid' => $group2b->id]);
+
+        $this->search->index();
+
+        // Search as admin user should find everything.
+        $querydata = new \stdClass();
+        $querydata->q = 'xyzzy';
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(
+                ['F1NG', 'F1SG-A', 'F1SG-B', 'F1VG-A', 'F1VG-B', 'F2SG-A', 'F2SG-B'], $results);
+
+        // Admin user manually restricts results by groups.
+        $querydata->groupids = [$group1b->id, $group2a->id];
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['F1SG-B', 'F1VG-B', 'F2SG-A'], $results);
+
+        // Student enrolled in both courses but no groups.
+        $student1 = $generator->create_user();
+        $generator->enrol_user($student1->id, $course1->id, 'student');
+        $generator->enrol_user($student1->id, $course2->id, 'student');
+        $this->setUser($student1);
+
+        unset($querydata->groupids);
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['F1NG', 'F1VG-A', 'F1VG-B'], $results);
+
+        // Student enrolled in both courses and group A in both cases.
+        $student2 = $generator->create_user();
+        $generator->enrol_user($student2->id, $course1->id, 'student');
+        $generator->enrol_user($student2->id, $course2->id, 'student');
+        groups_add_member($group1a, $student2);
+        groups_add_member($group2a, $student2);
+        $this->setUser($student2);
+
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['F1NG', 'F1SG-A', 'F1VG-A', 'F1VG-B', 'F2SG-A'], $results);
+
+        // Manually restrict results to group B in course 1.
+        $querydata->groupids = [$group1b->id];
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['F1VG-B'], $results);
+
+        // Manually restrict results to group A in course 1.
+        $querydata->groupids = [$group1a->id];
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['F1SG-A', 'F1VG-A'], $results);
+
+        // Manager enrolled in both courses (has access all groups).
+        $manager = $generator->create_user();
+        $generator->enrol_user($manager->id, $course1->id, 'manager');
+        $generator->enrol_user($manager->id, $course2->id, 'manager');
+        $this->setUser($manager);
+        unset($querydata->groupids);
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(
+                ['F1NG', 'F1SG-A', 'F1SG-B', 'F1VG-A', 'F1VG-B', 'F2SG-A', 'F2SG-B'], $results);
+    }
+
+    /**
+     * Tests searching for results restricted to specific user id(s).
+     */
+    public function test_user_restriction(): void {
+        // Use real search areas.
+        $this->search->clear_static();
+        $this->search->add_core_search_areas();
+
+        // Create a course, a forum, and a glossary.
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $forum = $generator->create_module('forum', ['course' => $course->id]);
+        $glossary = $generator->create_module('glossary', ['course' => $course->id]);
+
+        // Create 3 user accounts, all enrolled as students on the course.
+        $user1 = $generator->create_user();
+        $user2 = $generator->create_user();
+        $user3 = $generator->create_user();
+        $generator->enrol_user($user1->id, $course->id, 'student');
+        $generator->enrol_user($user2->id, $course->id, 'student');
+        $generator->enrol_user($user3->id, $course->id, 'student');
+
+        // All users create a forum discussion.
+        $forumgen = $generator->get_plugin_generator('mod_forum');
+        $forumgen->create_discussion(['course' => $course->id, 'forum' => $forum->id,
+            'userid' => $user1->id, 'name' => 'Post1', 'message' => 'plugh']);
+        $forumgen->create_discussion(['course' => $course->id, 'forum' => $forum->id,
+                'userid' => $user2->id, 'name' => 'Post2', 'message' => 'plugh']);
+        $forumgen->create_discussion(['course' => $course->id, 'forum' => $forum->id,
+                'userid' => $user3->id, 'name' => 'Post3', 'message' => 'plugh']);
+
+        // Two of the users create entries in the glossary.
+        $glossarygen = $generator->get_plugin_generator('mod_glossary');
+        $glossarygen->create_content($glossary, ['concept' => 'Entry1', 'definition' => 'plugh',
+                'userid' => $user1->id]);
+        $glossarygen->create_content($glossary, ['concept' => 'Entry3', 'definition' => 'plugh',
+                'userid' => $user3->id]);
+
+        // Index the data.
+        $this->search->index();
+
+        // Search without user restriction should find everything.
+        $querydata = new \stdClass();
+        $querydata->q = 'plugh';
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(
+                ['Entry1', 'Entry3', 'Post1', 'Post2', 'Post3'], $results);
+
+        // Restriction to user 3 only.
+        $querydata->userids = [$user3->id];
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(
+                ['Entry3', 'Post3'], $results);
+
+        // Restriction to users 1 and 2.
+        $querydata->userids = [$user1->id, $user2->id];
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(
+                ['Entry1', 'Post1', 'Post2'], $results);
+
+        // Restriction to users 1 and 2 combined with context restriction.
+        $querydata->contextids = [\context_module::instance($glossary->cmid)->id];
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(
+                ['Entry1'], $results);
+
+        // Restriction to users 1 and 2 combined with area restriction.
+        unset($querydata->contextids);
+        $querydata->areaids = [\core_search\manager::generate_areaid('mod_forum', 'post')];
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(
+                ['Post1', 'Post2'], $results);
+    }
+
+    /**
+     * Tests searching for results containing words in italic text. (This used to fail.)
+     */
+    public function test_italics(): void {
+        global $USER;
+
+        // Use real search areas.
+        $this->search->clear_static();
+        $this->search->add_core_search_areas();
+
+        // Create a course and a forum.
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $forum = $generator->create_module('forum', ['course' => $course->id]);
+
+        // As admin user, create forum discussions with various words in italics or with underlines.
+        $this->setAdminUser();
+        $forumgen = $generator->get_plugin_generator('mod_forum');
+        $forumgen->create_discussion(['course' => $course->id, 'forum' => $forum->id,
+                'userid' => $USER->id, 'name' => 'Post1',
+                'message' => '<p>This is a post about <i>frogs</i>.</p>']);
+        $forumgen->create_discussion(['course' => $course->id, 'forum' => $forum->id,
+                'userid' => $USER->id, 'name' => 'Post2',
+                'message' => '<p>This is a post about <i>toads and zombies</i>.</p>']);
+        $forumgen->create_discussion(['course' => $course->id, 'forum' => $forum->id,
+                'userid' => $USER->id, 'name' => 'Post3',
+                'message' => '<p>This is a post about toads_and_zombies.</p>']);
+        $forumgen->create_discussion(['course' => $course->id, 'forum' => $forum->id,
+                'userid' => $USER->id, 'name' => 'Post4',
+                'message' => '<p>This is a post about _leading and trailing_ underlines.</p>']);
+
+        // Index the data.
+        $this->search->index();
+
+        // Search for 'frogs' should find the post.
+        $querydata = new \stdClass();
+        $querydata->q = 'frogs';
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['Post1'], $results);
+
+        // Search for 'toads' or 'zombies' should find post 2 (and not 3)...
+        $querydata->q = 'toads';
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['Post2'], $results);
+        $querydata->q = 'zombies';
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['Post2'], $results);
+
+        // Search for 'toads_and_zombies' should find post 3.
+        $querydata->q = 'toads_and_zombies';
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['Post3'], $results);
+
+        // Search for '_leading' or 'trailing_' should find post 4.
+        $querydata->q = '_leading';
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['Post4'], $results);
+        $querydata->q = 'trailing_';
+        $results = $this->search->search($querydata);
+        $this->assert_result_titles(['Post4'], $results);
+    }
+
+    /**
+     * Asserts that the returned documents have the expected titles (regardless of order).
+     *
+     * @param string[] $expected List of expected document titles
+     * @param \core_search\document[] $results List of returned documents
+     */
+    protected function assert_result_titles(array $expected, array $results) {
+        $titles = [];
+        foreach ($results as $result) {
+            $titles[] = $result->get('title');
+        }
+        sort($titles);
+        sort($expected);
+        $this->assertEquals($expected, $titles);
+    }
+
+    /**
+     * Tests the get_supported_orders function for contexts where we can only use relevance
+     * (system, category).
+     */
+    public function test_get_supported_orders_relevance_only(): void {
+        global $DB;
+
+        // System or category context: relevance only.
+        $orders = $this->engine->get_supported_orders(\context_system::instance());
+        $this->assertCount(1, $orders);
+        $this->assertArrayHasKey('relevance', $orders);
+
+        $categoryid = $DB->get_field_sql('SELECT MIN(id) FROM {course_categories}');
+        $orders = $this->engine->get_supported_orders(\context_coursecat::instance($categoryid));
+        $this->assertCount(1, $orders);
+        $this->assertArrayHasKey('relevance', $orders);
+    }
+
+    /**
+     * Tests the get_supported_orders function for contexts where we support location as well
+     * (course, activity, block).
+     */
+    public function test_get_supported_orders_relevance_and_location(): void {
+        global $DB;
+
+        // Test with course context.
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course(['fullname' => 'Frogs']);
+        $coursecontext = \context_course::instance($course->id);
+
+        $orders = $this->engine->get_supported_orders($coursecontext);
+        $this->assertCount(2, $orders);
+        $this->assertArrayHasKey('relevance', $orders);
+        $this->assertArrayHasKey('location', $orders);
+        $this->assertStringContainsString('Course: Frogs', $orders['location']);
+
+        // Test with activity context.
+        $page = $generator->create_module('page', ['course' => $course->id, 'name' => 'Toads']);
+
+        $orders = $this->engine->get_supported_orders(\context_module::instance($page->cmid));
+        $this->assertCount(2, $orders);
+        $this->assertArrayHasKey('relevance', $orders);
+        $this->assertArrayHasKey('location', $orders);
+        $this->assertStringContainsString('Page: Toads', $orders['location']);
+
+        // Test with block context.
+        $instance = (object)['blockname' => 'html', 'parentcontextid' => $coursecontext->id,
+                'showinsubcontexts' => 0, 'pagetypepattern' => 'course-view-*',
+                'defaultweight' => 0, 'timecreated' => 1, 'timemodified' => 1,
+                'configdata' => ''];
+        $blockid = $DB->insert_record('block_instances', $instance);
+        $blockcontext = \context_block::instance($blockid);
+
+        $orders = $this->engine->get_supported_orders($blockcontext);
+        $this->assertCount(2, $orders);
+        $this->assertArrayHasKey('relevance', $orders);
+        $this->assertArrayHasKey('location', $orders);
+        $this->assertStringContainsString('Block: Text', $orders['location']);
+    }
+
+    /**
+     * Tests ordering by relevance vs location.
+     */
+    public function test_ordering(): void {
+        // Create 2 courses and 2 activities.
+        $generator = $this->getDataGenerator();
+        $course1 = $generator->create_course(['fullname' => 'Course 1']);
+        $course1context = \context_course::instance($course1->id);
+        $course1page = $generator->create_module('page', ['course' => $course1]);
+        $course1pagecontext = \context_module::instance($course1page->cmid);
+        $course2 = $generator->create_course(['fullname' => 'Course 2']);
+        $course2context = \context_course::instance($course2->id);
+        $course2page = $generator->create_module('page', ['course' => $course2]);
+        $course2pagecontext = \context_module::instance($course2page->cmid);
+
+        // Create one search record in each activity and course.
+        $this->create_search_record($course1->id, $course1context->id, 'C1', 'Xyzzy');
+        $this->create_search_record($course1->id, $course1pagecontext->id, 'C1P', 'Xyzzy');
+        $this->create_search_record($course2->id, $course2context->id, 'C2', 'Xyzzy');
+        $this->create_search_record($course2->id, $course2pagecontext->id, 'C2P', 'Xyzzy plugh');
+        $this->search->index();
+
+        // Default search works by relevance so the one with both words should be top.
+        $querydata = new \stdClass();
+        $querydata->q = 'xyzzy plugh';
+        $results = $this->search->search($querydata);
+        $this->assertCount(4, $results);
+        $this->assertEquals('C2P', $results[0]->get('title'));
+
+        // Same if you explicitly specify relevance.
+        $querydata->order = 'relevance';
+        $results = $this->search->search($querydata);
+        $this->assertEquals('C2P', $results[0]->get('title'));
+
+        // If you specify order by location and you are in C2 or C2P then results are the same.
+        $querydata->order = 'location';
+        $querydata->context = $course2context;
+        $results = $this->search->search($querydata);
+        $this->assertEquals('C2P', $results[0]->get('title'));
+        $querydata->context = $course2pagecontext;
+        $results = $this->search->search($querydata);
+        $this->assertEquals('C2P', $results[0]->get('title'));
+
+        // But if you are in C1P then you get different results (C1P first).
+        $querydata->context = $course1pagecontext;
+        $results = $this->search->search($querydata);
+        $this->assertEquals('C1P', $results[0]->get('title'));
+    }
+
+    /**
+     * Tests with bogus content (that can be entered into Moodle) to see if it crashes.
+     */
+    public function test_bogus_content(): void {
+        $generator = $this->getDataGenerator();
+        $course1 = $generator->create_course(['fullname' => 'Course 1']);
+        $course1context = \context_course::instance($course1->id);
+
+        // It is possible to enter into a Moodle database content containing these characters,
+        // which are Unicode non-characters / byte order marks. If sent to Solr, these cause
+        // failures.
+        $boguscontent = html_entity_decode('&#xfffe;', ENT_COMPAT) . 'frog';
+        $this->create_search_record($course1->id, $course1context->id, 'C1', $boguscontent);
+        $boguscontent = html_entity_decode('&#xffff;', ENT_COMPAT) . 'frog';
+        $this->create_search_record($course1->id, $course1context->id, 'C1', $boguscontent);
+
+        // Unicode Standard Version 9.0 - Core Specification, section 23.7, lists 66 non-characters
+        // in total. Here are some of them - these work OK for me but it may depend on platform.
+        $boguscontent = html_entity_decode('&#xfdd0;', ENT_COMPAT) . 'frog';
+        $this->create_search_record($course1->id, $course1context->id, 'C1', $boguscontent);
+        $boguscontent = html_entity_decode('&#xfdef;', ENT_COMPAT) . 'frog';
+        $this->create_search_record($course1->id, $course1context->id, 'C1', $boguscontent);
+        $boguscontent = html_entity_decode('&#x1fffe;', ENT_COMPAT) . 'frog';
+        $this->create_search_record($course1->id, $course1context->id, 'C1', $boguscontent);
+        $boguscontent = html_entity_decode('&#x10ffff;', ENT_COMPAT) . 'frog';
+        $this->create_search_record($course1->id, $course1context->id, 'C1', $boguscontent);
+
+        // Do the indexing (this will check it doesn't throw warnings).
+        $this->search->index();
+
+        // Confirm that all 6 documents are found in search.
+        $querydata = new \stdClass();
+        $querydata->q = 'frog';
+        $results = $this->search->search($querydata);
+        $this->assertCount(6, $results);
+    }
+
+    /**
+     * Adds a record to the mock search area, so that the search engine can find it later.
+     *
+     * @param int $courseid Course id
+     * @param int $contextid Context id
+     * @param string $title Title for search index
+     * @param string $content Content for search index
+     */
+    protected function create_search_record($courseid, $contextid, $title, $content) {
+        $record = new \stdClass();
+        $record->content = $content;
+        $record->title = $title;
+        $record->courseid = $courseid;
+        $record->contextid = $contextid;
+        $this->generator->create_record($record);
+    }
+
+    /**
+     * Tries out deleting data for a context or a course.
+     */
+    public function test_deleted_contexts_and_courses(): void {
+        // Create some courses and activities.
+        $generator = $this->getDataGenerator();
+        $course1 = $generator->create_course(['fullname' => 'Course 1']);
+        $course1context = \context_course::instance($course1->id);
+        $course1page1 = $generator->create_module('page', ['course' => $course1]);
+        $course1page1context = \context_module::instance($course1page1->cmid);
+        $course1page2 = $generator->create_module('page', ['course' => $course1]);
+        $course1page2context = \context_module::instance($course1page2->cmid);
+        $course2 = $generator->create_course(['fullname' => 'Course 2']);
+        $course2context = \context_course::instance($course2->id);
+        $course2page = $generator->create_module('page', ['course' => $course2]);
+        $course2pagecontext = \context_module::instance($course2page->cmid);
+
+        // Create one search record in each activity and course.
+        $this->create_search_record($course1->id, $course1context->id, 'C1', 'Xyzzy');
+        $this->create_search_record($course1->id, $course1page1context->id, 'C1P1', 'Xyzzy');
+        $this->create_search_record($course1->id, $course1page2context->id, 'C1P2', 'Xyzzy');
+        $this->create_search_record($course2->id, $course2context->id, 'C2', 'Xyzzy');
+        $this->create_search_record($course2->id, $course2pagecontext->id, 'C2P', 'Xyzzy plugh');
+        $this->search->index();
+
+        // By default we have all results.
+        $this->assert_raw_solr_query_result('content:xyzzy', ['C1', 'C1P1', 'C1P2', 'C2', 'C2P']);
+
+        // Say we delete the course2pagecontext...
+        $this->engine->delete_index_for_context($course2pagecontext->id);
+        $this->assert_raw_solr_query_result('content:xyzzy', ['C1', 'C1P1', 'C1P2', 'C2']);
+
+        // Now delete the second course...
+        $this->engine->delete_index_for_course($course2->id);
+        $this->assert_raw_solr_query_result('content:xyzzy', ['C1', 'C1P1', 'C1P2']);
+
+        // Finally let's delete using Moodle functions to check that works. Single context first.
+        course_delete_module($course1page1->cmid);
+        $this->assert_raw_solr_query_result('content:xyzzy', ['C1', 'C1P2']);
+        delete_course($course1, false);
+        $this->assert_raw_solr_query_result('content:xyzzy', []);
+    }
+
+    /**
+     * Specific test of the add_document_batch function (also used in many other tests).
+     */
+    public function test_add_document_batch(): void {
+        // Get a default document.
+        $area = new \core_mocksearch\search\mock_search_area();
+        $record = $this->generator->create_record();
+        $doc = $area->get_document($record);
+        $originalid = $doc->get('id');
+
+        // Now create 5 similar documents.
+        $docs = [];
+        for ($i = 1; $i <= 5; $i++) {
+            $doc = $area->get_document($record);
+            $doc->set('id', $originalid . '-' . $i);
+            $doc->set('title', 'Batch ' . $i);
+            $docs[$i] = $doc;
+        }
+
+        // Document 3 has a file attached.
+        $fs = get_file_storage();
+        $filerecord = new \stdClass();
+        $filerecord->content = 'Some FileContents';
+        $file = $this->generator->create_file($filerecord);
+        $docs[3]->add_stored_file($file);
+
+        // Add all these documents to the search engine.
+        $this->assertEquals([5, 0, 1], $this->engine->add_document_batch($docs, true));
+        $this->engine->area_index_complete($area->get_area_id());
+
+        // Check all documents were indexed.
+        $querydata = new \stdClass();
+        $querydata->q = 'Batch';
+        $results = $this->search->search($querydata);
+        $this->assertCount(5, $results);
+
+        // Check it also finds based on the file.
+        $querydata->q = 'FileContents';
+        $results = $this->search->search($querydata);
+        $this->assertCount(1, $results);
+    }
+
+    /**
+     * Tests the batching logic, specifically the limit to 100 documents per
+     * batch, and not batching very large documents.
+     */
+    public function test_batching(): void {
+        $area = new \core_mocksearch\search\mock_search_area();
+        $record = $this->generator->create_record();
+        $doc = $area->get_document($record);
+        $originalid = $doc->get('id');
+
+        // Up to 100 documents in 1 batch.
+        $docs = [];
+        for ($i = 1; $i <= 100; $i++) {
+            $doc = $area->get_document($record);
+            $doc->set('id', $originalid . '-' . $i);
+            $docs[$i] = $doc;
+        }
+        [, , , , , $batches] = $this->engine->add_documents(
+                new \ArrayIterator($docs), $area, ['indexfiles' => true]);
+        $this->assertEquals(1, $batches);
+
+        // More than 100 needs 2 batches.
+        $docs = [];
+        for ($i = 1; $i <= 101; $i++) {
+            $doc = $area->get_document($record);
+            $doc->set('id', $originalid . '-' . $i);
+            $docs[$i] = $doc;
+        }
+        [, , , , , $batches] = $this->engine->add_documents(
+                new \ArrayIterator($docs), $area, ['indexfiles' => true]);
+        $this->assertEquals(2, $batches);
+
+        // Small number but with some large documents that aren't batched.
+        $docs = [];
+        for ($i = 1; $i <= 10; $i++) {
+            $doc = $area->get_document($record);
+            $doc->set('id', $originalid . '-' . $i);
+            $docs[$i] = $doc;
+        }
+        // This one is just small enough to fit.
+        $docs[3]->set('content', str_pad('xyzzy ', 1024 * 1024, 'x'));
+        // These two don't fit.
+        $docs[5]->set('content', str_pad('xyzzy ', 1024 * 1024 + 1, 'x'));
+        $docs[6]->set('content', str_pad('xyzzy ', 1024 * 1024 + 1, 'x'));
+        [, , , , , $batches] = $this->engine->add_documents(
+                new \ArrayIterator($docs), $area, ['indexfiles' => true]);
+        $this->assertEquals(3, $batches);
+
+        // Check that all 3 of the large documents (added as batch or not) show up in results.
+        $this->engine->area_index_complete($area->get_area_id());
+        $querydata = new \stdClass();
+        $querydata->q = 'xyzzy';
+        $results = $this->search->search($querydata);
+        $this->assertCount(3, $results);
+    }
+
+    /**
+     * Tests with large documents. The point of this test is that we stop batching
+     * documents if they are bigger than 1MB, and the maximum batch count is 100,
+     * so the maximum size batch will be about 100 1MB documents.
+     */
+    public function test_add_document_batch_large(): void {
+        // This test is a bit slow and not that important to run every time...
+        if (!PHPUNIT_LONGTEST) {
+            $this->markTestSkipped('PHPUNIT_LONGTEST is not defined');
+        }
+
+        // Get a default document.
+        $area = new \core_mocksearch\search\mock_search_area();
+        $record = $this->generator->create_record();
+        $doc = $area->get_document($record);
+        $originalid = $doc->get('id');
+
+        // Now create 100 large documents.
+        $size = 1024 * 1024;
+        $docs = [];
+        for ($i = 1; $i <= 100; $i++) {
+            $doc = $area->get_document($record);
+            $doc->set('id', $originalid . '-' . $i);
+            $doc->set('title', 'Batch ' . $i);
+            $doc->set('content', str_pad('', $size, 'Long text ' . $i . '. ', STR_PAD_RIGHT) . ' xyzzy');
+            $docs[$i] = $doc;
+        }
+
+        // Add all these documents to the search engine.
+        $this->engine->add_document_batch($docs, true);
+        $this->engine->area_index_complete($area->get_area_id());
+
+        // Check all documents were indexed, searching for text at end.
+        $querydata = new \stdClass();
+        $querydata->q = 'xyzzy';
+        $results = $this->search->search($querydata);
+        $this->assertCount(100, $results);
+
+        // Search for specific text that's only in one.
+        $querydata->q = '42';
+        $results = $this->search->search($querydata);
+        $this->assertCount(1, $results);
+    }
+
+    /**
+     * Carries out a raw Solr query using the Solr basic query syntax.
+     *
+     * This is used to test data contained in the index without going through Moodle processing.
+     *
+     * @param string $q Search query
+     * @param string[] $expected Expected titles of results, in alphabetical order
+     */
+    protected function assert_raw_solr_query_result(string $q, array $expected) {
+        $solr = $this->engine->get_search_client_public();
+        $query = new \SolrQuery($q);
+        $results = $solr->query($query)->getResponse()->response->docs;
+        if ($results) {
+            $titles = array_map(function($x) {
+                return $x->title;
+            }, $results);
+            sort($titles);
+        } else {
+            $titles = [];
+        }
+        $this->assertEquals($expected, $titles);
     }
 }

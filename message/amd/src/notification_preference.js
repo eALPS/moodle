@@ -18,15 +18,13 @@
  * message preference page.
  *
  * @module     core_message/notification_preference
- * @class      notification_preference
- * @package    message
  * @copyright  2016 Ryan Wyllie <ryan@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 define(['jquery', 'core/ajax', 'core/notification', 'core_message/notification_processor'],
         function($, Ajax, Notification, NotificationProcessor) {
 
-    var SELECTORS = {
+    const SELECTORS = {
         PROCESSOR: '[data-processor-name]',
         STATE_INPUTS: '[data-state] input',
     };
@@ -34,10 +32,11 @@ define(['jquery', 'core/ajax', 'core/notification', 'core_message/notification_p
     /**
      * Constructor for the Preference.
      *
+     * @class
      * @param {object} element jQuery object root element of the preference
      * @param {int} userId The current user id
      */
-    var NotificationPreference = function(element, userId) {
+    const NotificationPreference = function(element, userId) {
         this.root = $(element);
         this.userId = userId;
     };
@@ -53,23 +52,13 @@ define(['jquery', 'core/ajax', 'core/notification', 'core_message/notification_p
     };
 
     /**
-     * Get the unique key for the logged in preference.
+     * Get the unique key for the enabled preference.
      *
-     * @method getLoggedInPreferenceKey
+     * @method getEnabledPreferenceKey
      * @return {string}
      */
-    NotificationPreference.prototype.getLoggedInPreferenceKey = function() {
-        return this.getPreferenceKey() + '_loggedin';
-    };
-
-    /**
-     * Get the unique key for the logged off preference.
-     *
-     * @method getLoggedOffPreferenceKey
-     * @return {string}
-     */
-    NotificationPreference.prototype.getLoggedOffPreferenceKey = function() {
-        return this.getPreferenceKey() + '_loggedoff';
+    NotificationPreference.prototype.getEnabledPreferenceKey = function() {
+        return this.getPreferenceKey() + '_enabled';
     };
 
     /**
@@ -127,50 +116,33 @@ define(['jquery', 'core/ajax', 'core/notification', 'core_message/notification_p
 
         this.startLoading();
 
-        var loggedInValue = '';
-        var loggedOffValue = '';
+        let enabledValue = '';
 
         this.getProcessors().each(function(index, processor) {
-            if (processor.isLoggedInEnabled()) {
-                if (loggedInValue === '') {
-                    loggedInValue = processor.getName();
+            if (processor.isEnabled()) {
+                if (enabledValue === '') {
+                    enabledValue = processor.getName();
                 } else {
-                    loggedInValue += ',' + processor.getName();
-                }
-            }
-
-            if (processor.isLoggedOffEnabled()) {
-                if (loggedOffValue === '') {
-                    loggedOffValue = processor.getName();
-                } else {
-                    loggedOffValue += ',' + processor.getName();
+                    enabledValue += ',' + processor.getName();
                 }
             }
         });
 
-        if (loggedInValue === '') {
-            loggedInValue = 'none';
+        if (enabledValue === '') {
+            enabledValue = 'none';
         }
 
-        if (loggedOffValue === '') {
-            loggedOffValue = 'none';
-        }
-
-        var args = {
+        const args = {
             userid: this.userId,
             preferences: [
                 {
-                    type: this.getLoggedInPreferenceKey(),
-                    value: loggedInValue,
-                },
-                {
-                    type: this.getLoggedOffPreferenceKey(),
-                    value: loggedOffValue,
-                },
+                    type: this.getEnabledPreferenceKey(),
+                    value: enabledValue,
+                }
             ],
         };
 
-        var request = {
+        const request = {
             methodname: 'core_user_update_user_preferences',
             args: args,
         };

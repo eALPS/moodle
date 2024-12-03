@@ -14,20 +14,24 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for /lib/filestorage/tgz_packer.php and tgz_extractor.php.
- *
- * @package core_files
- * @copyright 2013 The Open University
- * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core;
+
+use file_progress;
+use tgz_packer;
 
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->libdir . '/filestorage/file_progress.php');
 
-class core_files_tgz_packer_testcase extends advanced_testcase implements file_progress {
+/**
+ * Unit tests for /lib/filestorage/tgz_packer.php and tgz_extractor.php.
+ *
+ * @package core
+ * @copyright 2013 The Open University
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class tgz_packer_test extends \advanced_testcase implements file_progress {
     /**
      * @var array Progress information passed to the progress reporter
      */
@@ -68,7 +72,7 @@ class core_files_tgz_packer_testcase extends advanced_testcase implements file_p
         $filelist['out2'] = $CFG->tempdir . '/dir1';
 
         // Moodle stored_file.
-        $context = context_system::instance();
+        $context = \context_system::instance();
         $filerecord = array('contextid' => $context->id, 'component' => 'phpunit',
                 'filearea' => 'data', 'itemid' => 0, 'filepath' => '/',
                 'filename' => 'file4.txt', 'timemodified' => 1377993604);
@@ -103,7 +107,7 @@ class core_files_tgz_packer_testcase extends advanced_testcase implements file_p
     /**
      * Tests getting the item.
      */
-    public function test_get_packer() {
+    public function test_get_packer(): void {
         $packer = get_file_packer('application/x-gzip');
         $this->assertInstanceOf('tgz_packer', $packer);
     }
@@ -111,7 +115,7 @@ class core_files_tgz_packer_testcase extends advanced_testcase implements file_p
     /**
      * Tests basic archive and extract to file paths.
      */
-    public function test_to_normal_files() {
+    public function test_to_normal_files(): void {
         global $CFG;
         $packer = get_file_packer('application/x-gzip');
 
@@ -152,14 +156,14 @@ class core_files_tgz_packer_testcase extends advanced_testcase implements file_p
     /**
      * Tests archive and extract to Moodle file system.
      */
-    public function test_to_stored_files() {
+    public function test_to_stored_files(): void {
         global $CFG;
         $packer = get_file_packer('application/x-gzip');
 
         // Archive files.
         $files = $this->prepare_file_list();
         $archivefile = $CFG->tempdir . '/test.tar.gz';
-        $context = context_system::instance();
+        $context = \context_system::instance();
         $sf = $packer->archive_to_storage($files,
                 $context->id, 'phpunit', 'archive', 1, '/', 'archive.tar.gz');
         $this->assertInstanceOf('stored_file', $sf);
@@ -218,7 +222,7 @@ class core_files_tgz_packer_testcase extends advanced_testcase implements file_p
     /**
      * Tests extracting with a list of specified files.
      */
-    public function test_only_specified_files() {
+    public function test_only_specified_files(): void {
         global $CFG;
         $packer = get_file_packer('application/x-gzip');
 
@@ -250,12 +254,12 @@ class core_files_tgz_packer_testcase extends advanced_testcase implements file_p
     /**
      * Tests extracting files returning only a boolean state with success.
      */
-    public function test_extract_to_pathname_returnvalue_successful() {
+    public function test_extract_to_pathname_returnvalue_successful(): void {
         $packer = get_file_packer('application/x-gzip');
 
         // Prepare files.
         $files = $this->prepare_file_list();
-        $archivefile = make_request_directory() . DIRECTORY_SEPARATOR . 'test.tgz';
+        $archivefile = make_request_directory() . '/test.tgz';
         $packer->archive_to_pathname($files, $archivefile);
 
         // Extract same files.
@@ -268,11 +272,11 @@ class core_files_tgz_packer_testcase extends advanced_testcase implements file_p
     /**
      * Tests extracting files returning only a boolean state with failure.
      */
-    public function test_extract_to_pathname_returnvalue_failure() {
+    public function test_extract_to_pathname_returnvalue_failure(): void {
         $packer = get_file_packer('application/x-gzip');
 
         // Create sample files.
-        $archivefile = make_request_directory() . DIRECTORY_SEPARATOR . 'test.tgz';
+        $archivefile = make_request_directory() . '/test.tgz';
         file_put_contents($archivefile, '');
 
         // Extract same files.
@@ -286,14 +290,14 @@ class core_files_tgz_packer_testcase extends advanced_testcase implements file_p
     /**
      * Tests the progress reporting.
      */
-    public function test_file_progress() {
+    public function test_file_progress(): void {
         global $CFG;
 
         // Set up.
         $filelist = $this->prepare_file_list();
         $packer = get_file_packer('application/x-gzip');
         $archive = "$CFG->tempdir/archive.tgz";
-        $context = context_system::instance();
+        $context = \context_system::instance();
 
         // Archive to pathname.
         $this->progress = array();
@@ -343,7 +347,7 @@ class core_files_tgz_packer_testcase extends advanced_testcase implements file_p
     /**
      * Tests the list_files function with and without an index file.
      */
-    public function test_list_files() {
+    public function test_list_files(): void {
         global $CFG;
 
         // Set up.
@@ -355,7 +359,7 @@ class core_files_tgz_packer_testcase extends advanced_testcase implements file_p
         $packer = get_file_packer('application/x-gzip');
         $result = $packer->archive_to_pathname($filelist, $archive, true, $this);
         $this->assertTrue($result);
-        $hashwith = sha1_file($archive);
+        $hashwith = \file_storage::hash_from_path($archive);
 
         // List files.
         $files = $packer->list_files($archive);
@@ -382,7 +386,7 @@ class core_files_tgz_packer_testcase extends advanced_testcase implements file_p
         $packer->set_include_index(false);
         $result = $packer->archive_to_pathname($filelist, $archive, true, $this);
         $this->assertTrue($result);
-        $hashwithout = sha1_file($archive);
+        $hashwithout = \file_storage::hash_from_path($archive);
         $files = $packer->list_files($archive);
         $this->assertEquals($expectedinfo, self::convert_info_for_assert($files));
 
@@ -410,7 +414,7 @@ class core_files_tgz_packer_testcase extends advanced_testcase implements file_p
         return $actualinfo;
     }
 
-    public function test_is_tgz_file() {
+    public function test_is_tgz_file(): void {
         global $CFG;
 
         // Set up.
@@ -420,7 +424,7 @@ class core_files_tgz_packer_testcase extends advanced_testcase implements file_p
         $archive2 = "$CFG->tempdir/archive.zip";
 
         // Archive in tgz and zip format.
-        $context = context_system::instance();
+        $context = \context_system::instance();
         $archive1 = $packer1->archive_to_storage($filelist, $context->id,
                 'phpunit', 'test', 0, '/', 'archive.tgz', null, true, $this);
         $this->assertInstanceOf('stored_file', $archive1);

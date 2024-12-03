@@ -23,6 +23,10 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
+
 require_once("$CFG->dirroot/webservice/lib.php");
 
 /**
@@ -49,6 +53,19 @@ class webservice_rest_server extends webservice_base_server {
     }
 
     /**
+     * Set the request format to.
+     */
+    public function set_rest_format(): void {
+        // Get GET and POST parameters.
+        $methodvariables = array_merge($_GET, $_POST);
+
+        // Retrieve REST format parameter - 'xml' (default) or 'json'.
+        $restformatisset = isset($methodvariables['moodlewsrestformat'])
+                && (($methodvariables['moodlewsrestformat'] == 'xml' || $methodvariables['moodlewsrestformat'] == 'json'));
+        $this->restformat = $restformatisset ? $methodvariables['moodlewsrestformat'] : 'xml';
+    }
+
+    /**
      * This method parses the $_POST and $_GET superglobals and looks for
      * the following information:
      *  1/ user authentication - username+password or token (wsusername, wspassword and wstoken parameters)
@@ -64,11 +81,7 @@ class webservice_rest_server extends webservice_base_server {
 
         // Get GET and POST parameters.
         $methodvariables = array_merge($_GET, $_POST);
-
-        // Retrieve REST format parameter - 'xml' (default) or 'json'.
-        $restformatisset = isset($methodvariables['moodlewsrestformat'])
-                && (($methodvariables['moodlewsrestformat'] == 'xml' || $methodvariables['moodlewsrestformat'] == 'json'));
-        $this->restformat = $restformatisset ? $methodvariables['moodlewsrestformat'] : 'xml';
+        $this->set_rest_format();
         unset($methodvariables['moodlewsrestformat']);
 
         if ($this->authmethod == WEBSERVICE_AUTHMETHOD_USERNAME) {
@@ -103,7 +116,10 @@ class webservice_rest_server extends webservice_base_server {
         //Check that the returned values are valid
         try {
             if ($this->function->returns_desc != null) {
-                $validatedvalues = external_api::clean_returnvalue($this->function->returns_desc, $this->returns);
+                $validatedvalues = \core_external\external_api::clean_returnvalue(
+                    $this->function->returns_desc,
+                    $this->returns
+                );
             } else {
                 $validatedvalues = null;
             }
@@ -137,6 +153,15 @@ class webservice_rest_server extends webservice_base_server {
      * @param exception $ex the exception that we are sending
      */
     protected function send_error($ex=null) {
+        // Unless debugging is completely off, log the error to server error log.
+        if (debugging('', DEBUG_MINIMAL)) {
+            $info = get_exception_info($ex);
+            // This format is the same as default_exception_handler() in setuplib.php but with the
+            // word 'REST' instead of 'Default', to make it easy to reuse any existing processing.
+            error_log('REST exception handler: ' . $info->message . ' Debug: ' .
+                    $info->debuginfo . "\n" . format_backtrace($info->backtrace, true));
+        }
+
         $this->send_headers();
         echo $this->generate_error($ex);
     }
@@ -150,7 +175,9 @@ class webservice_rest_server extends webservice_base_server {
         if ($this->restformat == 'json') {
             $errorobject = new stdClass;
             $errorobject->exception = get_class($ex);
-            $errorobject->errorcode = $ex->errorcode;
+            if (isset($ex->errorcode)) {
+                $errorobject->errorcode = $ex->errorcode;
+            }
             $errorobject->message = $ex->getMessage();
             if (debugging() and isset($ex->debuginfo)) {
                 $errorobject->debuginfo = $ex->debuginfo;
@@ -159,8 +186,10 @@ class webservice_rest_server extends webservice_base_server {
         } else {
             $error = '<?xml version="1.0" encoding="UTF-8" ?>'."\n";
             $error .= '<EXCEPTION class="'.get_class($ex).'">'."\n";
-            $error .= '<ERRORCODE>' . htmlspecialchars($ex->errorcode, ENT_COMPAT, 'UTF-8')
-                    . '</ERRORCODE>' . "\n";
+            if (isset($ex->errorcode)) {
+                $error .= '<ERRORCODE>' . htmlspecialchars($ex->errorcode, ENT_COMPAT, 'UTF-8')
+                        . '</ERRORCODE>' . "\n";
+            }
             $error .= '<MESSAGE>'.htmlspecialchars($ex->getMessage(), ENT_COMPAT, 'UTF-8').'</MESSAGE>'."\n";
             if (debugging() and isset($ex->debuginfo)) {
                 $error .= '<DEBUGINFO>'.htmlspecialchars($ex->debuginfo, ENT_COMPAT, 'UTF-8').'</DEBUGINFO>'."\n";

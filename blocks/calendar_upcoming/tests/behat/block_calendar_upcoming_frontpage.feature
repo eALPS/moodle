@@ -4,17 +4,20 @@ Feature: View a site event on the frontpage
   As a teacher
   I can view the event in the upcoming events block
 
-  Scenario: View a global event in the upcoming events block on the frontpage
+  Background:
     Given the following "users" exist:
       | username | firstname | lastname | email | idnumber |
       | teacher1 | Teacher | 1 | teacher1@example.com | T1 |
-    And I log in as "admin"
+    And the following "blocks" exist:
+      | blockname         | contextlevel | reference | pagetypepattern | defaultregion |
+      | calendar_upcoming | System       | 1         | site-index      | side-pre      |
+
+  @javascript
+  Scenario: View a site event in the upcoming events block on the frontpage
+    Given I log in as "admin"
     And I create a calendar event with form data:
       | id_eventtype | Site |
       | id_name | My Site Event |
-    And I am on site homepage
-    And I navigate to "Turn editing on" node in "Front page settings"
-    And I add the "Upcoming events" block
     And I log out
     When I log in as "teacher1"
     And I am on site homepage

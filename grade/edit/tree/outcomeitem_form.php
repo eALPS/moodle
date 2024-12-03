@@ -78,7 +78,7 @@ class edit_outcomeitem_form extends moodleform {
         $mform->addElement('checkbox', 'hidden', get_string('hidden', 'grades'));
         $mform->addHelpButton('hidden', 'hidden', 'grades');
         $mform->addElement('date_time_selector', 'hiddenuntil', get_string('hiddenuntil', 'grades'), array('optional'=>true));
-        $mform->disabledIf('hidden', 'hiddenuntil[off]', 'notchecked');
+        $mform->disabledIf('hidden', 'hiddenuntil[enabled]', 'checked');
 
         //locking
         $mform->addElement('advcheckbox', 'locked', get_string('locked', 'grades'));
@@ -154,15 +154,6 @@ class edit_outcomeitem_form extends moodleform {
         $gpr = $this->_customdata['gpr'];
         $gpr->add_mform_elements($mform);
 
-/// mark advanced according to site settings
-        if (isset($CFG->grade_item_advanced)) {
-            $advanced = explode(',', $CFG->grade_item_advanced);
-            foreach ($advanced as $el) {
-                if ($mform->elementExists($el)) {
-                    $mform->setAdvanced($el);
-                }
-            }
-        }
 //-------------------------------------------------------------------------------
         // buttons
         $this->add_action_buttons();

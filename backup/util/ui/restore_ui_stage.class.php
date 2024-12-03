@@ -44,7 +44,7 @@ abstract class restore_ui_stage extends base_ui_stage {
      * @param restore_ui $ui
      * @param array $params
      */
-    public function __construct(restore_ui $ui, array $params = null) {
+    public function __construct(restore_ui $ui, ?array $params = null) {
         $this->ui = $ui;
         $this->params = $params;
     }
@@ -288,9 +288,9 @@ class restore_ui_stage_confirm extends restore_ui_independent_stage implements f
      * @throws restore_ui_exception
      */
     public function process() {
-        global $CFG;
+        $backuptempdir = make_backup_temp_directory('');
         if ($this->filename) {
-            $archivepath = $CFG->tempdir . '/backup/' . $this->filename;
+            $archivepath = $backuptempdir . '/' . $this->filename;
             if (!file_exists($archivepath)) {
                 throw new restore_ui_exception('invalidrestorefile');
             }
@@ -316,13 +316,14 @@ class restore_ui_stage_confirm extends restore_ui_independent_stage implements f
      * @return bool
      */
     protected function extract_file_to_dir($source) {
-        global $CFG, $USER;
+        global $USER;
 
         $this->filepath = restore_controller::get_tempdir_name($this->contextid, $USER->id);
+        $backuptempdir = make_backup_temp_directory('', false);
 
         $fb = get_file_packer('application/vnd.moodle.backup');
         $result = $fb->extract_to_pathname($source,
-                $CFG->tempdir . '/backup/' . $this->filepath . '/', null, $this);
+                $backuptempdir . '/' . $this->filepath . '/', null, $this);
 
         // If any progress happened, end it.
         if ($this->startedprogress) {
@@ -462,7 +463,12 @@ class restore_ui_stage_destination extends restore_ui_independent_stage {
             'filepath' => $this->filepath,
             'contextid' => $this->contextid,
             'stage' => restore_ui::STAGE_DESTINATION));
-        $this->coursesearch = new restore_course_search(array('url' => $url), context::instance_by_id($contextid)->instanceid);
+        // The context level can be course category, course or module. We need to make sure that we always use correct one.
+        $context = context::instance_by_id($contextid);
+        if ($context->contextlevel != CONTEXT_COURSE && $coursecontext = $context->get_course_context(false)) {
+            $context = $coursecontext;
+        }
+        $this->coursesearch = new restore_course_search(array('url' => $url), $context->instanceid);
         $this->categorysearch = new restore_category_search(array('url' => $url));
     }
 
@@ -473,8 +479,9 @@ class restore_ui_stage_destination extends restore_ui_independent_stage {
      * @throws restore_ui_exception
      */
     public function process() {
-        global $CFG, $DB;
-        if (!file_exists("$CFG->tempdir/backup/".$this->filepath) || !is_dir("$CFG->tempdir/backup/".$this->filepath)) {
+        global $DB;
+        $filepathdir = make_backup_temp_directory($this->filepath, false);
+        if (!file_exists($filepathdir) || !is_dir($filepathdir)) {
             throw new restore_ui_exception('invalidrestorepath');
         }
         if (optional_param('searchcourses', false, PARAM_BOOL)) {
@@ -594,7 +601,7 @@ class restore_ui_stage_settings extends restore_ui_stage {
      * @param restore_ui $ui
      * @param array $params
      */
-    public function __construct(restore_ui $ui, array $params = null) {
+    public function __construct(restore_ui $ui, ?array $params = null) {
         $this->stage = restore_ui::STAGE_SETTINGS;
         parent::__construct($ui, $params);
     }
@@ -605,7 +612,7 @@ class restore_ui_stage_settings extends restore_ui_stage {
      * @param base_moodleform $form
      * @return bool|int
      */
-    public function process(base_moodleform $form = null) {
+    public function process(?base_moodleform $form = null) {
         $form = $this->initialise_stage_form();
 
         if ($form->is_cancelled()) {
@@ -706,7 +713,7 @@ class restore_ui_stage_schema extends restore_ui_stage {
      * @param restore_ui $ui
      * @param array $params
      */
-    public function __construct(restore_ui $ui, array $params = null) {
+    public function __construct(restore_ui $ui, ?array $params = null) {
         $this->stage = restore_ui::STAGE_SCHEMA;
         parent::__construct($ui, $params);
     }
@@ -717,7 +724,7 @@ class restore_ui_stage_schema extends restore_ui_stage {
      * @param base_moodleform $form
      * @return int The number of changes the user made
      */
-    public function process(base_moodleform $form = null) {
+    public function process(?base_moodleform $form = null) {
         $form = $this->initialise_stage_form();
         // Check it wasn't cancelled.
         if ($form->is_cancelled()) {
@@ -854,7 +861,7 @@ class restore_ui_stage_review extends restore_ui_stage {
      * @param restore_ui $ui
      * @param array $params
      */
-    public function __construct($ui, array $params = null) {
+    public function __construct($ui, ?array $params = null) {
         $this->stage = restore_ui::STAGE_REVIEW;
         parent::__construct($ui, $params);
     }
@@ -865,7 +872,7 @@ class restore_ui_stage_review extends restore_ui_stage {
      * @param base_moodleform $form
      * @return int The number of changes the user made
      */
-    public function process(base_moodleform $form = null) {
+    public function process(?base_moodleform $form = null) {
         $form = $this->initialise_stage_form();
         // Check it hasn't been cancelled.
         if ($form->is_cancelled()) {
@@ -899,7 +906,7 @@ class restore_ui_stage_review extends restore_ui_stage {
             foreach ($tasks as $task) {
                 if ($task instanceof restore_root_task) {
                     // If its a backup root add a root settings heading to group nicely.
-                    $form->add_heading('rootsettings', get_string('rootsettings', 'backup'));
+                    $form->add_heading('rootsettings', get_string('restorerootsettings', 'backup'));
                 } else if (!$courseheading) {
                     // We haven't already add a course heading.
                     $form->add_heading('coursesettings', get_string('coursesettings', 'backup'));
@@ -961,7 +968,7 @@ class restore_ui_stage_process extends restore_ui_stage {
      * @param base_ui $ui
      * @param array $params
      */
-    public function __construct(base_ui $ui, array $params = null) {
+    public function __construct(base_ui $ui, ?array $params = null) {
         $this->stage = restore_ui::STAGE_PROCESS;
         parent::__construct($ui, $params);
     }
@@ -975,7 +982,7 @@ class restore_ui_stage_process extends restore_ui_stage {
      *
      * @param base_moodleform $form
      */
-    public function process(base_moodleform $form = null) {
+    public function process(?base_moodleform $form = null) {
         if (optional_param('cancel', false, PARAM_BOOL)) {
             redirect(new moodle_url('/course/view.php', array('id' => $this->get_ui()->get_controller()->get_courseid())));
         }
@@ -1059,7 +1066,26 @@ class restore_ui_stage_process extends restore_ui_stage {
                 if (!empty($info->role_mappings->mappings)) {
                     $context = context_course::instance($this->ui->get_controller()->get_courseid());
                     $assignableroles = get_assignable_roles($context, ROLENAME_ALIAS, false);
-                    $html .= $renderer->role_mappings($info->role_mappings->mappings, $assignableroles);
+
+                    // Get current role mappings.
+                    $currentroles = role_fix_names(get_all_roles(), $context);
+                    // Get backup role mappings.
+                    $rolemappings = $info->role_mappings->mappings;
+
+                    array_map(function($rolemapping) use ($currentroles) {
+                        foreach ($currentroles as $role) {
+                            // Find matching archetype to determine the backup's shortname for label display.
+                            if ($rolemapping->archetype == $role->archetype) {
+                                $rolemapping->name = $rolemapping->shortname;
+                                break;
+                            }
+                        }
+                        if ($rolemapping->name == null) {
+                            $rolemapping->name = get_string('undefinedrolemapping', 'backup', $rolemapping->archetype);
+                        }
+                    }, $rolemappings);
+
+                    $html .= $renderer->role_mappings($rolemappings, $assignableroles);
                 }
                 break;
             default:
@@ -1103,7 +1129,7 @@ class restore_ui_stage_complete extends restore_ui_stage_process {
      * @param array $params
      * @param array $results
      */
-    public function __construct(restore_ui $ui, array $params = null, array $results = null) {
+    public function __construct(restore_ui $ui, ?array $params = null, ?array $results = null) {
         $this->results = $results;
         parent::__construct($ui, $params);
         $this->stage = restore_ui::STAGE_COMPLETE;
@@ -1140,8 +1166,10 @@ class restore_ui_stage_complete extends restore_ui_stage_process {
             $html .= $renderer->notification(get_string('restorefileweremissing', 'backup'), 'notifyproblem');
         }
         $html .= $renderer->notification(get_string('restoreexecutionsuccess', 'backup'), 'notifysuccess');
-        $html .= $renderer->continue_button(new moodle_url('/course/view.php', array(
-            'id' => $this->get_ui()->get_controller()->get_courseid())), 'get');
+
+        $courseurl = course_get_url($this->get_ui()->get_controller()->get_courseid());
+        $html .= $renderer->continue_button($courseurl, 'get');
+
         $html .= $renderer->box_end();
 
         return $html;

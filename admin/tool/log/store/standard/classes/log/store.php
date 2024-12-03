@@ -38,6 +38,9 @@ class store implements \tool_log\log\writer, \core\log\sql_internal_table_reader
         $this->helper_setup($manager);
         // Log everything before setting is saved for the first time.
         $this->logguests = $this->get_config('logguests', 1);
+        // JSON writing defaults to false (table format compatibility with older versions).
+        // Note: This variable is defined in the buffered_writer trait.
+        $this->jsonformat = (bool)$this->get_config('jsonformat', false);
     }
 
     /**
@@ -120,7 +123,7 @@ class store implements \tool_log\log\writer, \core\log\sql_internal_table_reader
         $extra = array('origin' => $data->origin, 'ip' => $data->ip, 'realuserid' => $data->realuserid);
         $data = (array)$data;
         $id = $data['id'];
-        $data['other'] = unserialize($data['other']);
+        $data['other'] = self::decode_other($data['other']);
         if ($data['other'] === false) {
             $data['other'] = array();
         }
@@ -136,9 +139,30 @@ class store implements \tool_log\log\writer, \core\log\sql_internal_table_reader
         return $event;
     }
 
+    /**
+     * Get number of events present for the given select clause.
+     *
+     * @param string $selectwhere select conditions.
+     * @param array $params params.
+     *
+     * @return int Number of events available for the given conditions
+     */
     public function get_events_select_count($selectwhere, array $params) {
         global $DB;
         return $DB->count_records_select('logstore_standard_log', $selectwhere, $params);
+    }
+
+    /**
+     * Get whether events are present for the given select clause.
+     *
+     * @param string $selectwhere select conditions.
+     * @param array $params params.
+     *
+     * @return bool Whether events available for the given conditions
+     */
+    public function get_events_select_exists(string $selectwhere, array $params): bool {
+        global $DB;
+        return $DB->record_exists_select('logstore_standard_log', $selectwhere, $params);
     }
 
     public function get_internal_log_table_name() {

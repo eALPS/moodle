@@ -73,15 +73,18 @@ class user_filter_profilefield extends user_filter_type {
      * @return array of profile fields
      */
     public function get_profile_fields() {
-        global $DB;
-        if (!$fields = $DB->get_records('user_info_field', null, 'shortname', 'id,shortname')) {
-            return null;
+        global $CFG;
+        require_once($CFG->dirroot . '/user/profile/lib.php');
+
+        $fieldrecords = profile_get_custom_fields();
+        foreach ($fieldrecords as $key => $fieldrecord) {
+            $fieldrecords[$key]->name = format_string($fieldrecords[$key]->name, false, ['context' => context_system::instance()]);
         }
+        $fields = array_combine(array_keys($fieldrecords), array_column($fieldrecords, 'name'));
+        core_collator::asort($fields);
         $res = array(0 => get_string('anyfield', 'filters'));
-        foreach ($fields as $k => $v) {
-            $res[$k] = $v->shortname;
-        }
-        return $res;
+
+        return $res + $fields;
     }
 
     /**
@@ -123,7 +126,7 @@ class user_filter_profilefield extends user_filter_type {
         $operator = $field.'_op';
         $profile  = $field.'_fld';
 
-        if (array_key_exists($profile, $formdata)) {
+        if (property_exists($formdata, $profile)) {
             if ($formdata->$operator < 5 and $formdata->$field === '') {
                 return false;
             }

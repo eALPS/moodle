@@ -22,10 +22,9 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-use enrol_lti\data_connector;
-use enrol_lti\helper;
+namespace enrol_lti;
+
 use enrol_lti\task\sync_members;
-use enrol_lti\tool_provider;
 use IMSGlobal\LTI\ToolProvider\Context;
 use IMSGlobal\LTI\ToolProvider\ResourceLink;
 use IMSGlobal\LTI\ToolProvider\ToolConsumer;
@@ -40,11 +39,11 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright 2016 Jun Pataleta <jun@moodle.com>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class sync_members_testcase extends advanced_testcase {
+class sync_members_test extends \advanced_testcase {
     /** @var dummy_sync_members_task $task */
     protected $task;
 
-    /** @var  stdClass $tool The published tool. */
+    /** @var  \stdClass $tool The published tool. */
     protected $tool;
 
     /** @var User[] $members */
@@ -59,7 +58,8 @@ class sync_members_testcase extends advanced_testcase {
     /** @var  ResourceLink $resourcelink */
     protected $resourcelink;
 
-    public function setUp() {
+    public function setUp(): void {
+        parent::setUp();
         $this->resetAfterTest();
 
         // Set this user as the admin.
@@ -112,7 +112,7 @@ class sync_members_testcase extends advanced_testcase {
     /**
      * Test for sync_members::do_context_membership_request().
      */
-    public function test_do_context_membership_request() {
+    public function test_do_context_membership_request(): void {
         // Suppress output.
         ob_start();
         $members = $this->task->do_context_membership_request($this->context);
@@ -123,7 +123,7 @@ class sync_members_testcase extends advanced_testcase {
     /**
      * Test for sync_members::do_resourcelink_membership_request().
      */
-    public function test_do_resourcelink_membership_request() {
+    public function test_do_resourcelink_membership_request(): void {
         $members = $this->task->do_resourcelink_membership_request($this->resourcelink);
         $this->assertFalse($members);
     }
@@ -131,18 +131,18 @@ class sync_members_testcase extends advanced_testcase {
     /**
      * Test for sync_members::execute() when auth_lti is disabled.
      */
-    public function test_execute_authdisabled() {
+    public function test_execute_authdisabled(): void {
         ob_start();
         $this->task->execute();
         $output = ob_get_clean();
         $message = 'Skipping task - ' . get_string('pluginnotenabled', 'auth', get_string('pluginname', 'auth_lti'));
-        $this->assertContains($message, $output);
+        $this->assertStringContainsString($message, $output);
     }
 
     /**
      * Test for sync_members::execute() when enrol_lti is disabled.
      */
-    public function test_execute_enroldisabled() {
+    public function test_execute_enroldisabled(): void {
         // Enable auth_lti.
         $this->enable_auth();
 
@@ -150,13 +150,13 @@ class sync_members_testcase extends advanced_testcase {
         $this->task->execute();
         $output = ob_get_clean();
         $message = 'Skipping task - ' . get_string('enrolisdisabled', 'enrol_lti');
-        $this->assertContains($message, $output);
+        $this->assertStringContainsString($message, $output);
     }
 
     /**
      * Test for sync_members::execute().
      */
-    public function test_execute() {
+    public function test_execute(): void {
         // Enable auth_lti.
         $this->enable_auth();
 
@@ -168,16 +168,16 @@ class sync_members_testcase extends advanced_testcase {
         $output = ob_get_clean();
 
         $membersyncmessage = "Completed - Synced members for tool '{$this->tool->id}' in the course '{$this->tool->courseid}'";
-        $this->assertContains($membersyncmessage, $output);
+        $this->assertStringContainsString($membersyncmessage, $output);
 
         $imagesyncmessage = "Completed - Synced 0 profile images.";
-        $this->assertContains($imagesyncmessage, $output);
+        $this->assertStringContainsString($imagesyncmessage, $output);
     }
 
     /**
      * Test for sync_members::fetch_members_from_consumer() with no resource link nor context associated with the consumer.
      */
-    public function test_fetch_members_from_consumer_noresourcelink_nocontext() {
+    public function test_fetch_members_from_consumer_noresourcelink_nocontext(): void {
         // Suppress output.
         ob_start();
         $members = $this->task->fetch_members_from_consumer($this->consumer);
@@ -188,14 +188,14 @@ class sync_members_testcase extends advanced_testcase {
     /**
      * Test for sync_members::get_name().
      */
-    public function test_get_name() {
+    public function test_get_name(): void {
         $this->assertEquals(get_string('tasksyncmembers', 'enrol_lti'), $this->task->get_name());
     }
 
     /**
      * Test for sync_members::should_sync_enrol().
      */
-    public function test_should_sync_enrol() {
+    public function test_should_sync_enrol(): void {
         $this->assertTrue($this->task->should_sync_enrol(helper::MEMBER_SYNC_ENROL_AND_UNENROL));
         $this->assertTrue($this->task->should_sync_enrol(helper::MEMBER_SYNC_ENROL_NEW));
         $this->assertFalse($this->task->should_sync_enrol(helper::MEMBER_SYNC_UNENROL_MISSING));
@@ -204,7 +204,7 @@ class sync_members_testcase extends advanced_testcase {
     /**
      * Test for sync_members::should_sync_unenrol().
      */
-    public function test_should_sync_unenrol() {
+    public function test_should_sync_unenrol(): void {
         $this->assertTrue($this->task->should_sync_unenrol(helper::MEMBER_SYNC_ENROL_AND_UNENROL));
         $this->assertFalse($this->task->should_sync_unenrol(helper::MEMBER_SYNC_ENROL_NEW));
         $this->assertTrue($this->task->should_sync_unenrol(helper::MEMBER_SYNC_UNENROL_MISSING));
@@ -213,23 +213,23 @@ class sync_members_testcase extends advanced_testcase {
     /**
      * Test for sync_members::sync_member_information().
      */
-    public function test_sync_member_information() {
-        list($totalcount, $enrolledcount) = $this->task->sync_member_information($this->tool, $this->consumer, $this->members);
+    public function test_sync_member_information(): void {
+        list($users, $enrolledcount) = $this->task->sync_member_information($this->tool, $this->consumer, $this->members);
         $membercount = count($this->members);
         $this->assertCount(10, $this->members);
-        $this->assertEquals($membercount, $totalcount);
+        $this->assertCount($membercount, $users);
         $this->assertEquals($membercount, $enrolledcount);
     }
 
     /**
      * Test for sync_members::sync_profile_images().
      */
-    public function test_sync_profile_images() {
+    public function test_sync_profile_images(): void {
         $task = $this->task;
-        list($totalcount, $enrolledcount) = $task->sync_member_information($this->tool, $this->consumer, $this->members);
+        list($users, $enrolledcount) = $task->sync_member_information($this->tool, $this->consumer, $this->members);
         $membercount = count($this->members);
         $this->assertCount(10, $this->members);
-        $this->assertEquals($membercount, $totalcount);
+        $this->assertCount($membercount, $users);
         $this->assertEquals($membercount, $enrolledcount);
 
         // Suppress output.
@@ -241,25 +241,25 @@ class sync_members_testcase extends advanced_testcase {
     /**
      * Test for sync_members::sync_unenrol().
      */
-    public function test_sync_unenrol() {
+    public function test_sync_unenrol(): void {
         $tool = $this->tool;
         $task = $this->task;
 
-        $task->sync_member_information($tool, $this->consumer, $this->members);
+        list($users) = $task->sync_member_information($tool, $this->consumer, $this->members);
 
         // Simulate that the fetched list of current users has been reduced by 3.
         $unenrolcount = 3;
         for ($i = 0; $i < $unenrolcount; $i++) {
-            $task->pop_current_users();
+            array_pop($users);
         }
-        $this->assertEquals($unenrolcount, $task->sync_unenrol($tool));
+        $this->assertEquals($unenrolcount, $task->sync_unenrol($tool, 'Consumer1Key', $users));
     }
 
     /**
      * Enable auth_lti plugin.
      */
     protected function enable_auth() {
-        $auths = get_enabled_auth_plugins(true);
+        $auths = get_enabled_auth_plugins();
         if (!in_array('lti', $auths)) {
             $auths[] = 'lti';
         }
@@ -299,13 +299,6 @@ class dummy_sync_members_task extends sync_members {
     }
 
     /**
-     * Helper method that removes an element in the array of current users.
-     */
-    public function pop_current_users() {
-        array_pop($this->currentusers);
-    }
-
-    /**
      * Exposes sync_members::do_context_membership_request()
      *
      * @param Context $context The context object.
@@ -313,7 +306,7 @@ class dummy_sync_members_task extends sync_members {
      * @param string $membershipsurltemplate The memberships endpoint URL template.
      * @return bool|User[] Array of User objects upon successful membership service request. False, otherwise.
      */
-    public function do_context_membership_request(Context $context, ResourceLink $resourcelink = null,
+    public function do_context_membership_request(Context $context, ?ResourceLink $resourcelink = null,
                                                   $membershipsurltemplate = '') {
         $members = parent::do_context_membership_request($context, $resourcelink, $membershipsurltemplate);
         return $members;
@@ -367,12 +360,12 @@ class dummy_sync_members_task extends sync_members {
     /**
      * Exposes sync_members::sync_member_information()
      *
-     * @param stdClass $tool
+     * @param \stdClass $tool
      * @param ToolConsumer $consumer
      * @param User[] $members
      * @return array
      */
-    public function sync_member_information(stdClass $tool, ToolConsumer $consumer, $members) {
+    public function sync_member_information(\stdClass $tool, ToolConsumer $consumer, $members) {
         $result = parent::sync_member_information($tool, $consumer, $members);
         return $result;
     }
@@ -390,11 +383,13 @@ class dummy_sync_members_task extends sync_members {
     /**
      * Exposes sync_members::sync_unenrol()
      *
-     * @param stdClass $tool
+     * @param \stdClass $tool
+     * @param string $consumerkey
+     * @param array $currentusers
      * @return int
      */
-    public function sync_unenrol(stdClass $tool) {
-        $count = parent::sync_unenrol($tool);
+    public function sync_unenrol(\stdClass $tool, string $consumerkey, array $currentusers) {
+        $count = parent::sync_unenrol($tool, $consumerkey, $currentusers);
         return $count;
     }
 }

@@ -38,10 +38,11 @@ $PAGE->set_url('/badges/badge.php', array('hash' => $id));
 $PAGE->set_pagelayout('base');
 $PAGE->set_title(get_string('issuedbadge', 'badges'));
 
-$badge = new issued_badge($id);
+$badge = new \core_badges\output\issued_badge($id);
 if (!empty($badge->recipient->id)) {
     if ($bake && ($badge->recipient->id == $USER->id)) {
         $name = str_replace(' ', '_', $badge->badgeclass['name']) . '.png';
+        $name = clean_param($name, PARAM_FILE);
         $filehash = badges_bake($id, $badge->badgeid, $USER->id, true);
         $fs = get_file_storage();
         $file = $fs->get_file_by_hash($filehash);
@@ -63,9 +64,6 @@ if (!empty($badge->recipient->id)) {
         $url = new moodle_url($CFG->wwwroot);
         navigation_node::override_active_url($url);
     }
-
-    // Include JS files for backpack support.
-    badges_setup_backpack_js();
 
     echo $OUTPUT->header();
 

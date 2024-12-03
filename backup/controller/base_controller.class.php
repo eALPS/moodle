@@ -33,6 +33,19 @@ abstract class base_controller extends backup implements loggable {
      */
     protected $logger;
 
+    /** @var bool Whether this backup should release the session. */
+    protected $releasesession = backup::RELEASESESSION_NO;
+
+    /**
+     * Holds the relevant destination information for course copy operations.
+     *
+     * @var \stdClass.
+     */
+    protected $copy;
+
+    /** @var int Backup mode. */
+    protected $mode;
+
     /**
      * Gets the progress reporter, which can be used to report progress within
      * the backup or restore process.
@@ -81,5 +94,31 @@ abstract class base_controller extends backup implements loggable {
      */
     public function log($message, $level, $a = null, $depth = null, $display = false) {
         backup_helper::log($message, $level, $a, $depth, $display, $this->logger);
+    }
+
+    /**
+     * Returns the set value of releasesession.
+     * This is used to indicate if the session should be closed during the backup/restore.
+     *
+     * @return bool Indicates whether the session should be released.
+     */
+    public function get_releasesession() {
+        return $this->releasesession;
+    }
+
+    /**
+     * @deprecated since Moodle 4.1 MDL-74548
+     */
+    #[\core\attribute\deprecated(since: '4.1', mdl: 'MDL-74548', final: true)]
+    public function set_copy(): void {
+        \core\deprecation::emit_deprecation_if_present([self::class, __FUNCTION__]);
+    }
+
+    /**
+     * @deprecated since Moodle 4.1 MDL-74548
+     */
+    #[\core\attribute\deprecated('restore_controller::get_copy()', since: '4.1', mdl: 'MDL-74548', final: true)]
+    public function get_copy() {
+        \core\deprecation::emit_deprecation_if_present([self::class, __FUNCTION__]);
     }
 }

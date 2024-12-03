@@ -23,14 +23,17 @@
  */
 namespace core\plugininfo;
 
-use core_component, core_plugin_manager, moodle_url, coding_exception;
-
-defined('MOODLE_INTERNAL') || die();
+use moodle_url;
 
 /**
  * Class for portfolios
  */
 class portfolio extends base {
+
+    public static function plugintype_supports_disabling(): bool {
+        return true;
+    }
+
     /**
      * Finds all enabled plugins, the result may include missing plugins.
      * @return array|null of enabled plugins $pluginname=>$pluginname, null means unknown
@@ -43,8 +46,44 @@ class portfolio extends base {
         foreach ($rs as $repository) {
             $enabled[$repository->plugin] = $repository->plugin;
         }
+        $rs->close();
 
         return $enabled;
+    }
+
+    public static function enable_plugin(string $pluginname, int $enabled): bool {
+        global $DB, $CFG;
+
+        require_once($CFG->libdir . '/portfoliolib.php');
+
+        $haschanged = false;
+        $oldvalue = null;
+        $data = ['visible' => $enabled];
+        if ($plugin = $DB->get_record('portfolio_instance', ['plugin' => $pluginname])) {
+            $instance = portfolio_instance($plugin->id);
+            $oldvalue = $instance->get('visible');
+            if (empty($oldvalue) && $instance->instance_sanity_check()) {
+                throw new \moodle_exception('cannotsetvisible', 'portfolio');
+            }
+
+            // Only set visibility if it's different from the current value.
+            if ($oldvalue != $enabled) {
+                $haschanged = true;
+                $instance->set('visible', $enabled);
+                $instance->save();
+            }
+        } else {
+            $haschanged = true;
+            portfolio_static_function($pluginname, 'create_instance', $pluginname, $pluginname, $data);
+        }
+
+        if ($haschanged) {
+            // Include this information into config changes table.
+            add_to_config_log('portfolio_visibility', $oldvalue, $enabled, $pluginname);
+            \core_plugin_manager::reset_caches();
+        }
+
+        return $haschanged;
     }
 
     /**

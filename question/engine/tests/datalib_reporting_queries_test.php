@@ -14,6 +14,23 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace core_question;
+
+use quiz_statistics\tests\statistics_helper;
+use mod_quiz\quiz_attempt;
+use mod_quiz\quiz_settings;
+use qubaid_list;
+use question_bank;
+use question_engine;
+use question_engine_data_mapper;
+use question_state;
+
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+require_once(__DIR__ . '/../lib.php');
+require_once(__DIR__ . '/helpers.php');
+
 /**
  * Unit tests for the parts of {@link question_engine_data_mapper} related to reporting.
  *
@@ -22,22 +39,7 @@
  * @copyright 2013 The Open University
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-
-defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
-require_once(__DIR__ . '/../lib.php');
-require_once(__DIR__ . '/helpers.php');
-
-
-/**
- * Unit tests for the parts of {@link question_engine_data_mapper} related to reporting.
- *
- * @copyright 2013 The Open University
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class question_engine_data_mapper_reporting_testcase extends qbehaviour_walkthrough_test_base {
+class datalib_reporting_queries_test extends \qbehaviour_walkthrough_test_base {
 
     /** @var question_engine_data_mapper */
     protected $dm;
@@ -64,7 +66,7 @@ class question_engine_data_mapper_reporting_testcase extends qbehaviour_walkthro
      * operations on the data, we use a single method to do the set-up, which
      * calls diffents methods to test each query.
      */
-    public function test_reporting_queries() {
+    public function test_reporting_queries(): void {
         // We create two usages, each with two questions, a short-answer marked
         // out of 5, and and essay marked out of 10.
         //
@@ -101,7 +103,7 @@ class question_engine_data_mapper_reporting_testcase extends qbehaviour_walkthro
 
         // Create the second usage.
         $this->quba = question_engine::make_questions_usage_by_activity('unit_test',
-                context_system::instance());
+                \context_system::instance());
 
         $q = question_bank::load_question($this->sa->id);
         $this->start_attempt_at_question($q, 'interactive', 5);
@@ -119,19 +121,24 @@ class question_engine_data_mapper_reporting_testcase extends qbehaviour_walkthro
         $this->bothusages = new qubaid_list($this->usageids);
 
         // Now test the various queries.
-        $this->dotest_load_questions_usages_latest_steps();
-        $this->dotest_load_questions_usages_question_state_summary();
+        $this->dotest_load_questions_usages_latest_steps($this->allslots);
+        $this->dotest_load_questions_usages_latest_steps(null);
+        $this->dotest_load_questions_usages_question_state_summary($this->allslots);
+        $this->dotest_load_questions_usages_question_state_summary(null);
         $this->dotest_load_questions_usages_where_question_in_state();
-        $this->dotest_load_average_marks();
+        $this->dotest_load_average_marks($this->allslots);
+        $this->dotest_load_average_marks(null);
         $this->dotest_sum_usage_marks_subquery();
         $this->dotest_question_attempt_latest_state_view();
     }
 
     /**
      * This test is executed by {@link test_reporting_queries()}.
+     *
+     * @param array|null $slots list of slots to use in the call.
      */
-    protected function dotest_load_questions_usages_latest_steps() {
-        $rawstates = $this->dm->load_questions_usages_latest_steps($this->bothusages, $this->allslots,
+    protected function dotest_load_questions_usages_latest_steps($slots) {
+        $rawstates = $this->dm->load_questions_usages_latest_steps($this->bothusages, $slots,
                 'qa.id AS questionattemptid, qa.questionusageid, qa.slot, ' .
                 'qa.questionid, qa.maxmark, qas.sequencenumber, qas.state');
 
@@ -146,7 +153,7 @@ class question_engine_data_mapper_reporting_testcase extends qbehaviour_walkthro
         $state = $states[$this->usageids[0]][$this->allslots[0]];
         $this->assertEquals((object) array(
             'questionid'     => $this->sa->id,
-            'maxmark'        => '5.0000000',
+            'maxmark'        => 5.0,
             'sequencenumber' => 2,
             'state'          => (string) question_state::$gradedright,
         ), $state);
@@ -154,7 +161,7 @@ class question_engine_data_mapper_reporting_testcase extends qbehaviour_walkthro
         $state = $states[$this->usageids[0]][$this->allslots[1]];
         $this->assertEquals((object) array(
             'questionid'     => $this->essay->id,
-            'maxmark'        => '10.0000000',
+            'maxmark'        => 10.0,
             'sequencenumber' => 2,
             'state'          => (string) question_state::$needsgrading,
         ), $state);
@@ -162,7 +169,7 @@ class question_engine_data_mapper_reporting_testcase extends qbehaviour_walkthro
         $state = $states[$this->usageids[1]][$this->allslots[0]];
         $this->assertEquals((object) array(
             'questionid'     => $this->sa->id,
-            'maxmark'        => '5.0000000',
+            'maxmark'        => 5.0,
             'sequencenumber' => 2,
             'state'          => (string) question_state::$gradedwrong,
         ), $state);
@@ -170,7 +177,7 @@ class question_engine_data_mapper_reporting_testcase extends qbehaviour_walkthro
         $state = $states[$this->usageids[1]][$this->allslots[1]];
         $this->assertEquals((object) array(
             'questionid'     => $this->essay->id,
-            'maxmark'        => '10.0000000',
+            'maxmark'        => 10.0,
             'sequencenumber' => 1,
             'state'          => (string) question_state::$gaveup,
         ), $state);
@@ -178,10 +185,12 @@ class question_engine_data_mapper_reporting_testcase extends qbehaviour_walkthro
 
     /**
      * This test is executed by {@link test_reporting_queries()}.
+     *
+     * @param array|null $slots list of slots to use in the call.
      */
-    protected function dotest_load_questions_usages_question_state_summary() {
+    protected function dotest_load_questions_usages_question_state_summary($slots) {
         $summary = $this->dm->load_questions_usages_question_state_summary(
-                $this->bothusages, $this->allslots);
+                $this->bothusages, $slots);
 
         $this->assertEquals($summary[$this->allslots[0] . ',' . $this->sa->id],
                 (object) array(
@@ -229,9 +238,11 @@ class question_engine_data_mapper_reporting_testcase extends qbehaviour_walkthro
 
     /**
      * This test is executed by {@link test_reporting_queries()}.
+     *
+     * @param array|null $slots list of slots to use in the call.
      */
-    protected function dotest_load_average_marks() {
-        $averages = $this->dm->load_average_marks($this->bothusages);
+    protected function dotest_load_average_marks($slots) {
+        $averages = $this->dm->load_average_marks($this->bothusages, $slots);
 
         $this->assertEquals(array(
             $this->allslots[0] => (object) array(
@@ -295,7 +306,7 @@ class question_engine_data_mapper_reporting_testcase extends qbehaviour_walkthro
         $state = $states[$this->usageids[0]][$this->allslots[0]];
         $this->assertEquals((object) array(
             'questionid'     => $this->sa->id,
-            'maxmark'        => '5.0000000',
+            'maxmark'        => 5.0,
             'sequencenumber' => 2,
             'state'          => (string) question_state::$gradedright,
         ), $state);
@@ -303,7 +314,7 @@ class question_engine_data_mapper_reporting_testcase extends qbehaviour_walkthro
         $state = $states[$this->usageids[0]][$this->allslots[1]];
         $this->assertEquals((object) array(
             'questionid'     => $this->essay->id,
-            'maxmark'        => '10.0000000',
+            'maxmark'        => 10.0,
             'sequencenumber' => 2,
             'state'          => (string) question_state::$needsgrading,
         ), $state);
@@ -311,7 +322,7 @@ class question_engine_data_mapper_reporting_testcase extends qbehaviour_walkthro
         $state = $states[$this->usageids[1]][$this->allslots[0]];
         $this->assertEquals((object) array(
             'questionid'     => $this->sa->id,
-            'maxmark'        => '5.0000000',
+            'maxmark'        => 5.0,
             'sequencenumber' => 2,
             'state'          => (string) question_state::$gradedwrong,
         ), $state);
@@ -319,9 +330,53 @@ class question_engine_data_mapper_reporting_testcase extends qbehaviour_walkthro
         $state = $states[$this->usageids[1]][$this->allslots[1]];
         $this->assertEquals((object) array(
             'questionid'     => $this->essay->id,
-            'maxmark'        => '10.0000000',
+            'maxmark'        => 10.0,
             'sequencenumber' => 1,
             'state'          => (string) question_state::$gaveup,
         ), $state);
+    }
+
+    /**
+     * Test that a Quiz with only description questions wont break \quiz_statistics\task\recalculate.
+     *
+     * @covers \quiz_statistics\task\recalculate::execute
+     */
+    public function test_quiz_with_description_questions_recalculate_statistics(): void {
+        $this->resetAfterTest();
+
+        // Create course with quiz module.
+        $course = $this->getDataGenerator()->create_course();
+        $quizgenerator = $this->getDataGenerator()->get_plugin_generator('mod_quiz');
+        $layout = '1';
+        $quiz = $quizgenerator->create_instance([
+            'course' => $course->id,
+            'grade' => 0.0, 'sumgrades' => 1,
+            'layout' => $layout
+        ]);
+
+        // Add question of type description to quiz.
+        $questiongenerator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $cat = $questiongenerator->create_question_category();
+        $question = $questiongenerator->create_question('description', null, ['category' => $cat->id]);
+        quiz_add_quiz_question($question->id, $quiz);
+
+        // Create attempt.
+        $user = $this->getDataGenerator()->create_user();
+        $quizobj = quiz_settings::create($quiz->id, $user->id);
+        $quba = question_engine::make_questions_usage_by_activity('mod_quiz', $quizobj->get_context());
+        $quba->set_preferred_behaviour($quizobj->get_quiz()->preferredbehaviour);
+        $timenow = time();
+        $attempt = quiz_create_attempt($quizobj, 1, null, $timenow, false, $user->id);
+        quiz_start_new_attempt($quizobj, $quba, $attempt, 1, $timenow);
+        quiz_attempt_save_started($quizobj, $quba, $attempt);
+
+        // Submit attempt.
+        $attemptobj = quiz_attempt::create($attempt->id);
+        $attemptobj->process_submitted_actions($timenow, false);
+        $attemptobj->process_finish($timenow, false);
+
+        // Calculate the statistics.
+        $this->expectOutputRegex('~.*Calculations completed.*~');
+        statistics_helper::run_pending_recalculation_tasks();
     }
 }

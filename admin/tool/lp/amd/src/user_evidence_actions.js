@@ -17,7 +17,6 @@
  * User evidence actions.
  *
  * @module     tool_lp/user_evidence_actions
- * @package    tool_lp
  * @copyright  2015 Frédéric Massart - FMCorz.net
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -59,15 +58,15 @@ define(['jquery',
         }
     };
 
-    /** @type {String} Ajax method to fetch the page data from. */
+    /** @property {String} Ajax method to fetch the page data from. */
     UserEvidenceActions.prototype._contextMethod = null;
-    /** @type {String} Selector to find the node describing the evidence. */
+    /** @property {String} Selector to find the node describing the evidence. */
     UserEvidenceActions.prototype._evidenceNode = null;
-    /** @type {String} Selector mapping to the region to update. Usually similar to wrapper. */
+    /** @property {String} Selector mapping to the region to update. Usually similar to wrapper. */
     UserEvidenceActions.prototype._region = null;
-    /** @type {String} Name of the template used to render the region. */
+    /** @property {String} Name of the template used to render the region. */
     UserEvidenceActions.prototype._template = null;
-    /** @type {String} Type of page/region we're in. */
+    /** @property {String} Type of page/region we're in. */
     UserEvidenceActions.prototype._type = null;
 
     /**
@@ -98,14 +97,15 @@ define(['jquery',
      * Callback to render the region template.
      *
      * @param {Object} context The context for the template.
+     * @return {Promise}
      */
     UserEvidenceActions.prototype._renderView = function(context) {
         var self = this;
-        templates.render(self._template, context)
-            .done(function(newhtml, newjs) {
+        return templates.render(self._template, context)
+            .then(function(newhtml, newjs) {
                 templates.replaceNode($(self._region), newhtml, newjs);
-            })
-            .fail(notification.exception);
+                return;
+            });
     };
 
     /**
@@ -117,7 +117,6 @@ define(['jquery',
      */
     UserEvidenceActions.prototype._callAndRefresh = function(calls, evidenceData) {
         var self = this;
-
         calls.push({
             methodname: self._contextMethod,
             args: self._getContextArgs(evidenceData)
@@ -126,7 +125,7 @@ define(['jquery',
         // Apply all the promises, and refresh when the last one is resolved.
         return $.when.apply($.when, ajax.call(calls))
             .then(function() {
-                self._renderView(arguments[arguments.length - 1]);
+                return self._renderView(arguments[arguments.length - 1]);
             })
             .fail(notification.exception);
     };
@@ -196,7 +195,6 @@ define(['jquery',
      *
      * @param {Object} evidenceData Evidence data from evidence node.
      * @param {Number} competencyIds The competency IDs.
-     * @param {Boolean} requestReview Send competencies to review.
      */
     UserEvidenceActions.prototype._doCreateUserEvidenceCompetency = function(evidenceData, competencyIds) {
         var self = this,

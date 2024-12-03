@@ -104,7 +104,7 @@ class block_news_items extends block_base {
 
         /// Actually create the listing now
 
-            $strftimerecent = get_string('strftimerecent');
+            $strposttimeformat = get_string('strftimedatetime', 'core_langconfig');
             $strmore = get_string('more', 'forum');
 
         /// Accessibility: markup as a list.
@@ -115,10 +115,23 @@ class block_news_items extends block_base {
 
                 $discussion->subject = format_string($discussion->subject, true, $forum->course);
 
+                $posttime = $discussion->modified;
+                if (!empty($CFG->forum_enabletimedposts) && ($discussion->timestart > $posttime)) {
+                    $posttime = $discussion->timestart;
+                }
+
+                // If the user who created the discussion post has been deleted, indicate so.
+                if ($discussion->userdeleted) {
+                    $userfullname = get_string('deleteduser', 'mod_forum');
+                } else {
+                    $userfullname = fullname($discussion, has_capability('moodle/site:viewfullnames', $context));
+                }
+
                 $text .= '<li class="post">'.
                          '<div class="head clearfix">'.
-                         '<div class="date">'.userdate($discussion->modified, $strftimerecent).'</div>'.
-                         '<div class="name">'.fullname($discussion).'</div></div>'.
+                         '<div class="date">'.userdate($posttime, $strposttimeformat).'</div>'.
+                         '<div class="name">'.$userfullname.'</div>'.
+                         '</div>'.
                          '<div class="info"><a href="'.$CFG->wwwroot.'/mod/forum/discuss.php?d='.$discussion->discussion.'">'.$discussion->subject.'</a></div>'.
                          "</li>\n";
             }

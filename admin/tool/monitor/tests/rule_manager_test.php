@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace tool_monitor;
+
 /**
  * Unit tests for rule manager api.
  *
@@ -22,22 +24,13 @@
  * @copyright  2014 onwards Simey Lameze <simey@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
-
-/**
- * Tests for rule manager.
- *
- * Class tool_monitor_rule_manager_testcase
- */
-class tool_monitor_rule_manager_testcase extends advanced_testcase {
+class rule_manager_test extends \advanced_testcase {
 
     /**
      * Set up method.
      */
-    public function setUp() {
+    public function setUp(): void {
+        parent::setUp();
         // Enable monitor.
         set_config('enablemonitor', 1, 'tool_monitor');
     }
@@ -45,7 +38,7 @@ class tool_monitor_rule_manager_testcase extends advanced_testcase {
     /**
      * Test add_rule method.
      */
-    public function test_add_rule() {
+    public function test_add_rule(): void {
         $this->setAdminUser();
         $this->resetAfterTest(true);
 
@@ -53,7 +46,7 @@ class tool_monitor_rule_manager_testcase extends advanced_testcase {
         $course = $this->getDataGenerator()->create_course();
         $now = time();
 
-        $rule = new stdClass();
+        $rule = new \stdClass();
         $rule->userid = $user->id;
         $rule->courseid = $course->id;
         $rule->name = 'test rule 1';
@@ -77,7 +70,7 @@ class tool_monitor_rule_manager_testcase extends advanced_testcase {
     /**
      * Test get_rule method.
      */
-    public function test_get_rule() {
+    public function test_get_rule(): void {
         $this->setAdminUser();
         $this->resetAfterTest(true);
 
@@ -91,14 +84,14 @@ class tool_monitor_rule_manager_testcase extends advanced_testcase {
     /**
      * Test update_rule method.
      */
-    public function test_update_rule() {
+    public function test_update_rule(): void {
         $this->setAdminUser();
         $this->resetAfterTest(true);
 
         $monitorgenerator = $this->getDataGenerator()->get_plugin_generator('tool_monitor');
         $rule = $monitorgenerator->create_rule();
 
-        $ruledata = new stdClass;
+        $ruledata = new \stdClass;
         $ruledata->id = $rule->id;
         $ruledata->frequency = 25;
 
@@ -110,7 +103,7 @@ class tool_monitor_rule_manager_testcase extends advanced_testcase {
     /**
      * Test get_rules_by_courseid method.
      */
-    public function test_get_rules_by_courseid() {
+    public function test_get_rules_by_courseid(): void {
         $this->setAdminUser();
         $this->resetAfterTest(true);
 
@@ -119,10 +112,10 @@ class tool_monitor_rule_manager_testcase extends advanced_testcase {
         $course1 = $this->getDataGenerator()->create_course();
         $course2 = $this->getDataGenerator()->create_course();
 
-        $record = new stdClass();
+        $record = new \stdClass();
         $record->courseid = $course1->id;
 
-        $record2 = new stdClass();
+        $record2 = new \stdClass();
         $record2->courseid = $course2->id;
 
         $ruleids = array();
@@ -141,16 +134,16 @@ class tool_monitor_rule_manager_testcase extends advanced_testcase {
     /**
      * Test get_rules_by_plugin method.
      */
-    public function test_get_rules_by_plugin() {
+    public function test_get_rules_by_plugin(): void {
         $this->setAdminUser();
         $this->resetAfterTest(true);
 
         $monitorgenerator = $this->getDataGenerator()->get_plugin_generator('tool_monitor');
 
-        $record = new stdClass();
+        $record = new \stdClass();
         $record->plugin = 'core';
 
-        $record2 = new stdClass();
+        $record2 = new \stdClass();
         $record2->plugin = 'mod_assign';
 
         $ruleids = array();
@@ -168,17 +161,17 @@ class tool_monitor_rule_manager_testcase extends advanced_testcase {
     /**
      * Test get_rules_by_event method.
      */
-    public function test_get_rules_by_event() {
+    public function test_get_rules_by_event(): void {
         $this->setAdminUser();
         $this->resetAfterTest(true);
 
         $monitorgenerator = $this->getDataGenerator()->get_plugin_generator('tool_monitor');
         $rule = $monitorgenerator->create_rule();
 
-        $record = new stdClass();
+        $record = new \stdClass();
         $record->eventname = '\core\event\calendar_event_created';
 
-        $record2 = new stdClass();
+        $record2 = new \stdClass();
         $record2->eventname = '\core\event\calendar_event_updated';
 
         $ruleids = array();

@@ -34,15 +34,14 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright  2014 Mark Nelson <markn@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class question_category_created extends base {
+class question_category_created extends question_category_base {
 
     /**
      * Init method.
      */
     protected function init() {
-        $this->data['objecttable'] = 'question_categories';
+        parent::init();
         $this->data['crud'] = 'c';
-        $this->data['edulevel'] = self::LEVEL_TEACHING;
     }
 
     /**
@@ -61,43 +60,5 @@ class question_category_created extends base {
      */
     public function get_description() {
         return "The user with id '$this->userid' created the question category with id '$this->objectid'.";
-    }
-
-    /**
-     * Returns relevant URL.
-     *
-     * @return \moodle_url
-     */
-    public function get_url() {
-        if ($this->courseid) {
-            $cat = $this->objectid . ',' . $this->contextid;
-            if ($this->contextlevel == CONTEXT_MODULE) {
-                return new \moodle_url('/question/edit.php', array('cmid' => $this->contextinstanceid, 'cat' => $cat));
-            }
-            return new \moodle_url('/question/edit.php', array('courseid' => $this->courseid, 'cat' => $cat));
-        }
-
-        // Bad luck, there does not seem to be any simple intelligent way
-        // to go to specific question category in context above course,
-        // let's try to edit it from frontpage which may surprisingly work.
-        return new \moodle_url('/question/category.php', array('courseid' => SITEID, 'edit' => $this->objectid));
-    }
-
-    /**
-     * Return the legacy event log data.
-     *
-     * @return array|null
-     */
-    protected function get_legacy_logdata() {
-        if ($this->contextlevel == CONTEXT_MODULE) {
-            return array($this->courseid, 'quiz', 'addcategory', 'view.php?id=' . $this->contextinstanceid,
-                $this->objectid, $this->contextinstanceid);
-        }
-        // This is not related to individual quiz at all.
-        return null;
-    }
-
-    public static function get_objectid_mapping() {
-        return array('db' => 'question_categories', 'restore' => 'question_category');
     }
 }

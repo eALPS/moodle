@@ -42,7 +42,8 @@ class autogroup_form extends moodleform {
      * Form Definition
      */
     function definition() {
-        global $CFG, $COURSE;
+        global $USER, $COURSE;
+        $coursecontext = context_course::instance($COURSE->id);
 
         $mform =& $this->_form;
 
@@ -68,6 +69,12 @@ class autogroup_form extends moodleform {
         $mform->addRule('number', null, 'numeric', null, 'client');
         $mform->addRule('number', get_string('required'), 'required', null, 'client');
 
+        // Enable group messaging for the groups to be auto-created.
+        if (\core_message\api::can_create_group_conversation($USER->id, $coursecontext)) {
+            $mform->addElement('selectyesno', 'enablemessaging', get_string('enablemessaging', 'group'));
+            $mform->addHelpButton('enablemessaging', 'enablemessaging', 'group');
+        }
+
         $mform->addElement('header', 'groupmembershdr', get_string('groupmembers', 'group'));
         $mform->setExpanded('groupmembershdr', true);
 
@@ -86,7 +93,9 @@ class autogroup_form extends moodleform {
         if ($cohorts = cohort_get_available_cohorts($coursecontext, COHORT_WITH_ENROLLED_MEMBERS_ONLY, 0, 0)) {
             $options = array(0 => get_string('anycohort', 'cohort'));
             foreach ($cohorts as $c) {
-                $options[$c->id] = format_string($c->name, true, context::instance_by_id($c->contextid));
+                $options[$c->id] = format_string($c->name, true, [
+                    'context' => context::instance_by_id($c->contextid),
+                ]);
             }
             $mform->addElement('select', 'cohortid', get_string('selectfromcohort', 'cohort'), $options);
             $mform->setDefault('cohortid', '0');

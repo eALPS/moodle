@@ -14,6 +14,16 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace mod_forum;
+
+use mod_forum_tests_generator_trait;
+
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+require_once(__DIR__ . '/generator_trait.php');
+require_once("{$CFG->dirroot}/mod/forum/lib.php");
+
 /**
  * The module forums tests
  *
@@ -21,18 +31,18 @@
  * @copyright  2013 Frédéric Massart
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
-require_once($CFG->dirroot . '/mod/forum/lib.php');
-
-class mod_forum_subscriptions_testcase extends advanced_testcase {
+class subscriptions_test extends \advanced_testcase {
+    // Include the mod_forum test helpers.
+    // This includes functions to create forums, users, discussions, and posts.
+    use mod_forum_tests_generator_trait;
 
     /**
      * Test setUp.
      */
-    public function setUp() {
+    public function setUp(): void {
+        global $DB;
+        parent::setUp();
+
         // We must clear the subscription caches. This has to be done both before each test, and after in case of other
         // tests using these functions.
         \mod_forum\subscriptions::reset_forum_cache();
@@ -42,60 +52,20 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * Test tearDown.
      */
-    public function tearDown() {
+    public function tearDown(): void {
         // We must clear the subscription caches. This has to be done both before each test, and after in case of other
         // tests using these functions.
         \mod_forum\subscriptions::reset_forum_cache();
         \mod_forum\subscriptions::reset_discussion_cache();
+        parent::tearDown();
     }
 
     /**
-     * Helper to create the required number of users in the specified
-     * course.
-     * Users are enrolled as students.
+     * Test subscription modes modifications.
      *
-     * @param stdClass $course The course object
-     * @param integer $count The number of users to create
-     * @return array The users created
+     * @covers \mod_forum\event\subscription_mode_updated
      */
-    protected function helper_create_users($course, $count) {
-        $users = array();
-
-        for ($i = 0; $i < $count; $i++) {
-            $user = $this->getDataGenerator()->create_user();
-            $this->getDataGenerator()->enrol_user($user->id, $course->id);
-            $users[] = $user;
-        }
-
-        return $users;
-    }
-
-    /**
-     * Create a new discussion and post within the specified forum, as the
-     * specified author.
-     *
-     * @param stdClass $forum The forum to post in
-     * @param stdClass $author The author to post as
-     * @param array An array containing the discussion object, and the post object
-     */
-    protected function helper_post_to_forum($forum, $author) {
-        global $DB;
-        $generator = $this->getDataGenerator()->get_plugin_generator('mod_forum');
-
-        // Create a discussion in the forum, and then add a post to that discussion.
-        $record = new stdClass();
-        $record->course = $forum->course;
-        $record->userid = $author->id;
-        $record->forum = $forum->id;
-        $discussion = $generator->create_discussion($record);
-
-        // Retrieve the post which was created by create_discussion.
-        $post = $DB->get_record('forum_posts', array('discussion' => $discussion->id));
-
-        return array($discussion, $post);
-    }
-
-    public function test_subscription_modes() {
+    public function test_subscription_modes(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -105,6 +75,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
 
         $options = array('course' => $course->id);
         $forum = $this->getDataGenerator()->create_module('forum', $options);
+        $context = \context_module::instance($forum->cmid);
 
         // Create a user enrolled in the course as a student.
         list($user) = $this->helper_create_users($course, 1);
@@ -112,39 +83,75 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         // Must be logged in as the current user.
         $this->setUser($user);
 
-        \mod_forum\subscriptions::set_subscription_mode($forum->id, FORUM_FORCESUBSCRIBE);
+        $sink = $this->redirectEvents(); // Capturing the event.
+        \mod_forum\subscriptions::set_subscription_mode($forum, FORUM_FORCESUBSCRIBE);
         $forum = $DB->get_record('forum', array('id' => $forum->id));
         $this->assertEquals(FORUM_FORCESUBSCRIBE, \mod_forum\subscriptions::get_subscription_mode($forum));
         $this->assertTrue(\mod_forum\subscriptions::is_forcesubscribed($forum));
         $this->assertFalse(\mod_forum\subscriptions::is_subscribable($forum));
         $this->assertFalse(\mod_forum\subscriptions::subscription_disabled($forum));
 
-        \mod_forum\subscriptions::set_subscription_mode($forum->id, FORUM_DISALLOWSUBSCRIBE);
+        $events = $sink->get_events();
+        $this->assertCount(1, $events);
+        $event = reset($events);
+        $this->assertInstanceOf('\mod_forum\event\subscription_mode_updated', $event);
+        $this->assertEquals($context, $event->get_context());
+        $this->assertEventContextNotUsed($event);
+        $this->assertNotEmpty($event->get_name());
+
+        $sink = $this->redirectEvents(); // Capturing the event.
+        \mod_forum\subscriptions::set_subscription_mode($forum, FORUM_DISALLOWSUBSCRIBE);
         $forum = $DB->get_record('forum', array('id' => $forum->id));
         $this->assertEquals(FORUM_DISALLOWSUBSCRIBE, \mod_forum\subscriptions::get_subscription_mode($forum));
         $this->assertTrue(\mod_forum\subscriptions::subscription_disabled($forum));
         $this->assertFalse(\mod_forum\subscriptions::is_subscribable($forum));
         $this->assertFalse(\mod_forum\subscriptions::is_forcesubscribed($forum));
 
-        \mod_forum\subscriptions::set_subscription_mode($forum->id, FORUM_INITIALSUBSCRIBE);
+        $events = $sink->get_events();
+        $this->assertCount(1, $events);
+        $event = reset($events);
+        $this->assertInstanceOf('\mod_forum\event\subscription_mode_updated', $event);
+        $this->assertEquals($context, $event->get_context());
+        $this->assertEventContextNotUsed($event);
+        $this->assertNotEmpty($event->get_name());
+
+        $sink = $this->redirectEvents(); // Capturing the event.
+        \mod_forum\subscriptions::set_subscription_mode($forum, FORUM_INITIALSUBSCRIBE);
         $forum = $DB->get_record('forum', array('id' => $forum->id));
         $this->assertEquals(FORUM_INITIALSUBSCRIBE, \mod_forum\subscriptions::get_subscription_mode($forum));
         $this->assertTrue(\mod_forum\subscriptions::is_subscribable($forum));
         $this->assertFalse(\mod_forum\subscriptions::subscription_disabled($forum));
         $this->assertFalse(\mod_forum\subscriptions::is_forcesubscribed($forum));
 
-        \mod_forum\subscriptions::set_subscription_mode($forum->id, FORUM_CHOOSESUBSCRIBE);
+        $events = $sink->get_events();
+        $this->assertCount(1, $events);
+        $event = reset($events);
+        $this->assertInstanceOf('\mod_forum\event\subscription_mode_updated', $event);
+        $this->assertEquals($context, $event->get_context());
+        $this->assertEventContextNotUsed($event);
+        $this->assertNotEmpty($event->get_name());
+
+        $sink = $this->redirectEvents(); // Capturing the event.
+        \mod_forum\subscriptions::set_subscription_mode($forum, FORUM_CHOOSESUBSCRIBE);
         $forum = $DB->get_record('forum', array('id' => $forum->id));
         $this->assertEquals(FORUM_CHOOSESUBSCRIBE, \mod_forum\subscriptions::get_subscription_mode($forum));
         $this->assertTrue(\mod_forum\subscriptions::is_subscribable($forum));
         $this->assertFalse(\mod_forum\subscriptions::subscription_disabled($forum));
         $this->assertFalse(\mod_forum\subscriptions::is_forcesubscribed($forum));
+
+        $events = $sink->get_events();
+        $this->assertCount(1, $events);
+        $event = reset($events);
+        $this->assertInstanceOf('\mod_forum\event\subscription_mode_updated', $event);
+        $this->assertEquals($context, $event->get_context());
+        $this->assertEventContextNotUsed($event);
+        $this->assertNotEmpty($event->get_name());
     }
 
     /**
      * Test fetching unsubscribable forums.
      */
-    public function test_unsubscribable_forums() {
+    public function test_unsubscribable_forums(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -195,7 +202,6 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         $roleids = $DB->get_records_menu('role', null, '', 'shortname, id');
         $context = \context_course::instance($course->id);
         assign_capability('moodle/course:viewhiddenactivities', CAP_ALLOW, $roleids['student'], $context);
-        $context->mark_dirty();
 
         // All of the unsubscribable forums should now be listed.
         $result = \mod_forum\subscriptions::get_unsubscribable_forums();
@@ -206,7 +212,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
      * Test that toggling the forum-level subscription for a different user does not affect their discussion-level
      * subscriptions.
      */
-    public function test_forum_subscribe_toggle_as_other() {
+    public function test_forum_subscribe_toggle_as_other(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -395,7 +401,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * Test that a user unsubscribed from a forum is not subscribed to it's discussions by default.
      */
-    public function test_forum_discussion_subscription_forum_unsubscribed() {
+    public function test_forum_discussion_subscription_forum_unsubscribed(): void {
         $this->resetAfterTest(true);
 
         // Create a course, with a forum.
@@ -420,7 +426,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * Test that the act of subscribing to a forum subscribes the user to it's discussions by default.
      */
-    public function test_forum_discussion_subscription_forum_subscribed() {
+    public function test_forum_discussion_subscription_forum_subscribed(): void {
         $this->resetAfterTest(true);
 
         // Create a course, with a forum.
@@ -434,7 +440,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
 
         // Enrol the user in the forum.
         // If a subscription was added, we get the record ID.
-        $this->assertInternalType('int', \mod_forum\subscriptions::subscribe_user($author->id, $forum));
+        $this->assertIsInt(\mod_forum\subscriptions::subscribe_user($author->id, $forum));
 
         // If we already have a subscription when subscribing the user, we get a boolean (true).
         $this->assertTrue(\mod_forum\subscriptions::subscribe_user($author->id, $forum));
@@ -452,7 +458,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * Test that a user unsubscribed from a forum can be subscribed to a discussion.
      */
-    public function test_forum_discussion_subscription_forum_unsubscribed_discussion_subscribed() {
+    public function test_forum_discussion_subscription_forum_unsubscribed_discussion_subscribed(): void {
         $this->resetAfterTest(true);
 
         // Create a course, with a forum.
@@ -486,7 +492,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * Test that a user subscribed to a forum can be unsubscribed from a discussion.
      */
-    public function test_forum_discussion_subscription_forum_subscribed_discussion_unsubscribed() {
+    public function test_forum_discussion_subscription_forum_subscribed_discussion_unsubscribed(): void {
         $this->resetAfterTest(true);
 
         // Create a course, with a forum.
@@ -520,7 +526,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * Test the effect of toggling the discussion subscription status when subscribed to the forum.
      */
-    public function test_forum_discussion_toggle_forum_subscribed() {
+    public function test_forum_discussion_toggle_forum_subscribed(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -693,14 +699,14 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
 
         // And should have reset the discussion cache value.
         $result = \mod_forum\subscriptions::fetch_discussion_subscription($forum->id, $author->id);
-        $this->assertInternalType('array', $result);
+        $this->assertIsArray($result);
         $this->assertFalse(isset($result[$discussion->id]));
     }
 
     /**
      * Test the effect of toggling the discussion subscription status when unsubscribed from the forum.
      */
-    public function test_forum_discussion_toggle_forum_unsubscribed() {
+    public function test_forum_discussion_toggle_forum_unsubscribed(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -791,7 +797,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
      * Test that the correct users are returned when fetching subscribed users from a forum where users can choose to
      * subscribe and unsubscribe.
      */
-    public function test_fetch_subscribed_users_subscriptions() {
+    public function test_fetch_subscribed_users_subscriptions(): void {
         global $DB, $CFG;
 
         $this->resetAfterTest(true);
@@ -829,7 +835,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
      * Test that the correct users are returned hwen fetching subscribed users from a forum where users are forcibly
      * subscribed.
      */
-    public function test_fetch_subscribed_users_forced() {
+    public function test_fetch_subscribed_users_forced(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -851,7 +857,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * Test that unusual combinations of discussion subscriptions do not affect the subscribed user list.
      */
-    public function test_fetch_subscribed_users_discussion_subscriptions() {
+    public function test_fetch_subscribed_users_discussion_subscriptions(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -884,7 +890,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         $this->assertEquals($usercount, count($subscribers));
 
         // Manually insert an extra subscription for one of the users.
-        $record = new stdClass();
+        $record = new \stdClass();
         $record->userid = $users[2]->id;
         $record->forum = $forum->id;
         $record->discussion = $discussion->id;
@@ -923,7 +929,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * Test whether a user is force-subscribed to a forum.
      */
-    public function test_force_subscribed_to_forum() {
+    public function test_force_subscribed_to_forum(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -946,7 +952,6 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         $cm = get_coursemodule_from_instance('forum', $forum->id);
         $context = \context_module::instance($cm->id);
         assign_capability('mod/forum:allowforcesubscribe', CAP_PROHIBIT, $roleids['student'], $context);
-        $context->mark_dirty();
         $this->assertFalse(has_capability('mod/forum:allowforcesubscribe', $context, $user->id));
 
         // Check that the user is no longer subscribed to the forum.
@@ -956,7 +961,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * Test that the subscription cache can be pre-filled.
      */
-    public function test_subscription_cache_prefill() {
+    public function test_subscription_cache_prefill(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -973,11 +978,11 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         // Reset the subscription cache.
         \mod_forum\subscriptions::reset_forum_cache();
 
-        // Filling the subscription cache should only use a single query.
+        // Filling the subscription cache should use a query.
         $startcount = $DB->perf_get_reads();
         $this->assertNull(\mod_forum\subscriptions::fill_subscription_cache($forum->id));
         $postfillcount = $DB->perf_get_reads();
-        $this->assertEquals(1, $postfillcount - $startcount);
+        $this->assertNotEquals($postfillcount, $startcount);
 
         // Now fetch some subscriptions from that forum - these should use
         // the cache and not perform additional queries.
@@ -991,7 +996,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * Test that the subscription cache can filled user-at-a-time.
      */
-    public function test_subscription_cache_fill() {
+    public function test_subscription_cache_fill(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -1022,7 +1027,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * Test that the discussion subscription cache can filled course-at-a-time.
      */
-    public function test_discussion_subscription_cache_fill_for_course() {
+    public function test_discussion_subscription_cache_fill_for_course(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -1049,7 +1054,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         $result = \mod_forum\subscriptions::fill_subscription_cache_for_course($course->id, $user->id);
         $this->assertNull($result);
         $postfillcount = $DB->perf_get_reads();
-        $this->assertEquals(1, $postfillcount - $startcount);
+        $this->assertNotEquals($postfillcount, $startcount);
         $this->assertFalse(\mod_forum\subscriptions::fetch_subscription_cache($disallowforum->id, $user->id));
         $this->assertFalse(\mod_forum\subscriptions::fetch_subscription_cache($chooseforum->id, $user->id));
         $this->assertTrue(\mod_forum\subscriptions::fetch_subscription_cache($initialforum->id, $user->id));
@@ -1064,13 +1069,13 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
             $this->assertTrue(\mod_forum\subscriptions::fetch_subscription_cache($initialforum->id, $user->id));
         }
         $finalcount = $DB->perf_get_reads();
-        $this->assertEquals(count($users), $finalcount - $postfillcount);
+        $this->assertNotEquals($finalcount, $postfillcount);
     }
 
     /**
      * Test that the discussion subscription cache can be forcibly updated for a user.
      */
-    public function test_discussion_subscription_cache_prefill() {
+    public function test_discussion_subscription_cache_prefill(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -1078,7 +1083,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         // Create a course, with a forum.
         $course = $this->getDataGenerator()->create_course();
 
-        $options = array('course' => $course->id, 'forcesubscribe' => FORUM_INITIALSUBSCRIBE);
+        $options = array('course' => $course->id, 'forcesubscribe' => FORUM_FORCESUBSCRIBE);
         $forum = $this->getDataGenerator()->create_module('forum', $options);
 
         // Create some users.
@@ -1087,6 +1092,8 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         // Post some discussions to the forum.
         $discussions = array();
         $author = $users[0];
+        $userwithnosubs = $users[1];
+
         for ($i = 0; $i < 20; $i++) {
             list($discussion, $post) = $this->helper_post_to_forum($forum, $author);
             $discussions[] = $discussion;
@@ -1095,19 +1102,43 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         // Unsubscribe half the users from the half the discussions.
         $forumcount = 0;
         $usercount = 0;
+        $userwithsubs = null;
         foreach ($discussions as $data) {
+            // Unsubscribe user from all discussions.
+            \mod_forum\subscriptions::unsubscribe_user_from_discussion($userwithnosubs->id, $data);
+
             if ($forumcount % 2) {
                 continue;
             }
             foreach ($users as $user) {
                 if ($usercount % 2) {
+                    $userwithsubs = $user;
                     continue;
                 }
-                \mod_forum\subscriptions::unsubscribe_user_from_discussion($user->id, $discussion);
+                \mod_forum\subscriptions::unsubscribe_user_from_discussion($user->id, $data);
                 $usercount++;
             }
             $forumcount++;
         }
+
+        // Reset the subscription caches.
+        \mod_forum\subscriptions::reset_forum_cache();
+        \mod_forum\subscriptions::reset_discussion_cache();
+
+        // A user with no subscriptions should only be fetched once.
+        $this->assertNull(\mod_forum\subscriptions::fill_discussion_subscription_cache($forum->id, $userwithnosubs->id));
+        $startcount = $DB->perf_get_reads();
+        $this->assertNull(\mod_forum\subscriptions::fill_discussion_subscription_cache($forum->id, $userwithnosubs->id));
+        $this->assertEquals($startcount, $DB->perf_get_reads());
+
+        // Confirm subsequent calls properly tries to fetch subs.
+        $this->assertNull(\mod_forum\subscriptions::fill_discussion_subscription_cache($forum->id, $userwithsubs->id));
+        $this->assertNotEquals($startcount, $DB->perf_get_reads());
+
+        // Another read should be performed to get all subscriptions for the forum.
+        $startcount = $DB->perf_get_reads();
+        $this->assertNull(\mod_forum\subscriptions::fill_discussion_subscription_cache($forum->id));
+        $this->assertNotEquals($startcount, $DB->perf_get_reads());
 
         // Reset the subscription caches.
         \mod_forum\subscriptions::reset_forum_cache();
@@ -1117,13 +1148,13 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         $startcount = $DB->perf_get_reads();
         $this->assertNull(\mod_forum\subscriptions::fill_discussion_subscription_cache($forum->id));
         $postfillcount = $DB->perf_get_reads();
-        $this->assertEquals(1, $postfillcount - $startcount);
+        $this->assertNotEquals($postfillcount, $startcount);
 
         // Now fetch some subscriptions from that forum - these should use
         // the cache and not perform additional queries.
         foreach ($users as $user) {
             $result = \mod_forum\subscriptions::fetch_discussion_subscription($forum->id, $user->id);
-            $this->assertInternalType('array', $result);
+            $this->assertIsArray($result);
         }
         $finalcount = $DB->perf_get_reads();
         $this->assertEquals(0, $finalcount - $postfillcount);
@@ -1132,7 +1163,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * Test that the discussion subscription cache can filled user-at-a-time.
      */
-    public function test_discussion_subscription_cache_fill() {
+    public function test_discussion_subscription_cache_fill(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -1181,17 +1212,17 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         // the cache and not perform additional queries.
         foreach ($users as $user) {
             $result = \mod_forum\subscriptions::fetch_discussion_subscription($forum->id, $user->id);
-            $this->assertInternalType('array', $result);
+            $this->assertIsArray($result);
         }
         $finalcount = $DB->perf_get_reads();
-        $this->assertEquals(20, $finalcount - $startcount);
+        $this->assertNotEquals($finalcount, $startcount);
     }
 
     /**
      * Test that after toggling the forum subscription as another user,
      * the discussion subscription functionality works as expected.
      */
-    public function test_forum_subscribe_toggle_as_other_repeat_subscriptions() {
+    public function test_forum_subscribe_toggle_as_other_repeat_subscriptions(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -1279,7 +1310,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
      * Test that providing a context_module instance to is_subscribed does not result in additional lookups to retrieve
      * the context_module.
      */
-    public function test_is_subscribed_cm() {
+    public function test_is_subscribed_cm(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -1324,7 +1355,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         $this->assertGreaterThan($suppliedcmcount, $calculatedcmcount);
     }
 
-    public function is_subscribable_forums() {
+    public static function is_subscribable_forums(): array {
         return [
             [
                 'forcesubscribe' => FORUM_DISALLOWSUBSCRIBE,
@@ -1341,9 +1372,9 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         ];
     }
 
-    public function is_subscribable_provider() {
+    public static function is_subscribable_provider(): array {
         $data = [];
-        foreach ($this->is_subscribable_forums() as $forum) {
+        foreach (self::is_subscribable_forums() as $forum) {
             $data[] = [$forum];
         }
 
@@ -1353,7 +1384,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * @dataProvider is_subscribable_provider
      */
-    public function test_is_subscribable_logged_out($options) {
+    public function test_is_subscribable_logged_out($options): void {
         $this->resetAfterTest(true);
 
         // Create a course, with a forum.
@@ -1367,7 +1398,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * @dataProvider is_subscribable_provider
      */
-    public function test_is_subscribable_is_guest($options) {
+    public function test_is_subscribable_is_guest($options): void {
         global $DB;
         $this->resetAfterTest(true);
 
@@ -1382,7 +1413,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         $this->assertFalse(\mod_forum\subscriptions::is_subscribable($forum));
     }
 
-    public function is_subscribable_loggedin_provider() {
+    public static function is_subscribable_loggedin_provider(): array {
         return [
             [
                 ['forcesubscribe' => FORUM_DISALLOWSUBSCRIBE],
@@ -1406,7 +1437,7 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
     /**
      * @dataProvider is_subscribable_loggedin_provider
      */
-    public function test_is_subscribable_loggedin($options, $expect) {
+    public function test_is_subscribable_loggedin($options, $expect): void {
         $this->resetAfterTest(true);
 
         // Create a course, with a forum.
@@ -1419,5 +1450,49 @@ class mod_forum_subscriptions_testcase extends advanced_testcase {
         $this->setUser($user);
 
         $this->assertEquals($expect, \mod_forum\subscriptions::is_subscribable($forum));
+    }
+
+    public function test_get_user_default_subscription(): void {
+        global $DB;
+        $this->resetAfterTest(true);
+
+        // Create a course, with a forum.
+        $course = $this->getDataGenerator()->create_course();
+        $context = \context_course::instance($course->id);
+        $options['course'] = $course->id;
+        $forum = $this->getDataGenerator()->create_module('forum', $options);
+        $cm = get_coursemodule_from_instance("forum", $forum->id, $course->id);
+
+        // Create a user enrolled in the course as a student.
+        list($author, $student) = $this->helper_create_users($course, 2, 'student');
+        // Post a discussion to the forum.
+        list($discussion, $post) = $this->helper_post_to_forum($forum, $author);
+
+        // A guest user.
+        $this->setUser(0);
+        $this->assertFalse((boolean)\mod_forum\subscriptions::get_user_default_subscription($forum, $context, $cm, $discussion->id));
+        $this->assertFalse((boolean)\mod_forum\subscriptions::get_user_default_subscription($forum, $context, $cm, null));
+
+        // A user enrolled in the course.
+        $this->setUser($author->id);
+        $this->assertTrue((boolean)\mod_forum\subscriptions::get_user_default_subscription($forum, $context, $cm, $discussion->id));
+        $this->assertTrue((boolean)\mod_forum\subscriptions::get_user_default_subscription($forum, $context, $cm, null));
+
+        // Subscribption disabled.
+        $this->setUser($student->id);
+        \mod_forum\subscriptions::set_subscription_mode($forum, FORUM_DISALLOWSUBSCRIBE);
+        $forum = $DB->get_record('forum', array('id' => $forum->id));
+        $this->assertFalse((boolean)\mod_forum\subscriptions::get_user_default_subscription($forum, $context, $cm, $discussion->id));
+        $this->assertFalse((boolean)\mod_forum\subscriptions::get_user_default_subscription($forum, $context, $cm, null));
+
+        \mod_forum\subscriptions::set_subscription_mode($forum, FORUM_FORCESUBSCRIBE);
+        $forum = $DB->get_record('forum', array('id' => $forum->id));
+        $this->assertTrue((boolean)\mod_forum\subscriptions::get_user_default_subscription($forum, $context, $cm, $discussion->id));
+        $this->assertTrue((boolean)\mod_forum\subscriptions::get_user_default_subscription($forum, $context, $cm, null));
+
+        // Admin user.
+        $this->setAdminUser();
+        $this->assertTrue((boolean)\mod_forum\subscriptions::get_user_default_subscription($forum, $context, $cm, $discussion->id));
+        $this->assertTrue((boolean)\mod_forum\subscriptions::get_user_default_subscription($forum, $context, $cm, null));
     }
 }

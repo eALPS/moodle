@@ -1,5 +1,31 @@
 <?php
 
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * This script is used to configure and execute the import proccess.
+ *
+ * @package    core
+ * @subpackage backup
+ * @copyright  Moodle
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+define('NO_OUTPUT_BUFFERING', true);
+
 // Require both the backup and restore libs
 require_once('../config.php');
 require_once($CFG->dirroot . '/backup/util/includes/backup_includes.php');
@@ -43,7 +69,14 @@ if ($importcourseid === false || $searchcourses) {
 
     // show the course selector
     echo $OUTPUT->header();
-    echo $renderer->import_course_selector($url, $search);
+    \backup_helper::print_coursereuse_selector('import');
+
+    echo html_writer::tag('div', get_string('importinfo'), ['class' => 'pb-3']);
+
+    $backup = new import_ui(false, array());
+    echo $renderer->progress_bar($backup->get_progress_bar());
+    $html = $renderer->import_course_selector($url, $search);
+    echo $html;
     echo $OUTPUT->footer();
     die();
 }
@@ -89,6 +122,9 @@ if ($backup->get_stage() == backup_ui::STAGE_CONFIRMATION) {
 // If it's the final stage process the import
 if ($backup->get_stage() == backup_ui::STAGE_FINAL) {
     echo $OUTPUT->header();
+    \backup_helper::print_coursereuse_selector('import');
+
+    echo html_writer::tag('div', get_string('importinfo'), ['class' => 'pb-3']);
 
     // Display an extra progress bar so that we can show the current stage.
     echo html_writer::start_div('', array('id' => 'executionprogress'));
@@ -105,6 +141,8 @@ if ($backup->get_stage() == backup_ui::STAGE_FINAL) {
 
     // First execute the backup
     $backup->execute();
+    // Before destroying the backup object, we still need to generate the progress bar.
+    $progressbar = $renderer->progress_bar($backup->get_progress_bar());
     $backup->destroy();
     unset($backup);
 
@@ -114,9 +152,9 @@ if ($backup->get_stage() == backup_ui::STAGE_FINAL) {
     // Check whether the backup directory still exists. If missing, something
     // went really wrong in backup, throw error. Note that backup::MODE_IMPORT
     // backups don't store resulting files ever
-    $tempdestination = $CFG->tempdir . '/backup/' . $backupid;
+    $tempdestination = make_backup_temp_directory($backupid, false);
     if (!file_exists($tempdestination) || !is_dir($tempdestination)) {
-        print_error('unknownbackupexporterror'); // shouldn't happen ever
+        throw new \moodle_exception('unknownbackupexporterror'); // Shouldn't happen ever.
     }
 
     // Prepare the restore controller. We don't need a UI here as we will just use what
@@ -183,6 +221,7 @@ if ($backup->get_stage() == backup_ui::STAGE_FINAL) {
         echo html_writer::end_tag('ul');
         echo $OUTPUT->box_end();
     }
+    echo $progressbar;
     echo $OUTPUT->notification(get_string('importsuccess', 'backup'), 'notifysuccess');
     echo $OUTPUT->continue_button(new moodle_url('/course/view.php', array('id'=>$course->id)));
 
@@ -201,8 +240,12 @@ if ($backup->get_stage() == backup_ui::STAGE_FINAL) {
     $backup->save_controller();
 }
 
-// Display the current stage
+// Display the current stage.
 echo $OUTPUT->header();
+\backup_helper::print_coursereuse_selector('import');
+
+echo html_writer::tag('div', get_string('importinfo'), ['class' => 'pb-3']);
+
 if ($backup->enforce_changed_dependencies()) {
     debugging('Your settings have been altered due to unmet dependencies', DEBUG_DEVELOPER);
 }

@@ -24,10 +24,9 @@
  */
 
 require_once('../config.php');
-require($CFG->dirroot . '/webservice/lib.php');
+require_once($CFG->dirroot . '/webservice/lib.php');
 
 require_login();
-require_sesskey();
 
 $usercontext = context_user::instance($USER->id);
 $tokenid = required_param('id', PARAM_INT);
@@ -35,17 +34,15 @@ $tokenid = required_param('id', PARAM_INT);
 // PAGE settings
 $PAGE->set_context($usercontext);
 $PAGE->set_url('/user/wsdoc.php');
-$PAGE->set_title(get_string('documentation', 'webservice'));
-$PAGE->set_heading(get_string('documentation', 'webservice'));
+$PAGE->set_title(get_string('wsdocumentation', 'webservice'));
 $PAGE->set_pagelayout('standard');
 
 // nav bar
 $PAGE->navbar->ignore_active(true);
-$PAGE->navbar->add(get_string('usercurrentsettings'));
-$PAGE->navbar->add(get_string('securitykeys', 'webservice'),
-        new moodle_url('/user/managetoken.php', 
-                array('id' => $tokenid, 'sesskey' => sesskey())));
-$PAGE->navbar->add(get_string('documentation', 'webservice'));
+$PAGE->navbar->add(get_string('preferences'), new moodle_url('/user/preferences.php'));
+$PAGE->navbar->add(get_string('useraccount'));
+$PAGE->navbar->add(get_string('securitykeys', 'webservice'), new moodle_url('/user/managetoken.php'));
+$PAGE->navbar->add(get_string('wsdocumentation', 'webservice'));
 
 // check web service are enabled
 if (empty($CFG->enablewsdocumentation)) {
@@ -67,8 +64,10 @@ $functions = $webservice->get_external_functions(array($token->externalserviceid
 // get all the function descriptions
 $functiondescs = array();
 foreach ($functions as $function) {
-    $functiondescs[$function->name] = external_api::external_function_info($function);
+    $functiondescs[$function->name] = \core_external\external_api::external_function_info($function);
 }
+
+// TODO: MDL-76078 - Incorrect inter-communication, core cannot have plugin dependencies like this.
 
 // get activated protocol
 $activatedprotocol = array();

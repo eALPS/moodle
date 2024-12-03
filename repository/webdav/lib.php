@@ -35,6 +35,19 @@ require_once($CFG->libdir.'/webdavlib.php');
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class repository_webdav extends repository {
+
+    /** @var string webdav type. */
+    protected $webdav_type;
+
+    /** @var mixed webdav port. */
+    protected $webdav_port;
+
+    /** @var string webdav host. */
+    protected $webdav_host;
+
+    /** @var webdav_client webdav client. */
+    protected $dav;
+
     public function __construct($repositoryid, $context = SYSCONTEXTID, $options = array()) {
         parent::__construct($repositoryid, $context, $options);
         // set up webdav client
@@ -72,7 +85,8 @@ class repository_webdav extends repository {
     }
     public function get_file($url, $title = '') {
         $url = urldecode($url);
-        $path = $this->prepare_file();
+        // Prepare a file with an arbitrary name - cannot be $title because of special chars (cf. MDL-57002).
+        $path = $this->prepare_file(uniqid());
         if (!$this->dav->open()) {
             return false;
         }
@@ -128,25 +142,25 @@ class repository_webdav extends repository {
             $title = substr($v['href'], strlen($path));
 
             if (!empty($v['resourcetype']) && $v['resourcetype'] == 'collection') {
-                // a folder
+                // A folder.
                 if ($path != $v['href']) {
                     $folders[strtoupper($title)] = array(
-                        'title'=>rtrim($title, '/'),
-                        'thumbnail'=>$OUTPUT->pix_url(file_folder_icon(90))->out(false),
-                        'children'=>array(),
-                        'datemodified'=>$v['lastmodified'],
-                        'path'=>$v['href']
+                        'title' => rtrim($title, '/'),
+                        'thumbnail' => $OUTPUT->image_url(file_folder_icon())->out(false),
+                        'children' => array(),
+                        'datemodified' => $v['lastmodified'],
+                        'path' => $v['href'],
                     );
                 }
             }else{
-                // a file
+                // A file.
                 $size = !empty($v['getcontentlength'])? $v['getcontentlength']:'';
                 $files[strtoupper($title)] = array(
-                    'title'=>$title,
-                    'thumbnail' => $OUTPUT->pix_url(file_extension_icon($title, 90))->out(false),
-                    'size'=>$size,
-                    'datemodified'=>$v['lastmodified'],
-                    'source'=>$v['href']
+                    'title' => $title,
+                    'thumbnail' => $OUTPUT->image_url(file_extension_icon($title))->out(false),
+                    'size' => $size,
+                    'datemodified' => $v['lastmodified'],
+                    'source' => $v['href'],
                 );
             }
         }
@@ -183,7 +197,7 @@ class repository_webdav extends repository {
         $mform->setType('webdav_port', PARAM_INT);
         $mform->addElement('text', 'webdav_user', get_string('webdav_user', 'repository_webdav'), array('size' => '40'));
         $mform->setType('webdav_user', PARAM_RAW_TRIMMED); // Not for us to clean.
-        $mform->addElement('password', 'webdav_password', get_string('webdav_password', 'repository_webdav'),
+        $mform->addElement('passwordunmask', 'webdav_password', get_string('webdav_password', 'repository_webdav'),
             array('size' => '40'));
     }
     public function supported_returntypes() {

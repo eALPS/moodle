@@ -26,9 +26,9 @@ Feature: Rubrics can have levels with negative scores
     And the following "activities" exist:
       | activity   | name              | intro | course | idnumber    | grade   | advancedgradingmethod_submissions |
       | assign     | Test assignment 1 | Test  | C1     | assign1     | 100     | rubric                            |
+    And I change window size to "large"
     When I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
+    And I am on "Course 1" course homepage with editing mode on
     And I go to "Test assignment 1" advanced grading definition page
     And I set the following fields to these values:
       | Name | Assignment 1 rubric |
@@ -39,18 +39,21 @@ Feature: Rubrics can have levels with negative scores
       | Criterion 3 | Level 31    | 10  | Level 32 | 20 |          |    |           |     |
     And I press "Save rubric and make it ready"
     # Grading a student.
+    And I navigate to "Assignment" in current page administration
     And I go to "Student 1" "Test assignment 1" activity advanced grading page
     And I grade by filling the rubric with:
       | Criterion 1 | 25 |  |
       | Criterion 2 | 30 |  |
       | Criterion 3 | 10 |  |
     And I save the advanced grading form
+    And I am on the "Test assignment 1" "assign activity" page
     And I go to "Student 2" "Test assignment 1" activity advanced grading page
     And I grade by filling the rubric with:
       | Criterion 1 | 25 |  |
       | Criterion 2 | -20 |  |
       | Criterion 3 | 10 |  |
     And I save the advanced grading form
+    And I am on the "Test assignment 1" "assign activity" page
     And I go to "Student 3" "Test assignment 1" activity advanced grading page
     And I grade by filling the rubric with:
       | Criterion 1 | -11 |  |

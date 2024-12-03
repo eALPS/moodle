@@ -31,6 +31,19 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class behat_exact_named_selector extends \Behat\Mink\Selector\ExactNamedSelector {
+
+    // Use the named selector trait.
+    use behat_named_selector;
+
+    /**
+     * Creates selector instance.
+     */
+    public function __construct() {
+        $this->registerReplacement('%iconMatch%', "(contains(concat(' ', @class, ' '), ' icon ') or self::img)");
+        $this->registerReplacement('%imgAltMatch%', './/*[%iconMatch% and (%altMatch% or %titleMatch%)]');
+        parent::__construct();
+    }
+
     /**
      * @var Allowed types when using text selectors arguments.
      */
@@ -52,6 +65,9 @@ class behat_exact_named_selector extends \Behat\Mink\Selector\ExactNamedSelector
         'table_exact' => 'table',
         'text_exact' => 'text',
     );
+
+    /** @var List of deprecated selectors */
+    protected static $deprecatedselectors = [];
 
     /**
      * Allowed selectors getter.

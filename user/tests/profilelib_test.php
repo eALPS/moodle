@@ -14,17 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for user/profile/lib.php.
- *
- * @package core_user
- * @copyright 2014 The Open University
- * @licensehttp://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
+namespace core_user;
 
 /**
  * Unit tests for user/profile/lib.php.
@@ -33,22 +23,29 @@ global $CFG;
  * @copyright 2014 The Open University
  * @licensehttp://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_user_profilelib_testcase extends advanced_testcase {
+class profilelib_test extends \advanced_testcase {
+
+    /**
+     * Load required test libraries
+     */
+    public static function setUpBeforeClass(): void {
+        global $CFG;
+        require_once("{$CFG->dirroot}/user/profile/lib.php");
+        parent::setUpBeforeClass();
+    }
+
     /**
      * Tests profile_get_custom_fields function and checks it is consistent
      * with profile_user_record.
      */
-    public function test_get_custom_fields() {
-        global $DB, $CFG;
-        require_once($CFG->dirroot . '/user/profile/lib.php');
-
+    public function test_get_custom_fields(): void {
         $this->resetAfterTest();
         $user = $this->getDataGenerator()->create_user();
 
         // Add a custom field of textarea type.
-        $id1 = $DB->insert_record('user_info_field', array(
-                'shortname' => 'frogdesc', 'name' => 'Description of frog', 'categoryid' => 1,
-                'datatype' => 'textarea'));
+        $id1 = $this->getDataGenerator()->create_custom_profile_field([
+                'shortname' => 'frogdesc', 'name' => 'Description of frog',
+                'datatype' => 'textarea'])->id;
 
         // Check the field is returned.
         $result = profile_get_custom_fields();
@@ -60,15 +57,15 @@ class core_user_profilelib_testcase extends advanced_testcase {
         $this->assertArrayNotHasKey($id1, profile_get_custom_fields(true));
 
         // Check that profile_user_record returns same (no) fields.
-        $this->assertObjectNotHasAttribute('frogdesc', profile_user_record($user->id));
+        $this->assertObjectNotHasProperty('frogdesc', profile_user_record($user->id));
 
         // Check that profile_user_record returns all the fields when requested.
-        $this->assertObjectHasAttribute('frogdesc', profile_user_record($user->id, false));
+        $this->assertObjectHasProperty('frogdesc', profile_user_record($user->id, false));
 
         // Add another custom field, this time of normal text type.
-        $id2 = $DB->insert_record('user_info_field', array(
-                'shortname' => 'frogname', 'name' => 'Name of frog', 'categoryid' => 1,
-                'datatype' => 'text'));
+        $id2 = $this->getDataGenerator()->create_custom_profile_field(array(
+                'shortname' => 'frogname', 'name' => 'Name of frog',
+                'datatype' => 'text'))->id;
 
         // Check both are returned using normal option.
         $result = profile_get_custom_fields();
@@ -79,16 +76,16 @@ class core_user_profilelib_testcase extends advanced_testcase {
         $this->assertArrayHasKey($id2, profile_get_custom_fields(true));
 
         // Check profile_user_record returns same field.
-        $this->assertObjectHasAttribute('frogname', profile_user_record($user->id));
+        $this->assertObjectHasProperty('frogname', profile_user_record($user->id));
 
         // Check that profile_user_record returns all the fields when requested.
-        $this->assertObjectHasAttribute('frogname', profile_user_record($user->id, false));
+        $this->assertObjectHasProperty('frogname', profile_user_record($user->id, false));
     }
 
     /**
      * Make sure that all profile fields can be initialised without arguments.
      */
-    public function test_default_constructor() {
+    public function test_default_constructor(): void {
         global $DB, $CFG;
         require_once($CFG->dirroot . '/user/profile/definelib.php');
         $datatypes = profile_list_datatypes();
@@ -104,16 +101,16 @@ class core_user_profilelib_testcase extends advanced_testcase {
     /**
      * Test profile_view function
      */
-    public function test_profile_view() {
+    public function test_profile_view(): void {
         global $USER;
 
         $this->resetAfterTest();
 
         // Course without sections.
         $course = $this->getDataGenerator()->create_course();
-        $context = context_course::instance($course->id);
+        $context = \context_course::instance($course->id);
         $user = $this->getDataGenerator()->create_user();
-        $usercontext = context_user::instance($user->id);
+        $usercontext = \context_user::instance($user->id);
 
         $this->setUser($user);
 
@@ -146,27 +143,27 @@ class core_user_profilelib_testcase extends advanced_testcase {
     /**
      * Test that {@link user_not_fully_set_up()} takes required custom fields into account.
      */
-    public function test_profile_has_required_custom_fields_set() {
-        global $CFG, $DB;
+    public function test_profile_has_required_custom_fields_set(): void {
+        global $CFG;
         require_once($CFG->dirroot.'/mnet/lib.php');
 
         $this->resetAfterTest();
 
         // Add a required, visible, unlocked custom field.
-        $DB->insert_record('user_info_field', ['shortname' => 'house', 'name' => 'House', 'required' => 1,
-            'visible' => 1, 'locked' => 0, 'categoryid' => 1, 'datatype' => 'text']);
+        $this->getDataGenerator()->create_custom_profile_field(['shortname' => 'house', 'name' => 'House', 'required' => 1,
+            'visible' => 1, 'locked' => 0, 'datatype' => 'text']);
 
         // Add an optional, visible, unlocked custom field.
-        $DB->insert_record('user_info_field', ['shortname' => 'pet', 'name' => 'Pet', 'required' => 0,
-            'visible' => 1, 'locked' => 0, 'categoryid' => 1, 'datatype' => 'text']);
+        $this->getDataGenerator()->create_custom_profile_field(['shortname' => 'pet', 'name' => 'Pet', 'required' => 0,
+            'visible' => 1, 'locked' => 0, 'datatype' => 'text']);
 
         // Add required but invisible custom field.
-        $DB->insert_record('user_info_field', ['shortname' => 'secretid', 'name' => 'Secret ID', 'required' => 1,
-            'visible' => 0, 'locked' => 0, 'categoryid' => 1, 'datatype' => 'text']);
+        $this->getDataGenerator()->create_custom_profile_field(['shortname' => 'secretid', 'name' => 'Secret ID',
+            'required' => 1, 'visible' => 0, 'locked' => 0, 'datatype' => 'text']);
 
         // Add required but locked custom field.
-        $DB->insert_record('user_info_field', ['shortname' => 'muggleborn', 'name' => 'Muggle-born', 'required' => 1,
-            'visible' => 1, 'locked' => 1, 'categoryid' => 1, 'datatype' => 'checkbox']);
+        $this->getDataGenerator()->create_custom_profile_field(['shortname' => 'muggleborn', 'name' => 'Muggle-born',
+            'required' => 1, 'visible' => 1, 'locked' => 1, 'datatype' => 'checkbox']);
 
         // Create some student accounts.
         $hermione = $this->getDataGenerator()->create_user();
@@ -209,5 +206,147 @@ class core_user_profilelib_testcase extends advanced_testcase {
         $this->assertFalse(user_not_fully_set_up($roamingharry, false));
         $this->assertTrue(user_not_fully_set_up($roaminghermione, true));
         $this->assertTrue(user_not_fully_set_up($roaminghermione, false));
+    }
+
+    /**
+     * Test that user generator sets the custom profile fields
+     */
+    public function test_profile_fields_in_generator(): void {
+        global $CFG;
+        require_once($CFG->dirroot.'/mnet/lib.php');
+
+        $this->resetAfterTest();
+
+        // Add a required, visible, unlocked custom field.
+        $this->getDataGenerator()->create_custom_profile_field(['shortname' => 'house', 'name' => 'House', 'required' => 1,
+            'visible' => 1, 'locked' => 0, 'datatype' => 'text', 'defaultdata' => null]);
+
+        // Create some student accounts.
+        $hermione = $this->getDataGenerator()->create_user(['profile_field_house' => 'Gryffindor']);
+        $harry = $this->getDataGenerator()->create_user();
+
+        // Only students with required fields filled should be considered as fully set up.
+        $this->assertFalse(user_not_fully_set_up($hermione));
+        $this->assertTrue(user_not_fully_set_up($harry));
+
+        // Test that the profile fields were actually set.
+        $profilefields1 = profile_user_record($hermione->id);
+        $this->assertEquals('Gryffindor', $profilefields1->house);
+
+        $profilefields2 = profile_user_record($harry->id);
+        $this->assertObjectHasProperty('house', $profilefields2);
+        $this->assertNull($profilefields2->house);
+    }
+
+    /**
+     * Tests the profile_get_custom_field_data_by_shortname function when working normally.
+     */
+    public function test_profile_get_custom_field_data_by_shortname_normal(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        // Create 3 profile fields.
+        $generator = $this->getDataGenerator();
+        $field1 = $generator->create_custom_profile_field(['datatype' => 'text',
+                'shortname' => 'speciality', 'name' => 'Speciality',
+                'visible' => PROFILE_VISIBLE_ALL]);
+        $field2 = $generator->create_custom_profile_field(['datatype' => 'menu',
+                'shortname' => 'veggie', 'name' => 'Vegetarian',
+                'visible' => PROFILE_VISIBLE_PRIVATE]);
+
+        // Get the first field data and check it is correct.
+        $data = profile_get_custom_field_data_by_shortname('speciality');
+        $this->assertEquals('Speciality', $data->name);
+        $this->assertEquals(PROFILE_VISIBLE_ALL, $data->visible);
+        $this->assertEquals($field1->id, $data->id);
+
+        // Get the second field data, checking there is no database query this time.
+        $before = $DB->perf_get_queries();
+        $data = profile_get_custom_field_data_by_shortname('veggie');
+        $this->assertEquals($before, $DB->perf_get_queries());
+        $this->assertEquals('Vegetarian', $data->name);
+        $this->assertEquals(PROFILE_VISIBLE_PRIVATE, $data->visible);
+        $this->assertEquals($field2->id, $data->id);
+    }
+
+    /**
+     * Tests the profile_get_custom_field_data_by_shortname function with a field that doesn't exist.
+     */
+    public function test_profile_get_custom_field_data_by_shortname_missing(): void {
+        $this->assertNull(profile_get_custom_field_data_by_shortname('speciality'));
+    }
+
+    /**
+     * Data provider for {@see test_profile_get_custom_field_data_by_shortname_case_sensitivity}
+     *
+     * @return array[]
+     */
+    public static function profile_get_custom_field_data_by_shortname_case_sensitivity_provider(): array {
+        return [
+            'Matching case, case-sensitive search' => ['hello', 'hello', true, true],
+            'Matching case, case-insensitive search' => ['hello', 'hello', false, true],
+            'Non-matching case, case-sensitive search' => ['hello', 'Hello', true, false],
+            'Non-matching case, case-insensitive search' => ['hello', 'Hello', false, true],
+            'Non-matching, case-sensitive search' => ['hello', 'hola', true, false],
+            'Non-matching, case-insensitive search' => ['hello', 'hola', false, false],
+        ];
+    }
+
+    /**
+     * Test retrieving custom field by shortname, specifying case-sensitivity when matching
+     *
+     * @param string $shortname
+     * @param string $shortnamesearch
+     * @param bool $casesensitive
+     * @param bool $expectmatch
+     *
+     * @dataProvider profile_get_custom_field_data_by_shortname_case_sensitivity_provider
+     */
+    public function test_profile_get_custom_field_data_by_shortname_case_sensitivity(
+        string $shortname,
+        string $shortnamesearch,
+        bool $casesensitive,
+        bool $expectmatch
+    ): void {
+        $this->resetAfterTest();
+
+        $this->getDataGenerator()->create_custom_profile_field([
+            'datatype' => 'text',
+            'shortname' => $shortname,
+            'name' => 'My field',
+        ]);
+
+        $customfield = profile_get_custom_field_data_by_shortname($shortnamesearch, $casesensitive);
+        if ($expectmatch) {
+            $this->assertInstanceOf(\stdClass::class, $customfield);
+            $this->assertEquals('text', $customfield->datatype);
+            $this->assertEquals($shortname, $customfield->shortname);
+            $this->assertEquals('My field', $customfield->name);
+        } else {
+            $this->assertNull($customfield);
+        }
+    }
+
+    /**
+     * Test profile field loading via profile_get_user_field helper
+     *
+     * @covers ::profile_get_user_field
+     */
+    public function test_profile_get_user_field(): void {
+        $this->resetAfterTest();
+
+        $profilefield = $this->getDataGenerator()->create_custom_profile_field([
+            'shortname' => 'fruit',
+            'name' => 'Fruit',
+            'datatype' => 'text',
+        ]);
+        $user = $this->getDataGenerator()->create_user(['profile_field_fruit' => 'Apple']);
+
+        $fieldinstance = profile_get_user_field('text', $profilefield->id, $user->id);
+        $this->assertInstanceOf(\profile_field_text::class, $fieldinstance);
+        $this->assertEquals($profilefield->id, $fieldinstance->fieldid);
+        $this->assertEquals($user->id, $fieldinstance->userid);
+        $this->assertEquals('Apple', $fieldinstance->data);
     }
 }

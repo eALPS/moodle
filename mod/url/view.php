@@ -31,6 +31,7 @@ require_once($CFG->libdir . '/completionlib.php');
 $id       = optional_param('id', 0, PARAM_INT);        // Course module ID
 $u        = optional_param('u', 0, PARAM_INT);         // URL instance id
 $redirect = optional_param('redirect', 0, PARAM_BOOL);
+$forceview = optional_param('forceview', 0, PARAM_BOOL);
 
 if ($u) {  // Two ways to specify the module
     $url = $DB->get_record('url', array('id'=>$u), '*', MUST_EXIST);
@@ -56,9 +57,8 @@ $PAGE->set_url('/mod/url/view.php', array('id' => $cm->id));
 // Do not use PARAM_URL here, it is too strict and does not support general URIs!
 $exturl = trim($url->externalurl);
 if (empty($exturl) or $exturl === 'http://') {
+    $PAGE->activityheader->set_description(url_get_intro($url, $cm));
     url_print_header($url, $cm, $course);
-    url_print_heading($url, $cm, $course);
-    url_print_intro($url, $cm, $course);
     notice(get_string('invalidstoredurl', 'url'), new moodle_url('/course/view.php', array('id'=>$cm->course)));
     die;
 }
@@ -66,14 +66,10 @@ unset($exturl);
 
 $displaytype = url_get_final_display_type($url);
 if ($displaytype == RESOURCELIB_DISPLAY_OPEN) {
-    // For 'open' links, we always redirect to the content - except if the user
-    // just chose 'save and display' from the form then that would be confusing
-    if (strpos(get_local_referer(false), 'modedit.php') === false) {
-        $redirect = true;
-    }
+    $redirect = true;
 }
 
-if ($redirect) {
+if ($redirect && !$forceview) {
     // coming from course page or url index page,
     // the redirection is needed for completion tracking and logging
     $fullurl = str_replace('&amp;', '&', url_get_full_url($url, $cm, $course));

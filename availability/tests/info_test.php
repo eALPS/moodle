@@ -14,19 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for info and subclasses.
- *
- * @package core_availability
- * @copyright 2014 The Open University
- * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
-
-use core_availability\info;
-use core_availability\info_module;
-use core_availability\info_section;
+namespace core_availability;
 
 /**
  * Unit tests for info and subclasses.
@@ -35,16 +23,17 @@ use core_availability\info_section;
  * @copyright 2014 The Open University
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class info_testcase extends advanced_testcase {
-    public function setUp() {
+class info_test extends \advanced_testcase {
+    public function setUp(): void {
         // Load the mock condition so that it can be used.
         require_once(__DIR__ . '/fixtures/mock_condition.php');
+        parent::setUp();
     }
 
     /**
      * Tests the info_module class (is_available, get_full_information).
      */
-    public function test_info_module() {
+    public function test_info_module(): void {
         global $DB, $CFG;
 
         // Create a course and pages.
@@ -91,7 +80,7 @@ class info_testcase extends advanced_testcase {
         $debugging = $this->getDebuggingMessages();
         $this->resetDebugging();
         $this->assertEquals(1, count($debugging));
-        $this->assertContains('Invalid availability', $debugging[0]->message);
+        $this->assertStringContainsString('Invalid availability', $debugging[0]->message);
 
         // Check empty one.
         $info = new info_module($cm4);
@@ -103,7 +92,7 @@ class info_testcase extends advanced_testcase {
     /**
      * Tests the info_section class (is_available, get_full_information).
      */
-    public function test_info_section() {
+    public function test_info_section(): void {
         global $DB;
 
         // Create a course.
@@ -145,7 +134,7 @@ class info_testcase extends advanced_testcase {
         $debugging = $this->getDebuggingMessages();
         $this->resetDebugging();
         $this->assertEquals(1, count($debugging));
-        $this->assertContains('Invalid availability', $debugging[0]->message);
+        $this->assertStringContainsString('Invalid availability', $debugging[0]->message);
 
         // Check empty one.
         $info = new info_section($sections[4]);
@@ -157,7 +146,7 @@ class info_testcase extends advanced_testcase {
     /**
      * Tests the is_user_visible() static function in info_module.
      */
-    public function test_is_user_visible() {
+    public function test_is_user_visible(): void {
         global $CFG, $DB;
         require_once($CFG->dirroot . '/course/lib.php');
         $this->resetAfterTest();
@@ -255,7 +244,7 @@ class info_testcase extends advanced_testcase {
     /**
      * Tests the convert_legacy_fields function used in restore.
      */
-    public function test_convert_legacy_fields() {
+    public function test_convert_legacy_fields(): void {
         // Check with no availability conditions first.
         $rec = (object)array('availablefrom' => 0, 'availableuntil' => 0,
                 'groupingid' => 7, 'showavailability' => 1);
@@ -322,7 +311,7 @@ class info_testcase extends advanced_testcase {
     /**
      * Tests the add_legacy_availability_condition function used in restore.
      */
-    public function test_add_legacy_availability_condition() {
+    public function test_add_legacy_availability_condition(): void {
         // Completion condition tests.
         $rec = (object)array('sourcecmid' => 7, 'requiredcompletion' => 1);
         // No previous availability, show = true.
@@ -366,7 +355,7 @@ class info_testcase extends advanced_testcase {
     /**
      * Tests the add_legacy_availability_field_condition function used in restore.
      */
-    public function test_add_legacy_availability_field_condition() {
+    public function test_add_legacy_availability_field_condition(): void {
         // User field, normal operator.
         $rec = (object)array('userfield' => 'email', 'shortname' => null,
                 'operator' => 'contains', 'value' => '@');
@@ -395,7 +384,7 @@ class info_testcase extends advanced_testcase {
     /**
      * Tests the filter_user_list() and get_user_list_sql() functions.
      */
-    public function test_filter_user_list() {
+    public function test_filter_user_list(): void {
         global $CFG, $DB;
         require_once($CFG->dirroot . '/course/lib.php');
         $this->resetAfterTest();
@@ -491,8 +480,8 @@ class info_testcase extends advanced_testcase {
 
         // If the students have viewhiddenactivities, they get past the module
         // restriction.
-        role_change_permission($studentroleid, context_module::instance($page2->cmid),
-                'moodle/course:viewhiddenactivities', CAP_ALLOW);
+        role_change_permission($studentroleid, \context_module::instance($page2->cmid),
+                'moodle/course:ignoreavailabilityrestrictions', CAP_ALLOW);
         $expected = array($u1->id, $u2->id);
         $this->assertEquals($expected, array_keys($info->filter_user_list($allusers)));
         list ($sql, $params) = $info->get_user_list_sql(true);
@@ -502,13 +491,130 @@ class info_testcase extends advanced_testcase {
 
         // If they have viewhiddensections, they also get past the section
         // restriction.
-        role_change_permission($studentroleid, context_course::instance($course->id),
-                'moodle/course:viewhiddensections', CAP_ALLOW);
+        role_change_permission($studentroleid, \context_course::instance($course->id),
+                'moodle/course:ignoreavailabilityrestrictions', CAP_ALLOW);
         $expected = array($u1->id, $u2->id, $u3->id);
         $this->assertEquals($expected, array_keys($info->filter_user_list($allusers)));
         list ($sql, $params) = $info->get_user_list_sql(true);
         $result = $DB->get_fieldset_sql($sql, $params);
         sort($result);
         $this->assertEquals($expected, $result);
+    }
+
+    /**
+     * Tests the info_module class when involved in a recursive call to $cm->name.
+     */
+    public function test_info_recursive_name_call(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        // Create a course and page.
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $page1 = $generator->create_module('page', ['course' => $course->id, 'name' => 'Page1']);
+
+        // Set invalid availability.
+        $DB->set_field('course_modules', 'availability', 'not valid', ['id' => $page1->cmid]);
+
+        // Get the cm_info object.
+        $this->setAdminUser();
+        $modinfo = get_fast_modinfo($course);
+        $cm1 = $modinfo->get_cm($page1->cmid);
+
+        // At this point we will generate dynamic data for $cm1, which will cause the debugging
+        // call below.
+        $this->assertEquals('Page1', $cm1->name);
+
+        $this->assertDebuggingCalled('Error processing availability data for ' .
+                '&lsquo;Page1&rsquo;: Invalid availability text');
+    }
+
+    /**
+     * Test for the is_available_for_all() method of the info base class.
+     * @covers \core_availability\info_module::is_available_for_all
+     */
+    public function test_is_available_for_all(): void {
+        global $CFG, $DB;
+        $this->resetAfterTest();
+        $CFG->enableavailability = 0;
+
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $page = $generator->get_plugin_generator('mod_page')->create_instance(['course' => $course]);
+
+        // Set an availability restriction and reset the modinfo cache.
+        // The enableavailability setting is disabled so this does not take effect yet.
+        $notavailable = '{"op":"|","show":true,"c":[{"type":"mock","a":false}]}';
+        $DB->set_field('course_modules', 'availability', $notavailable, ['id' => $page->cmid]);
+        get_fast_modinfo($course, 0, true);
+
+        // Availability is disabled, so we expect this module to be available for everyone.
+        $modinfo = get_fast_modinfo($course);
+        $info = new info_module($modinfo->get_cm($page->cmid));
+        $this->assertTrue($info->is_available_for_all());
+
+        // Now, enable availability restrictions, and check again.
+        // This time, we expect it to return false, because of the access restriction.
+        $CFG->enableavailability = 1;
+        $this->assertFalse($info->is_available_for_all());
+    }
+
+    /**
+     * Test update_display_mode function.
+     *
+     * @covers \core\plugininfo\availability::update_display_mode
+     * @dataProvider update_display_mode_provider
+     *
+     * @param string $plugin The plugin name.
+     * @param string $expected The expected data.
+     */
+    public function test_update_display_mode(string $plugin, string $expected): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        // Get default value for default display mode.
+        $availabilityvalue = $DB->get_field('config_plugins', 'value',
+            ['name' => 'defaultdisplaymode', 'plugin' => "availability_$plugin"]);
+        $updatedisplaymode = \core\plugininfo\availability::update_display_mode($plugin, true);
+
+        // The default value is not inserted into the table.
+        // Or the display is updated but the display mode is the same value as the default.
+        $this->assertFalse($availabilityvalue);
+        $this->assertFalse($updatedisplaymode);
+
+        // Update display mode for plugins.
+        $updatedisplaymode = \core\plugininfo\availability::update_display_mode($plugin, false);
+
+        // The function should return true because the display mode value has changed.
+        $this->assertTrue($updatedisplaymode);
+
+        // Get the updated value for the default display mode.
+        $availabilityvalue = $DB->get_field('config_plugins', 'value',
+            ['name' => 'defaultdisplaymode', 'plugin' => "availability_$plugin"]);
+        $this->assertEquals($expected, $availabilityvalue);
+    }
+
+    /**
+     * Data provider for test_update_display_mode().
+     *
+     * @return array
+     */
+    public static function update_display_mode_provider(): array {
+        return [
+            'Update display mode for completion' => [
+                'completion',
+                '1',
+            ],
+            'Update display mode for grade' => [
+                'grade',
+                '1',
+            ],
+            'Update display mode for group' => [
+                'group',
+                '1',
+            ],
+        ];
     }
 }

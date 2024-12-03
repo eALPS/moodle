@@ -79,7 +79,7 @@ abstract class database_exporter {
      * @param string $description a user description of the data.
      * @return void
      */
-    public abstract function begin_database_export($version, $release, $timestamp, $description);
+    abstract public function begin_database_export($version, $release, $timestamp, $description);
 
     /**
      * Callback function. Should be called only once per table export operation,
@@ -89,7 +89,7 @@ abstract class database_exporter {
      * @param xmldb_table $table - XMLDB object for the exported table
      * @return void
      */
-    public abstract function begin_table_export(xmldb_table $table);
+    abstract public function begin_table_export(xmldb_table $table);
 
     /**
      * Callback function. Should be called only once per table export operation,
@@ -97,13 +97,13 @@ abstract class database_exporter {
      *
      * @param xmldb_table $table - XMLDB object for the exported table
      */
-    public abstract function finish_table_export(xmldb_table $table);
+    abstract public function finish_table_export(xmldb_table $table);
 
     /**
      * Callback function. Should be called only once database per export
      * operation, after all database export operations.
      */
-    public abstract function finish_database_export();
+    abstract public function finish_database_export();
 
     /**
      * Callback function. Should be called only once per record export operation,
@@ -115,7 +115,7 @@ abstract class database_exporter {
      * @param object $data - data object (fields and values from record)
      * @return void
      */
-    public abstract function export_table_data(xmldb_table $table, $data);
+    abstract public function export_table_data(xmldb_table $table, $data);
 
     /**
      * Generic method to export the database. It checks the schema (if
@@ -129,7 +129,11 @@ abstract class database_exporter {
     public function export_database($description=null) {
         global $CFG;
 
-        $options = array('changedcolumns' => false); // Column types may be fixed by transfer.
+        $options = [
+            'changedcolumns' => false, // Column types may be fixed by transfer.
+            'missingindexes' => false, // No need to worry about indexes for transfering data.
+            'extraindexes' => false
+        ];
         if ($this->check_schema and $errors = $this->manager->check_database_schema($this->schema, $options)) {
             $details = '';
             foreach ($errors as $table=>$items) {

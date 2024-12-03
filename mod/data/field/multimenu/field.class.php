@@ -32,6 +32,27 @@ class data_field_multimenu extends data_field_base {
      * */
     protected static $priority = self::LOW_PRIORITY;
 
+    public function supports_preview(): bool {
+        return true;
+    }
+
+    public function get_data_content_preview(int $recordid): stdClass {
+        $options = explode("\n", $this->field->param1);
+        $options = array_map('trim', $options);
+        $selected = $options[$recordid % count($options)];
+        $selected .= '##' . $options[($recordid + 1) % count($options)];
+        return (object)[
+            'id' => 0,
+            'fieldid' => $this->field->id,
+            'recordid' => $recordid,
+            'content' => $selected,
+            'content1' => null,
+            'content2' => null,
+            'content3' => null,
+            'content4' => null,
+        ];
+    }
+
     function display_add_field($recordid = 0, $formdata = null) {
         global $DB, $OUTPUT;
 
@@ -43,8 +64,8 @@ class data_field_multimenu extends data_field_base {
                 $content = array();
             }
         } else if ($recordid) {
-            $content = $DB->get_field('data_content', 'content', array('fieldid'=>$this->field->id, 'recordid'=>$recordid));
-            $content = explode('##', $content);
+            $contentfield = $DB->get_field('data_content', 'content', ['fieldid' => $this->field->id, 'recordid' => $recordid]);
+            $content = explode('##', $contentfield ?? '');
         } else {
             $content = array();
         }
@@ -52,13 +73,16 @@ class data_field_multimenu extends data_field_base {
         $str = '<div title="'.s($this->field->description).'">';
         $str .= '<input name="field_' . $this->field->id . '[xxx]" type="hidden" value="xxx"/>'; // hidden field - needed for empty selection
 
-        $str .= '<label for="field_' . $this->field->id . '" class="accesshide">';
-        $str .= html_writer::span($this->field->name);
+        $str .= '<label for="field_' . $this->field->id . '">';
+        $str .= '<legend><span class="accesshide">' . s($this->field->name);
+
         if ($this->field->required) {
+            $str .= '&nbsp;' . get_string('requiredelement', 'form') . '</span></legend>';
             $str .= '<div class="inline-req">';
-            $str .= html_writer::img($OUTPUT->pix_url('req'), get_string('requiredelement', 'form'),
-                                     array('class' => 'req', 'title' => get_string('requiredelement', 'form')));
+            $str .= $OUTPUT->pix_icon('req', get_string('requiredelement', 'form'));
             $str .= '</div>';
+        } else {
+            $str .= '</span></legend>';
         }
         $str .= '</label>';
         $str .= '<select name="field_' . $this->field->id . '[]" id="field_' . $this->field->id . '"';
@@ -95,7 +119,7 @@ class data_field_multimenu extends data_field_base {
 
         static $c = 0;
 
-        $str = '<label class="accesshide" for="f_' . $this->field->id . '">' . $this->field->name . '</label>';
+        $str = '<label class="accesshide" for="f_' . $this->field->id . '">' . s($this->field->name) . '</label>';
         $str .= '<select id="f_'.$this->field->id.'" name="f_'.$this->field->id.'[]" multiple="multiple" class="form-control">';
 
         // display only used options
@@ -141,15 +165,23 @@ class data_field_multimenu extends data_field_base {
         $str .= '</select>';
 
         $str .= html_writer::checkbox('f_'.$this->field->id.'_allreq', null, $allrequired,
-            get_string('selectedrequired', 'data'), array('class' => 'm-r-1'));
+            get_string('selectedrequired', 'data'), array('class' => 'me-1'));
 
         return $str;
 
     }
 
-    function parse_search_field() {
-        $selected    = optional_param_array('f_'.$this->field->id, array(), PARAM_NOTAGS);
-        $allrequired = optional_param('f_'.$this->field->id.'_allreq', 0, PARAM_BOOL);
+    public function parse_search_field($defaults = null) {
+        $paramselected = 'f_'.$this->field->id;
+        $paramallrequired = 'f_'.$this->field->id.'_allreq';
+
+        if (empty($defaults[$paramselected])) { // One empty means the other ones are empty too.
+            $defaults = array($paramselected => array(), $paramallrequired => 0);
+        }
+
+        $selected    = optional_param_array($paramselected, $defaults[$paramselected], PARAM_NOTAGS);
+        $allrequired = optional_param($paramallrequired, $defaults[$paramallrequired], PARAM_BOOL);
+
         if (empty($selected)) {
             // no searching
             return '';
@@ -239,28 +271,23 @@ class data_field_multimenu extends data_field_base {
 
 
     function display_browse_field($recordid, $template) {
-        global $DB;
-
-        if ($content = $DB->get_record('data_content', array('fieldid'=>$this->field->id, 'recordid'=>$recordid))) {
-            if (strval($content->content) === '') {
-                return false;
-            }
-
-            $options = explode("\n",$this->field->param1);
-            $options = array_map('trim', $options);
-
-            $contentArr = explode('##', $content->content);
-            $str = '';
-            foreach ($contentArr as $line) {
-                if (!in_array($line, $options)) {
-                    // hmm, looks like somebody edited the field definition
-                    continue;
-                }
-                $str .= $line . "<br />\n";
-            }
-            return $str;
+        $content = $this->get_data_content($recordid);
+        if (!$content || empty($content->content)) {
+            return '';
         }
-        return false;
+        $options = explode("\n", $this->field->param1);
+        $options = array_map('trim', $options);
+
+        $contentarray = explode('##', $content->content);
+        $str = '';
+        foreach ($contentarray as $line) {
+            if (!in_array($line, $options)) {
+                // Hmm, looks like somebody edited the field definition.
+                continue;
+            }
+            $str .= $line . "<br />\n";
+        }
+        return $str;
     }
 
     /**
@@ -294,4 +321,18 @@ class data_field_multimenu extends data_field_base {
         return trim($strvalue, "\r\n ");
     }
 
+    /**
+     * Return the plugin configs for external functions.
+     *
+     * @return array the list of config parameters
+     * @since Moodle 3.3
+     */
+    public function get_config_for_external() {
+        // Return all the config parameters.
+        $configs = [];
+        for ($i = 1; $i <= 10; $i++) {
+            $configs["param$i"] = $this->field->{"param$i"};
+        }
+        return $configs;
+    }
 }

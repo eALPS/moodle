@@ -94,12 +94,14 @@ class qtype_truefalse extends question_type {
             // But we'll do it anyway, just for robustness.
             $options->trueanswer  = $trueid;
             $options->falseanswer = $falseid;
+            $options->showstandardinstruction = !empty($question->showstandardinstruction);
             $DB->update_record('question_truefalse', $options);
         } else {
             $options = new stdClass();
             $options->question    = $question->id;
             $options->trueanswer  = $trueid;
             $options->falseanswer = $falseid;
+            $options->showstandardinstruction = !empty($question->showstandardinstruction);
             $DB->insert_record('question_truefalse', $options);
         }
 
@@ -108,11 +110,17 @@ class qtype_truefalse extends question_type {
         return true;
     }
 
+    public function save_defaults_for_new_questions(stdClass $fromform): void {
+        parent::save_defaults_for_new_questions($fromform);
+        $this->set_default_value('showstandardinstruction', $fromform->showstandardinstruction);
+    }
+
     /**
      * Loads the question type specific options for the question.
      */
     public function get_question_options($question) {
         global $DB, $OUTPUT;
+        parent::get_question_options($question);
         // Get additional information from database
         // and attach it to the question object.
         if (!$question->options = $DB->get_record('question_truefalse',
@@ -134,11 +142,9 @@ class qtype_truefalse extends question_type {
     protected function initialise_question_instance(question_definition $question, $questiondata) {
         parent::initialise_question_instance($question, $questiondata);
         $answers = $questiondata->options->answers;
-        if ($answers[$questiondata->options->trueanswer]->fraction > 0.99) {
-            $question->rightanswer = true;
-        } else {
-            $question->rightanswer = false;
-        }
+
+        /** @var qtype_truefalse_question $question */
+        $question->rightanswer = $answers[$questiondata->options->trueanswer]->fraction > 0.99;
         $question->truefeedback =  $answers[$questiondata->options->trueanswer]->feedback;
         $question->falsefeedback = $answers[$questiondata->options->falseanswer]->feedback;
         $question->truefeedbackformat =
@@ -147,6 +153,7 @@ class qtype_truefalse extends question_type {
                 $answers[$questiondata->options->falseanswer]->feedbackformat;
         $question->trueanswerid =  $questiondata->options->trueanswer;
         $question->falseanswerid = $questiondata->options->falseanswer;
+        $question->showstandardinstruction = $questiondata->options->showstandardinstruction;
     }
 
     public function delete_question($questionid, $contextid) {

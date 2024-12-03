@@ -27,6 +27,14 @@ require_once(__DIR__ . '/../config.php');
 $page = optional_param('page', 0, PARAM_INT);
 $q = optional_param('q', '', PARAM_NOTAGS);
 $title = optional_param('title', '', PARAM_NOTAGS);
+$contextid = optional_param('context', 0, PARAM_INT);
+$cat = optional_param('cat', '', PARAM_NOTAGS);
+$mycoursesonly = optional_param('mycoursesonly', 0, PARAM_INT);
+
+if (\core_search\manager::is_search_area_categories_enabled()) {
+    $cat = \core_search\manager::get_search_area_category_by_name($cat);
+}
+
 // Moving areaids, courseids, timestart, and timeend further down as they might come as an array if they come from the form.
 
 $context = context_system::instance();
@@ -47,16 +55,42 @@ $searchrenderer = $PAGE->get_renderer('core_search');
 if (\core_search\manager::is_global_search_enabled() === false) {
     $PAGE->set_url(new moodle_url('/search/index.php'));
     echo $OUTPUT->header();
-    echo $OUTPUT->heading($pagetitle);
     echo $searchrenderer->render_search_disabled();
     echo $OUTPUT->footer();
     exit;
 }
 
-$search = \core_search\manager::instance();
+$search = \core_search\manager::instance(true, true);
 
-// We first get the submitted data as we want to set it all in the page URL.
-$mform = new \core_search\output\form\search(null, array('searchengine' => $search->get_engine()->get_plugin_name()));
+// Set up custom data for form.
+$customdata = ['searchengine' => $search->get_engine()->get_plugin_name()];
+if ($contextid) {
+    // When a context is supplied, check if it's within course level. If so, show dropdown.
+    $context = context::instance_by_id($contextid);
+    $coursecontext = $context->get_course_context(false);
+    if ($coursecontext) {
+        $searchwithin = [];
+        $searchwithin[''] = get_string('everywhere', 'search');
+        $searchwithin['course'] = $coursecontext->get_context_name();
+        if ($context->contextlevel != CONTEXT_COURSE) {
+            $searchwithin['context'] = $context->get_context_name();
+            if ($context->contextlevel == CONTEXT_MODULE) {
+                $customdata['withincmid'] = $context->instanceid;
+            }
+        }
+        $customdata['searchwithin'] = $searchwithin;
+        $customdata['withincourseid'] = $coursecontext->instanceid;
+    }
+
+}
+// Get available ordering options from search engine.
+$customdata['orderoptions'] = $search->get_engine()->get_supported_orders($context);
+
+if ($cat instanceof \core_search\area_category) {
+    $customdata['cat'] = $cat->get_name();
+}
+
+$mform = new \core_search\output\form\search(null, $customdata);
 
 $data = $mform->get_data();
 if (!$data && $q) {
@@ -77,7 +111,33 @@ if (!$data && $q) {
     }
     $data->timestart = optional_param('timestart', 0, PARAM_INT);
     $data->timeend = optional_param('timeend', 0, PARAM_INT);
+
+    $data->context = $contextid;
+    $data->mycoursesonly = $mycoursesonly;
+
     $mform->set_data($data);
+}
+
+// Convert the 'search within' option, if used, to course or context restrictions.
+if ($data && !empty($data->searchwithin)) {
+    switch ($data->searchwithin) {
+        case 'course':
+            $data->courseids = [$coursecontext->instanceid];
+            break;
+        case 'context':
+            $data->courseids = [$coursecontext->instanceid];
+            $data->contextids = [$context->id];
+            break;
+    }
+}
+
+// Inform search engine about source context.
+if (!empty($context) && $data) {
+    $data->context = $context;
+}
+
+if ($data && $cat instanceof \core_search\area_category) {
+    $data->cat = $cat->get_name();
 }
 
 // Set the page URL.
@@ -93,17 +153,30 @@ if ($data) {
     }
     $urlparams['timestart'] = $data->timestart;
     $urlparams['timeend'] = $data->timeend;
+    $urlparams['mycoursesonly'] = isset($data->mycoursesonly) ? $data->mycoursesonly : 0;
 }
+
+if ($cat instanceof \core_search\area_category) {
+    $urlparams['cat'] = $cat->get_name();
+}
+
 $url = new moodle_url('/search/index.php', $urlparams);
 $PAGE->set_url($url);
 
 // We are ready to render.
 echo $OUTPUT->header();
-echo $OUTPUT->heading($pagetitle);
+
+// Unlock the session only after outputting the header as this modifies the session cachestore.
+\core\session\manager::write_close();
 
 // Get the results.
 if ($data) {
     $results = $search->paged_search($data, $page);
+}
+
+// Show search information if configured by system administrator.
+if ($CFG->searchbannerenable && $CFG->searchbanner) {
+    echo $OUTPUT->notification(format_text($CFG->searchbanner, FORMAT_HTML), 'notifywarning');
 }
 
 if ($errorstr = $search->get_engine()->get_query_error()) {
@@ -115,7 +188,11 @@ if ($errorstr = $search->get_engine()->get_query_error()) {
 $mform->display();
 
 if (!empty($results)) {
-    echo $searchrenderer->render_results($results->results, $results->actualpage, $results->totalcount, $url);
+    $topresults = $search->search_top($data);
+    if (!empty($topresults)) {
+        echo $searchrenderer->render_top_results($topresults);
+    }
+    echo $searchrenderer->render_results($results->results, $results->actualpage, $results->totalcount, $url, $cat);
 
     \core_search\manager::trigger_search_results_viewed([
         'q' => $data->q,

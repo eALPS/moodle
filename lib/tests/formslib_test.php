@@ -17,11 +17,20 @@
 /**
  * Unit tests for /lib/formslib.php.
  *
- * @package   core_form
- * @category  phpunit
+ * @package   core
+ * @category  test
  * @copyright 2011 Sam Hemelryk
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+
+namespace core;
+
+use HTML_QuickForm_Rule_Range;
+use moodleform;
+use MoodleQuickForm_radio;
+use MoodleQuickForm_Rule_Required;
+use MoodleQuickForm_select;
+use MoodleQuickForm_text;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -31,10 +40,17 @@ require_once($CFG->libdir . '/form/radio.php');
 require_once($CFG->libdir . '/form/select.php');
 require_once($CFG->libdir . '/form/text.php');
 
+/**
+ * Unit tests for /lib/formslib.php.
+ *
+ * @package   core
+ * @category  test
+ * @copyright 2011 Sam Hemelryk
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class formslib_test extends \advanced_testcase {
 
-class core_formslib_testcase extends advanced_testcase {
-
-    public function test_require_rule() {
+    public function test_require_rule(): void {
         global $CFG;
 
         $strictformsrequired = null;
@@ -125,7 +141,7 @@ class core_formslib_testcase extends advanced_testcase {
         }
     }
 
-    public function test_range_rule() {
+    public function test_range_rule(): void {
         global $CFG;
 
         require_once('HTML/QuickForm/Rule/Range.php'); // Requires this pear stuff.
@@ -208,46 +224,46 @@ class core_formslib_testcase extends advanced_testcase {
         }
     }
 
-    public function test_generate_id_select() {
+    public function test_generate_id_select(): void {
         $el = new MoodleQuickForm_select('choose_one', 'Choose one',
             array(1 => 'One', '2' => 'Two'));
         $el->_generateId();
         $this->assertSame('id_choose_one', $el->getAttribute('id'));
     }
 
-    public function test_generate_id_like_repeat() {
+    public function test_generate_id_like_repeat(): void {
         $el = new MoodleQuickForm_text('text[7]', 'Type something');
         $el->_generateId();
         $this->assertSame('id_text_7', $el->getAttribute('id'));
     }
 
-    public function test_can_manually_set_id() {
+    public function test_can_manually_set_id(): void {
         $el = new MoodleQuickForm_text('elementname', 'Type something',
             array('id' => 'customelementid'));
         $el->_generateId();
         $this->assertSame('customelementid', $el->getAttribute('id'));
     }
 
-    public function test_generate_id_radio() {
+    public function test_generate_id_radio(): void {
         $el = new MoodleQuickForm_radio('radio', 'Label', 'Choice label', 'choice_value');
         $el->_generateId();
         $this->assertSame('id_radio_choice_value', $el->getAttribute('id'));
     }
 
-    public function test_radio_can_manually_set_id() {
+    public function test_radio_can_manually_set_id(): void {
         $el = new MoodleQuickForm_radio('radio2', 'Label', 'Choice label', 'choice_value',
             array('id' => 'customelementid2'));
         $el->_generateId();
         $this->assertSame('customelementid2', $el->getAttribute('id'));
     }
 
-    public function test_generate_id_radio_like_repeat() {
+    public function test_generate_id_radio_like_repeat(): void {
         $el = new MoodleQuickForm_radio('repeatradio[2]', 'Label', 'Choice label', 'val');
         $el->_generateId();
         $this->assertSame('id_repeatradio_2_val', $el->getAttribute('id'));
     }
 
-    public function test_rendering() {
+    public function test_rendering(): void {
         $form = new formslib_test_form();
         ob_start();
         $form->display();
@@ -278,16 +294,16 @@ class core_formslib_testcase extends advanced_testcase {
             'attributes'=>array('type'=>'radio', 'name'=>'repeatradio[2]', 'value'=>'2')), $html);
     }
 
-    public function test_settype_debugging_text() {
+    public function test_settype_debugging_text(): void {
         $mform = new formslib_settype_debugging_text();
         $this->assertDebuggingCalled("Did you remember to call setType() for 'texttest'? Defaulting to PARAM_RAW cleaning.");
 
         // Check form still there though.
-        $this->expectOutputRegex('/<input[^>]*name="texttest[^>]*type="text/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="texttest/');
         $mform->display();
     }
 
-    public function test_settype_debugging_hidden() {
+    public function test_settype_debugging_hidden(): void {
         $mform = new formslib_settype_debugging_hidden();
         $this->assertDebuggingCalled("Did you remember to call setType() for 'hiddentest'? Defaulting to PARAM_RAW cleaning.");
 
@@ -296,83 +312,83 @@ class core_formslib_testcase extends advanced_testcase {
         $mform->display();
     }
 
-    public function test_settype_debugging_url() {
+    public function test_settype_debugging_url(): void {
         $this->resetAfterTest(true);
         $this->setAdminUser();
         $mform = new formslib_settype_debugging_url();
         $this->assertDebuggingCalled("Did you remember to call setType() for 'urltest'? Defaulting to PARAM_RAW cleaning.");
 
         // Check form still there though.
-        $this->expectOutputRegex('/<input[^>]*name="urltest"[^>]*type="text/');
+        $this->expectOutputRegex('/<input[^>]*type="url[^>]*name="urltest"/');
         $mform->display();
     }
 
-    public function test_settype_debugging_repeat() {
+    public function test_settype_debugging_repeat(): void {
         $mform = new formslib_settype_debugging_repeat();
         $this->assertDebuggingCalled("Did you remember to call setType() for 'repeattest[0]'? Defaulting to PARAM_RAW cleaning.");
 
         // Check form still there though.
-        $this->expectOutputRegex('/<input[^>]*name="repeattest[^>]*type="text/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="repeattest/');
         $mform->display();
     }
 
-    public function test_settype_debugging_repeat_ok() {
+    public function test_settype_debugging_repeat_ok(): void {
         $mform = new formslib_settype_debugging_repeat_ok();
         // No debugging expected here.
 
-        $this->expectOutputRegex('/<input[^>]*name="repeattest[^>]*type="text/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="repeattest/');
         $mform->display();
     }
 
-    public function test_settype_debugging_group() {
+    public function test_settype_debugging_group(): void {
         $mform = new formslib_settype_debugging_group();
         $this->assertDebuggingCalled("Did you remember to call setType() for 'groupel1'? Defaulting to PARAM_RAW cleaning.");
-        $this->expectOutputRegex('/<input[^>]*name="groupel1"[^>]*type="text/');
-        $this->expectOutputRegex('/<input[^>]*name="groupel2"[^>]*type="text/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="groupel1"/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="groupel2"/');
         $mform->display();
     }
 
-    public function test_settype_debugging_namedgroup() {
+    public function test_settype_debugging_namedgroup(): void {
         $mform = new formslib_settype_debugging_namedgroup();
         $this->assertDebuggingCalled("Did you remember to call setType() for 'namedgroup[groupel1]'? Defaulting to PARAM_RAW cleaning.");
-        $this->expectOutputRegex('/<input[^>]*name="namedgroup\[groupel1\]"[^>]*type="text/');
-        $this->expectOutputRegex('/<input[^>]*name="namedgroup\[groupel2\]"[^>]*type="text/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="namedgroup\[groupel1\]"/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="namedgroup\[groupel2\]"/');
         $mform->display();
     }
 
-    public function test_settype_debugging_funky_name() {
+    public function test_settype_debugging_funky_name(): void {
         $mform = new formslib_settype_debugging_funky_name();
         $this->assertDebuggingCalled("Did you remember to call setType() for 'blah[foo][bar][1]'? Defaulting to PARAM_RAW cleaning.");
-        $this->expectOutputRegex('/<input[^>]*name="blah\[foo\]\[bar\]\[0\]"[^>]*type="text/');
-        $this->expectOutputRegex('/<input[^>]*name="blah\[foo\]\[bar\]\[1\]"[^>]*type="text/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="blah\[foo\]\[bar\]\[0\]"/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="blah\[foo\]\[bar\]\[1\]"/');
         $mform->display();
     }
 
-    public function test_settype_debugging_type_inheritance() {
+    public function test_settype_debugging_type_inheritance(): void {
         $mform = new formslib_settype_debugging_type_inheritance();
-        $this->expectOutputRegex('/<input[^>]*name="blah\[foo\]\[bar\]\[0\]"[^>]*type="text/');
-        $this->expectOutputRegex('/<input[^>]*name="blah\[bar\]\[foo\]\[1\]"[^>]*type="text/');
-        $this->expectOutputRegex('/<input[^>]*name="blah\[any\]\[other\]\[2\]"[^>]*type="text/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="blah\[foo\]\[bar\]\[0\]"/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="blah\[bar\]\[foo\]\[1\]"/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="blah\[any\]\[other\]\[2\]"/');
         $mform->display();
     }
 
-    public function test_settype_debugging_type_group_in_repeat() {
+    public function test_settype_debugging_type_group_in_repeat(): void {
         $mform = new formslib_settype_debugging_type_group_in_repeat();
         $this->assertDebuggingCalled("Did you remember to call setType() for 'test2[0]'? Defaulting to PARAM_RAW cleaning.");
-        $this->expectOutputRegex('/<input[^>]*name="test1\[0\]"[^>]*type="text/');
-        $this->expectOutputRegex('/<input[^>]*name="test2\[0\]"[^>]*type="text/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="test1\[0\]"/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="test2\[0\]"/');
         $mform->display();
     }
 
-    public function test_settype_debugging_type_namedgroup_in_repeat() {
+    public function test_settype_debugging_type_namedgroup_in_repeat(): void {
         $mform = new formslib_settype_debugging_type_namedgroup_in_repeat();
         $this->assertDebuggingCalled("Did you remember to call setType() for 'namedgroup[0][test2]'? Defaulting to PARAM_RAW cleaning.");
-        $this->expectOutputRegex('/<input[^>]*name="namedgroup\[0\]\[test1\]"[^>]*type="text/');
-        $this->expectOutputRegex('/<input[^>]*name="namedgroup\[0\]\[test2\]"[^>]*type="text/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="namedgroup\[0\]\[test1\]"/');
+        $this->expectOutputRegex('/<input[^>]*type="text[^>]*name="namedgroup\[0\]\[test2\]"/');
         $mform->display();
     }
 
-    public function test_type_cleaning() {
+    public function test_type_cleaning(): void {
         $expectedtypes = array(
             'simpleel' => PARAM_INT,
             'groupel1' => PARAM_INT,
@@ -554,27 +570,27 @@ class core_formslib_testcase extends advanced_testcase {
     /**
      * MDL-52873
      */
-    public function test_multiple_modgrade_fields() {
+    public function test_multiple_modgrade_fields(): void {
         global $CFG;
         $this->resetAfterTest(true);
 
-        $CFG->theme = 'clean';
+        $CFG->theme = 'classic';
         $form = new formslib_multiple_modgrade_form();
         ob_start();
         $form->display();
         $html = ob_get_clean();
 
-        $this->assertTag(array('id' => 'fgroup_id_grade1'), $html);
+        $this->assertTag(array('id' => 'fitem_fgroup_id_grade1'), $html);
         $this->assertTag(array('id' => 'id_grade1_modgrade_type'), $html);
         $this->assertTag(array('id' => 'id_grade1_modgrade_point'), $html);
         $this->assertTag(array('id' => 'id_grade1_modgrade_scale'), $html);
 
-        $this->assertTag(array('id' => 'fgroup_id_grade2'), $html);
+        $this->assertTag(array('id' => 'fitem_fgroup_id_grade2'), $html);
         $this->assertTag(array('id' => 'id_grade2_modgrade_type'), $html);
         $this->assertTag(array('id' => 'id_grade2_modgrade_point'), $html);
         $this->assertTag(array('id' => 'id_grade2_modgrade_scale'), $html);
 
-        $this->assertTag(array('id' => 'fgroup_id_grade_3'), $html);
+        $this->assertTag(array('id' => 'fitem_fgroup_id_grade_3'), $html);
         $this->assertTag(array('id' => 'id_grade_3_modgrade_type'), $html);
         $this->assertTag(array('id' => 'id_grade_3_modgrade_point'), $html);
         $this->assertTag(array('id' => 'id_grade_3_modgrade_scale'), $html);
@@ -583,10 +599,10 @@ class core_formslib_testcase extends advanced_testcase {
     /**
      * Test persistant freeze elements have different id's.
      */
-    public function test_persistantrreeze_element() {
+    public function test_persistantrreeze_element(): void {
         global $CFG;
         $this->resetAfterTest(true);
-        $CFG->theme = 'clean';
+        $CFG->theme = 'classic';
 
         $form = new formslib_persistantrreeze_element();
         ob_start();
@@ -595,15 +611,12 @@ class core_formslib_testcase extends advanced_testcase {
 
         // Test advcheckbox id's.
         $this->assertTag(array('id' => 'id_advcheckboxpersistant'), $html);
-        $this->assertTag(array('id' => 'id_advcheckboxpersistant_persistant'), $html);
         $this->assertTag(array('id' => 'id_advcheckboxnotpersistant'), $html);
         $this->assertNotTag(array('id' => 'id_advcheckboxnotpersistant_persistant'), $html);
         $this->assertTag(array('id' => 'id_advcheckboxfrozen'), $html);
-        $this->assertTag(array('id' => 'id_advcheckboxfrozen_persistant'), $html);
 
         // Check text element id's.
         $this->assertTag(array('id' => 'id_textpersistant'), $html);
-        $this->assertTag(array('id' => 'id_textpersistant_persistant'), $html);
         $this->assertTag(array('id' => 'id_textnotpersistant'), $html);
         $this->assertNotTag(array('id' => 'id_textnotpersistant_persistant'), $html);
         $this->assertTag(array('id' => 'id_textfrozen'), $html);
@@ -614,7 +627,7 @@ class core_formslib_testcase extends advanced_testcase {
     /**
      * Ensure a validation can run at least once per object. See MDL-56259.
      */
-    public function test_multiple_validation() {
+    public function test_multiple_validation(): void {
         $this->resetAfterTest(true);
 
         // It should be valid.
@@ -633,7 +646,7 @@ class core_formslib_testcase extends advanced_testcase {
     /**
      * MDL-56233 - Tests mocking a form inside a namespace.
      */
-    public function test_mock_submit() {
+    public function test_mock_submit(): void {
         require_once(__DIR__.'/fixtures/namespaced_form.php');
         \local_unittests\namespaced_form\exampleform::mock_submit(['title' => 'Mocked Value']);
         $form = new \local_unittests\namespaced_form\exampleform();

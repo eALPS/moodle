@@ -60,6 +60,9 @@ abstract class base extends \core\event\base {
         if ($assign->get_context()->id != $this->get_context()->id) {
             throw new \coding_exception('Invalid assign isntance supplied!');
         }
+        if ($assign->is_blind_marking()) {
+            $this->data['anonymous'] = 1;
+        }
         $this->assign = $assign;
     }
 
@@ -94,35 +97,6 @@ abstract class base extends \core\event\base {
      */
     public function get_url() {
         return new \moodle_url('/mod/assign/view.php', array('id' => $this->contextinstanceid));
-    }
-
-    /**
-     * Sets the legacy event log data.
-     *
-     * @param string $action The current action
-     * @param string $info A detailed description of the change. But no more than 255 characters.
-     * @param string $url The url to the assign module instance.
-     */
-    public function set_legacy_logdata($action = '', $info = '', $url = '') {
-        $fullurl = 'view.php?id=' . $this->contextinstanceid;
-        if ($url != '') {
-            $fullurl .= '&' . $url;
-        }
-
-        $this->legacylogdata = array($this->courseid, 'assign', $action, $fullurl, $info, $this->contextinstanceid);
-    }
-
-    /**
-     * Return legacy data for add_to_log().
-     *
-     * @return array
-     */
-    protected function get_legacy_logdata() {
-        if (isset($this->legacylogdata)) {
-            return $this->legacylogdata;
-        }
-
-        return null;
     }
 
     /**

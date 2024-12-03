@@ -30,7 +30,8 @@ class backup_files_edit_form extends moodleform {
     public function definition() {
         $mform =& $this->_form;
 
-        $options = array('subdirs' => 0, 'maxfiles' => -1, 'accepted_types' => '*', 'return_types' => FILE_INTERNAL | FILE_REFERENCE);
+        $types = (FILE_INTERNAL | FILE_REFERENCE | FILE_CONTROLLED_LINK);
+        $options = array('subdirs' => 0, 'maxfiles' => -1, 'accepted_types' => '*', 'return_types' => $types);
 
         $mform->addElement('filemanager', 'files_filemanager', get_string('files'), null, $options);
 
@@ -47,7 +48,7 @@ class backup_files_edit_form extends moodleform {
         $mform->setType('component', PARAM_COMPONENT);
 
         $mform->addElement('hidden', 'returnurl', $this->_customdata['returnurl']);
-        $mform->setType('returnurl', PARAM_URL);
+        $mform->setType('returnurl', PARAM_LOCALURL);
 
         $this->add_action_buttons(true, get_string('savechanges'));
         $this->set_data($this->_customdata['data']);

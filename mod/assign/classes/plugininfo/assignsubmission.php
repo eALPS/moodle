@@ -14,6 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace mod_assign\plugininfo;
+
+use core\plugininfo\base;
+use core_plugin_manager;
+use moodle_url;
+
 /**
  * Assign submission subplugin info class.
  *
@@ -21,14 +27,12 @@
  * @copyright 2013 Petr Skoda {@link http://skodak.org}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-namespace mod_assign\plugininfo;
-
-use core\plugininfo\base, core_plugin_manager, moodle_url;
-
-defined('MOODLE_INTERNAL') || die();
-
-
 class assignsubmission extends base {
+
+    public static function plugintype_supports_disabling(): bool {
+        return true;
+    }
+
     /**
      * Finds all enabled plugins, the result may include missing plugins.
      * @return array|null of enabled plugins $pluginname=>$pluginname, null means unknown
@@ -61,6 +65,24 @@ class assignsubmission extends base {
         }
 
         return $enabled;
+    }
+
+    public static function enable_plugin(string $pluginname, int $enabled): bool {
+        $haschanged = false;
+
+        $plugin = 'assignsubmission_' . $pluginname;
+        $oldvalue = get_config($plugin, 'disabled');
+        $disabled = !$enabled;
+        // Only set value if there is no config setting or if the value is different from the previous one.
+        if ($oldvalue === false || ((bool) $oldvalue != $disabled)) {
+            set_config('disabled', $disabled, $plugin);
+            $haschanged = true;
+
+            add_to_config_log('disabled', $oldvalue, $disabled, $plugin);
+            \core_plugin_manager::reset_caches();
+        }
+
+        return $haschanged;
     }
 
     public function is_uninstall_allowed() {

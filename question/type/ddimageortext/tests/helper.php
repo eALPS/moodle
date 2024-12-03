@@ -34,7 +34,7 @@ defined('MOODLE_INTERNAL') || die();
  */
 class qtype_ddimageortext_test_helper extends question_test_helper {
     public function get_test_questions() {
-        return array('fox', 'maths', 'xsection');
+        return ['fox', 'maths', 'xsection', 'mixedlang', 'mathjax'];
     }
 
     /**
@@ -246,6 +246,91 @@ class qtype_ddimageortext_test_helper extends question_test_helper {
         $fromform->hintclearwrong = array(1, 0, 1, 0);
         $fromform->hintshownumcorrect = array(1, 1, 1, 1);
 
+        $fromform->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
+
         return $fromform;
+    }
+
+    /**
+     * Get data required to save a drag-drop into text question where the the answer contain equation
+     *
+     *
+     * @return stdClass data to create a ddwtos question.
+     */
+    public function get_ddimageortext_question_form_data_mathjax() {
+        global $CFG, $USER;
+        $fromform = new stdClass();
+
+        $bgdraftitemid = 0;
+        file_prepare_draft_area($bgdraftitemid, null, null, null, null);
+        $fs = get_file_storage();
+        $filerecord = new stdClass();
+        $filerecord->contextid = context_user::instance($USER->id)->id;
+        $filerecord->component = 'user';
+        $filerecord->filearea = 'draft';
+        $filerecord->itemid = $bgdraftitemid;
+        $filerecord->filepath = '/';
+        $filerecord->filename = 'oceanfloorbase.jpg';
+        $fs->create_file_from_pathname($filerecord, $CFG->dirroot .
+            '/question/type/ddimageortext/tests/fixtures/oceanfloorbase.jpg');
+        $fromform->name = 'Drag-and-drop words into image question with equation';
+        $fromform->questiontext = ['text' => 'Fill in the correct mathjax equation: y = 2, x =4', 'format' => FORMAT_HTML];
+        $fromform->defaultmark = 1.0;
+        $fromform->generalfeedback = ['text' => 'The right answer is: "y = x^2"', 'format' => FORMAT_HTML];
+        $fromform->drags = [
+            ['dragitemtype' => 'word', 'draggroup' => '1', 'infinite' => '0'],
+            ['dragitemtype' => 'word', 'draggroup' => '1', 'infinite' => '0'],
+        ];
+        $fromform->bgimage = $bgdraftitemid;
+        $fromform->dragitem = [0, 0];
+        $fromform->draglabel =
+            [
+                '$$ y = x^2 $$',
+                '$$ y = x^5 $$',
+            ];
+        $fromform->drops = [
+            ['xleft' => '53', 'ytop' => '17', 'choice' => '1', 'droplabel' => ''],
+            ['xleft' => '172', 'ytop' => '2', 'choice' => '2', 'droplabel' => ''],
+        ];
+        test_question_maker::set_standard_combined_feedback_form_data($fromform);
+        $fromform->shownumcorrect = 0;
+        $fromform->penalty = 0.3333333;
+        $fromform->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
+        return $fromform;
+    }
+
+    /**
+     * Make a test question where the drag items are a different language than the main question text.
+     *
+     * @return qtype_ddimageortext_question
+     */
+    public function make_ddimageortext_question_mixedlang() {
+        question_bank::load_question_definition_classes('ddimageortext');
+        $dd = new qtype_ddimageortext_question();
+
+        test_question_maker::initialise_a_question($dd);
+
+        $dd->name = 'Question about French in English.';
+        $dd->questiontext = '<p>Complete the blanks in this sentence.</p>' .
+                '<p lang="fr">J\'ai perdu [[1]] plume de [[2]] tante - l\'avez-vous vue?</p>';
+        $dd->generalfeedback = 'This sentence uses each letter of the alphabet.';
+        $dd->qtype = question_bank::get_qtype('ddimageortext');
+
+        $dd->shufflechoices = true;
+
+        test_question_maker::set_standard_combined_feedback_fields($dd);
+
+        $dd->choices = $this->make_choice_structure(array(
+                new qtype_ddimageortext_drag_item('<span lang="fr">la</span>', 1, 1),
+                new qtype_ddimageortext_drag_item('<span lang="fr">ma</span>', 2, 1),
+        ));
+
+        $dd->places = $this->make_place_structure(array(
+                new qtype_ddimageortext_drop_zone('', 1, 1),
+                new qtype_ddimageortext_drop_zone('', 2, 1)
+        ));
+        $dd->rightchoices = array(1 => 1, 2 => 2);
+
+        return $dd;
     }
 }

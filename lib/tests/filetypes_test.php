@@ -14,13 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Unit tests for /lib/classes/filetypes.php.
- *
- * @package core
- * @copyright 2014 The Open University
- * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core;
+
+use core_filetypes;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -34,9 +30,9 @@ require_once($CFG->libdir . '/filelib.php');
  * @copyright 2014 The Open University
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_filetypes_testcase extends advanced_testcase {
+class filetypes_test extends \advanced_testcase {
 
-    public function test_add_type() {
+    public function test_add_type(): void {
         $this->resetAfterTest();
 
         // Check the filetypes to be added do not exist yet (basically this
@@ -63,24 +59,24 @@ class core_filetypes_testcase extends advanced_testcase {
         try {
             core_filetypes::add_type('frog', 'application/x-frog', 'document');
             $this->fail();
-        } catch (coding_exception $e) {
-            $this->assertContains('already exists', $e->getMessage());
-            $this->assertContains('frog', $e->getMessage());
+        } catch (\coding_exception $e) {
+            $this->assertStringContainsString('already exists', $e->getMessage());
+            $this->assertStringContainsString('frog', $e->getMessage());
         }
 
         // Test bogus extension causes exception.
         try {
             core_filetypes::add_type('.frog', 'application/x-frog', 'document');
             $this->fail();
-        } catch (coding_exception $e) {
-            $this->assertContains('Invalid extension', $e->getMessage());
-            $this->assertContains('..frog', $e->getMessage());
+        } catch (\coding_exception $e) {
+            $this->assertStringContainsString('Invalid extension', $e->getMessage());
+            $this->assertStringContainsString('..frog', $e->getMessage());
         }
         try {
             core_filetypes::add_type('', 'application/x-frog', 'document');
             $this->fail();
-        } catch (coding_exception $e) {
-            $this->assertContains('Invalid extension', $e->getMessage());
+        } catch (\coding_exception $e) {
+            $this->assertStringContainsString('Invalid extension', $e->getMessage());
         }
 
         // Test there is an exception if you add something with defaulticon when
@@ -89,13 +85,13 @@ class core_filetypes_testcase extends advanced_testcase {
             core_filetypes::add_type('gecko', 'text/plain', 'document',
                     array(), '', '', true);
             $this->fail();
-        } catch (coding_exception $e) {
-            $this->assertContains('default icon set', $e->getMessage());
-            $this->assertContains('text/plain', $e->getMessage());
+        } catch (\coding_exception $e) {
+            $this->assertStringContainsString('default icon set', $e->getMessage());
+            $this->assertStringContainsString('text/plain', $e->getMessage());
         }
     }
 
-    public function test_update_type() {
+    public function test_update_type(): void {
         $this->resetAfterTest();
 
         // Check previous value for the MIME type of Word documents.
@@ -121,24 +117,24 @@ class core_filetypes_testcase extends advanced_testcase {
         try {
             core_filetypes::update_type('doc', 'doc', 'application/x-frog', 'document');
             $this->fail();
-        } catch (coding_exception $e) {
-            $this->assertContains('not found', $e->getMessage());
-            $this->assertContains('doc', $e->getMessage());
+        } catch (\coding_exception $e) {
+            $this->assertStringContainsString('not found', $e->getMessage());
+            $this->assertStringContainsString('doc', $e->getMessage());
         }
 
         // Test bogus extension causes exception.
         try {
             core_filetypes::update_type('docccc', '.frog', 'application/x-frog', 'document');
             $this->fail();
-        } catch (coding_exception $e) {
-            $this->assertContains('Invalid extension', $e->getMessage());
-            $this->assertContains('.frog', $e->getMessage());
+        } catch (\coding_exception $e) {
+            $this->assertStringContainsString('Invalid extension', $e->getMessage());
+            $this->assertStringContainsString('.frog', $e->getMessage());
         }
         try {
             core_filetypes::update_type('docccc', '', 'application/x-frog', 'document');
             $this->fail();
-        } catch (coding_exception $e) {
-            $this->assertContains('Invalid extension', $e->getMessage());
+        } catch (\coding_exception $e) {
+            $this->assertStringContainsString('Invalid extension', $e->getMessage());
         }
 
         // Test defaulticon changes.
@@ -146,13 +142,13 @@ class core_filetypes_testcase extends advanced_testcase {
             core_filetypes::update_type('docccc', 'docccc', 'text/plain', 'document',
                     array(), '', '', true);
             $this->fail();
-        } catch (coding_exception $e) {
-            $this->assertContains('default icon set', $e->getMessage());
-            $this->assertContains('text/plain', $e->getMessage());
+        } catch (\coding_exception $e) {
+            $this->assertStringContainsString('default icon set', $e->getMessage());
+            $this->assertStringContainsString('text/plain', $e->getMessage());
         }
     }
 
-    public function test_delete_type() {
+    public function test_delete_type(): void {
         $this->resetAfterTest();
 
         // Filetype exists.
@@ -168,9 +164,9 @@ class core_filetypes_testcase extends advanced_testcase {
         try {
             core_filetypes::delete_type('doc');
             $this->fail();
-        } catch (coding_exception $e) {
-            $this->assertContains('not found', $e->getMessage());
-            $this->assertContains('doc', $e->getMessage());
+        } catch (\coding_exception $e) {
+            $this->assertStringContainsString('not found', $e->getMessage());
+            $this->assertStringContainsString('doc', $e->getMessage());
         }
 
         // Try a custom type (slightly different).
@@ -182,7 +178,7 @@ class core_filetypes_testcase extends advanced_testcase {
         $this->assertArrayNotHasKey('frog', $types);
     }
 
-    public function test_revert_type_to_default() {
+    public function test_revert_type_to_default(): void {
         $this->resetAfterTest();
 
         // Delete and then revert.
@@ -203,9 +199,9 @@ class core_filetypes_testcase extends advanced_testcase {
         try {
             core_filetypes::revert_type_to_default('frog');
             $this->fail();
-        } catch (coding_exception $e) {
-            $this->assertContains('not a default type', $e->getMessage());
-            $this->assertContains('frog', $e->getMessage());
+        } catch (\coding_exception $e) {
+            $this->assertStringContainsString('not a default type', $e->getMessage());
+            $this->assertStringContainsString('frog', $e->getMessage());
         }
     }
 
@@ -213,41 +209,41 @@ class core_filetypes_testcase extends advanced_testcase {
      * Check that the logic cleans up the variable by deleting parts that are
      * no longer needed.
      */
-    public function test_cleanup() {
+    public function test_cleanup(): void {
         global $CFG;
         $this->resetAfterTest();
 
         // The custom filetypes setting is empty to start with.
-        $this->assertObjectNotHasAttribute('customfiletypes', $CFG);
+        $this->assertObjectNotHasProperty('customfiletypes', $CFG);
 
         // Add a custom filetype, then delete it.
         core_filetypes::add_type('frog', 'application/x-frog', 'document');
-        $this->assertObjectHasAttribute('customfiletypes', $CFG);
+        $this->assertObjectHasProperty('customfiletypes', $CFG);
         core_filetypes::delete_type('frog');
-        $this->assertObjectNotHasAttribute('customfiletypes', $CFG);
+        $this->assertObjectNotHasProperty('customfiletypes', $CFG);
 
         // Change a standard filetype, then change it back.
         core_filetypes::update_type('asm', 'asm', 'text/plain', 'document');
-        $this->assertObjectHasAttribute('customfiletypes', $CFG);
+        $this->assertObjectHasProperty('customfiletypes', $CFG);
         core_filetypes::update_type('asm', 'asm', 'text/plain', 'sourcecode');
-        $this->assertObjectNotHasAttribute('customfiletypes', $CFG);
+        $this->assertObjectNotHasProperty('customfiletypes', $CFG);
 
         // Delete a standard filetype, then add it back (the same).
         core_filetypes::delete_type('asm');
-        $this->assertObjectHasAttribute('customfiletypes', $CFG);
+        $this->assertObjectHasProperty('customfiletypes', $CFG);
         core_filetypes::add_type('asm', 'text/plain', 'sourcecode');
-        $this->assertObjectNotHasAttribute('customfiletypes', $CFG);
+        $this->assertObjectNotHasProperty('customfiletypes', $CFG);
 
         // Revert a changed type.
         core_filetypes::update_type('asm', 'asm', 'text/plain', 'document');
-        $this->assertObjectHasAttribute('customfiletypes', $CFG);
+        $this->assertObjectHasProperty('customfiletypes', $CFG);
         core_filetypes::revert_type_to_default('asm');
-        $this->assertObjectNotHasAttribute('customfiletypes', $CFG);
+        $this->assertObjectNotHasProperty('customfiletypes', $CFG);
 
         // Revert a deleted type.
         core_filetypes::delete_type('asm');
-        $this->assertObjectHasAttribute('customfiletypes', $CFG);
+        $this->assertObjectHasProperty('customfiletypes', $CFG);
         core_filetypes::revert_type_to_default('asm');
-        $this->assertObjectNotHasAttribute('customfiletypes', $CFG);
+        $this->assertObjectNotHasProperty('customfiletypes', $CFG);
     }
 }

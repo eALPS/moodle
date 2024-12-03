@@ -33,7 +33,7 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class phpunit_message_sink {
-    /** @var array of records from message_read table */
+    /** @var array of records from messages table */
     protected $messages = array();
 
     /**
@@ -48,7 +48,7 @@ class phpunit_message_sink {
     /**
      * To be called from phpunit_util only!
      *
-     * @param stdClass $message record from message_read table
+     * @param stdClass $message record from messages table
      */
     public function add_message($message) {
         /* Number messages from 0. */
@@ -58,14 +58,48 @@ class phpunit_message_sink {
     /**
      * Returns all redirected messages.
      *
-     * The instances are records form the message_read table.
+     * The instances are records from the messages table.
      * The array indexes are numbered from 0 and the order is matching
      * the creation of events.
      *
+     * @param callable|null $filter Use to filter the messages.
      * @return array
      */
-    public function get_messages() {
+    public function get_messages(?callable $filter = null): array {
+        if ($filter) {
+            return array_filter($this->messages, $filter);
+        }
         return $this->messages;
+    }
+
+    /**
+     * Return all redirected messages for a given component.
+     *
+     * @param string $component Component name.
+     * @return array List of messages.
+     */
+    public function get_messages_by_component(string $component): array {
+        $component = core_component::normalize_componentname($component);
+
+        return $this->get_messages(
+            fn ($message) => core_component::normalize_componentname($message->component) === $component,
+        );
+    }
+
+    /**
+     * Return all redirected messages for a given component and type.
+     *
+     * @param string $component Component name.
+     * @param string $type Message type.
+     * @return array List of messages.
+     */
+    public function get_messages_by_component_and_type(
+        string $component,
+        string $type,
+    ): array {
+        return array_filter($this->get_messages_by_component($component), function($message) use ($type) {
+            return $message->eventtype == $type;
+        });
     }
 
     /**

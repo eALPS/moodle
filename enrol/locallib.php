@@ -23,6 +23,8 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use core_user\fields;
+
 defined('MOODLE_INTERNAL') || die();
 
 /**
@@ -38,7 +40,7 @@ class course_enrolment_manager {
 
     /**
      * The course context
-     * @var stdClass
+     * @var context
      */
     protected $context;
     /**
@@ -117,6 +119,7 @@ class course_enrolment_manager {
     private $_plugins = null;
     private $_allplugins = null;
     private $_roles = null;
+    private $_visibleroles = null;
     private $_assignableroles = null;
     private $_assignablerolesothers = null;
     private $_groups = null;
@@ -237,13 +240,15 @@ class course_enrolment_manager {
             list($instancessql, $params, $filter) = $this->get_instance_sql();
             list($filtersql, $moreparams) = $this->get_filter_sql();
             $params += $moreparams;
-            $extrafields = get_extra_user_fields($this->get_context());
-            $extrafields[] = 'lastaccess';
-            $ufields = user_picture::fields('u', $extrafields);
-            $sql = "SELECT DISTINCT $ufields, COALESCE(ul.timeaccess, 0) AS lastcourseaccess
+            $userfields = fields::for_identity($this->get_context())->with_userpic()->excluding('lastaccess');
+            ['selects' => $fieldselect, 'joins' => $fieldjoin, 'params' => $fieldjoinparams] =
+                    (array)$userfields->get_sql('u', true, '', '', false);
+            $params += $fieldjoinparams;
+            $sql = "SELECT DISTINCT $fieldselect, COALESCE(ul.timeaccess, 0) AS lastcourseaccess
                       FROM {user} u
                       JOIN {user_enrolments} ue ON (ue.userid = u.id  AND ue.enrolid $instancessql)
                       JOIN {enrol} e ON (e.id = ue.enrolid)
+                           $fieldjoin
                  LEFT JOIN {user_lastaccess} ul ON (ul.courseid = e.courseid AND ul.userid = u.id)";
             if ($this->groupfilter) {
                 $sql .= " LEFT JOIN ({groups_members} gm JOIN {groups} g ON (g.id = gm.groupid))
@@ -267,8 +272,9 @@ class course_enrolment_manager {
         global $DB;
 
         // Search condition.
-        $extrafields = get_extra_user_fields($this->get_context());
-        list($sql, $params) = users_search_sql($this->searchfilter, 'u', true, $extrafields);
+        // TODO Does not support custom user profile fields (MDL-70456).
+        $extrafields = fields::get_identity_fields($this->get_context(), false);
+        list($sql, $params) = users_search_sql($this->searchfilter, 'u', USER_SEARCH_CONTAINS, $extrafields);
 
         // Role condition.
         if ($this->rolefilter) {
@@ -340,22 +346,26 @@ class course_enrolment_manager {
             list($ctxcondition, $params) = $DB->get_in_or_equal($this->context->get_parent_context_ids(true), SQL_PARAMS_NAMED, 'ctx');
             $params['courseid'] = $this->course->id;
             $params['cid'] = $this->course->id;
-            $extrafields = get_extra_user_fields($this->get_context());
-            $ufields = user_picture::fields('u', $extrafields);
-            $sql = "SELECT ra.id as raid, ra.contextid, ra.component, ctx.contextlevel, ra.roleid, $ufields,
-                        coalesce(u.lastaccess,0) AS lastaccess
-                    FROM {role_assignments} ra
-                    JOIN {user} u ON u.id = ra.userid
-                    JOIN {context} ctx ON ra.contextid = ctx.id
-               LEFT JOIN (
+            $userfields = fields::for_identity($this->get_context())->with_userpic();
+            ['selects' => $fieldselect, 'joins' => $fieldjoin, 'params' => $fieldjoinparams] =
+                    (array)$userfields->get_sql('u', true);
+            $params += $fieldjoinparams;
+            $sql = "SELECT ra.id as raid, ra.contextid, ra.component, ctx.contextlevel, ra.roleid,
+                           coalesce(u.lastaccess,0) AS lastaccess
+                           $fieldselect
+                      FROM {role_assignments} ra
+                      JOIN {user} u ON u.id = ra.userid
+                      JOIN {context} ctx ON ra.contextid = ctx.id
+                           $fieldjoin
+                 LEFT JOIN (
                        SELECT ue.id, ue.userid
                          FROM {user_enrolments} ue
                          JOIN {enrol} e ON e.id = ue.enrolid
                         WHERE e.courseid = :courseid
                        ) ue ON ue.userid=u.id
-                   WHERE ctx.id $ctxcondition AND
-                         ue.id IS NULL
-                ORDER BY $sort $direction, ctx.depth DESC";
+                     WHERE ctx.id $ctxcondition AND
+                           ue.id IS NULL
+                  ORDER BY $sort $direction, ctx.depth DESC";
             $this->otherusers[$key] = $DB->get_records_sql($sql, $params, $page*$perpage, $perpage);
         }
         return $this->otherusers[$key];
@@ -368,19 +378,38 @@ class course_enrolment_manager {
      * @param bool $searchanywhere Can the search term be anywhere, or must it be at the start.
      * @return array with three elements:
      *     string list of fields to SELECT,
+     *     string possible database joins for user fields
      *     string contents of SQL WHERE clause,
      *     array query params. Note that the SQL snippets use named parameters.
      */
     protected function get_basic_search_conditions($search, $searchanywhere) {
         global $DB, $CFG;
 
+        // Get custom user field SQL used for querying all the fields we need (identity, name, and
+        // user picture).
+        $userfields = fields::for_identity($this->context)->with_name()->with_userpic()
+                ->excluding('username', 'lastaccess', 'maildisplay');
+        ['selects' => $fieldselects, 'joins' => $fieldjoins, 'params' => $params, 'mappings' => $mappings] =
+                (array)$userfields->get_sql('u', true, '', '', false);
+
+        // Searchable fields are only the identity and name ones (not userpic, and without exclusions).
+        $searchablefields = fields::for_identity($this->context)->with_name();
+        $searchable = array_fill_keys($searchablefields->get_required_fields(), true);
+        if (array_key_exists('username', $searchable)) {
+            // Add the username into the mappings list from the other query, because it was excluded.
+            $mappings['username'] = 'u.username';
+        }
+
         // Add some additional sensible conditions
         $tests = array("u.id <> :guestid", 'u.deleted = 0', 'u.confirmed = 1');
-        $params = array('guestid' => $CFG->siteguest);
+        $params['guestid'] = $CFG->siteguest;
         if (!empty($search)) {
-            $conditions = get_extra_user_fields($this->get_context());
-            $conditions[] = 'u.firstname';
-            $conditions[] = 'u.lastname';
+            // Include identity and name fields as conditions.
+            foreach ($mappings as $fieldname => $fieldsql) {
+                if (array_key_exists($fieldname, $searchable)) {
+                    $conditions[] = $fieldsql;
+                }
+            }
             $conditions[] = $DB->sql_fullname('u.firstname', 'u.lastname');
             if ($searchanywhere) {
                 $searchparam = '%' . $search . '%';
@@ -397,12 +426,8 @@ class course_enrolment_manager {
         }
         $wherecondition = implode(' AND ', $tests);
 
-        $extrafields = get_extra_user_fields($this->get_context(), array('username', 'lastaccess'));
-        $extrafields[] = 'username';
-        $extrafields[] = 'lastaccess';
-        $ufields = user_picture::fields('u', $extrafields);
-
-        return array($ufields, $params, $wherecondition);
+        $selects = $fieldselects . ', u.username, u.lastaccess, u.maildisplay';
+        return [$selects, $fieldjoins, $params, $wherecondition];
     }
 
     /**
@@ -416,21 +441,50 @@ class course_enrolment_manager {
      * @param int $page which page number of the results to show.
      * @param int $perpage number of users per page.
      * @param int $addedenrollment number of users added to enrollment.
-     * @return array with two elememts:
-     *      int total number of users matching the search.
-     *      array of user objects returned by the query.
+     * @param bool $returnexactcount Return the exact total users using count_record or not.
+     * @return array with two or three elements:
+     *      int totalusers Number users matching the search. (This element only exist if $returnexactcount was set to true)
+     *      array users List of user objects returned by the query.
+     *      boolean moreusers True if there are still more users, otherwise is False.
+     * @throws dml_exception
      */
-    protected function execute_search_queries($search, $fields, $countfields, $sql, array $params, $page, $perpage, $addedenrollment=0) {
+    protected function execute_search_queries($search, $fields, $countfields, $sql, array $params, $page, $perpage,
+            $addedenrollment = 0, $returnexactcount = false) {
         global $DB, $CFG;
 
         list($sort, $sortparams) = users_order_by_sql('u', $search, $this->get_context());
         $order = ' ORDER BY ' . $sort;
 
-        $totalusers = $DB->count_records_sql($countfields . $sql, $params);
-        $availableusers = $DB->get_records_sql($fields . $sql . $order,
-                array_merge($params, $sortparams), ($page*$perpage) - $addedenrollment, $perpage);
+        $totalusers = 0;
+        $moreusers = false;
+        $results = [];
 
-        return array('totalusers' => $totalusers, 'users' => $availableusers);
+        $availableusers = $DB->get_records_sql($fields . $sql . $order,
+                array_merge($params, $sortparams), ($page * $perpage) - $addedenrollment, $perpage + 1);
+        if ($availableusers) {
+            $totalusers = count($availableusers);
+            $moreusers = $totalusers > $perpage;
+
+            if ($moreusers) {
+                // We need to discard the last record.
+                array_pop($availableusers);
+            }
+
+            if ($returnexactcount && $moreusers) {
+                // There is more data. We need to do the exact count.
+                $totalusers = $DB->count_records_sql($countfields . $sql, $params);
+            }
+        }
+
+        $results['users'] = $availableusers;
+        $results['moreusers'] = $moreusers;
+
+        if ($returnexactcount) {
+            // Include totalusers in result if $returnexactcount flag is true.
+            $results['totalusers'] = $totalusers;
+        }
+
+        return $results;
     }
 
     /**
@@ -443,22 +497,30 @@ class course_enrolment_manager {
      * @param int $page Defaults to 0
      * @param int $perpage Defaults to 25
      * @param int $addedenrollment Defaults to 0
-     * @return array Array(totalusers => int, users => array)
+     * @param bool $returnexactcount Return the exact total users using count_record or not.
+     * @return array with two or three elements:
+     *      int totalusers Number users matching the search. (This element only exist if $returnexactcount was set to true)
+     *      array users List of user objects returned by the query.
+     *      boolean moreusers True if there are still more users, otherwise is False.
+     * @throws dml_exception
      */
-    public function get_potential_users($enrolid, $search='', $searchanywhere=false, $page=0, $perpage=25, $addedenrollment=0) {
+    public function get_potential_users($enrolid, $search = '', $searchanywhere = false, $page = 0, $perpage = 25,
+            $addedenrollment = 0, $returnexactcount = false) {
         global $DB;
 
-        list($ufields, $params, $wherecondition) = $this->get_basic_search_conditions($search, $searchanywhere);
+        [$ufields, $joins, $params, $wherecondition] = $this->get_basic_search_conditions($search, $searchanywhere);
 
         $fields      = 'SELECT '.$ufields;
         $countfields = 'SELECT COUNT(1)';
         $sql = " FROM {user} u
+                      $joins
             LEFT JOIN {user_enrolments} ue ON (ue.userid = u.id AND ue.enrolid = :enrolid)
                 WHERE $wherecondition
                       AND ue.id IS NULL";
         $params['enrolid'] = $enrolid;
 
-        return $this->execute_search_queries($search, $fields, $countfields, $sql, $params, $page, $perpage, $addedenrollment);
+        return $this->execute_search_queries($search, $fields, $countfields, $sql, $params, $page, $perpage, $addedenrollment,
+                $returnexactcount);
     }
 
     /**
@@ -469,22 +531,83 @@ class course_enrolment_manager {
      * @param bool $searchanywhere
      * @param int $page Starting at 0
      * @param int $perpage
-     * @return array
+     * @param bool $returnexactcount Return the exact total users using count_record or not.
+     * @return array with two or three elements:
+     *      int totalusers Number users matching the search. (This element only exist if $returnexactcount was set to true)
+     *      array users List of user objects returned by the query.
+     *      boolean moreusers True if there are still more users, otherwise is False.
+     * @throws dml_exception
      */
-    public function search_other_users($search='', $searchanywhere=false, $page=0, $perpage=25) {
+    public function search_other_users($search = '', $searchanywhere = false, $page = 0, $perpage = 25, $returnexactcount = false) {
         global $DB, $CFG;
 
-        list($ufields, $params, $wherecondition) = $this->get_basic_search_conditions($search, $searchanywhere);
+        [$ufields, $joins, $params, $wherecondition] = $this->get_basic_search_conditions($search, $searchanywhere);
 
         $fields      = 'SELECT ' . $ufields;
         $countfields = 'SELECT COUNT(u.id)';
         $sql   = " FROM {user} u
+                        $joins
               LEFT JOIN {role_assignments} ra ON (ra.userid = u.id AND ra.contextid = :contextid)
                   WHERE $wherecondition
                     AND ra.id IS NULL";
         $params['contextid'] = $this->context->id;
 
-        return $this->execute_search_queries($search, $fields, $countfields, $sql, $params, $page, $perpage);
+        return $this->execute_search_queries($search, $fields, $countfields, $sql, $params, $page, $perpage, 0, $returnexactcount);
+    }
+
+    /**
+     * Searches through the enrolled users in this course.
+     *
+     * @param string $search The search term.
+     * @param bool $searchanywhere Can the search term be anywhere, or must it be at the start.
+     * @param int $page Starting at 0.
+     * @param int $perpage Number of users returned per page.
+     * @param bool $returnexactcount Return the exact total users using count_record or not.
+     * @param ?int $contextid Context ID we are in - we might use search on activity level and its group mode can be different from course group mode.
+     * @return array with two or three elements:
+     *      int totalusers Number users matching the search. (This element only exist if $returnexactcount was set to true)
+     *      array users List of user objects returned by the query.
+     *      boolean moreusers True if there are still more users, otherwise is False.
+     */
+    public function search_users(string $search = '', bool $searchanywhere = false, int $page = 0, int $perpage = 25,
+            bool $returnexactcount = false, ?int $contextid = null) {
+        global $USER;
+
+        [$ufields, $joins, $params, $wherecondition] = $this->get_basic_search_conditions($search, $searchanywhere);
+
+        if (isset($contextid)) {
+            // If contextid is set, we need to determine the group mode that should be used (module or course).
+            [$context, $course, $cm] = get_context_info_array($contextid);
+            // If cm instance is returned, then use the group mode from the module, otherwise get the course group mode.
+            $groupmode = $cm ? groups_get_activity_groupmode($cm, $course) : groups_get_course_groupmode($this->course);
+        } else {
+            // Otherwise, default to the group mode of the course.
+            $context = $this->context;
+            $groupmode = groups_get_course_groupmode($this->course);
+        }
+
+        if ($groupmode == SEPARATEGROUPS && !has_capability('moodle/site:accessallgroups', $context)) {
+            $groups = groups_get_all_groups($this->course->id, $USER->id, 0, 'g.id');
+            $groupids = array_column($groups, 'id');
+            if (!$groupids) {
+                return ['totalusers' => 0, 'users' => [], 'moreusers' => false];
+            }
+        } else {
+            $groupids = [];
+        }
+
+        [$enrolledsql, $enrolledparams] = get_enrolled_sql($context, '', $groupids);
+
+        $fields      = 'SELECT ' . $ufields;
+        $countfields = 'SELECT COUNT(u.id)';
+        $sql = " FROM {user} u
+                      $joins
+                 JOIN ($enrolledsql) je ON je.id = u.id
+                WHERE $wherecondition";
+
+        $params = array_merge($params, $enrolledparams);
+
+        return $this->execute_search_queries($search, $fields, $countfields, $sql, $params, $page, $perpage, 0, $returnexactcount);
     }
 
     /**
@@ -492,7 +615,7 @@ class course_enrolment_manager {
      * that SQL, and the filter that was used in constructing the sql.
      *
      * @global moodle_database $DB
-     * @return string
+     * @return array
      */
     protected function get_instance_sql() {
         global $DB;
@@ -521,13 +644,12 @@ class course_enrolment_manager {
     /**
      * Returns all of the enrolment instances for this course.
      *
-     * NOTE: since 2.4 it includes instances of disabled plugins too.
-     *
+     * @param bool $onlyenabled Whether to return data from enabled enrolment instance names only.
      * @return array
      */
-    public function get_enrolment_instances() {
+    public function get_enrolment_instances($onlyenabled = false) {
         if ($this->_instances === null) {
-            $this->_instances = enrol_get_instances($this->course->id, false);
+            $this->_instances = enrol_get_instances($this->course->id, $onlyenabled);
         }
         return $this->_instances;
     }
@@ -535,13 +657,12 @@ class course_enrolment_manager {
     /**
      * Returns the names for all of the enrolment instances for this course.
      *
-     * NOTE: since 2.4 it includes instances of disabled plugins too.
-     *
+     * @param bool $onlyenabled Whether to return data from enabled enrolment instance names only.
      * @return array
      */
-    public function get_enrolment_instance_names() {
+    public function get_enrolment_instance_names($onlyenabled = false) {
         if ($this->_inames === null) {
-            $instances = $this->get_enrolment_instances();
+            $instances = $this->get_enrolment_instances($onlyenabled);
             $plugins = $this->get_enrolment_plugins(false);
             foreach ($instances as $key=>$instance) {
                 if (!isset($plugins[$instance->enrol])) {
@@ -556,7 +677,7 @@ class course_enrolment_manager {
     }
 
     /**
-     * Gets all of the enrolment plugins that are active for this course.
+     * Gets all of the enrolment plugins that are available for this course.
      *
      * @param bool $onlyenabled return only enabled enrol plugins
      * @return array
@@ -593,6 +714,18 @@ class course_enrolment_manager {
             $this->_roles = role_fix_names(get_all_roles($this->context), $this->context);
         }
         return $this->_roles;
+    }
+
+    /**
+     * Gets all of the roles this course can contain.
+     *
+     * @return array
+     */
+    public function get_viewable_roles() {
+        if ($this->_visibleroles === null) {
+            $this->_visibleroles = get_viewable_roles($this->context);
+        }
+        return $this->_visibleroles;
     }
 
     /**
@@ -805,7 +938,7 @@ class course_enrolment_manager {
      */
     public function edit_enrolment($userenrolment, $data) {
         //Only allow editing if the user has the appropriate capability
-        //Already checked in /enrol/users.php but checking again in case this function is called from elsewhere
+        //Already checked in /user/index.php but checking again in case this function is called from elsewhere
         list($instance, $plugin) = $this->get_user_enrolment_components($userenrolment);
         if ($instance && $plugin && $plugin->allow_manage($instance) && has_capability("enrol/$instance->enrol:manage", $this->context)) {
             if (!isset($data->status)) {
@@ -935,7 +1068,7 @@ class course_enrolment_manager {
     /**
      * Returns the course context
      *
-     * @return stdClass
+     * @return context
      */
     public function get_context() {
         return $this->context;
@@ -963,7 +1096,8 @@ class course_enrolment_manager {
 
         $context    = $this->get_context();
         $now = time();
-        $extrafields = get_extra_user_fields($context);
+        // TODO Does not support custom user profile fields (MDL-70456).
+        $extrafields = fields::get_identity_fields($context, false);
 
         $users = array();
         foreach ($userroles as $userrole) {
@@ -1034,14 +1168,15 @@ class course_enrolment_manager {
         $strunenrol = get_string('unenrol', 'enrol');
         $stredit = get_string('edit');
 
-        $allroles   = $this->get_all_roles();
+        $visibleroles   = $this->get_viewable_roles();
         $assignable = $this->get_assignable_roles();
         $allgroups  = $this->get_all_groups();
         $context    = $this->get_context();
         $canmanagegroups = has_capability('moodle/course:managegroups', $context);
 
         $url = new moodle_url($pageurl, $this->get_url_params());
-        $extrafields = get_extra_user_fields($context);
+        // TODO Does not support custom user profile fields (MDL-70456).
+        $extrafields = fields::get_identity_fields($context, false);
 
         $enabledplugins = $this->get_enrolment_plugins(true);
 
@@ -1056,7 +1191,15 @@ class course_enrolment_manager {
                 if (!is_siteadmin() and !isset($assignable[$rid])) {
                     $unchangeable = true;
                 }
-                $details['roles'][$rid] = array('text'=>$allroles[$rid]->localname, 'unchangeable'=>$unchangeable);
+
+                if (isset($visibleroles[$rid])) {
+                    $label = $visibleroles[$rid];
+                } else {
+                    $label = get_string('novisibleroles', 'role');
+                    $unchangeable = true;
+                }
+
+                $details['roles'][$rid] = array('text' => $label, 'unchangeable' => $unchangeable);
             }
 
             // Users
@@ -1112,7 +1255,7 @@ class course_enrolment_manager {
      * Please note that this function does not check capability for moodle/coures:viewhiddenuserfields
      *
      * @param object $user The user record
-     * @param array $extrafields The list of fields as returned from get_extra_user_fields used to determine which
+     * @param array $extrafields The list of fields as returned from \core_user\fields::get_identity_fields used to determine which
      * additional fields may be displayed
      * @param int $now The time used for lastaccess calculation
      * @return array The fields to be displayed including userid, courseid, picture, firstname, lastcourseaccess, lastaccess and any
@@ -1129,7 +1272,7 @@ class course_enrolment_manager {
         );
 
         foreach ($extrafields as $field) {
-            $details[$field] = $user->{$field};
+            $details[$field] = s($user->{$field});
         }
 
         // Last time user has accessed the site.
@@ -1210,7 +1353,8 @@ class course_enrolment_manager {
             list($instancesql, $instanceparams) = $DB->get_in_or_equal(array_keys($instances), SQL_PARAMS_NAMED, 'instanceid0000');
         }
 
-        $userfields = user_picture::fields('u');
+        $userfieldsapi = \core_user\fields::for_userpic();
+        $userfields = $userfieldsapi->get_sql('u', false, '', '', false)->selects;
         list($idsql, $idparams) = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'userid0000');
 
         list($sort, $sortparams) = users_order_by_sql('u');
@@ -1292,7 +1436,7 @@ class enrol_user_button extends single_button {
      * @param string $galleryversion Deprecated: The gallery version to use
      * @param bool $ondomready If true the call is postponed until the DOM is finished loading
      */
-    public function require_yui_module($modules, $function, array $arguments = null, $galleryversion = null, $ondomready = false) {
+    public function require_yui_module($modules, $function, ?array $arguments = null, $galleryversion = null, $ondomready = false) {
         if ($galleryversion != null) {
             debugging('The galleryversion parameter to yui_module has been deprecated since Moodle 2.3.', DEBUG_DEVELOPER);
         }
@@ -1313,7 +1457,7 @@ class enrol_user_button extends single_button {
      * @param bool $ondomready If true the call is postponed until the DOM is finished loading
      * @param array $module A module definition
      */
-    public function require_js_init_call($function, array $extraarguments = null, $ondomready = false, array $module = null) {
+    public function require_js_init_call($function, ?array $extraarguments = null, $ondomready = false, ?array $module = null) {
         $js = new stdClass;
         $js->function = $function;
         $js->extraarguments = $extraarguments;
@@ -1397,7 +1541,7 @@ class user_enrolment_action implements renderable {
      * @param moodle_url $url
      * @param array $attributes
      */
-    public function __construct(pix_icon $icon, $title, $url, array $attributes = null) {
+    public function __construct(pix_icon $icon, $title, $url, ?array $attributes = null) {
         $this->icon = $icon;
         $this->title = $title;
         $this->url = new moodle_url($url);
@@ -1479,7 +1623,7 @@ abstract class enrol_bulk_enrolment_operation {
      * @param course_enrolment_manager $manager
      * @param stdClass $plugin
      */
-    public function __construct(course_enrolment_manager $manager, enrol_plugin $plugin = null) {
+    public function __construct(course_enrolment_manager $manager, ?enrol_plugin $plugin = null) {
         $this->manager = $manager;
         $this->plugin = $plugin;
     }

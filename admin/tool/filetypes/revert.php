@@ -27,7 +27,7 @@ require_once($CFG->libdir . '/adminlib.php');
 
 admin_externalpage_setup('tool_filetypes');
 
-$extension = required_param('extension', PARAM_RAW);
+$extension = required_param('extension', PARAM_ALPHANUMEXT);
 $redirecturl = new \moodle_url('/admin/tool/filetypes/index.php');
 
 if (optional_param('revert', 0, PARAM_INT)) {
@@ -46,7 +46,7 @@ $PAGE->set_url(new \moodle_url('/admin/tool/filetypes/revert.php', array('extens
 $PAGE->navbar->add($title);
 $PAGE->set_context($context);
 $PAGE->set_pagelayout('admin');
-$PAGE->set_title($SITE->fullname. ': ' . $title);
+$PAGE->set_title($title);
 
 // Display the page.
 echo $OUTPUT->header();

@@ -27,8 +27,8 @@
 
 require_once(__DIR__ . '/../../behat/behat_base.php');
 
-use Behat\Mink\Exception\ExpectationException as ExpectationException;
-use Behat\Mink\Exception\DriverException as DriverException;
+use Behat\Mink\Element\NodeElement;
+use Behat\Mink\Exception\DriverException;
 
 /**
  * Steps definitions to open and close action menus.
@@ -49,40 +49,163 @@ class behat_action_menu extends behat_base {
      * @return void
      */
     public function i_open_the_action_menu_in($element, $selectortype) {
-        if (!$this->running_javascript()) {
-            // Action menus automatically expand in a visible list of actions when Javascript is disabled.
-            return;
-        }
         // Gets the node based on the requested selector type and locator.
-        $node = $this->get_node_in_container("css_element", "[role=menuitem][aria-haspopup=true]", $selectortype, $element);
+        $node = $this->get_node_in_container(
+            "css_element",
+            "[role=button][aria-haspopup=true],button[aria-haspopup=true],[role=menuitem][aria-haspopup=true]",
+            $selectortype,
+            $element
+        );
 
         // Check if it is not already opened.
-        $menunode = $this->find('css', '[aria-labelledby='.$node->getAttribute('id').']');
-        if ($menunode->getAttribute('aria-hidden') === 'false') {
+        if ($node->getAttribute('aria-expanded') === 'true') {
             return;
         }
 
-        $this->ensure_node_is_visible($node);
         $node->click();
     }
 
     /**
      * When an action menu is open, follow one of the items in it.
      *
+     * The > is used to indicate a sub-menu. For example "Group mode > Visible groups"
+     * will do two clicks, one on the Group mode menu item, and one on the Visible groups link
+     * in the sub-menu.
+     *
      * @Given /^I choose "(?P<link_string>(?:[^"]|\\")*)" in the open action menu$/
      * @param string $linkstring
      * @return void
      */
-    public function i_choose_in_the_open_action_menu($linkstring) {
+    public function i_choose_in_the_open_action_menu($menuitemstring) {
         if (!$this->running_javascript()) {
             throw new DriverException('Action menu steps are not available with Javascript disabled');
         }
-        // Gets the node based on the requested selector type and locator.
-        $node = $this->get_node_in_container("link",
-            $linkstring,
-            "css_element",
-            ".moodle-actionmenu [role=menu][aria-hidden=false]");
-        $this->ensure_node_is_visible($node);
-        $node->click();
+        // Check for sub-menus.
+        $menuitems = explode('>', $menuitemstring);
+        foreach ($menuitems as $menuitem) {
+            // Gets the node based on the requested selector type and locator.
+            $menuselector = ".moodle-actionmenu .dropdown.show .dropdown-menu";
+            $node = $this->get_node_in_container("link", trim($menuitem), "css_element", $menuselector);
+            $node->click();
+        }
+
+    }
+
+    /**
+     * Select a specific item in an action menu.
+     *
+     * @When /^I choose the "(?P<item_string>(?:[^"]|\\")*)" item in the "(?P<actionmenu_string>(?:[^"]|\\")*)" action menu$/
+     * @param string $item The item to choose
+     * @param string $actionmenu The text used in the description of the action menu
+     */
+    public function i_choose_in_the_named_menu(string $item, string $actionmenu): void {
+        $menu = $this->find('actionmenu', $actionmenu);
+        $this->select_item_in_action_menu($item, $menu);
+    }
+
+    /**
+     * Select a specific item in an action menu within a container.
+     *
+     * @When /^I choose the "(?P<item_string>(?:[^"]|\\")*)" item in the "(?P<actionmenu_string>(?:[^"]|\\")*)" action menu of the "(?P<locator_string>(?:[^"]|\\")*)" "(?P<type_string>(?:[^"]|\\")*)"$/
+     * @param string $item The item to choose
+     * @param string $actionmenu The text used in the description of the action menu
+     * @param string|NodeElement $locator The identifer used for the container
+     * @param string $selector The type of container to locate
+     */
+    public function i_choose_in_the_named_menu_in_container(string $item, string $actionmenu, $locator, $selector): void {
+        $container = $this->find($selector, $locator);
+        $menu = $this->find('actionmenu', $actionmenu, false, $container);
+        $this->select_item_in_action_menu($item, $menu);
+    }
+
+    /**
+     * Select an item in the specified menu.
+     *
+     * Note: This step does work both with, and without, JavaScript.
+     *
+     * @param string $item Item string value
+     * @param NodeElement $menu The menu NodeElement to select from
+     */
+    protected function select_item_in_action_menu(string $item, NodeElement $menu): void {
+        if ($this->running_javascript()) {
+            // Open the menu by clicking on the trigger.
+            $this->execute(
+                'behat_general::i_click_on_in_the',
+                ['a.dropdown-toggle', 'css_element', $menu, "NodeElement"]
+            );
+        }
+
+        // Select the menu item.
+        $this->execute(
+            'behat_general::i_click_on_in_the',
+            [$item, "link", $menu, "NodeElement"]
+        );
+    }
+
+    /**
+     * The action menu item should not exist.
+     *
+     * @Then /^the "(?P<item_string>(?:[^"]|\\")*)" item should not exist in the "(?P<actionmenu_string>(?:[^"]|\\")*)" action menu$/
+     * @param string $item The item to check
+     * @param string $actionmenu The text used in the description of the action menu
+     */
+    public function item_should_not_exist(string $item, string $actionmenu): void {
+        $menu = $this->find('actionmenu', $actionmenu);
+        $this->execute('behat_general::should_not_exist_in_the', [
+            $item, 'link',
+            $menu, 'NodeElement'
+        ]);
+    }
+
+    /**
+     * The action menu item should not exist within a container.
+     *
+     * @Then /^the "(?P<item_string>(?:[^"]|\\")*)" item should not exist in the "(?P<actionmenu_string>(?:[^"]|\\")*)" action menu of the "(?P<locator_string>(?:[^"]|\\")*)" "(?P<type_string>(?:[^"]|\\")*)"$/
+     * @param string $item The item to check
+     * @param string $actionmenu The text used in the description of the action menu
+     * @param string|NodeElement $locator The identifer used for the container
+     * @param string $selector The type of container to locate
+     */
+    public function item_should_not_exist_in_the(string $item, string $actionmenu, $locator, $selector): void {
+        $container = $this->find($selector, $locator);
+        $menu = $this->find('actionmenu', $actionmenu, false, $container);
+        $this->execute('behat_general::should_not_exist_in_the', [
+            $item, 'link',
+            $menu, 'NodeElement'
+        ]);
+    }
+
+
+    /**
+     * The action menu item should exist.
+     *
+     * @Then /^the "(?P<item_string>(?:[^"]|\\")*)" item should exist in the "(?P<actionmenu_string>(?:[^"]|\\")*)" action menu$/
+     * @param string $item The item to check
+     * @param string $actionmenu The text used in the description of the action menu
+     */
+    public function item_should_exist(string $item, string $actionmenu): void {
+        $menu = $this->find('actionmenu', $actionmenu);
+        $this->execute('behat_general::should_exist_in_the', [
+            $item, 'link',
+            $menu, 'NodeElement'
+        ]);
+    }
+
+    /**
+     * The action menu item should exist within a container.
+     *
+     * @Then /^the "(?P<item_string>(?:[^"]|\\")*)" item should exist in the "(?P<actionmenu_string>(?:[^"]|\\")*)" action menu of the "(?P<locator_string>(?:[^"]|\\")*)" "(?P<type_string>(?:[^"]|\\")*)"$/
+     * @param string $item The item to check
+     * @param string $actionmenu The text used in the description of the action menu
+     * @param string|NodeElement $locator The identifer used for the container
+     * @param string $selector The type of container to locate
+     */
+    public function item_should_exist_in_the(string $item, string $actionmenu, $locator, $selector): void {
+        $container = $this->find($selector, $locator);
+        $menu = $this->find('actionmenu', $actionmenu, false, $container);
+        $this->execute('behat_general::should_exist_in_the', [
+            $item, 'link',
+            $menu, 'NodeElement'
+        ]);
     }
 }

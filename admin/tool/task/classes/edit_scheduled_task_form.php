@@ -34,46 +34,59 @@ require_once($CFG->libdir.'/formslib.php');
  */
 class tool_task_edit_scheduled_task_form extends moodleform {
     public function definition() {
+        global $PAGE;
+
         $mform = $this->_form;
         /** @var \core\task\scheduled_task $task */
         $task = $this->_customdata;
+        $defaulttask = \core\task\manager::get_default_scheduled_task(get_class($task), false);
+        $renderer = $PAGE->get_renderer('tool_task');
 
-        $plugininfo = core_plugin_manager::instance()->get_plugin_info($task->get_component());
-        $plugindisabled = $plugininfo && $plugininfo->is_enabled() === false && !$task->get_run_if_component_disabled();
+        $mform->addElement('static', 'lastrun', get_string('lastruntime', 'tool_task'),
+                $renderer->last_run_time($task));
 
-        $lastrun = $task->get_last_run_time() ? userdate($task->get_last_run_time()) : get_string('never');
-        $nextrun = $task->get_next_run_time();
-        if ($plugindisabled) {
-            $nextrun = get_string('plugindisabled', 'tool_task');
-        } else if ($task->get_disabled()) {
-            $nextrun = get_string('taskdisabled', 'tool_task');
-        } else if ($nextrun > time()) {
-            $nextrun = userdate($nextrun);
-        } else {
-            $nextrun = get_string('asap', 'tool_task');
-        }
-        $mform->addElement('static', 'lastrun', get_string('lastruntime', 'tool_task'), $lastrun);
-        $mform->addElement('static', 'nextrun', get_string('nextruntime', 'tool_task'), $nextrun);
+        $mform->addElement('static', 'nextrun', get_string('nextruntime', 'tool_task'),
+                $renderer->next_run_time($task));
 
-        $mform->addElement('text', 'minute', get_string('taskscheduleminute', 'tool_task'));
+        $mform->addGroup([
+                $mform->createElement('text', 'minute'),
+                $mform->createElement('static', 'minutedefault', '',
+                        get_string('defaultx', 'tool_task', $defaulttask->get_minute())),
+            ], 'minutegroup', get_string('taskscheduleminute', 'tool_task'), null, false);
         $mform->setType('minute', PARAM_RAW);
-        $mform->addHelpButton('minute', 'taskscheduleminute', 'tool_task');
+        $mform->addHelpButton('minutegroup', 'taskscheduleminute', 'tool_task');
 
-        $mform->addElement('text', 'hour', get_string('taskschedulehour', 'tool_task'));
+        $mform->addGroup([
+                $mform->createElement('text', 'hour'),
+                $mform->createElement('static', 'hourdefault', '',
+                        get_string('defaultx', 'tool_task', $defaulttask->get_hour())),
+        ], 'hourgroup', get_string('taskschedulehour', 'tool_task'), null, false);
         $mform->setType('hour', PARAM_RAW);
-        $mform->addHelpButton('hour', 'taskschedulehour', 'tool_task');
+        $mform->addHelpButton('hourgroup', 'taskschedulehour', 'tool_task');
 
-        $mform->addElement('text', 'day', get_string('taskscheduleday', 'tool_task'));
+        $mform->addGroup([
+                $mform->createElement('text', 'day'),
+                $mform->createElement('static', 'daydefault', '',
+                        get_string('defaultx', 'tool_task', $defaulttask->get_day())),
+        ], 'daygroup', get_string('taskscheduleday', 'tool_task'), null, false);
         $mform->setType('day', PARAM_RAW);
-        $mform->addHelpButton('day', 'taskscheduleday', 'tool_task');
+        $mform->addHelpButton('daygroup', 'taskscheduleday', 'tool_task');
 
-        $mform->addElement('text', 'month', get_string('taskschedulemonth', 'tool_task'));
+        $mform->addGroup([
+                $mform->createElement('text', 'month'),
+                $mform->createElement('static', 'monthdefault', '',
+                        get_string('defaultx', 'tool_task', $defaulttask->get_month())),
+        ], 'monthgroup', get_string('taskschedulemonth', 'tool_task'), null, false);
         $mform->setType('month', PARAM_RAW);
-        $mform->addHelpButton('month', 'taskschedulemonth', 'tool_task');
+        $mform->addHelpButton('monthgroup', 'taskschedulemonth', 'tool_task');
 
-        $mform->addElement('text', 'dayofweek', get_string('taskscheduledayofweek', 'tool_task'));
+        $mform->addGroup([
+                $mform->createElement('text', 'dayofweek'),
+                $mform->createElement('static', 'dayofweekdefault', '',
+                        get_string('defaultx', 'tool_task', $defaulttask->get_day_of_week())),
+        ], 'dayofweekgroup', get_string('taskscheduledayofweek', 'tool_task'), null, false);
         $mform->setType('dayofweek', PARAM_RAW);
-        $mform->addHelpButton('dayofweek', 'taskscheduledayofweek', 'tool_task');
+        $mform->addHelpButton('dayofweekgroup', 'taskscheduledayofweek', 'tool_task');
 
         $mform->addElement('advcheckbox', 'disabled', get_string('disabled', 'tool_task'));
         $mform->addHelpButton('disabled', 'disabled', 'tool_task');
@@ -108,52 +121,33 @@ class tool_task_edit_scheduled_task_form extends moodleform {
      */
     public function validation($data, $files) {
         $error = parent::validation($data, $files);
-        $fields = array('minute', 'hour', 'day', 'month', 'dayofweek');
-        foreach ($fields as $field) {
-            if (!self::validate_fields($field, $data[$field])) {
-                $error[$field] = get_string('invaliddata', 'core_error');
-            }
-        }
-        return $error;
-    }
+        // Use a checker class.
+        $checker = new \tool_task\scheduled_checker_task();
+        $checker->set_minute($data['minute']);
+        $checker->set_hour($data['hour']);
+        $checker->set_month($data['month']);
+        $checker->set_day_of_week($data['dayofweek']);
+        $checker->set_day($data['day']);
+        $checker->set_disabled(false);
+        $checker->set_customised(false);
 
-    /**
-     * Helper function that validates the submitted data.
-     *
-     * Explanation of the regex:-
-     *
-     * \A\*\z - matches *
-     * \A[0-5]?[0-9]\z - matches entries like 23
-     * \A\*\/[0-5]?[0-9]\z - matches entries like * / 5
-     * \A[0-5]?[0-9](,[0-5]?[0-9])*\z - matches entries like 1,2,3
-     * \A[0-5]?[0-9]-[0-5]?[0-9]\z - matches entries like 2-10
-     *
-     * @param string $field field to validate
-     * @param string $value value
-     *
-     * @return bool true if validation passes, false other wise.
-     */
-    public static function validate_fields($field, $value) {
-        switch ($field) {
-            case 'minute' :
-            case 'hour' :
-                $regex = "/\A\*\z|\A[0-5]?[0-9]\z|\A\*\/[0-5]?[0-9]\z|\A[0-5]?[0-9](,[0-5]?[0-9])*\z|\A[0-5]?[0-9]-[0-5]?[0-9]\z/";
-                break;
-            case 'day':
-                $regex = "/\A\*\z|\A([1-2]?[0-9]|3[0-1])\z|\A\*\/([1-2]?[0-9]|3[0-1])\z|";
-                $regex .= "\A([1-2]?[0-9]|3[0-1])(,([1-2]?[0-9]|3[0-1]))*\z|\A([1-2]?[0-9]|3[0-1])-([1-2]?[0-9]|3[0-1])\z/";
-                break;
-            case 'month':
-                $regex = "/\A\*\z|\A([0-9]|1[0-2])\z|\A\*\/([0-9]|1[0-2])\z|\A([0-9]|1[0-2])(,([0-9]|1[0-2]))*\z|";
-                $regex .= "\A([0-9]|1[0-2])-([0-9]|1[0-2])\z/";
-                break;
-            case 'dayofweek':
-                $regex = "/\A\*\z|\A[0-6]\z|\A\*\/[0-6]\z|\A[0-6](,[0-6])*\z|\A[0-6]-[0-6]\z/";
-                break;
-            default:
-                return false;
+        if (!$checker->is_valid($checker::FIELD_MINUTE)) {
+            $error['minutegroup'] = get_string('invaliddata', 'core_error');
         }
-        return (bool)preg_match($regex, $value);
+        if (!$checker->is_valid($checker::FIELD_HOUR)) {
+            $error['hourgroup'] = get_string('invaliddata', 'core_error');
+        }
+        if (!$checker->is_valid($checker::FIELD_DAY)) {
+            $error['daygroup'] = get_string('invaliddata', 'core_error');
+        }
+        if (!$checker->is_valid($checker::FIELD_MONTH)) {
+            $error['monthgroup'] = get_string('invaliddata', 'core_error');
+        }
+        if (!$checker->is_valid($checker::FIELD_DAYOFWEEK)) {
+            $error['dayofweekgroup'] = get_string('invaliddata', 'core_error');
+        }
+
+        return $error;
     }
 }
 

@@ -26,8 +26,15 @@
 
 defined('MOODLE_INTERNAL') || die;
 
-require_once($CFG->libdir . '/externallib.php');
 require_once($CFG->libdir . '/badgeslib.php');
+
+use core_badges\external\user_badge_exporter;
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
+use core_external\external_warnings;
 
 /**
  * Badges external functions
@@ -73,7 +80,7 @@ class core_badges_external extends external_api {
      * @throws moodle_exception
      */
     public static function get_user_badges($userid = 0, $courseid = 0, $page = 0, $perpage = 0, $search = '', $onlypublic = false) {
-        global $CFG, $USER;
+        global $CFG, $USER, $PAGE;
 
         $warnings = array();
 
@@ -121,26 +128,7 @@ class core_badges_external extends external_api {
         $result['warnings'] = $warnings;
 
         foreach ($userbadges as $badge) {
-            $context = ($badge->type == BADGE_TYPE_SITE) ? context_system::instance() : context_course::instance($badge->courseid);
-            $badge->badgeurl = moodle_url::make_webservice_pluginfile_url($context->id, 'badges', 'badgeimage', $badge->id, '/',
-                                                                            'f1')->out(false);
-            // Return all the information if we are requesting our own badges.
-            // Or, if we have permissions for configuring badges in the badge context.
-            if ($USER->id == $user->id or has_capability('moodle/badges:configuredetails', $context)) {
-                $result['badges'][] = (array) $badge;
-            } else {
-                $result['badges'][] = array(
-                    'name' => $badge->name,
-                    'description' => $badge->description,
-                    'badgeurl' => $badge->badgeurl,
-                    'issuername' => $badge->issuername,
-                    'issuerurl' => $badge->issuerurl,
-                    'issuercontact' => $badge->issuercontact,
-                    'uniquehash' => $badge->uniquehash,
-                    'dateissued' => $badge->dateissued,
-                    'dateexpire' => $badge->dateexpire,
-                );
-            }
+            $result['badges'][] = badges_prepare_badge_for_external($badge, $user);
         }
 
         return $result;
@@ -156,34 +144,7 @@ class core_badges_external extends external_api {
         return new external_single_structure(
             array(
                 'badges' => new external_multiple_structure(
-                    new external_single_structure(
-                        array(
-                            'id' => new external_value(PARAM_INT, 'Badge id.', VALUE_OPTIONAL),
-                            'name' => new external_value(PARAM_FILE, 'Badge name.'),
-                            'description' => new external_value(PARAM_NOTAGS, 'Badge description.'),
-                            'badgeurl' => new external_value(PARAM_URL, 'Badge URL.'),
-                            'timecreated' => new external_value(PARAM_INT, 'Time created.', VALUE_OPTIONAL),
-                            'timemodified' => new external_value(PARAM_INT, 'Time modified.', VALUE_OPTIONAL),
-                            'usercreated' => new external_value(PARAM_INT, 'User created.', VALUE_OPTIONAL),
-                            'usermodified' => new external_value(PARAM_INT, 'User modified.', VALUE_OPTIONAL),
-                            'issuername' => new external_value(PARAM_NOTAGS, 'Issuer name.'),
-                            'issuerurl' => new external_value(PARAM_URL, 'Issuer URL.'),
-                            'issuercontact' => new external_value(PARAM_RAW, 'Issuer contact.'),
-                            'expiredate' => new external_value(PARAM_INT, 'Expire date.', VALUE_OPTIONAL),
-                            'expireperiod' => new external_value(PARAM_INT, 'Expire period.', VALUE_OPTIONAL),
-                            'type' => new external_value(PARAM_INT, 'Type.', VALUE_OPTIONAL),
-                            'courseid' => new external_value(PARAM_INT, 'Course id.', VALUE_OPTIONAL),
-                            'message' => new external_value(PARAM_RAW, 'Message.', VALUE_OPTIONAL),
-                            'messagesubject' => new external_value(PARAM_TEXT, 'Message subject.', VALUE_OPTIONAL),
-                            'attachment' => new external_value(PARAM_INT, 'Attachment.', VALUE_OPTIONAL),
-                            'status' => new external_value(PARAM_INT, 'Status.', VALUE_OPTIONAL),
-                            'issuedid' => new external_value(PARAM_INT, 'Issued id.', VALUE_OPTIONAL),
-                            'uniquehash' => new external_value(PARAM_ALPHANUM, 'Unique hash.'),
-                            'dateissued' => new external_value(PARAM_INT, 'Date issued.'),
-                            'dateexpire' => new external_value(PARAM_INT, 'Date expire.'),
-                            'visible' => new external_value(PARAM_INT, 'Visible.', VALUE_OPTIONAL),
-                        )
-                    )
+                    user_badge_exporter::get_read_structure()
                 ),
                 'warnings' => new external_warnings(),
             )

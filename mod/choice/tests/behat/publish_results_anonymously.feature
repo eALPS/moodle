@@ -19,43 +19,47 @@ Feature: A teacher can choose whether to publish choice activity results anonymo
       | student1 | C1 | student |
       | student2 | C1 | student |
     And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
 
   Scenario: Publish anonymous results
-    Given I add a "Choice" to section "1" and I fill the form with:
-      | Choice name | Choice 1 |
-      | Description | Choice Description |
-      | option[0] | Option 1 |
-      | option[1] | Option 2 |
+    Given the following "activities" exist:
+      | activity | name     | intro              | course | idnumber | option             | section |
+      | choice   | Choice 1 | Choice Description | C1     | choice1  | Option 1, Option 2 | 1       |
+    And I am on "Course 1" course homepage
+    And I follow "Choice 1"
+    And I navigate to "Settings" in current page administration
+    And I set the following fields to these values:
       | Publish results | Always show results to students |
       | Privacy of results | Publish anonymous results, do not show student names |
+    And I press "Save and return to course"
     And I log out
     And I log in as "student1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I choose "Option 1" from "Choice 1" choice activity
     And I log out
     When I log in as "student2"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Choice 1"
     Then I should not see "Student 1"
     And I should not see "Users who chose this option"
 
   Scenario: Publish full results
-    Given I add a "Choice" to section "1" and I fill the form with:
-      | Choice name | Choice 1 |
-      | Description | Choice Description |
-      | option[0] | Option 1 |
-      | option[1] | Option 2 |
+    Given the following "activities" exist:
+      | activity | name     | intro              | course | idnumber | option             | section |
+      | choice   | Choice 1 | Choice Description | C1     | choice1  | Option 1, Option 2 | 1       |
+    And I am on "Course 1" course homepage
+    And I follow "Choice 1"
+    And I navigate to "Settings" in current page administration
+    And I set the following fields to these values:
       | Publish results | Always show results to students |
       | Privacy of results | Publish full results, showing names and their choices |
+    And I press "Save and return to course"
     And I log out
     And I log in as "student1"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I choose "Option 1" from "Choice 1" choice activity
     And I log out
     When I log in as "student2"
-    And I follow "Course 1"
+    And I am on "Course 1" course homepage
     And I follow "Choice 1"
     Then I should see "Student 1"
     And I should see "Users who chose this option"

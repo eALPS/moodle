@@ -14,16 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Tests legacy Moodle date/time functions.
- *
- * @package   core
- * @copyright 2015 Totara Learning Solutions Ltd {@link http://www.totaralms.com/}
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @author    Petr Skoda <petr.skoda@totaralms.com>
- */
-
-defined('MOODLE_INTERNAL') || die();
+namespace core;
 
 /**
  * Tests legacy Moodle date/time functions.
@@ -33,8 +24,8 @@ defined('MOODLE_INTERNAL') || die();
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @author    Petr Skoda <petr.skoda@totaralms.com>
  */
-class core_date_legacy_testcase extends advanced_testcase {
-    public function test_settings() {
+class date_legacy_test extends \advanced_testcase {
+    public function test_settings(): void {
         global $CFG;
         $this->resetAfterTest();
 
@@ -46,7 +37,7 @@ class core_date_legacy_testcase extends advanced_testcase {
         $this->assertSame('99', $user->timezone);
     }
 
-    public function test_get_user_timezone() {
+    public function test_get_user_timezone(): void {
         global $CFG, $USER;
 
         $this->resetAfterTest();
@@ -119,7 +110,7 @@ class core_date_legacy_testcase extends advanced_testcase {
         $this->assertSame('Europe/Berlin', $tz);
     }
 
-    public function test_dst_offset_on() {
+    public function test_dst_offset_on(): void {
         $time = gmmktime(1, 1, 1, 3, 1, 2015);
         $this->assertSame(3600, dst_offset_on($time, 'Pacific/Auckland'));
         $this->assertSame(0, dst_offset_on($time, 'Australia/Perth'));
@@ -135,7 +126,7 @@ class core_date_legacy_testcase extends advanced_testcase {
         $this->assertSame(3600, dst_offset_on($time, 'America/New_York'));
     }
 
-    public function test_make_timestamp() {
+    public function test_make_timestamp(): void {
         global $CFG;
 
         $this->resetAfterTest();
@@ -156,7 +147,7 @@ class core_date_legacy_testcase extends advanced_testcase {
             foreach ($years as $year) {
                 foreach ($dates as $date) {
                     $result = make_timestamp($year, $date[0], $date[1], $date[2], $date[3], $date[4], $tz, true);
-                    $expected = new DateTime('now', new DateTimeZone(($tz == 99 ? 'Pacific/Auckland' : $tz)));
+                    $expected = new \DateTime('now', new \DateTimeZone(($tz == 99 ? 'Pacific/Auckland' : $tz)));
                     $expected->setDate($year, $date[0], $date[1]);
                     $expected->setTime($date[2], $date[3], $date[4]);
                     $this->assertSame($expected->getTimestamp(), $result,
@@ -170,7 +161,7 @@ class core_date_legacy_testcase extends advanced_testcase {
             foreach ($years as $year) {
                 foreach ($dates as $date) {
                     $result = make_timestamp($year, $date[0], $date[1], $date[2], $date[3], $date[4], $tz, true);
-                    $expected = new DateTime('now', new DateTimeZone(($tz == 99 ? 'Pacific/Auckland' : $tz)));
+                    $expected = new \DateTime('now', new \DateTimeZone(($tz == 99 ? 'Pacific/Auckland' : $tz)));
                     $expected->setDate($year, $date[0], $date[1]);
                     $expected->setTime($date[2], $date[3], $date[4]);
                     $this->assertSame($expected->getTimestamp(), $result,
@@ -180,7 +171,7 @@ class core_date_legacy_testcase extends advanced_testcase {
         }
     }
 
-    public function test_usergetdate() {
+    public function test_usergetdate(): void {
         global $CFG;
 
         $this->resetAfterTest();
@@ -200,7 +191,7 @@ class core_date_legacy_testcase extends advanced_testcase {
         foreach ($timezones as $tz) {
             foreach ($years as $year) {
                 foreach ($dates as $date) {
-                    $expected = new DateTime('now', new DateTimeZone(($tz == 99 ? 'Pacific/Auckland' : $tz)));
+                    $expected = new \DateTime('now', new \DateTimeZone(($tz == 99 ? 'Pacific/Auckland' : $tz)));
                     $expected->setDate($year, $date[0], $date[1]);
                     $expected->setTime($date[2], $date[3], $date[4]);
                     $result = usergetdate($expected->getTimestamp(), $tz);
@@ -227,7 +218,7 @@ class core_date_legacy_testcase extends advanced_testcase {
         foreach ($timezones as $tz) {
             foreach ($years as $year) {
                 foreach ($dates as $date) {
-                    $expected = new DateTime('now', new DateTimeZone(($tz == 99 ? 'Pacific/Auckland' : $tz)));
+                    $expected = new \DateTime('now', new \DateTimeZone(($tz == 99 ? 'Pacific/Auckland' : $tz)));
                     $expected->setDate($year, $date[0], $date[1]);
                     $expected->setTime($date[2], $date[3], $date[4]);
                     $result = usergetdate($expected->getTimestamp(), $tz);
@@ -251,7 +242,7 @@ class core_date_legacy_testcase extends advanced_testcase {
         }
     }
 
-    public function test_userdate() {
+    public function test_userdate(): void {
         global $CFG;
 
         $this->resetAfterTest();
@@ -276,16 +267,16 @@ class core_date_legacy_testcase extends advanced_testcase {
         $this->setTimezone('Pacific/Auckland', 'Pacific/Auckland');
         foreach ($years as $year) {
             foreach ($dates as $date) {
-                $expected = new DateTime('now', new DateTimeZone('UTC'));
+                $expected = new \DateTime('now', new \DateTimeZone('UTC'));
                 $expected->setDate($year, $date[0], $date[1]);
                 $expected->setTime($date[2], $date[3], $date[4]);
 
                 foreach ($users as $user) {
                     $this->setUser($user);
-                    $expected->setTimezone(new DateTimeZone(($user->timezone == 99 ? 'Pacific/Auckland' : $user->timezone)));
+                    $expected->setTimezone(new \DateTimeZone(($user->timezone == 99 ? 'Pacific/Auckland' : $user->timezone)));
                     $result = userdate($expected->getTimestamp(), '', 99, false, false);
                     date_default_timezone_set($expected->getTimezone()->getName());
-                    $ex = strftime($format, $expected->getTimestamp());
+                    $ex = \core_date::strftime($format, $expected->getTimestamp());
                     date_default_timezone_set($CFG->timezone);
                     $this->assertSame($ex, $result);
                 }
@@ -293,7 +284,7 @@ class core_date_legacy_testcase extends advanced_testcase {
         }
     }
 
-    public function test_usertime() {
+    public function test_usertime(): void {
         // This is a useless bad hack, it needs to be completely eliminated.
 
         $time = gmmktime(1, 1, 1, 3, 1, 2015);
@@ -313,7 +304,7 @@ class core_date_legacy_testcase extends advanced_testcase {
         $this->assertSame($time - (60 * 60 * -5), usertime($time, 'America/New_York'));
     }
 
-    public function test_usertimezone() {
+    public function test_usertimezone(): void {
         global $USER;
         $this->resetAfterTest();
 

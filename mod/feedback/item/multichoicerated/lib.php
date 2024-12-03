@@ -73,12 +73,18 @@ class feedback_item_multichoicerated extends feedback_item_base {
         $this->item_form = new feedback_multichoicerated_form('edit_item.php', $customdata);
     }
 
+    /**
+     * Saves item
+     *
+     * @return stdClass
+     */
     public function save_item() {
         global $DB;
 
-        if (!$item = $this->item_form->get_data()) {
+        if (!$this->get_data()) {
             return false;
         }
+        $item = $this->item;
 
         if (isset($item->clone_item) AND $item->clone_item) {
             $item->id = ''; //to clone this item
@@ -105,7 +111,7 @@ class feedback_item_multichoicerated extends feedback_item_base {
      * @param stdClass $item the db-object from feedback_item
      * @param int $groupid
      * @param int $courseid
-     * @return array
+     * @return array|null
      */
     protected function get_analysed($item, $groupid = false, $courseid = false) {
         $analysed_item = array();
@@ -179,14 +185,13 @@ class feedback_item_multichoicerated extends feedback_item_base {
         $analysed_item = $this->get_analysed($item, $groupid, $courseid);
         if ($analysed_item) {
             echo "<table class=\"analysis itemtype_{$item->typ}\">";
-            echo '<tr><th colspan="2" align="left">';
+            echo '<tr><th class="text-start">';
             echo $itemnr . ' ';
             if (strval($item->label) !== '') {
                 echo '('. format_string($item->label).') ';
             }
             echo format_string($analysed_item[1]);
             echo '</th></tr>';
-            echo '</table>';
             $analysed_vals = $analysed_item[2];
             $avg = 0.0;
             $count = 0;
@@ -214,12 +219,12 @@ class feedback_item_multichoicerated extends feedback_item_base {
             $series->set_labels($data['series_labels']);
             $chart->add_series($series);
             $chart->set_labels($data['labels']);
-            echo $OUTPUT->render($chart);
-
+            echo '<tr><td>'. $OUTPUT->render($chart) . '</td></tr>';
             $avg = format_float($avg, 2);
-            echo '<tr><td align="left" colspan="2"><b>';
+            echo '<tr><td class="text-start"><b>';
             echo get_string('average', 'feedback').': '.$avg.'</b>';
             echo '</td></tr>';
+            echo '</table>';
         }
     }
 
@@ -228,6 +233,9 @@ class feedback_item_multichoicerated extends feedback_item_base {
                              $groupid, $courseid = false) {
 
         $analysed_item = $this->get_analysed($item, $groupid, $courseid);
+        if (!$analysed_item) {
+            return $row_offset;
+        }
 
         $data = $analysed_item[2];
 
@@ -278,8 +286,10 @@ class feedback_item_multichoicerated extends feedback_item_base {
         $options = array();
         foreach ($lines as $idx => $line) {
             list($weight, $optiontext) = explode(FEEDBACK_MULTICHOICERATED_VALUE_SEP, $line);
-            $options[$idx + 1] = format_text("<span class=\"weight\">($weight) </span>".$optiontext,
-                    FORMAT_HTML, array('noclean' => true, 'para' => false));
+            $a = new stdclass();
+            $a->weight = $weight;
+            $a->name = format_text($optiontext, FORMAT_HTML, array('noclean' => true, 'para' => false));
+            $options[$idx + 1] = get_string('multichoiceoption', 'feedback', $a);
         }
         if ($info->subtype === 'r' && !$this->hidenoselect($item)) {
             $options = array(0 => get_string('not_selected', 'feedback')) + $options;
@@ -314,7 +324,7 @@ class feedback_item_multichoicerated extends feedback_item_base {
             }
             // Span to hold the element id. The id is used for drag and drop reordering.
             $objs[] = ['static', '', '', html_writer::span('', '', ['id' => 'feedback_item_' . $item->id])];
-            $separator = $info->horizontal ? ' ' : '<br>';
+            $separator = $info->horizontal ? ' ' : \html_writer::div('', 'w-100');
             $class .= ' multichoicerated-' . ($info->horizontal ? 'horizontal' : 'vertical');
             $el = $form->add_form_group_element($item, 'group_'.$inputname, $name, $objs, $separator, $class);
             $form->set_element_type($inputname, PARAM_INT);
@@ -374,7 +384,10 @@ class feedback_item_multichoicerated extends feedback_item_base {
         $info->horizontal = false;
 
         $parts = explode(FEEDBACK_MULTICHOICERATED_TYPE_SEP, $item->presentation);
-        @list($info->subtype, $info->presentation) = $parts;
+        $info->subtype = $parts[0];
+        if (count($parts) > 1) {
+            $info->presentation = $parts[1];
+        }
 
         if (!isset($info->subtype)) {
             $info->subtype = 'r';
@@ -382,7 +395,10 @@ class feedback_item_multichoicerated extends feedback_item_base {
 
         if ($info->subtype != 'd') {
             $parts = explode(FEEDBACK_MULTICHOICERATED_ADJUST_SEP, $info->presentation);
-            @list($info->presentation, $info->horizontal) = $parts;
+            $info->presentation = $parts[0];
+            if (count($parts) > 1) {
+                $info->horizontal = $parts[1];
+            }
 
             if (isset($info->horizontal) AND $info->horizontal == 1) {
                 $info->horizontal = true;
@@ -467,5 +483,27 @@ class feedback_item_multichoicerated extends feedback_item_base {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Return the analysis data ready for external functions.
+     *
+     * @param stdClass $item     the item (question) information
+     * @param int      $groupid  the group id to filter data (optional)
+     * @param int      $courseid the course id (optional)
+     * @return array an array of data with non scalar types json encoded
+     * @since  Moodle 3.3
+     */
+    public function get_analysed_for_external($item, $groupid = false, $courseid = false) {
+
+        $externaldata = array();
+        $data = $this->get_analysed($item, $groupid, $courseid);
+
+        if ($data && !empty($data[2]) && is_array($data[2])) {
+            foreach ($data[2] as $d) {
+                $externaldata[] = json_encode($d);
+            }
+        }
+        return $externaldata;
     }
 }

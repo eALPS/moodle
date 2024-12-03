@@ -19,7 +19,7 @@ require_once('../lib.php');
 
 $id      = required_param('id', PARAM_INT);
 $groupid = optional_param('groupid', 0, PARAM_INT); // Only for teachers.
-$theme   = optional_param('theme', 'course_theme', PARAM_SAFEDIR); // The value course_theme == the current theme.
+$theme   = optional_param('chat_theme', 'course_theme', PARAM_SAFEDIR); // The value course_theme == the current theme.
 
 $url = new moodle_url('/mod/chat/gui_ajax/index.php', array('id' => $id));
 if ($groupid !== 0) {
@@ -41,7 +41,7 @@ require_capability('mod/chat:chat', $context);
 if ($groupmode = groups_get_activity_groupmode($cm)) {   // Groups are being used.
     if ($groupid = groups_get_activity_group($cm)) {
         if (!$group = groups_get_group($groupid)) {
-            print_error('invalidgroupid');
+            throw new \moodle_exception('invalidgroupid');
         }
         $groupname = ': '.$group->name;
     } else {
@@ -58,7 +58,7 @@ if ($theme != 'course_theme' and !file_exists(__DIR__ . '/theme/'.$theme.'/chat.
 
 // Log into the chat room.
 if (!$chatsid = chat_login_user($chat->id, 'ajax', $groupid, $course)) {
-    print_error('cantlogin', 'chat');
+    throw new \moodle_exception('cantlogin', 'chat');
 }
 $courseshortname = format_string($course->shortname, true, array('context' => context_course::instance($course->id)));
 $module = array(
@@ -70,8 +70,8 @@ $module = array(
                          array('modulename', 'chat'), array('beep', 'chat'), array('talk', 'chat'))
 );
 $modulecfg = array(
-    'home' => $CFG->httpswwwroot.'/mod/chat/view.php?id='.$cm->id,
-    'chaturl' => $CFG->httpswwwroot.'/mod/chat/gui_ajax/index.php?id='.$id,
+    'home' => $CFG->wwwroot.'/mod/chat/view.php?id='.$cm->id,
+    'chaturl' => $CFG->wwwroot.'/mod/chat/gui_ajax/index.php?id='.$id,
     'theme' => $theme,
     'userid' => $USER->id,
     'sid' => $chatsid,
@@ -84,6 +84,7 @@ $PAGE->requires->js_init_call('M.mod_chat_ajax.init', array($modulecfg), false, 
 
 $PAGE->set_title(get_string('modulename', 'chat').": $courseshortname: ".format_string($chat->name, true)."$groupname");
 $PAGE->add_body_class('yui-skin-sam');
+$PAGE->activityheader->disable();
 $PAGE->set_pagelayout('embedded');
 if ( $theme != 'course_theme') {
     $PAGE->requires->css('/mod/chat/gui_ajax/theme/'.$theme.'/chat.css');
@@ -96,14 +97,17 @@ echo $OUTPUT->box('', '', 'chat-options');
 echo $OUTPUT->box(html_writer::tag('h2',  get_string('messages', 'chat'), array('class' => 'accesshide')) .
         '<ul id="messages-list"></ul>', '', 'chat-messages');
 $table = new html_table();
-$table->data = array(
-    array('<div class="form-inline"><label class="accesshide" for="input-message">'.get_string('entermessage', 'chat').' </label>'.
-          '<span class="form-group"><input type="text" disabled="true" class="form-control" ' .
-          'id="input-message" value="Loading..." size="48" /></span>'.
-          '<span class="form-group"><input type="button" id="button-send" class="btn btn-secondary m-x-1" ' .
-          'value="'.get_string('send', 'chat').'" /></span> <span class="form-group"><a id="choosetheme" href="###">'.
-          get_string('themes').
-          ' &raquo; </a></span></div>'));
+$table->data = [[
+    '<div class="d-flex flex-wrap align-items-center"><div class="d-flex"><label class="accesshide" for="input-message">'.
+    get_string('entermessage', 'chat').' </label>'.
+    '<span class="mb-3"><input type="text" disabled="true" class="form-control" ' .
+    'id="input-message" value="Loading..." size="48" /></span>'.
+    '<span class="mb-3"><input type="button" id="button-send" class="btn btn-secondary mx-1" ' .
+    'value="'.get_string('send', 'chat').'" />' .$OUTPUT->help_icon('usingchat', 'chat'). '</span></div>' .
+    ' <div class="mb-3 d-flex ms-auto"><a id="choosetheme" href="###">'.
+    get_string('themes').
+    ' &raquo; </a></div></div>',
+]];
 echo $OUTPUT->box(html_writer::tag('h2',  get_string('composemessage', 'chat'), array('class' => 'accesshide')) .
         html_writer::table($table), '', 'chat-input-area');
 echo $OUTPUT->box('', '', 'chat-notify');

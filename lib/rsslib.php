@@ -64,9 +64,8 @@ function rss_get_link($contextid, $userid, $componentname, $id, $tooltiptext='')
     static $rsspath = '';
 
     $rsspath = rss_get_url($contextid, $userid, $componentname, $id);
-    $rsspix = $OUTPUT->pix_url('i/rss');
 
-    return '<a href="'. $rsspath .'"><img src="'. $rsspix .'" title="'. strip_tags($tooltiptext) .'" alt="'.get_string('rss').'" /></a>';
+    return '<a href="'. $rsspath .'">' . $OUTPUT->pix_icon('i/rss', $tooltiptext) . '</a>';
 }
 
 /**
@@ -281,7 +280,7 @@ function rss_standard_header($title = NULL, $link = NULL, $description = NULL) {
        */
 
         //write image info
-        $rsspix = $OUTPUT->pix_url('i/rsssitelogo');
+        $rsspix = $OUTPUT->image_url('i/rsssitelogo');
 
         //write the info
         $result .= rss_start_tag('image', 2, true);
@@ -414,10 +413,15 @@ function rss_geterrorxmlfile($errortype = 'rsserror') {
 function rss_get_userid_from_token($token) {
     global $DB;
 
-    $sql = 'SELECT u.id FROM {user} u
-            JOIN {user_private_key} k ON u.id = k.userid
-            WHERE u.deleted = 0 AND u.confirmed = 1
-            AND u.suspended = 0 AND k.value = ?';
+    $sql = "SELECT u.id
+              FROM {user} u
+              JOIN {user_private_key} k ON u.id = k.userid
+             WHERE u.deleted = 0
+               AND u.confirmed = 1
+               AND u.suspended = 0
+               AND k.script = 'rss'
+               AND k.value = ?";
+
     return $DB->get_field_sql($sql, array($token), IGNORE_MISSING);
 }
 
@@ -489,10 +493,10 @@ function rss_end_tag($tag,$level=0,$endline=true) {
  * @param array  $attributes the attributes of the xml tag
  * @return string the whole xml element
  */
-function rss_full_tag($tag,$level=0,$endline=true,$content,$attributes=null) {
+function rss_full_tag($tag, $level, $endline, $content, $attributes = null) {
     $st = rss_start_tag($tag,$level,$endline,$attributes);
     $co="";
-    $co = preg_replace("/\r\n|\r/", "\n", htmlspecialchars($content));
+    $co = preg_replace("/\r\n|\r/", "\n", htmlspecialchars($content, ENT_COMPAT));
     $et = rss_end_tag($tag,0,true);
 
     return $st.$co.$et;

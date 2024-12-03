@@ -25,9 +25,6 @@
  * The exception to this is some of the reporting methods, like
  * {@link question_engine_data_mapper::load_attempts_at_question()}.
  *
- * (TODO, probably we should split this class up, so that it has no public
- * methods. They should all be moved to a new public class.)
- *
  * A note for future reference. This code is pretty efficient but there are some
  * potential optimisations that could be contemplated, at the cost of making the
  * code more complex:
@@ -65,7 +62,7 @@ class question_engine_data_mapper {
     /**
      * @param moodle_database $db a database connectoin. Defaults to global $DB.
      */
-    public function __construct(moodle_database $db = null) {
+    public function __construct(?moodle_database $db = null) {
         if (is_null($db)) {
             global $DB;
             $this->db = $DB;
@@ -100,10 +97,9 @@ class question_engine_data_mapper {
             $stepdata[] = $this->insert_question_attempt($qa, $quba->get_owning_context());
         }
 
-        $stepdata = call_user_func_array('array_merge', $stepdata);
-        if ($stepdata) {
-            $this->insert_all_step_data($stepdata);
-        }
+        $this->insert_all_step_data($this->combine_step_data($stepdata));
+
+        $quba->set_observer(new question_engine_unit_of_work($quba));
     }
 
     /**
@@ -122,7 +118,7 @@ class question_engine_data_mapper {
         $record->questionusageid = $qa->get_usage_id();
         $record->slot = $qa->get_slot();
         $record->behaviour = $qa->get_behaviour_name();
-        $record->questionid = $qa->get_question()->id;
+        $record->questionid = $qa->get_question_id();
         $record->variant = $qa->get_variant();
         $record->maxmark = $qa->get_max_mark();
         $record->minfraction = $qa->get_min_fraction();
@@ -148,11 +144,12 @@ class question_engine_data_mapper {
             $stepdata[] = $this->insert_question_attempt_step($step, $record->id, $seq, $context);
         }
 
-        return call_user_func_array('array_merge', $stepdata);
+        return $this->combine_step_data($stepdata);
     }
 
     /**
      * Helper method used by insert_question_attempt_step and update_question_attempt_step
+     *
      * @param question_attempt_step $step the step to store.
      * @param int $questionattemptid the question attept id this step belongs to.
      * @param int $seq the sequence number of this stop.
@@ -162,11 +159,27 @@ class question_engine_data_mapper {
         $record = new stdClass();
         $record->questionattemptid = $questionattemptid;
         $record->sequencenumber = $seq;
-        $record->state = (string) $step->get_state();
+        $record->state = $step->get_state()?->__toString();
         $record->fraction = $step->get_fraction();
         $record->timecreated = $step->get_timecreated();
         $record->userid = $step->get_user_id();
         return $record;
+    }
+
+    /**
+     * Take an array of arrays, and flatten it, even if the outer array is empty.
+     *
+     * Only public so it can be called from the unit of work. Not part of the
+     * public API of this class.
+     *
+     * @param array $stepdata array of zero or more arrays.
+     * @return array made by concatenating all the separate arrays.
+     */
+    public function combine_step_data(array $stepdata): array {
+        if (empty($stepdata)) {
+            return [];
+        }
+        return call_user_func_array('array_merge', $stepdata);
     }
 
     /**
@@ -234,7 +247,7 @@ class question_engine_data_mapper {
      *
      * Private method, only for use by other parts of the question engine.
      *
-     * @param question_attempt_step $qa the step to store.
+     * @param question_attempt_step $step the step to store.
      * @param int $questionattemptid the question attept id this step belongs to.
      * @param int $seq the sequence number of this stop.
      * @param context $context the context of the owning question_usage_by_activity.
@@ -309,7 +322,7 @@ class question_engine_data_mapper {
      * Private method, only for use by other parts of the question engine.
      *
      * @param int $stepid the id of the step to load.
-     * @param question_attempt_step the step that was loaded.
+     * @return question_attempt_step the step that was loaded.
      */
     public function load_question_attempt_step($stepid) {
         $records = $this->db->get_recordset_sql("
@@ -355,7 +368,7 @@ WHERE
      * wish to load one qa, in which case you may call this method.
      *
      * @param int $questionattemptid the id of the question attempt to load.
-     * @param question_attempt the question attempt that was loaded.
+     * @return question_attempt the question attempt that was loaded.
      */
     public function load_question_attempt($questionattemptid) {
         $records = $this->db->get_recordset_sql("
@@ -417,7 +430,7 @@ ORDER BY
      * rather than calling this method directly.
      *
      * @param int $qubaid the id of the usage to load.
-     * @param question_usage_by_activity the usage that was loaded.
+     * @return question_usage_by_activity the usage that was loaded.
      */
     public function load_questions_usage_by_activity($qubaid) {
         $records = $this->db->get_recordset_sql("
@@ -525,15 +538,11 @@ ORDER BY
     qas.sequencenumber
     ", $qubaids->usage_id_in_params());
 
-        if (!$records->valid()) {
-            throw new coding_exception('Failed to load questions_usages_by_activity for qubaid_condition :' . $qubaids);
-        }
-
         $qubas = array();
-        do {
+        while ($records->valid()) {
             $record = $records->current();
             $qubas[$record->qubaid] = question_usage_by_activity::load_from_records($records, $record->qubaid);
-        } while ($records->valid());
+        }
 
         $records->close();
 
@@ -547,12 +556,20 @@ ORDER BY
      *
      * @param qubaid_condition $qubaids used to restrict which usages are included
      *                                  in the query. See {@link qubaid_condition}.
-     * @param array            $slots   A list of slots for the questions you want to know about.
+     * @param array|null       $slots   (optional) list of slots for which to return information. Default all slots.
      * @param string|null      $fields
      * @return array of records. See the SQL in this function to see the fields available.
      */
-    public function load_questions_usages_latest_steps(qubaid_condition $qubaids, $slots, $fields = null) {
-        list($slottest, $params) = $this->db->get_in_or_equal($slots, SQL_PARAMS_NAMED, 'slot');
+    public function load_questions_usages_latest_steps(qubaid_condition $qubaids, $slots = null, $fields = null) {
+        if ($slots === []) {
+            return [];
+        } else if ($slots !== null) {
+            [$slottest, $params] = $this->db->get_in_or_equal($slots, SQL_PARAMS_NAMED, 'slot');
+            $slotwhere = " AND qa.slot {$slottest}";
+        } else {
+            $slotwhere = '';
+            $params = [];
+        }
 
         if ($fields === null) {
             $fields = "qas.id,
@@ -588,8 +605,8 @@ JOIN {question_attempt_steps} qas ON qas.questionattemptid = qa.id
         AND qas.sequencenumber = {$this->latest_step_for_qa_subquery()}
 
 WHERE
-    {$qubaids->where()} AND
-    qa.slot $slottest
+    {$qubaids->where()}
+    $slotwhere
         ", $params + $qubaids->from_where_params());
 
         return $records;
@@ -604,14 +621,19 @@ WHERE
      *
      * @param qubaid_condition $qubaids used to restrict which usages are included
      * in the query. See {@link qubaid_condition}.
-     * @param array $slots A list of slots for the questions you want to konw about.
-     * @return array The array keys are slot,qestionid. The values are objects with
+     * @param array|null $slots (optional) list of slots for which to return information. Default all slots.
+     * @return array The array keys are 'slot,questionid'. The values are objects with
      * fields $slot, $questionid, $inprogress, $name, $needsgrading, $autograded,
      * $manuallygraded and $all.
      */
-    public function load_questions_usages_question_state_summary(
-            qubaid_condition $qubaids, $slots) {
-        list($slottest, $params) = $this->db->get_in_or_equal($slots, SQL_PARAMS_NAMED, 'slot');
+    public function load_questions_usages_question_state_summary(qubaid_condition $qubaids, $slots = null) {
+        if ($slots !== null) {
+            [$slottest, $params] = $this->db->get_in_or_equal($slots, SQL_PARAMS_NAMED, 'slot');
+            $slotwhere = " AND qa.slot {$slottest}";
+        } else {
+            $slotwhere = '';
+            $params = [];
+        }
 
         $rs = $this->db->get_recordset_sql("
 SELECT
@@ -629,8 +651,8 @@ JOIN {question_attempt_steps} qas ON qas.questionattemptid = qa.id
 JOIN {question} q ON q.id = qa.questionid
 
 WHERE
-    {$qubaids->where()} AND
-    qa.slot $slottest
+    {$qubaids->where()}
+    $slotwhere
 
 GROUP BY
     qa.slot,
@@ -686,7 +708,7 @@ ORDER BY
      *
      * @param qubaid_condition $qubaids used to restrict which usages are included
      * in the query. See {@link qubaid_condition}.
-     * @param int $slot The slot for the questions you want to konw about.
+     * @param int $slot The slot for the questions you want to know about.
      * @param int $questionid (optional) Only return attempts that were of this specific question.
      * @param string $summarystate the summary state of interest, or 'all'.
      * @param string $orderby the column to order by.
@@ -694,24 +716,29 @@ ORDER BY
      * @param int $limitfrom implements paging of the results.
      *      Ignored if $orderby = random or $limitnum is null.
      * @param int $limitnum implements paging of the results. null = all.
+     * @param string $extraselect anything passed here will be added to the SELECT list, use this to return extra data.
      * @return array with two elements, an array of usage ids, and a count of the total number.
      */
     public function load_questions_usages_where_question_in_state(
             qubaid_condition $qubaids, $summarystate, $slot, $questionid = null,
-            $orderby = 'random', $params = array(), $limitfrom = 0, $limitnum = null) {
+            $orderby = 'random', $params = array(), $limitfrom = 0, $limitnum = null, $extraselect = '') {
 
         $extrawhere = '';
         if ($questionid) {
             $extrawhere .= ' AND qa.questionid = :questionid';
             $params['questionid'] = $questionid;
         }
-        if ($summarystate != 'all') {
+        if ($summarystate !== 'all') {
             list($test, $sparams) = $this->in_summary_state_test($summarystate);
             $extrawhere .= ' AND qas.state ' . $test;
             $params += $sparams;
         }
 
-        if ($orderby == 'random') {
+        if (!empty($extraselect)) {
+            $extraselect = ', ' . $extraselect;
+        }
+
+        if ($orderby === 'random') {
             $sqlorderby = '';
         } else if ($orderby) {
             $sqlorderby = 'ORDER BY ' . $orderby;
@@ -728,29 +755,24 @@ ORDER BY
         $qubaidswhere = $qubaids->where(); // Must call this before params.
         $params += $qubaids->from_where_params();
         $params['slot'] = $slot;
+        $sql = "SELECT qa.questionusageid,
+                       1
+                       $extraselect
+                  FROM {$qubaids->from_question_attempts('qa')}
+                  JOIN {question_attempt_steps} qas ON qas.questionattemptid = qa.id
+                   AND qas.sequencenumber = {$this->latest_step_for_qa_subquery()}
+                  JOIN {question} q ON q.id = qa.questionid
+                 WHERE {$qubaidswhere}
+                   AND qa.slot = :slot
+                       $extrawhere
+                       $sqlorderby";
 
-        $qubaids = $this->db->get_records_sql_menu("
-SELECT
-    qa.questionusageid,
-    1
-
-FROM {$qubaids->from_question_attempts('qa')}
-JOIN {question_attempt_steps} qas ON qas.questionattemptid = qa.id
-        AND qas.sequencenumber = {$this->latest_step_for_qa_subquery()}
-JOIN {question} q ON q.id = qa.questionid
-
-WHERE
-    {$qubaidswhere} AND
-    qa.slot = :slot
-    $extrawhere
-
-$sqlorderby
-        ", $params);
+        $qubaids = $this->db->get_records_sql_menu($sql, $params);
 
         $qubaids = array_keys($qubaids);
         $count = count($qubaids);
 
-        if ($orderby == 'random') {
+        if ($orderby === 'random') {
             shuffle($qubaids);
             $limitfrom = 0;
         }
@@ -770,7 +792,7 @@ $sqlorderby
      *
      * @param qubaid_condition $qubaids used to restrict which usages are included
      * in the query. See {@link qubaid_condition}.
-     * @param array $slots if null, load info for all quesitions, otherwise only
+     * @param array|null $slots if null, load info for all quesitions, otherwise only
      * load the averages for the specified questions.
      * @return array of objects with fields ->slot, ->averagefraction and ->numaveraged.
      */
@@ -919,6 +941,7 @@ ORDER BY
         $record = new stdClass();
         $record->id = $qa->get_database_id();
         $record->slot = $qa->get_slot();
+        $record->questionid = $qa->get_question(false)->id;
         $record->variant = $qa->get_variant();
         $record->maxmark = $qa->get_max_mark();
         $record->minfraction = $qa->get_min_fraction();
@@ -1010,11 +1033,11 @@ ORDER BY
     }
 
     /**
-     * Delete all the steps for a question attempt.
+     * Delete some steps of a question attempt.
      *
      * Private method, only for use by other parts of the question engine.
      *
-     * @param int $qaids question_attempt id.
+     * @param array $stepids array of step ids to delete.
      * @param context $context the context that the $quba belongs to.
      */
     public function delete_steps($stepids, $context) {
@@ -1075,7 +1098,8 @@ ORDER BY
      *
      * @param int $qubaid the question usage id.
      * @param int $questionid the question id.
-     * @param int $sessionid the question_attempt id.
+     * @param int $qaid the question_attempt id.
+     * @param int $slot the slot number of the question attempt to update.
      * @param bool $newstate the new state of the flag. true = flagged.
      */
     public function update_question_attempt_flag($qubaid, $questionid, $qaid, $slot, $newstate) {
@@ -1091,7 +1115,8 @@ ORDER BY
      * Get all the WHEN 'x' THEN 'y' terms needed to convert the question_attempt_steps.state
      * column to a summary state. Use this like
      * CASE qas.state {$this->full_states_to_summary_state_sql()} END AS summarystate,
-     * @param string SQL fragment.
+     *
+     * @return string SQL fragment.
      */
     protected function full_states_to_summary_state_sql() {
         $sql = '';
@@ -1110,7 +1135,8 @@ ORDER BY
      * @param string $summarystate one of
      * inprogress, needsgrading, manuallygraded or autograded
      * @param bool $equal if false, do a NOT IN test. Default true.
-     * @return string SQL fragment.
+     * @param string $prefix used in the call to $DB->get_in_or_equal().
+     * @return array as returned by $DB->get_in_or_equal().
      */
     public function in_summary_state_test($summarystate, $equal = true, $prefix = 'summarystates') {
         $states = question_state::get_all_for_summary_state($summarystate);
@@ -1150,11 +1176,11 @@ ORDER BY
     }
 
     /**
-     * Return a subquery that computes the sum of the marks for all the questions
-     * in a usage. Which useage to compute the sum for is controlled bu the $qubaid
+     * Return a sub-query that computes the sum of the marks for all the questions
+     * in a usage. Which usage to compute the sum for is controlled by the $qubaid
      * parameter.
      *
-     * See {@link quiz_update_all_attempt_sumgrades()} for an example of the usage of
+     * See {@see \mod_quiz\grade_calculator::recompute_all_attempt_sumgrades()} for an example of the usage of
      * this method.
      *
      * This method may be called publicly.
@@ -1187,7 +1213,7 @@ ORDER BY
     /**
      * Get a subquery that returns the latest step of every qa in some qubas.
      * Currently, this is only used by the quiz reports. See
-     * {@link quiz_attempts_report_table::add_latest_state_join()}.
+     * {@see \mod_quiz\local\reports\attempts_report_table::add_latest_state_join()}.
      *
      * This method may be called publicly.
      *
@@ -1226,7 +1252,13 @@ ORDER BY
             ) {$alias}", $qubaids->from_where_params());
     }
 
-    protected function latest_step_for_qa_subquery($questionattemptid = 'qa.id') {
+    /**
+     * Get the subquery which selects the latest step for each question_attempt.
+     *
+     * @param string $questionattemptid column alias for the column to join on which is question_attempt.id.
+     * @return string SQL fragment to include in the query. Has not placeholders.
+     */
+    public function latest_step_for_qa_subquery($questionattemptid = 'qa.id') {
         return "(
                 SELECT MAX(sequencenumber)
                 FROM {question_attempt_steps}
@@ -1298,16 +1330,22 @@ class question_engine_unit_of_work implements question_usage_observer {
     protected $modified = false;
 
     /**
-     * @var array list of slot => {@link question_attempt}s that
+     * @var question_attempt[] list of slot => {@link question_attempt}s that
      * have been added to the usage.
      */
     protected $attemptsadded = array();
 
     /**
-     * @var array list of slot => {@link question_attempt}s that
+     * @var question_attempt[] list of slot => {@link question_attempt}s that
      * were already in the usage, and which have been modified.
      */
     protected $attemptsmodified = array();
+
+    /**
+     * @var question_attempt[] list of slot => {@link question_attempt}s that
+     * have been added to the usage.
+     */
+    protected $attemptsdeleted = array();
 
     /**
      * @var array of array(question_attempt_step, question_attempt id, seq number)
@@ -1322,7 +1360,7 @@ class question_engine_unit_of_work implements question_usage_observer {
     protected $stepsmodified = array();
 
     /**
-     * @var array list of question_attempt_step.id => question_attempt_step of steps
+     * @var question_attempt_step[] list of question_attempt_step.id => question_attempt_step of steps
      * that were previously stored in the database, but which are no longer required.
      */
     protected $stepsdeleted = array();
@@ -1495,13 +1533,15 @@ class question_engine_unit_of_work implements question_usage_observer {
     }
 
     /**
+     * Determine if a step is new. If so get its array key.
+     *
      * @param question_attempt_step $step a step
      * @return int|false if the step is in the list of steps to be added, return
      *      the key, otherwise return false.
      */
     protected function is_step_added(question_attempt_step $step) {
         foreach ($this->stepsadded as $key => $data) {
-            list($addedstep, $qaid, $seq) = $data;
+            list($addedstep) = $data;
             if ($addedstep === $step) {
                 return $key;
             }
@@ -1510,13 +1550,15 @@ class question_engine_unit_of_work implements question_usage_observer {
     }
 
     /**
+     * Determine if a step is modified. If so get its array key.
+     *
      * @param question_attempt_step $step a step
      * @return int|false if the step is in the list of steps to be modified, return
      *      the key, otherwise return false.
      */
     protected function is_step_modified(question_attempt_step $step) {
         foreach ($this->stepsmodified as $key => $data) {
-            list($modifiedstep, $qaid, $seq) = $data;
+            list($modifiedstep) = $data;
             if ($modifiedstep === $step) {
                 return $key;
             }
@@ -1583,9 +1625,7 @@ class question_engine_unit_of_work implements question_usage_observer {
             $dm->update_questions_usage_by_activity($this->quba);
         }
 
-        if ($stepdata) {
-            $dm->insert_all_step_data(call_user_func_array('array_merge', $stepdata));
-        }
+        $dm->insert_all_step_data($dm->combine_step_data($stepdata));
 
         $this->stepsdeleted = array();
         $this->stepsmodified = array();
@@ -1639,23 +1679,28 @@ class question_file_saver implements question_response_files {
     protected $value = null;
 
     /**
-     * Constuctor.
+     * Constructor.
+     *
      * @param int $draftitemid the draft area to save the files from.
      * @param string $component the component for the file area to save into.
-     * @param string $filearea the name of the file area to save into.
+     * @param string $uncleanedfilearea the name of the file area to save into - but before it has been cleaned up.
+     * @param string $text optional content containing file links.
      */
-    public function __construct($draftitemid, $component, $filearea, $text = null) {
+    public function __construct($draftitemid, $component, $uncleanedfilearea, $text = null) {
         $this->draftitemid = $draftitemid;
         $this->component = $component;
-        $this->filearea = $filearea;
+        $this->filearea = self::clean_file_area_name($uncleanedfilearea);
         $this->value = $this->compute_value($draftitemid, $text);
     }
 
     /**
-     * Compute the value that should be stored in the question_attempt_step_data
-     * table. Contains a hash that (almost) uniquely encodes all the files.
+     * Compute the value that should be stored in the question_attempt_step_data table.
+     *
+     * Contains a hash that (almost) uniquely encodes all the files.
+     *
      * @param int $draftitemid the draft file area itemid.
      * @param string $text optional content containing file links.
+     * @return string the value.
      */
     protected function compute_value($draftitemid, $text) {
         global $USER;
@@ -1699,11 +1744,36 @@ class question_file_saver implements question_response_files {
 
     /**
      * Actually save the files.
+     *
      * @param integer $itemid the item id for the file area to save into.
+     * @param context $context the context where the files should be saved.
      */
     public function save_files($itemid, $context) {
         file_save_draft_area_files($this->draftitemid, $context->id,
                 $this->component, $this->filearea, $itemid);
+    }
+
+    /**
+     * Clean up a possible file area name to ensure that it matches the required rules.
+     *
+     * @param string $uncleanedfilearea the proposed file area name (e.g. 'response_-attachments').
+     * @return string a similar valid file area name. E.g: response_attachments.
+     */
+    public static function clean_file_area_name(string $uncleanedfilearea): string {
+        $filearea = $uncleanedfilearea;
+        if ($filearea !== clean_param($filearea, PARAM_AREA)) {
+            // Only lowercase ascii letters, numbers and underscores are allowed.
+            // Remove the invalid character in the filearea string.
+            $filearea = preg_replace('~[^a-z0-9_]~', '', core_text::strtolower($filearea));
+            // Replace multiple underscore to a single underscore.
+            $filearea = preg_replace('~_+~', '_', $filearea);
+            // If, after attempted cleaning, the filearea is not valid, throw a clear error to avoid subtle bugs.
+            if ($filearea !== clean_param($filearea, PARAM_AREA)) {
+                throw new coding_exception('Name ' . $filearea .
+                    ' cannot be used with question_file_saver because it does not match the rules for file area names');
+            }
+        }
+        return $filearea;
     }
 
     /**
@@ -1827,31 +1897,36 @@ class question_file_loader implements question_response_files {
 abstract class qubaid_condition {
 
     /**
-     * @return string the SQL that needs to go in the FROM clause when trying
-     * to select records from the 'question_attempts' table based on the
+     * Get the SQL fragment to go in a FROM clause.
+     *
+     * The SQL that needs to go in the FROM clause when trying
+     * to select records from the 'question_attempts' table based on this
      * qubaid_condition.
+     *
+     * @param string $alias
+     * @return string SQL fragment.
      */
-    public abstract function from_question_attempts($alias);
+    abstract public function from_question_attempts($alias);
 
     /** @return string the SQL that needs to go in the where clause. */
-    public abstract function where();
+    abstract public function where();
 
     /**
-     * @return the params needed by a query that uses
+     * @return array the params needed by a query that uses
      * {@link from_question_attempts()} and {@link where()}.
      */
-    public abstract function from_where_params();
+    abstract public function from_where_params();
 
     /**
      * @return string SQL that can use used in a WHERE qubaid IN (...) query.
      * This method returns the "IN (...)" part.
      */
-    public abstract function usage_id_in();
+    abstract public function usage_id_in();
 
     /**
-     * @return the params needed by a query that uses {@link usage_id_in()}.
+     * @return array the params needed by a query that uses {@link usage_id_in()}.
      */
-    public abstract function usage_id_in_params();
+    abstract public function usage_id_in_params();
 
     /**
      * @return string 40-character hash code that uniquely identifies the combination of properties and class name of this qubaid
@@ -1890,8 +1965,6 @@ class qubaid_list extends qubaid_condition {
     }
 
     public function where() {
-        global $DB;
-
         if (is_null($this->columntotest)) {
             throw new coding_exception('Must call from_question_attempts before where().');
         }

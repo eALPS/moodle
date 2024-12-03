@@ -33,6 +33,7 @@ $d               = optional_param('d', 0, PARAM_INT);   // database id
 $rid             = optional_param('rid', 0, PARAM_INT); // record id
 $fielddelimiter  = optional_param('fielddelimiter', ',', PARAM_CLEANHTML); // characters used as field delimiters for csv file import
 $fieldenclosure = optional_param('fieldenclosure', '', PARAM_CLEANHTML);   // characters used as record delimiters for csv file import
+$redirectbackto = optional_param('backto', '', PARAM_LOCALURL); // The location to redirect back to.
 
 $url = new moodle_url('/mod/data/import.php');
 if ($rid !== 0) {
@@ -64,109 +65,65 @@ require_login($course, false, $cm);
 
 $context = context_module::instance($cm->id);
 require_capability('mod/data:manageentries', $context);
-$form = new mod_data_import_form(new moodle_url('/mod/data/import.php'));
+
+$form = new mod_data_import_form(new moodle_url('/mod/data/import.php'), ['dataid' => $data->id,
+    'backtourl' => $redirectbackto]);
+
+if ($form->is_cancelled()) {
+    $redirectbackto = !empty($redirectbackto) ? $redirectbackto :
+        new \moodle_url('/mod/data/view.php', ['d' => $data->id]);
+    redirect($redirectbackto);
+}
 
 /// Print the page header
-$PAGE->navbar->add(get_string('add', 'data'));
-$PAGE->set_title($data->name);
+$pagename = get_string('uploadrecords', 'data');
+$PAGE->navbar->add($pagename);
+$PAGE->add_body_class('mediumwidth');
+$titleparts = [
+    $pagename,
+    format_string($data->name),
+    format_string($course->fullname),
+];
+$PAGE->set_title(implode(moodle_page::TITLE_SEPARATOR, $titleparts));
 $PAGE->set_heading($course->fullname);
-navigation_node::override_active_url(new moodle_url('/mod/data/import.php', array('d' => $data->id)));
+$PAGE->set_secondary_active_tab('modulepage');
+$PAGE->activityheader->disable();
 echo $OUTPUT->header();
-echo $OUTPUT->heading_with_help(get_string('uploadrecords', 'mod_data'), 'uploadrecords', 'mod_data');
+echo $OUTPUT->heading_with_help($pagename, 'uploadrecords', 'mod_data');
 
-/// Groups needed for Add entry tab
-$currentgroup = groups_get_activity_group($cm);
-$groupmode = groups_get_activity_groupmode($cm);
+if ($formdata = $form->get_data()) {
+    $uploadedfilepath = $form->save_temp_file('recordsfile');
+    $filestempdir = null;
 
-if (!$formdata = $form->get_data()) {
+    if (!$uploadedfilepath) {
+        throw new coding_exception('No file uploaded.');
+    }
+
+    $importer = new \mod_data\local\importer\csv_entries_importer($uploadedfilepath, $form->get_new_filename('recordsfile'));
+
+    if (!$importer->get_data_file_content()) {
+        echo $OUTPUT->notification(get_string('errordatafilenotfound', 'data'),
+            \core\output\notification::NOTIFY_ERROR);
+    } else {
+        $importer->import_csv($cm, $data, $formdata->encoding, $formdata->fielddelimiter);
+        unlink($uploadedfilepath);
+
+        $addedrecordsmessages = $importer->get_added_records_messages();
+        echo html_writer::div(implode('<br/>', $addedrecordsmessages));
+        if (count($addedrecordsmessages) > 0) {
+            echo $OUTPUT->notification(count($addedrecordsmessages) . ' ' . get_string('recordssaved', 'data'),
+                \core\output\notification::NOTIFY_SUCCESS);
+        } else {
+            echo $OUTPUT->notification(get_string('recordsnotsaved', 'data'),
+                \core\output\notification::NOTIFY_ERROR);
+        }
+    }
+} else {
     /// Upload records section. Only for teachers and the admin.
     echo $OUTPUT->box_start('generalbox boxaligncenter boxwidthwide');
-    require_once('import_form.php');
-    $form = new mod_data_import_form(new moodle_url('/mod/data/import.php'));
-    $formdata = new stdClass();
-    $formdata->d = $data->id;
-    $form->set_data($formdata);
     $form->display();
     echo $OUTPUT->box_end();
-    echo $OUTPUT->footer();
-    die;
-} else {
-    // Large files are likely to take their time and memory. Let PHP know
-    // that we'll take longer, and that the process should be recycled soon
-    // to free up memory.
-    core_php_time_limit::raise();
-    raise_memory_limit(MEMORY_EXTRA);
-
-    $iid = csv_import_reader::get_new_iid('moddata');
-    $cir = new csv_import_reader($iid, 'moddata');
-
-    $filecontent = $form->get_file_content('recordsfile');
-    $readcount = $cir->load_csv_content($filecontent, $formdata->encoding, $formdata->fielddelimiter);
-    unset($filecontent);
-    if (empty($readcount)) {
-        print_error('csvfailed','data',"{$CFG->wwwroot}/mod/data/edit.php?d={$data->id}");
-    } else {
-        if (!$fieldnames = $cir->get_columns()) {
-            print_error('cannotreadtmpfile', 'error');
-        }
-        $fieldnames = array_flip($fieldnames);
-        // check the fieldnames are valid
-        $rawfields = $DB->get_records('data_fields', array('dataid' => $data->id), '', 'name, id, type');
-        $fields = array();
-        $errorfield = '';
-        foreach ($fieldnames as $name => $id) {
-            if (!isset($rawfields[$name])) {
-                $errorfield .= "'$name' ";
-            } else {
-                $field = $rawfields[$name];
-                require_once("$CFG->dirroot/mod/data/field/$field->type/field.class.php");
-                $classname = 'data_field_' . $field->type;
-                $fields[$name] = new $classname($field, $data, $cm);
-            }
-        }
-
-        if (!empty($errorfield)) {
-            print_error('fieldnotmatched','data',"{$CFG->wwwroot}/mod/data/edit.php?d={$data->id}",$errorfield);
-        }
-
-        $cir->init();
-        $recordsadded = 0;
-        while ($record = $cir->next()) {
-            if ($recordid = data_add_record($data, 0)) {  // add instance to data_record
-                foreach ($fields as $field) {
-                    $fieldid = $fieldnames[$field->field->name];
-                    if (isset($record[$fieldid])) {
-                        $value = $record[$fieldid];
-                    } else {
-                        $value = '';
-                    }
-
-                    if (method_exists($field, 'update_content_import')) {
-                        $field->update_content_import($recordid, $value, 'field_' . $field->field->id);
-                    } else {
-                        $content = new stdClass();
-                        $content->fieldid = $field->field->id;
-                        $content->content = $value;
-                        $content->recordid = $recordid;
-                        $DB->insert_record('data_content', $content);
-                    }
-                }
-                $recordsadded++;
-                print get_string('added', 'moodle', $recordsadded) . ". " . get_string('entry', 'data') . " (ID $recordid)<br />\n";
-            }
-        }
-        $cir->close();
-        $cir->cleanup(true);
-    }
 }
-
-if ($recordsadded > 0) {
-    echo $OUTPUT->notification($recordsadded. ' '. get_string('recordssaved', 'data'), '');
-} else {
-    echo $OUTPUT->notification(get_string('recordsnotsaved', 'data'), 'notifysuccess');
-}
-
-echo $OUTPUT->continue_button('import.php?d='.$data->id);
 
 /// Finish the page
 echo $OUTPUT->footer();

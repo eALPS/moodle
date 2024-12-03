@@ -50,7 +50,7 @@ class mod_book_generator extends testing_module_generator {
         parent::reset();
     }
 
-    public function create_instance($record = null, array $options = null) {
+    public function create_instance($record = null, ?array $options = null) {
         global $CFG;
         require_once("$CFG->dirroot/mod/book/locallib.php");
 
@@ -66,7 +66,7 @@ class mod_book_generator extends testing_module_generator {
         return parent::create_instance($record, (array)$options);
     }
 
-    public function create_chapter($record = null, array $options = null) {
+    public function create_chapter($record = null, ?array $options = null) {
         global $DB;
 
         $record = (object) (array) $record;
@@ -116,6 +116,14 @@ class mod_book_generator extends testing_module_generator {
                    SET revision = revision + 1
                  WHERE id = ?";
         $DB->execute($sql, array($record->bookid));
+
+        if (property_exists($record, 'tags')) {
+            $cm = get_coursemodule_from_instance('book', $record->bookid);
+            $tags = is_array($record->tags) ? $record->tags : preg_split('/,/', $record->tags);
+
+            core_tag_tag::set_item_tags('mod_book', 'book_chapters', $record->id,
+                context_module::instance($cm->id), $tags);
+        }
 
         return $record;
     }

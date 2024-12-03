@@ -58,7 +58,7 @@ interface workshop_strategy {
      * @param bool $editable        Shall the form be opened as editable (true) or read-only (false)
      * @param array $options        More assessment form options, editableweight implemented only now
      */
-    public function get_assessment_form(moodle_url $actionurl=null, $mode='preview', stdclass $assessment=null, $editable=true, $options=array());
+    public function get_assessment_form(?moodle_url $actionurl=null, $mode='preview', ?stdclass $assessment=null, $editable=true, $options=array());
 
     /**
      * Saves the filled assessment and returns the grade for submission as suggested by the reviewer
@@ -84,7 +84,7 @@ interface workshop_strategy {
     /**
      * Returns a general information about the assessment dimensions
      *
-     * @return array [dimid] => stdclass (->id ->max ->min ->weight)
+     * @return array [dimid] => stdclass (->id ->max ->min ->weight and optionally ->scale containing scale items)
      */
     public function get_dimensions_info();
 

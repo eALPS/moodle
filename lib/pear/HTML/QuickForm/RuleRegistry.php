@@ -76,7 +76,7 @@ class HTML_QuickForm_RuleRegistry
      */
     function registerRule($ruleName, $type, $data1, $data2 = null)
     {
-        $type = strtolower($type);
+        $type = strtolower($type ?? '');
         if ($type == 'regex') {
             // Regular expression
             $rule =& $this->getRule('regex');
@@ -302,15 +302,13 @@ class HTML_QuickForm_RuleRegistry
                     "    }\n";
             }
 
+        } elseif ($element->getType() == 'advcheckbox') {
+            $value = "  value{$jsIndex} = frm.elements['$elementName'][1].checked ?" .
+                    " frm.elements['$elementName'][1].value : frm.elements['$elementName'][0].value;\n";
+            $tmp_reset .= $reset ? "    field[1].checked = field[1].defaultChecked;\n" : '';
         } elseif ($element->getType() == 'checkbox') {
-            if (is_a($element, 'html_quickform_advcheckbox')) {
-                $value = "  value{$jsIndex} = frm.elements['$elementName'][1].checked? frm.elements['$elementName'][1].value: frm.elements['$elementName'][0].value;\n";
-                $tmp_reset .= $reset ? "    field[1].checked = field[1].defaultChecked;\n" : '';
-            } else {
-                $value = "  value{$jsIndex} = frm.elements['$elementName'].checked? '1': '';\n";
-                $tmp_reset .= $reset ? "    field.checked = field.defaultChecked;\n" : '';
-            }
-
+            $value = "  value{$jsIndex} = frm.elements['$elementName'].checked? '1': '';\n";
+            $tmp_reset .= $reset ? "    field.checked = field.defaultChecked;\n" : '';
         } elseif ($element->getType() == 'radio') {
             $value = "  value{$jsIndex} = '';\n" .
                      // Fix for bug #5644

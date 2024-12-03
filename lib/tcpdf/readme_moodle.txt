@@ -1,9 +1,71 @@
-Description of TCPDF library import 6.2.12
-===========================================
-* delete examples/, tools/ and tcpdf_import.php
+Description of TCPDF library import
+===================================
+* download library from https://github.com/tecnickcom/TCPDF/tags
+* delete examples/, tools/ VERSION and tcpdf_import.php
 * remove tcpdf_import.php from composer.json
 * remove all fonts that were not already present
 * visit http://127.0.0.1/lib/tests/other/pdflibtestpage.php and view the pdf
+* modify getTCPDFProducer lib/tcpdf/include/tcpdf_static.php to remove the version number
+
+Important
+---------
+A new version of the libray is being developed @ https://github.com/tecnickcom/tc-lib-pdf . Check periodically when it's ready
+and if it's a drop-in replacement for the legacy tcpdf one.
+
+2024/06/16
+----------
+Upgrade to tcpdf TCPDF 6.7.5 (MDL-81658)
+by Daniel Ziegenbergg <daniel.ziegenberg@tuwien.ac.at>
+
+2023/10/23
+----------
+Upgrade to tcpdf TCPDF 6.6.5 (MDL-79665)
+by Paul Holden <paulh@moodle.com>
+
+2023/03/02
+----------
+Upgrade to tcpdf TCPDF 6.6.2 (MDL-76910)
+by Paul Holden <paulh@moodle.com>
+
+2022/09/27
+----------
+Upgrade to tcpdf TCPDF 6.5.0 (MDL-75468)
+by Paul Holden <paulh@moodle.com>
+
+2021/04/20
+----------
+Upgrade to tcpdf TCPDF 6.4.1 (MDL-70902)
+by David Matamoros <davidmc@moodle.com>
+
+2021/02/11
+----------
+Reduce PDF metadata disclosure (MDL-70735)
+by Brendan Heywood <brendan@catalyst-au.net>
+
+2020/12/15
+----------
+Upgrade to tcpdf TCPDF 6.3.5 (MDL-70294)
+by Paul Holden <paulh@moodle.com>
+
+2019/10/20
+----------
+Upgrade to tcpdf TCPDF 6.3.2 (MDL-66966)
+by Eloy Lafuente <stronk7@moodle.org>
+
+2019/05/06
+----------
+Upgrade to tcpdf TCPDF 6.2.26 (MDL-64794)
+by Eloy Lafuente <stronk7@moodle.org>
+
+- https://github.com/tecnickcom/TCPDF/pull/74 has been already merged upstream (6.2.16 and up), so we don't need to apply it.
+- https://github.com/tecnickcom/TCPDF/pull/91 has been already merged upstream (6.2.19 and up), so we don't need to apply it.
+
+2017/10/02
+----------
+Upgrade to tcpdf_php5 TCPDF 6.2.13 (MDL-60237)
+by Marina Glancy <marina@moodle.com>
+
+* replaced the calls to function each() deprecated in PHP7.2
 
 2015/09/29
 ----------

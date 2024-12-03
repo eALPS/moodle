@@ -34,7 +34,7 @@ class xmldb_structure extends xmldb_object {
     /** @var string */
     protected $version;
 
-    /** @var array tables */
+    /** @var xmldb_table[] tables */
     protected $tables;
 
     /**
@@ -231,6 +231,23 @@ class xmldb_structure extends xmldb_object {
             $this->debug($this->errormsg);
             $result = false;
         }
+        // Normalize paths to compare them.
+        $filepath = realpath($this->name); // File path comes in name.
+        $filename = basename($filepath);
+        $normalisedpath = $this->path;
+        if ($CFG->admin !== 'admin') {
+            $needle = 'admin/';
+            if (strpos($this->path, $needle) === 0) {
+                $normalisedpath = substr_replace($this->path, "$CFG->admin/", 0, strlen($needle));
+            }
+        }
+        $structurepath = realpath($CFG->dirroot . DIRECTORY_SEPARATOR . $normalisedpath . DIRECTORY_SEPARATOR . $filename);
+        if ($filepath !== $structurepath) {
+            $relativepath = dirname(str_replace(realpath($CFG->dirroot) . DIRECTORY_SEPARATOR, '', $filepath));
+            $this->errormsg = 'PATH attribute does not match file directory: ' . $relativepath;
+            $this->debug($this->errormsg);
+            $result = false;
+        }
         if (isset($xmlarr['XMLDB']['@']['VERSION'])) {
             $this->version = trim($xmlarr['XMLDB']['@']['VERSION']);
         } else {
@@ -327,7 +344,7 @@ class xmldb_structure extends xmldb_object {
         $o.= '<XMLDB PATH="' . $this->path . '"';
         $o.= ' VERSION="' . $this->version . '"';
         if ($this->comment) {
-            $o.= ' COMMENT="' . htmlspecialchars($this->comment) . '"'."\n";
+            $o.= ' COMMENT="' . htmlspecialchars($this->comment, ENT_COMPAT) . '"'."\n";
         }
         $rel = array_fill(0, count(explode('/', $this->path)), '..');
         $rel = implode('/', $rel);
@@ -342,7 +359,7 @@ class xmldb_structure extends xmldb_object {
             }
             $o.= '  </TABLES>' . "\n";
         }
-        $o.= '</XMLDB>';
+        $o.= '</XMLDB>' . "\n";
 
         return $o;
     }

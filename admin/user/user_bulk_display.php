@@ -8,7 +8,8 @@ $dir  = optional_param('dir', 'asc', PARAM_ALPHA);
 
 admin_externalpage_setup('userbulk');
 
-$return = $CFG->wwwroot.'/'.$CFG->admin.'/user/user_bulk.php';
+$returnurl = optional_param('returnurl', '', PARAM_LOCALURL);
+$return = new moodle_url($returnurl ?: '/admin/user/user_bulk.php');
 
 if (empty($SESSION->bulk_users)) {
     redirect($return);
@@ -20,11 +21,15 @@ $usercount = count($users);
 
 $strnever = get_string('never');
 
+$PAGE->set_primary_active_tab('siteadminnode');
+$PAGE->set_secondary_active_tab('users');
+
 echo $OUTPUT->header();
 
 $countries = get_string_manager()->get_list_of_countries(true);
 
-$namefields = get_all_user_name_fields(true);
+$userfieldsapi = \core_user\fields::for_name();
+$namefields = $userfieldsapi->get_sql('', false, '', '', false)->selects;
 foreach ($users as $key => $id) {
     $user = $DB->get_record('user', array('id'=>$id), 'id, ' . $namefields . ', username, email, country, lastaccess, city');
     $user->fullname = fullname($user, true);
@@ -57,7 +62,12 @@ foreach ($columns as $column) {
         $columndir = 'asc';
     } else {
         $columndir = $dir == 'asc' ? 'desc' : 'asc';
-        $columnicon = ' <img src="'.$OUTPUT->pix_url('t/'.($dir == 'asc' ? 'down' : 'up' )).'f" alt="" />';
+        $icon = 't/down';
+        $iconstr = $columndir;
+        if ($dir != 'asc') {
+            $icon = 't/up';
+        }
+        $columnicon = ' ' . $OUTPUT->pix_icon($icon, get_string($iconstr));
     }
     $table->head[] = '<a href="user_bulk_display.php?sort='.$column.'&amp;dir='.$columndir.'">'.$strtitle.'</a>'.$columnicon;
     $table->align[] = 'left';
@@ -67,7 +77,7 @@ foreach($users as $user) {
     $table->data[] = array (
         '<a href="'.$CFG->wwwroot.'/user/view.php?id='.$user->id.'&amp;course='.SITEID.'">'.$user->fullname.'</a>',
 //        $user->username,
-        $user->email,
+        s($user->email),
         $user->city,
         $user->country,
         $user->lastaccess ? format_time(time() - $user->lastaccess) : $strnever

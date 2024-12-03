@@ -14,26 +14,19 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace mod_folder;
+
 /**
- * mod_folder generator tests
+ * Generator tests class for mod_folder.
  *
  * @package    mod_folder
  * @category   test
  * @copyright  2013 Marina Glancy
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+class generator_test extends \advanced_testcase {
 
-/**
- * Genarator tests class for mod_folder.
- *
- * @package    mod_folder
- * @category   test
- * @copyright  2013 Marina Glancy
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class mod_folder_generator_testcase extends advanced_testcase {
-
-    public function test_create_instance() {
+    public function test_create_instance(): void {
         global $DB, $USER;
         $this->resetAfterTest();
         $this->setAdminUser();
@@ -57,7 +50,7 @@ class mod_folder_generator_testcase extends advanced_testcase {
             'course' => $course->id,
             'files' => file_get_unused_draft_itemid()
         );
-        $usercontext = context_user::instance($USER->id);
+        $usercontext = \context_user::instance($USER->id);
         $filerecord = array('component' => 'user', 'filearea' => 'draft',
                 'contextid' => $usercontext->id, 'itemid' => $params['files'],
                 'filename' => 'file1.txt', 'filepath' => '/');

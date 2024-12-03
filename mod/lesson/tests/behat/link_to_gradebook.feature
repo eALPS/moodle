@@ -16,98 +16,69 @@ Feature: link to gradebook on the end of lesson page
       | user | course | role |
       | teacher1 | C1 | editingteacher |
       | student1 | C1 | student |
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Lesson" to section "1" and I fill the form with:
-      | Name | Test lesson |
-      | Description | Test lesson description |
-    And I follow "Test lesson"
-    And I follow "Add a content page"
-    And I set the following fields to these values:
-      | Page title | First page name |
-      | Page contents | First page contents |
-      | id_answer_editor_0 | Next page |
-      | id_jumpto_0 | Next page |
-    And I press "Save page"
-    And I select "Add a content page" from the "qtype" singleselect
-    And I set the following fields to these values:
-      | Page title | Second page name |
-      | Page contents | Second page contents |
-      | id_answer_editor_0 | Previous page |
-      | id_jumpto_0 | Previous page |
-      | id_answer_editor_1 | Next page |
-      | id_jumpto_1 | Next page |
-    And I press "Save page"
+    And the following "activities" exist:
+      | activity   | name        | course | idnumber    |
+      | lesson     | Test lesson | C1     | lesson1     |
+    And the following "mod_lesson > pages" exist:
+      | lesson      | qtype   | title            | content              |
+      | Test lesson | content | First page name  | First page contents  |
+      | Test lesson | content | Second page name | Second page contents |
+    And the following "mod_lesson > answers" exist:
+      | page             | answer        | jumpto        |
+      | First page name  | Next page     | Next page     |
+      | Second page name | Previous page | Previous page |
+      | Second page name | Next page     | Next page     |
 
   Scenario: Link to gradebook for non practice lesson
-    Given I log out
-    When I log in as "student1"
-    And I follow "Course 1"
-    And I follow "Test lesson"
+    When I am on the "Test lesson" "lesson activity" page logged in as student1
     And I press "Next page"
     And I press "Next page"
     Then I should see "Congratulations - end of lesson reached"
     And I should see "View grades"
     And I follow "View grades"
-    And I should see "User report - Student 1"
+    And I should see "Student 1" in the "region-main" "region"
     And I should see "Test lesson"
 
   Scenario: No link to gradebook for non graded lesson
-    Given I follow "Test lesson"
-    And I navigate to "Edit settings" in current page administration
+    Given I am on the "Test lesson" "lesson activity editing" page logged in as teacher1
     And I set the following fields to these values:
         | Type | None |
     And I press "Save and display"
-    And I log out
-    When I log in as "student1"
-    And I follow "Course 1"
-    And I follow "Test lesson"
+    When I am on the "Test lesson" "lesson activity" page logged in as student1
     And I press "Next page"
     And I press "Next page"
     Then I should see "Congratulations - end of lesson reached"
     And I should not see "View grades"
 
   Scenario: No link to gradebook for practice lesson
-    Given I follow "Test lesson"
-    And I navigate to "Edit settings" in current page administration
+    Given I am on the "Test lesson" "lesson activity editing" page logged in as teacher1
     And I set the following fields to these values:
         | Practice lesson | Yes |
     And I press "Save and display"
-    And I log out
-    When I log in as "student1"
-    And I follow "Course 1"
-    And I follow "Test lesson"
+    When I am on the "Test lesson" "lesson activity" page logged in as student1
     And I press "Next page"
     And I press "Next page"
     Then I should see "Congratulations - end of lesson reached"
     And I should not see "View grades"
 
   Scenario: No link if Show gradebook to student disabled
-    Given I follow "Course 1"
-    And I navigate to "Edit settings" in current page administration
+    Given I log in as "teacher1"
+    And I am on "Course 1" course homepage
+    And I navigate to "Settings" in current page administration
     And I set the following fields to these values:
       | Show gradebook to students | No |
     And I press "Save and display"
-    And I log out
-    When I log in as "student1"
-    And I follow "Course 1"
-    And I follow "Test lesson"
+    When I am on the "Test lesson" "lesson activity" page logged in as student1
     And I press "Next page"
     And I press "Next page"
     Then I should see "Congratulations - end of lesson reached"
     And I should not see "View grades"
 
   Scenario: No link to gradebook if no gradereport/user:view capability
-    Given I log out
-    And I log in as "admin"
-    And I set the following system permissions of "Student" role:
-      | capability | permission |
-      | gradereport/user:view | Prevent |
-    And I log out
-    When I log in as "student1"
-    And I follow "Course 1"
-    And I follow "Test lesson"
+    Given the following "role capability" exists:
+      | role                  | student |
+      | gradereport/user:view | prevent |
+    When I am on the "Test lesson" "lesson activity" page logged in as student1
     And I press "Next page"
     And I press "Next page"
     Then I should see "Congratulations - end of lesson reached"

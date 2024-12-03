@@ -19,6 +19,9 @@ require_once($CFG->dirroot.'/mod/feedback/item/feedback_item_form_class.php');
 class feedback_multichoicerated_form extends feedback_item_form {
     protected $type = "multichoicerated";
 
+    /** @var object Form element */
+    protected $values;
+
     public function definition() {
         $item = $this->_customdata['item'];
         $common = $this->_customdata['common'];
@@ -54,12 +57,12 @@ class feedback_multichoicerated_form extends feedback_item_form {
                             get_string('adjustment', 'feedback').'&nbsp;',
                             array(0 => get_string('vertical', 'feedback'),
                                   1 => get_string('horizontal', 'feedback')));
-        $mform->disabledIf('horizontal', 'subtype', 'eq', 'd');
+        $mform->hideIf('horizontal', 'subtype', 'eq', 'd');
 
         $mform->addElement('selectyesno',
                            'hidenoselect',
                            get_string('hide_no_select_option', 'feedback'));
-        $mform->disabledIf('hidenoselect', 'subtype', 'eq', 'd');
+        $mform->hideIf('hidenoselect', 'subtype', 'eq', 'd');
 
         $mform->addElement('selectyesno',
                            'ignoreempty',

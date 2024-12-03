@@ -50,7 +50,9 @@ $PAGE->set_title($course->shortname.': '.$strurls);
 $PAGE->set_heading($course->fullname);
 $PAGE->navbar->add($strurls);
 echo $OUTPUT->header();
-echo $OUTPUT->heading($strurls);
+if (!$PAGE->has_secondary_navigation()) {
+    echo $OUTPUT->heading($strurls);
+}
 
 if (!$urls = get_all_instances_in_course('url', $course)) {
     notice(get_string('thereareno', 'moodle', $strurls), "$CFG->wwwroot/course/view.php?id=$course->id");
@@ -94,7 +96,7 @@ foreach ($urls as $url) {
     $icon = '';
     if (!empty($cm->icon)) {
         // each url has an icon in 2.0
-        $icon = '<img src="'.$OUTPUT->pix_url($cm->icon).'" class="activityicon" alt="'.get_string('modulename', $cm->modname).'" /> ';
+        $icon = $OUTPUT->pix_icon($cm->icon, get_string('modulename', $cm->modname)) . ' ';
     }
 
     $class = $url->visible ? '' : 'class="dimmed"'; // hidden modules are dimmed

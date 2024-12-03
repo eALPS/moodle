@@ -25,6 +25,9 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+use mod_assign\output\assign_header;
+use core_external\external_value;
+
 // File areas for file feedback assignment.
 define('ASSIGNFEEDBACK_FILE_FILEAREA', 'feedback_files');
 define('ASSIGNFEEDBACK_FILE_BATCH_FILEAREA', 'feedback_files_batch');
@@ -430,14 +433,18 @@ class assign_feedback_file extends assign_feedback_plugin {
         return true;
     }
 
-    /**
-     * Return a list of the batch grading operations performed by this plugin.
-     * This plugin supports batch upload files and upload zip.
-     *
-     * @return array The list of batch grading operations
-     */
-    public function get_grading_batch_operations() {
-        return array('uploadfiles'=>get_string('uploadfiles', 'assignfeedback_file'));
+    public function get_grading_batch_operation_details() {
+        global $OUTPUT;
+
+        return [
+            (object) [
+                'key' => 'uploadfiles',
+                'label' => get_string('batchoperationuploadfiles', 'assignfeedback_file'),
+                'icon' => $OUTPUT->pix_icon('i/upload', ''),
+                'confirmationtitle' => get_string('uploadfiles', 'assignfeedback_file'),
+                'confirmationquestion' => get_string('batchoperationconfirmuploadfiles', 'assignfeedback_file'),
+            ],
+        ];
     }
 
     /**
@@ -474,7 +481,8 @@ class assign_feedback_file extends assign_feedback_plugin {
                                                    $this->assignment->get_course_context()),
                                                    $this->assignment->is_blind_marking(),
                                                    $this->assignment->get_uniqueid_for_user($user->id),
-                                                   get_extra_user_fields($this->assignment->get_context()));
+                                                   // TODO Does not support custom user profile fields (MDL-70456).
+                                                   \core_user\fields::get_identity_fields($this->assignment->get_context(), false));
             $usershtml .= $this->assignment->get_renderer()->render($usersummary);
             $usercount += 1;
         }
@@ -690,7 +698,7 @@ class assign_feedback_file extends assign_feedback_plugin {
     /**
      * Return a description of external params suitable for uploading a feedback file from a webservice.
      *
-     * @return external_description|null
+     * @return \core_external\external_description|null
      */
     public function get_external_parameters() {
         return array(

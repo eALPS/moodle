@@ -49,50 +49,76 @@ $PAGE->set_pagelayout('admin');
 
 $returnurl = new moodle_url('/group/index.php', array('id'=>$id));
 
-$mform_post = new groups_import_form(null, array('id'=>$id));
+$importform = new groups_import_form(null, ['id' => $id]);
 
 // If a file has been uploaded, then process it
-if ($mform_post->is_cancelled()) {
+if ($importform->is_cancelled()) {
     redirect($returnurl);
 
-} else if ($mform_post->get_data()) {
+} else if ($formdata = $importform->get_data()) {
     echo $OUTPUT->header();
 
-    $csv_encode = '/\&\#44/';
-    if (isset($CFG->CSV_DELIMITER)) {
-        $csv_delimiter = $CFG->CSV_DELIMITER;
+    $text = $importform->get_file_content('userfile');
+    $text = preg_replace('!\r\n?!', "\n", $text);
 
-        if (isset($CFG->CSV_ENCODE)) {
-            $csv_encode = '/\&\#' . $CFG->CSV_ENCODE . '/';
-        }
-    } else {
-        $csv_delimiter = ",";
+    require_once($CFG->libdir . '/csvlib.class.php');
+    $importid = csv_import_reader::get_new_iid('groupimport');
+    $csvimport = new csv_import_reader($importid, 'groupimport');
+    $delimiter = $formdata->delimiter_name;
+    $encoding = $formdata->encoding;
+    $readcount = $csvimport->load_csv_content($text, $encoding, $delimiter);
+
+    if ($readcount === false) {
+        throw new \moodle_exception('csvfileerror', 'error', $PAGE->url, $csvimport->get_error());
+    } else if ($readcount == 0) {
+        throw new \moodle_exception('csvemptyfile', 'error', $PAGE->url, $csvimport->get_error());
+    } else if ($readcount == 1) {
+        throw new \moodle_exception('csvnodata', 'error', $PAGE->url);
     }
 
-    $text = $mform_post->get_file_content('userfile');
-    $text = preg_replace('!\r\n?!',"\n",$text);
+    $csvimport->init();
 
-    $rawlines = explode("\n", $text);
     unset($text);
 
     // make arrays of valid fields for error checking
     $required = array("groupname" => 1);
-    $optionalDefaults = array("lang" => 1);
+    $optionaldefaults = array("lang" => 1);
     $optional = array("coursename" => 1,
             "idnumber" => 1,
             "groupidnumber" => 1,
             "description" => 1,
             "enrolmentkey" => 1,
-            "groupingname" => 1);
+            "groupingname" => 1,
+            "enablemessaging" => 1,
+        );
+    // Check custom fields from group and grouping.
+    $customfields = \core_group\customfield\group_handler::create()->get_fields();
+    $customfieldnames = [];
+    foreach ($customfields as $customfield) {
+        $controller = \core_customfield\data_controller::create(0, null, $customfield);
+        $customfieldnames['customfield_' . $customfield->get('shortname')] = 1;
+    }
+    $customfields = \core_group\customfield\grouping_handler::create()->get_fields();
+    $groupingcustomfields = [];
+    foreach ($customfields as $customfield) {
+        $controller = \core_customfield\data_controller::create(0, null, $customfield);
+        $groupingcustomfieldname = 'grouping_customfield_' . $customfield->get('shortname');
+        $customfieldnames[$groupingcustomfieldname] = 1;
+        $groupingcustomfields[$groupingcustomfieldname] = 'customfield_' . $customfield->get('shortname');
+    }
 
     // --- get header (field names) ---
-    $header = explode($csv_delimiter, array_shift($rawlines));
-    // check for valid field names
+    // Using get_columns() ensures the Byte Order Mark is removed.
+    $header = $csvimport->get_columns();
+
+    // Check for valid field names.
     foreach ($header as $i => $h) {
-        $h = trim($h); $header[$i] = $h; // remove whitespace
-        if (!(isset($required[$h]) or isset($optionalDefaults[$h]) or isset($optional[$h]))) {
-                print_error('invalidfieldname', 'error', 'import.php?id='.$id, $h);
-            }
+        // Remove whitespace.
+        $h = trim($h);
+        $header[$i] = $h;
+        if (!isset($required[$h]) && !isset($optionaldefaults[$h]) && !isset($optional[$h]) && !isset($customfieldnames[$h])) {
+            throw new \moodle_exception('invalidfieldname', 'error', $PAGE->url, $h);
+        }
         if (isset($required[$h])) {
             $required[$h] = 2;
         }
@@ -100,32 +126,28 @@ if ($mform_post->is_cancelled()) {
     // check for required fields
     foreach ($required as $key => $value) {
         if ($value < 2) {
-            print_error('fieldrequired', 'error', 'import.php?id='.$id, $key);
+            throw new \moodle_exception('fieldrequired', 'error', $PAGE->url, $key);
         }
     }
     $linenum = 2; // since header is line 1
 
-    foreach ($rawlines as $rawline) {
+    while ($line = $csvimport->next()) {
 
         $newgroup = new stdClass();//to make Martin happy
-        foreach ($optionalDefaults as $key => $value) {
+        foreach ($optionaldefaults as $key => $value) {
             $newgroup->$key = current_language(); //defaults to current language
         }
-        //Note: commas within a field should be encoded as &#44 (for comma separated csv files)
-        //Note: semicolon within a field should be encoded as &#59 (for semicolon separated csv files)
-        $line = explode($csv_delimiter, $rawline);
         foreach ($line as $key => $value) {
-            //decode encoded commas
-            $record[$header[$key]] = preg_replace($csv_encode, $csv_delimiter, trim($value));
+            $record[$header[$key]] = trim($value);
         }
-        if ($record[$header[0]]) {
+        if (trim(implode($line)) !== '') {
             // add a new group to the database
 
             // add fields to object $user
             foreach ($record as $name => $value) {
                 // check for required values
                 if (isset($required[$name]) and !$value) {
-                    print_error('missingfield', 'error', 'import.php?id='.$id, $name);
+                    throw new \moodle_exception('missingfield', 'error', $PAGE->url, $name);
                 } else if ($name == "groupname") {
                     $newgroup->name = $value;
                 } else {
@@ -134,28 +156,32 @@ if ($mform_post->is_cancelled()) {
                 }
             }
 
-            if (isset($newgroup->idnumber)){
+            if (isset($newgroup->idnumber) && strlen($newgroup->idnumber)) {
                 //if idnumber is set, we use that.
                 //unset invalid courseid
                 if (!$mycourse = $DB->get_record('course', array('idnumber'=>$newgroup->idnumber))) {
                     echo $OUTPUT->notification(get_string('unknowncourseidnumber', 'error', $newgroup->idnumber));
                     unset($newgroup->courseid);//unset so 0 doesn't get written to database
+                } else {
+                    $newgroup->courseid = $mycourse->id;
                 }
-                $newgroup->courseid = $mycourse->id;
 
-            } else if (isset($newgroup->coursename)){
+            } else if (isset($newgroup->coursename) && strlen($newgroup->coursename)) {
                 //else use course short name to look up
                 //unset invalid coursename (if no id)
-                if (!$mycourse = $DB->get_record('course', array('shortname', $newgroup->coursename))) {
+                if (!$mycourse = $DB->get_record('course', array('shortname' => $newgroup->coursename))) {
                     echo $OUTPUT->notification(get_string('unknowncourse', 'error', $newgroup->coursename));
                     unset($newgroup->courseid);//unset so 0 doesn't get written to database
+                } else {
+                    $newgroup->courseid = $mycourse->id;
                 }
-                $newgroup->courseid = $mycourse->id;
 
             } else {
                 //else use use current id
                 $newgroup->courseid = $id;
             }
+            unset($newgroup->idnumber);
+            unset($newgroup->coursename);
 
             //if courseid is set
             if (isset($newgroup->courseid)) {
@@ -196,12 +222,18 @@ if ($mform_post->is_cancelled()) {
                     }
 
                     // Add group to grouping
-                    if (!empty($newgroup->groupingname) || is_numeric($newgroup->groupingname)) {
+                    if (isset($newgroup->groupingname) && strlen($newgroup->groupingname)) {
                         $groupingname = $newgroup->groupingname;
                         if (! $groupingid = groups_get_grouping_by_name($newgroup->courseid, $groupingname)) {
                             $data = new stdClass();
                             $data->courseid = $newgroup->courseid;
                             $data->name = $groupingname;
+                            // Add customfield if exists.
+                            foreach ($header as $fieldname) {
+                                if (isset($customfieldnames[$fieldname]) && isset($newgroup->$fieldname)) {
+                                    $data->{$groupingcustomfields[$groupingcustomfieldname]} = $newgroup->$fieldname;
+                                }
+                            }
                             if ($groupingid = groups_create_grouping($data)) {
                                 echo $OUTPUT->notification(get_string('groupingaddedsuccesfully', 'group', $groupingname), 'notifysuccess');
                             } else {
@@ -226,6 +258,7 @@ if ($mform_post->is_cancelled()) {
         }
     }
 
+    $csvimport->close();
     echo $OUTPUT->single_button($returnurl, get_string('continue'), 'get');
     echo $OUTPUT->footer();
     die;
@@ -234,5 +267,5 @@ if ($mform_post->is_cancelled()) {
 /// Print the form
 echo $OUTPUT->header();
 echo $OUTPUT->heading_with_help($strimportgroups, 'importgroups', 'core_group');
-$mform_post ->display();
+$importform->display();
 echo $OUTPUT->footer();

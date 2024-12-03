@@ -56,8 +56,8 @@ $params = array(// run id param
                 // parents/children functions of it will be shown.
                 'func' => array(XHPROF_STRING_PARAM, ''),
 
-                // image type, can be 'jpg', 'gif', 'ps', 'png'
-                'type' => array(XHPROF_STRING_PARAM, 'png'),
+                // image type, can be 'jpg', 'gif', 'ps', 'png', 'svg'
+                'type' => array(XHPROF_STRING_PARAM, 'svg'),
 
                 // only functions whose exclusive time over the total time
                 // is larger than this threshold will be shown.
@@ -90,6 +90,7 @@ if (!array_key_exists($type, $xhprof_legal_image_types)) {
 // Start moodle modification: use own XHProfRuns implementation.
 // $xhprof_runs_impl = new XHProfRuns_Default();
 $xhprof_runs_impl = new moodle_xhprofrun();
+$xhprof_runs_impl->set_reducedata(xhprof_get_bool_param('reducedata', 1)); // Reduce data by default.
 // End moodle modification.
 
 if (!empty($run)) {

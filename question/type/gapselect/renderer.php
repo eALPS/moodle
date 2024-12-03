@@ -44,10 +44,10 @@ class qtype_gapselect_renderer extends qtype_elements_embedded_in_question_text_
 
         $value = $qa->get_last_qt_var($question->field($place));
 
-        $attributes = array(
-            'id'     => $this->box_id($qa, 'p' . $place),
-             'class' => 'custom-select place' . $place,
-        );
+        $attributes = [
+            'id' => $this->box_id($qa, 'p' . $place),
+            'class' => 'custom-select place' . $place,
+        ];
         $groupclass = 'group' . $group;
 
         if ($options->readonly) {
@@ -55,9 +55,9 @@ class qtype_gapselect_renderer extends qtype_elements_embedded_in_question_text_
         }
 
         $orderedchoices = $question->get_ordered_choices($group);
-        $selectoptions = array();
+        $selectoptions = [];
         foreach ($orderedchoices as $orderedchoicevalue => $orderedchoice) {
-            $selectoptions[$orderedchoicevalue] = $orderedchoice->text;
+            $selectoptions[$orderedchoicevalue] = format_string($orderedchoice->text);
         }
 
         $feedbackimage = '';
@@ -71,18 +71,12 @@ class qtype_gapselect_renderer extends qtype_elements_embedded_in_question_text_
             }
         }
 
-        // If the text is short use non-breaking space.
-        $choose = '&nbsp;';
-        foreach ($selectoptions as $key => $text) {
-            if (strlen(get_string('choosedots')) / 2 <= strlen($text)) {
-                $choose = get_string('choosedots');
-                break;
-            }
-        }
-
-        $selecthtml = html_writer::select($selectoptions, $qa->get_qt_field_name($fieldname),
-                $value, $choose, $attributes) . ' ' . $feedbackimage;
-        return html_writer::tag('span', $selecthtml, array('class' => 'control '.$groupclass));
+        $label = $options->add_question_identifier_to_label(get_string('blanknumber', 'qtype_gapselect', $place));
+        // Use non-breaking space instead of 'Choose...'.
+        $selecthtml = html_writer::label($label, $attributes['id'], false, ['class' => 'sr-only']);
+        $selecthtml .= html_writer::select($selectoptions, $qa->get_qt_field_name($fieldname),
+                        $value, '&nbsp;', $attributes) . ' ' . $feedbackimage;
+        return html_writer::tag('span', $selecthtml, ['class' => 'control '.$groupclass]);
     }
 
 }

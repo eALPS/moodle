@@ -14,16 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace qtype_calculatedsimple;
 
-/**
- * Unit tests for the simple calculated question definition class.
- *
- * @package    qtype
- * @subpackage calculatedsimple
- * @copyright  2011 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
+use question_attempt_step;
+use question_classified_response;
+use question_state;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -34,12 +29,13 @@ require_once($CFG->dirroot . '/question/engine/tests/helpers.php');
 /**
  * Unit tests for qtype_calculatedsimple_definition.
  *
+ * @package    qtype_calculatedsimple
  * @copyright  2011 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class qtype_calculatedsimple_question_test extends advanced_testcase {
-    public function test_is_complete_response() {
-        $question = test_question_maker::make_question('calculatedsimple');
+class question_test extends \advanced_testcase {
+    public function test_is_complete_response(): void {
+        $question = \test_question_maker::make_question('calculatedsimple');
 
         $this->assertFalse($question->is_complete_response(array()));
         $this->assertTrue($question->is_complete_response(array('answer' => '0')));
@@ -47,8 +43,8 @@ class qtype_calculatedsimple_question_test extends advanced_testcase {
         $this->assertFalse($question->is_complete_response(array('answer' => 'test')));
     }
 
-    public function test_is_gradable_response() {
-        $question = test_question_maker::make_question('calculatedsimple');
+    public function test_is_gradable_response(): void {
+        $question = \test_question_maker::make_question('calculatedsimple');
 
         $this->assertFalse($question->is_gradable_response(array()));
         $this->assertTrue($question->is_gradable_response(array('answer' => '0')));
@@ -56,8 +52,8 @@ class qtype_calculatedsimple_question_test extends advanced_testcase {
         $this->assertTrue($question->is_gradable_response(array('answer' => 'test')));
     }
 
-    public function test_grading() {
-        $question = test_question_maker::make_question('calculatedsimple');
+    public function test_grading(): void {
+        $question = \test_question_maker::make_question('calculatedsimple');
         $question->start_attempt(new question_attempt_step(), 1);
         $values = $question->vs->get_values();
 
@@ -67,8 +63,8 @@ class qtype_calculatedsimple_question_test extends advanced_testcase {
                 $question->grade_response(array('answer' => $values['a'] + $values['b'])));
     }
 
-    public function test_get_correct_response() {
-        $question = test_question_maker::make_question('calculatedsimple');
+    public function test_get_correct_response(): void {
+        $question = \test_question_maker::make_question('calculatedsimple');
         $question->start_attempt(new question_attempt_step(), 1);
         $values = $question->vs->get_values();
 
@@ -76,8 +72,8 @@ class qtype_calculatedsimple_question_test extends advanced_testcase {
                 $question->get_correct_response());
     }
 
-    public function test_get_question_summary() {
-        $question = test_question_maker::make_question('calculatedsimple');
+    public function test_get_question_summary(): void {
+        $question = \test_question_maker::make_question('calculatedsimple');
         $question->start_attempt(new question_attempt_step(), 1);
         $values = $question->vs->get_values();
 
@@ -85,16 +81,16 @@ class qtype_calculatedsimple_question_test extends advanced_testcase {
         $this->assertEquals('What is ' . $values['a'] . ' + ' . $values['b'] . '?', $qsummary);
     }
 
-    public function test_summarise_response() {
-        $question = test_question_maker::make_question('calculatedsimple');
+    public function test_summarise_response(): void {
+        $question = \test_question_maker::make_question('calculatedsimple');
         $question->start_attempt(new question_attempt_step(), 1);
         $values = $question->vs->get_values();
 
         $this->assertEquals('3.1', $question->summarise_response(array('answer' => '3.1')));
     }
 
-    public function test_classify_response() {
-        $question = test_question_maker::make_question('calculatedsimple');
+    public function test_classify_response(): void {
+        $question = \test_question_maker::make_question('calculatedsimple');
         $question->start_attempt(new question_attempt_step(), 1);
         $values = $question->vs->get_values();
 

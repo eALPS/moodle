@@ -24,9 +24,15 @@
  * @since      Moodle 2.9
  */
 
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
+use core_external\external_warnings;
+
 defined('MOODLE_INTERNAL') || die;
 
-require_once("$CFG->libdir/externallib.php");
 require_once("$CFG->libdir/completionlib.php");
 
 /**
@@ -75,6 +81,7 @@ class core_completion_external extends external_api {
 
         $context = context_module::instance($cmid);
         self::validate_context($context);
+        require_capability('moodle/course:togglecompletion', $context);
 
         list($course, $cm) = get_course_and_cm_from_cmid($cmid);
 
@@ -115,6 +122,86 @@ class core_completion_external extends external_api {
     }
 
     /**
+     * Describes the parameters for override_activity_completion_status.
+     *
+     * @return external_external_function_parameters
+     * @since Moodle 3.4
+     */
+    public static function override_activity_completion_status_parameters() {
+        return new external_function_parameters (
+            array(
+                'userid' => new external_value(PARAM_INT, 'user id'),
+                'cmid' => new external_value(PARAM_INT, 'course module id'),
+                'newstate' => new external_value(PARAM_INT, 'the new activity completion state'),
+            )
+        );
+    }
+
+    /**
+     * Update completion status for a user in an activity.
+     * @param  int $userid    User id
+     * @param  int $cmid      Course module id
+     * @param  int $newstate  Activity completion
+     * @return array          Array containing the current (updated) completion status.
+     * @since Moodle 3.4
+     * @throws moodle_exception
+     */
+    public static function override_activity_completion_status($userid, $cmid, $newstate) {
+        // Validate and normalize parameters.
+        $params = self::validate_parameters(self::override_activity_completion_status_parameters(),
+            array('userid' => $userid, 'cmid' => $cmid, 'newstate' => $newstate));
+        $userid = $params['userid'];
+        $cmid = $params['cmid'];
+        $newstate = $params['newstate'];
+
+        $context = context_module::instance($cmid);
+        self::validate_context($context);
+
+        list($course, $cm) = get_course_and_cm_from_cmid($cmid);
+
+        // Set up completion object and check it is enabled.
+        $completion = new completion_info($course);
+        if (!$completion->is_enabled()) {
+            throw new moodle_exception('completionnotenabled', 'completion');
+        }
+
+        // Update completion state and get the new state back.
+        $completion->update_state($cm, $newstate, $userid, true);
+        $completiondata = $completion->get_data($cm, false, $userid);
+
+        // Return the current state of completion.
+        return [
+            'cmid' => $completiondata->coursemoduleid,
+            'userid' => $completiondata->userid,
+            'state' => $completiondata->completionstate,
+            'timecompleted' => $completiondata->timemodified,
+            'overrideby' => $completiondata->overrideby,
+            'tracking' => $completion->is_enabled($cm)
+        ];
+    }
+
+    /**
+     * Describes the override_activity_completion_status return value.
+     *
+     * @return external_single_structure
+     * @since Moodle 3.4
+     */
+    public static function override_activity_completion_status_returns() {
+
+        return new external_single_structure(
+            array(
+                'cmid' => new external_value(PARAM_INT, 'The course module id'),
+                'userid' => new external_value(PARAM_INT, 'The user id to which the completion info belongs'),
+                'state'   => new external_value(PARAM_INT, 'The current completion state.'),
+                'timecompleted' => new external_value(PARAM_INT, 'time of completion'),
+                'overrideby' => new external_value(PARAM_INT, 'The user id who has overriden the status, or null'),
+                'tracking'      => new external_value(PARAM_INT, 'type of tracking:
+                                                                    0 means none, 1 manual, 2 automatic'),
+            )
+        );
+    }
+
+    /**
      * Returns description of method parameters
      *
      * @return external_function_parameters
@@ -140,7 +227,7 @@ class core_completion_external extends external_api {
      * @throws moodle_exception
      */
     public static function get_activities_completion_status($courseid, $userid) {
-        global $CFG, $USER;
+        global $CFG, $USER, $PAGE;
         require_once($CFG->libdir . '/grouplib.php');
 
         $warnings = array();
@@ -169,35 +256,27 @@ class core_completion_external extends external_api {
 
         $completion = new completion_info($course);
         $activities = $completion->get_activities();
-        $progresses = $completion->get_progress_all();
-        $userprogress = $progresses[$user->id];
 
         $results = array();
         foreach ($activities as $activity) {
-
             // Check if current user has visibility on this activity.
             if (!$activity->uservisible) {
                 continue;
             }
-
-            // Get progress information and state.
-            if (array_key_exists($activity->id, $userprogress->progress)) {
-                $thisprogress  = $userprogress->progress[$activity->id];
-                $state         = $thisprogress->completionstate;
-                $timecompleted = $thisprogress->timemodified;
-            } else {
-                $state = COMPLETION_INCOMPLETE;
-                $timecompleted = 0;
-            }
-
-            $results[] = array(
-                       'cmid'          => $activity->id,
-                       'modname'       => $activity->modname,
-                       'instance'      => $activity->instance,
-                       'state'         => $state,
-                       'timecompleted' => $timecompleted,
-                       'tracking'      => $activity->completion
+            // Get progress information and state (we must use get_data because it works for all user roles in course).
+            $exporter = new \core_completion\external\completion_info_exporter(
+                $course,
+                $activity,
+                $userid,
             );
+            $renderer = $PAGE->get_renderer('core');
+            $data = (array)$exporter->export($renderer);
+            $results[] = array_merge([
+                'cmid'     => $activity->id,
+                'modname'  => $activity->modname,
+                'instance' => $activity->instance,
+                'tracking' => $activity->completion,
+            ], $data);
         }
 
         $results = array(
@@ -210,7 +289,7 @@ class core_completion_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 2.9
      */
     public static function get_activities_completion_status_returns() {
@@ -218,17 +297,62 @@ class core_completion_external extends external_api {
             array(
                 'statuses' => new external_multiple_structure(
                     new external_single_structure(
-                        array(
-                            'cmid'          => new external_value(PARAM_INT, 'comment ID'),
+                        [
+                            'cmid'          => new external_value(PARAM_INT, 'course module ID'),
                             'modname'       => new external_value(PARAM_PLUGIN, 'activity module name'),
                             'instance'      => new external_value(PARAM_INT, 'instance ID'),
-                            'state'         => new external_value(PARAM_INT, 'completion state value:
-                                                                    0 means incomplete, 1 complete,
-                                                                    2 complete pass, 3 complete fail'),
-                            'timecompleted' => new external_value(PARAM_INT, 'timestamp for completed activity'),
-                            'tracking'      => new external_value(PARAM_INT, 'type of tracking:
-                                                                    0 means none, 1 manual, 2 automatic'),
-                        ), 'Activity'
+                            'state'         => new external_value(PARAM_INT,
+                                "Completion state value:
+                                    0 means incomplete,
+                                    1 complete,
+                                    2 complete pass,
+                                    3 complete fail"
+                                ),
+                            'timecompleted' => new external_value(PARAM_INT,
+                                'timestamp for completed activity'),
+                            'tracking'      => new external_value(PARAM_INT,
+                                "type of tracking:
+                                    0 means none,
+                                    1 manual,
+                                    2 automatic"
+                                ),
+                            'overrideby' => new external_value(PARAM_INT,
+                                'The user id who has overriden the status, or null', VALUE_OPTIONAL),
+                            'valueused' => new external_value(PARAM_BOOL,
+                                'Whether the completion status affects the availability of another activity.',
+                                VALUE_OPTIONAL),
+                            'hascompletion' => new external_value(PARAM_BOOL,
+                                'Whether this activity module has completion enabled',
+                                VALUE_OPTIONAL),
+                            'isautomatic' => new external_value(PARAM_BOOL,
+                                'Whether this activity module instance tracks completion automatically.',
+                                VALUE_OPTIONAL),
+                            'istrackeduser' => new external_value(PARAM_BOOL,
+                                'Whether completion is being tracked for this user.',
+                                VALUE_OPTIONAL),
+                            'uservisible' => new external_value(PARAM_BOOL,
+                                'Whether this activity is visible to the user.',
+                                VALUE_OPTIONAL),
+                            'details' => new external_multiple_structure(
+                                new external_single_structure(
+                                    [
+                                        'rulename' => new external_value(PARAM_TEXT, 'Rule name'),
+                                        'rulevalue' => new external_single_structure(
+                                            [
+                                                'status' => new external_value(PARAM_INT, 'Completion status'),
+                                                'description' => new external_value(PARAM_TEXT, 'Completion description'),
+                                            ]
+                                        )
+                                    ]
+                                ),
+                                'Completion status details',
+                                VALUE_DEFAULT,
+                                []
+                            ),
+                            'isoverallcomplete' => new external_value(PARAM_BOOL,
+                                'Whether the overall completion state of this course module should be marked as complete or not.',
+                                VALUE_OPTIONAL),
+                        ], 'Activity'
                     ), 'List of activities status'
                 ),
                 'warnings' => new external_warnings()
@@ -345,7 +469,7 @@ class core_completion_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 2.9
      */
     public static function get_course_completion_status_returns() {

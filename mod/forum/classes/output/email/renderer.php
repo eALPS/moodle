@@ -55,11 +55,20 @@ class renderer extends \mod_forum_renderer {
      * @return string
      */
     public function format_message_text($cm, $post) {
-        $message = file_rewrite_pluginfile_urls($post->message, 'pluginfile.php',
-            \context_module::instance($cm->id)->id,
-            'mod_forum', 'post', $post->id);
+        $context = \context_module::instance($cm->id);
+        $message = file_rewrite_pluginfile_urls(
+            $post->message,
+            'pluginfile.php',
+            $context->id,
+            'mod_forum',
+            'post',
+            $post->id,
+            [
+                'includetoken' => true,
+            ]);
         $options = new \stdClass();
         $options->para = true;
+        $options->context = $context;
         return format_text($message, $post->messageformat, $options);
     }
 

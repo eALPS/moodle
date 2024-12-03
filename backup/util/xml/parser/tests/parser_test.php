@@ -15,11 +15,21 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Test progressive_parser and progressive_parser_processor tests.
+ *
  * @package   core_backup
- * @category  phpunit
+ * @category  test
  * @copyright 2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+
+namespace core_backup;
+
+use grouped_parser_processor;
+use progressive_parser;
+use progressive_parser_exception;
+use progressive_parser_processor;
+use simplified_parser_processor;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -30,15 +40,20 @@ require_once($CFG->dirroot . '/backup/util/xml/parser/processors/progressive_par
 require_once($CFG->dirroot . '/backup/util/xml/parser/processors/simplified_parser_processor.class.php');
 require_once($CFG->dirroot . '/backup/util/xml/parser/processors/grouped_parser_processor.class.php');
 
-/*
- * progressive_parser and progressive_parser_processor tests
+/**
+ * Test progressive_parser and progressive_parser_processor tests.
+ *
+ * @package   core_backup
+ * @category  test
+ * @copyright 2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class progressive_parser_test extends advanced_testcase {
+class parser_test extends \advanced_testcase {
 
     /*
      * test progressive_parser public methods
      */
-    function test_parser_public_api() {
+    function test_parser_public_api(): void {
         global $CFG;
         // Instantiate progressive_parser
         $pp = new progressive_parser();
@@ -50,7 +65,7 @@ class progressive_parser_test extends advanced_testcase {
         try {
             $pp->process();
             $this->assertTrue(false);
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof progressive_parser_exception);
             $this->assertEquals($e->errorcode, 'undefined_parser_processor');
         }
@@ -62,16 +77,16 @@ class progressive_parser_test extends advanced_testcase {
         try {
             $pp->process();
             $this->assertTrue(false);
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof progressive_parser_exception);
             $this->assertEquals($e->errorcode, 'undefined_xml_to_parse');
         }
 
         // Assign *invalid* processor to parser
         try {
-            $pp->set_processor(new stdClass());
+            $pp->set_processor(new \stdClass());
             $this->assertTrue(false);
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof progressive_parser_exception);
             $this->assertEquals($e->errorcode, 'invalid_parser_processor');
         }
@@ -87,7 +102,7 @@ class progressive_parser_test extends advanced_testcase {
         try {
             $pp->set_file($CFG->dirroot . '/backup/util/xml/parser/tests/fixtures/test0.xml');
             $this->assertTrue(false);
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof progressive_parser_exception);
             $this->assertEquals($e->errorcode, 'invalid_file_to_parse');
         }
@@ -103,7 +118,7 @@ class progressive_parser_test extends advanced_testcase {
         try {
             $pp->set_contents('');
             $this->assertTrue(false);
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof progressive_parser_exception);
             $this->assertEquals($e->errorcode, 'invalid_contents_to_parse');
         }
@@ -129,7 +144,7 @@ class progressive_parser_test extends advanced_testcase {
         $pp->set_file($CFG->dirroot . '/backup/util/xml/parser/tests/fixtures/test2.xml');
         try {
             $pp->process();
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof progressive_parser_exception);
             $this->assertEquals($e->errorcode, 'xml_parsing_error');
         }
@@ -143,7 +158,7 @@ class progressive_parser_test extends advanced_testcase {
         try { // Second process, will throw exception
             $pp->process();
             $this->assertTrue(false);
-        } catch (exception $e) {
+        } catch (\Exception $e) {
             $this->assertTrue($e instanceof progressive_parser_exception);
             $this->assertEquals($e->errorcode, 'progressive_parser_already_used');
         }
@@ -153,7 +168,7 @@ class progressive_parser_test extends advanced_testcase {
      * test progressive_parser parsing results using testing_parser_processor and test1.xml
      * auto-described file from fixtures
      */
-    function test_parser_results() {
+    function test_parser_results(): void {
         global $CFG;
         // Instantiate progressive_parser
         $pp = new progressive_parser();
@@ -178,7 +193,7 @@ class progressive_parser_test extends advanced_testcase {
      * test progressive_parser parsing results using simplified_parser_processor and test4.xml
      * (one simple glossary backup file example)
      */
-    function test_simplified_parser_results() {
+    function test_simplified_parser_results(): void {
         global $CFG;
         // Instantiate progressive_parser
         $pp =  new progressive_parser();
@@ -338,7 +353,7 @@ class progressive_parser_test extends advanced_testcase {
      * with one real fragment of one backup 1.9 file, where some problems
      * were found by David, hence we honor him in the name of the test ;-)
      */
-    function test_simplified_david_backup19_file_fragment() {
+    function test_simplified_david_backup19_file_fragment(): void {
         global $CFG;
         // Instantiate progressive_parser
         $pp =  new progressive_parser();
@@ -404,7 +419,7 @@ class progressive_parser_test extends advanced_testcase {
      * test progressive_parser parsing results using grouped_parser_processor and test4.xml
      * (one simple glossary backup file example)
      */
-    function test_grouped_parser_results() {
+    function test_grouped_parser_results(): void {
         global $CFG;
         // Instantiate progressive_parser
         $pp =  new progressive_parser();
@@ -580,7 +595,7 @@ class progressive_parser_test extends advanced_testcase {
      * with one real fragment of one backup 1.9 file, where some problems
      * were found by David, hence we honor him in the name of the test ;-)
      */
-    function test_grouped_david_backup19_file_fragment() {
+    function test_grouped_david_backup19_file_fragment(): void {
         global $CFG;
         // Instantiate progressive_parser
         $pp =  new progressive_parser();
@@ -634,7 +649,7 @@ class progressive_parser_test extends advanced_testcase {
 
     /**
      */
-    function test_grouped_at_empty_node() {
+    function test_grouped_at_empty_node(): void {
         global $CFG;
         // Instantiate progressive_parser.
         $pp =  new progressive_parser();

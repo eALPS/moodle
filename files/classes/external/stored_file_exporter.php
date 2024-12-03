@@ -14,15 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Class for exporting stored_file data.
- *
- * @package    core_files
- * @copyright  2015 Frédéric Massart - FMCorz.net
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
 namespace core_files\external;
-defined('MOODLE_INTERNAL') || die();
 
 use coding_exception;
 use core_text;
@@ -40,6 +32,9 @@ use stored_file;
  */
 class stored_file_exporter extends \core\external\exporter {
 
+    /** @var int Length of the shortened filename */
+    protected const FILENAMESHORT_LENGTH = 25;
+
     /** @var stored_file */
     protected $file;
 
@@ -54,6 +49,7 @@ class stored_file_exporter extends \core\external\exporter {
         $data->filepath = $file->get_filepath();
         $data->filename = $file->get_filename();
         $data->isdir = $file->is_directory();
+        $data->isimage = $file->is_valid_image();
         $data->timemodified = $file->get_timemodified();
         $data->timecreated = $file->get_timecreated();
         $data->filesize = $file->get_filesize();
@@ -94,6 +90,9 @@ class stored_file_exporter extends \core\external\exporter {
             'isdir' => array(
                 'type' => PARAM_BOOL
             ),
+            'isimage' => array(
+                'type' => PARAM_BOOL
+            ),
             'timemodified' => array(
                 'type' => PARAM_INT
             ),
@@ -123,9 +122,6 @@ class stored_file_exporter extends \core\external\exporter {
             'icon' => array(
                 'type' => PARAM_RAW,
             ),
-            'iconurl' => array(
-                'type' => PARAM_URL,
-            ),
             'timecreatedformatted' => array(
                 'type' => PARAM_RAW
             ),
@@ -141,13 +137,16 @@ class stored_file_exporter extends \core\external\exporter {
     protected function get_other_values(renderer_base $output) {
         $filename = $this->file->get_filename();
         $filenameshort = $filename;
-        if (core_text::strlen($filename) > 25) {
-            $filenameshort = shorten_text(substr($filename, 0, -4), 21, true, '..');
-            $filenameshort .= substr($filename, -4);
+
+        if (core_text::strlen($filename) > static::FILENAMESHORT_LENGTH) {
+            $extension = pathinfo($filename, PATHINFO_EXTENSION);
+            $extensionlength = core_text::strlen($extension) + 1;
+            $filenameshort = core_text::substr($filename, 0, -$extensionlength);
+            $filenameshort = shorten_text($filenameshort, static::FILENAMESHORT_LENGTH - $extensionlength, true, '..') .
+                ".{$extension}";
         }
 
         $icon = $this->file->is_directory() ? file_folder_icon() : file_file_icon($this->file);
-        $iconurl = $output->pix_url($icon, 'core');
 
         $url = moodle_url::make_pluginfile_url(
             $this->file->get_contextid(),
@@ -163,7 +162,6 @@ class stored_file_exporter extends \core\external\exporter {
             'filenameshort' => $filenameshort,
             'filesizeformatted' => display_size((int) $this->file->get_filesize()),
             'icon' => $icon,
-            'iconurl' => $iconurl->out(false),
             'url' => $url->out(false),
             'timecreatedformatted' => userdate($this->file->get_timecreated()),
             'timemodifiedformatted' => userdate($this->file->get_timemodified()),

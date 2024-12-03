@@ -18,92 +18,35 @@
  * Code quality unit tests that are fast enough to run each time.
  *
  * @package    core
- * @category   phpunit
+ * @category   test
  * @copyright  (C) 2013 onwards Remote Learner.net Inc (http://www.remote-learner.net)
  * @author     Brent Boghosian (brent.boghosian@remote-learner.net)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+namespace core;
+
+use context;
+use context_helper;
+
 defined('MOODLE_INTERNAL') || die();
 
-/**
- * Bogus custom context class for testing
- */
-class context_bogus1 extends context {
-    /**
-     * Returns the most relevant URL for this context.
-     *
-     * @return moodle_url
-     */
-    public function get_url() {
-        global $ME;
-        return $ME;
-    }
-
-    /**
-     * Returns array of relevant context capability records.
-     *
-     * @return array
-     */
-    public function get_capabilities() {
-        return array();
-    }
-}
 
 /**
- * Bogus custom context class for testing
+ * Code quality unit tests that are fast enough to run each time.
+ *
+ * @package    core
+ * @category   test
+ * @copyright  (C) 2013 onwards Remote Learner.net Inc (http://www.remote-learner.net)
+ * @author     Brent Boghosian (brent.boghosian@remote-learner.net)
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class context_bogus2 extends context {
-    /**
-     * Returns the most relevant URL for this context.
-     *
-     * @return moodle_url
-     */
-    public function get_url() {
-        global $ME;
-        return $ME;
-    }
-
-    /**
-     * Returns array of relevant context capability records.
-     *
-     * @return array
-     */
-    public function get_capabilities() {
-        return array();
-    }
-}
-
-/**
- * Bogus custom context class for testing
- */
-class context_bogus3 extends context {
-    /**
-     * Returns the most relevant URL for this context.
-     *
-     * @return moodle_url
-     */
-    public function get_url() {
-        global $ME;
-        return $ME;
-    }
-
-    /**
-     * Returns array of relevant context capability records.
-     *
-     * @return array
-     */
-    public function get_capabilities() {
-        return array();
-    }
-}
-
-class customcontext_testcase extends advanced_testcase {
+class customcontext_test extends \advanced_testcase {
 
     /**
      * Perform setup before every test. This tells Moodle's phpunit to reset the database after every test.
      */
-    protected function setUp() {
+    protected function setUp(): void {
         parent::setUp();
         $this->resetAfterTest(true);
     }
@@ -111,7 +54,7 @@ class customcontext_testcase extends advanced_testcase {
     /**
      * Test case for custom context classes
      */
-    public function test_customcontexts() {
+    public function test_customcontexts(): void {
         global $CFG;
         static $customcontexts = array(
             11 => 'context_bogus1',
@@ -134,5 +77,104 @@ class customcontext_testcase extends advanced_testcase {
         set_config('custom_context_classes', ($existingcustomcontexts === false) ? null : $existingcustomcontexts);
         initialise_cfg();
         context_helper::reset_levels();
+    }
+}
+
+/**
+ * Bogus custom context class for testing
+ */
+class context_bogus1 extends context {
+    /**
+     * Returns context shortname.
+     *
+     * @return string
+     */
+    public static function get_short_name(): string {
+        return 'bogus1';
+    }
+
+    /**
+     * Returns the most relevant URL for this context.
+     *
+     * @return \moodle_url
+     */
+    public function get_url() {
+        global $ME;
+        return $ME;
+    }
+
+    /**
+     * Returns array of relevant context capability records.
+     *
+     * @return array
+     */
+    public function get_capabilities(string $sort = self::DEFAULT_CAPABILITY_SORT) {
+        return array();
+    }
+}
+
+/**
+ * Bogus custom context class for testing
+ */
+class context_bogus2 extends context {
+    /**
+     * Returns context shortname.
+     *
+     * @return string
+     */
+    public static function get_short_name(): string {
+        return 'bogus2';
+    }
+
+    /**
+     * Returns the most relevant URL for this context.
+     *
+     * @return \moodle_url
+     */
+    public function get_url() {
+        global $ME;
+        return $ME;
+    }
+
+    /**
+     * Returns array of relevant context capability records.
+     *
+     * @return array
+     */
+    public function get_capabilities(string $sort = self::DEFAULT_CAPABILITY_SORT) {
+        return array();
+    }
+}
+
+/**
+ * Bogus custom context class for testing
+ */
+class context_bogus3 extends context {
+    /**
+     * Returns context shortname.
+     *
+     * @return string
+     */
+    public static function get_short_name(): string {
+        return 'bogus3';
+    }
+
+    /**
+     * Returns the most relevant URL for this context.
+     *
+     * @return \moodle_url
+     */
+    public function get_url() {
+        global $ME;
+        return $ME;
+    }
+
+    /**
+     * Returns array of relevant context capability records.
+     *
+     * @return array
+     */
+    public function get_capabilities(string $sort = self::DEFAULT_CAPABILITY_SORT) {
+        return array();
     }
 }

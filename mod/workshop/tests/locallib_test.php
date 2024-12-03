@@ -22,6 +22,12 @@
  * @copyright  2009 David Mudrak <david.mudrak@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+namespace mod_workshop;
+
+use testable_workshop;
+use workshop;
+use workshop_example_assessment;
+use workshop_example_reference_assessment;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -33,7 +39,7 @@ require_once(__DIR__ . '/fixtures/testable.php');
 /**
  * Test cases for the internal workshop api
  */
-class mod_workshop_internal_api_testcase extends advanced_testcase {
+class locallib_test extends \advanced_testcase {
 
     /** @var object */
     protected $course;
@@ -42,7 +48,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
     protected $workshop;
 
     /** setup testing environment */
-    protected function setUp() {
+    protected function setUp(): void {
         parent::setUp();
         $this->setAdminUser();
         $this->course = $this->getDataGenerator()->create_course();
@@ -51,12 +57,12 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop = new testable_workshop($workshop, $cm, $this->course);
     }
 
-    protected function tearDown() {
+    protected function tearDown(): void {
         $this->workshop = null;
         parent::tearDown();
     }
 
-    public function test_aggregate_submission_grades_process_notgraded() {
+    public function test_aggregate_submission_grades_process_notgraded(): void {
         $this->resetAfterTest(true);
 
         // fixture set-up
@@ -67,7 +73,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_submission_grades_process($batch);
     }
 
-    public function test_aggregate_submission_grades_process_single() {
+    public function test_aggregate_submission_grades_process_single(): void {
         $this->resetAfterTest(true);
 
         // fixture set-up
@@ -79,7 +85,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_submission_grades_process($batch);
     }
 
-    public function test_aggregate_submission_grades_process_null_doesnt_influence() {
+    public function test_aggregate_submission_grades_process_null_doesnt_influence(): void {
         $this->resetAfterTest(true);
 
         // fixture set-up
@@ -92,7 +98,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_submission_grades_process($batch);
     }
 
-    public function test_aggregate_submission_grades_process_weighted_single() {
+    public function test_aggregate_submission_grades_process_weighted_single(): void {
         $this->resetAfterTest(true);
 
         // fixture set-up
@@ -104,7 +110,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_submission_grades_process($batch);
     }
 
-    public function test_aggregate_submission_grades_process_mean() {
+    public function test_aggregate_submission_grades_process_mean(): void {
         $this->resetAfterTest(true);
 
         // fixture set-up
@@ -119,7 +125,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_submission_grades_process($batch);
     }
 
-    public function test_aggregate_submission_grades_process_mean_changed() {
+    public function test_aggregate_submission_grades_process_mean_changed(): void {
         $this->resetAfterTest(true);
 
         // fixture set-up
@@ -134,7 +140,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_submission_grades_process($batch);
     }
 
-    public function test_aggregate_submission_grades_process_mean_nochange() {
+    public function test_aggregate_submission_grades_process_mean_nochange(): void {
         $this->resetAfterTest(true);
 
         // fixture set-up
@@ -148,7 +154,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_submission_grades_process($batch);
     }
 
-    public function test_aggregate_submission_grades_process_rounding() {
+    public function test_aggregate_submission_grades_process_rounding(): void {
         $this->resetAfterTest(true);
 
         // fixture set-up
@@ -162,7 +168,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_submission_grades_process($batch);
     }
 
-    public function test_aggregate_submission_grades_process_weighted_mean() {
+    public function test_aggregate_submission_grades_process_weighted_mean(): void {
         $this->resetAfterTest(true);
 
         // fixture set-up
@@ -177,7 +183,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_submission_grades_process($batch);
     }
 
-    public function test_aggregate_grading_grades_process_nograding() {
+    public function test_aggregate_grading_grades_process_nograding(): void {
         $this->resetAfterTest(true);
         // fixture set-up
         $batch = array();
@@ -188,14 +194,14 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_grading_grades_process($batch);
     }
 
-    public function test_aggregate_grading_grades_process_single_grade_new() {
+    public function test_aggregate_grading_grades_process_single_grade_new(): void {
         $this->resetAfterTest(true);
         // fixture set-up
         $batch = array();
         $batch[] = (object)array('reviewerid'=>3, 'gradinggrade'=>82.87670, 'gradinggradeover'=>null, 'aggregationid'=>null, 'aggregatedgrade'=>null);
         // expectation
         $now = time();
-        $expected = new stdclass();
+        $expected = new \stdClass();
         $expected->workshopid = $this->workshop->id;
         $expected->userid = 3;
         $expected->gradinggrade = 82.87670;
@@ -205,7 +211,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_grading_grades_process($batch, $now);
     }
 
-    public function test_aggregate_grading_grades_process_single_grade_update() {
+    public function test_aggregate_grading_grades_process_single_grade_update(): void {
         $this->resetAfterTest(true);
         // fixture set-up
         $batch = array();
@@ -216,7 +222,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_grading_grades_process($batch);
     }
 
-    public function test_aggregate_grading_grades_process_single_grade_uptodate() {
+    public function test_aggregate_grading_grades_process_single_grade_uptodate(): void {
         $this->resetAfterTest(true);
         // fixture set-up
         $batch = array();
@@ -227,7 +233,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_grading_grades_process($batch);
     }
 
-    public function test_aggregate_grading_grades_process_single_grade_overridden() {
+    public function test_aggregate_grading_grades_process_single_grade_overridden(): void {
         $this->resetAfterTest(true);
         // fixture set-up
         $batch = array();
@@ -238,7 +244,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_grading_grades_process($batch);
     }
 
-    public function test_aggregate_grading_grades_process_multiple_grades_new() {
+    public function test_aggregate_grading_grades_process_multiple_grades_new(): void {
         $this->resetAfterTest(true);
         // fixture set-up
         $batch = array();
@@ -247,7 +253,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $batch[] = (object)array('reviewerid'=>5, 'gradinggrade'=>51.12000, 'gradinggradeover'=>null, 'aggregationid'=>null, 'aggregatedgrade'=>null);
         // expectation
         $now = time();
-        $expected = new stdclass();
+        $expected = new \stdClass();
         $expected->workshopid = $this->workshop->id;
         $expected->userid = 5;
         $expected->gradinggrade = 79.3066;
@@ -257,7 +263,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_grading_grades_process($batch, $now);
     }
 
-    public function test_aggregate_grading_grades_process_multiple_grades_update() {
+    public function test_aggregate_grading_grades_process_multiple_grades_update(): void {
         $this->resetAfterTest(true);
         // fixture set-up
         $batch = array();
@@ -270,7 +276,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_grading_grades_process($batch);
     }
 
-    public function test_aggregate_grading_grades_process_multiple_grades_overriden() {
+    public function test_aggregate_grading_grades_process_multiple_grades_overriden(): void {
         $this->resetAfterTest(true);
         // fixture set-up
         $batch = array();
@@ -283,7 +289,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_grading_grades_process($batch);
     }
 
-    public function test_aggregate_grading_grades_process_multiple_grades_one_missing() {
+    public function test_aggregate_grading_grades_process_multiple_grades_one_missing(): void {
         $this->resetAfterTest(true);
         // fixture set-up
         $batch = array();
@@ -296,7 +302,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_grading_grades_process($batch);
     }
 
-    public function test_aggregate_grading_grades_process_multiple_grades_missing_overridden() {
+    public function test_aggregate_grading_grades_process_multiple_grades_missing_overridden(): void {
         $this->resetAfterTest(true);
         // fixture set-up
         $batch = array();
@@ -309,7 +315,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->workshop->aggregate_grading_grades_process($batch);
     }
 
-    public function test_percent_to_value() {
+    public function test_percent_to_value(): void {
         $this->resetAfterTest(true);
         // fixture setup
         $total = 185;
@@ -320,33 +326,29 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->assertEquals($part, $total * $percent / 100);
     }
 
-    /**
-     * @expectedException coding_exception
-     */
-    public function test_percent_to_value_negative() {
+    public function test_percent_to_value_negative(): void {
         $this->resetAfterTest(true);
         // fixture setup
         $total = 185;
         $percent = -7.098;
 
         // exercise SUT
+        $this->expectException(\coding_exception::class);
         $part = workshop::percent_to_value($percent, $total);
     }
 
-    /**
-     * @expectedException coding_exception
-     */
-    public function test_percent_to_value_over_hundred() {
+    public function test_percent_to_value_over_hundred(): void {
         $this->resetAfterTest(true);
         // fixture setup
         $total = 185;
         $percent = 121.08;
 
         // exercise SUT
+        $this->expectException(\coding_exception::class);
         $part = workshop::percent_to_value($percent, $total);
     }
 
-    public function test_lcm() {
+    public function test_lcm(): void {
         $this->resetAfterTest(true);
         // fixture setup + exercise SUT + verify in one step
         $this->assertEquals(workshop::lcm(1,4), 4);
@@ -356,7 +358,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->assertEquals(workshop::lcm(6,4), 12);
     }
 
-    public function test_lcm_array() {
+    public function test_lcm_array(): void {
         $this->resetAfterTest(true);
         // fixture setup
         $numbers = array(5,3,15);
@@ -366,7 +368,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->assertEquals($lcm, 15);
     }
 
-    public function test_prepare_example_assessment() {
+    public function test_prepare_example_assessment(): void {
         $this->resetAfterTest(true);
         // fixture setup
         $fakerawrecord = (object)array(
@@ -386,7 +388,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $a = $this->workshop->prepare_example_assessment($fakerawrecord);
         // verify
         $this->assertTrue($a instanceof workshop_example_assessment);
-        $this->assertTrue($a->url instanceof moodle_url);
+        $this->assertTrue($a->url instanceof \moodle_url);
 
         // modify setup
         $fakerawrecord->weight = 1;
@@ -395,7 +397,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $a = $this->workshop->prepare_example_assessment($fakerawrecord);
     }
 
-    public function test_prepare_example_reference_assessment() {
+    public function test_prepare_example_reference_assessment(): void {
         global $USER;
         $this->resetAfterTest(true);
         // fixture setup
@@ -431,7 +433,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
      * This includes the groupingid option (when group mode is in use), and
      * standard activity restrictions using the availability API.
      */
-    public function test_user_restrictions() {
+    public function test_user_restrictions(): void {
         global $DB, $CFG;
 
         $this->resetAfterTest();
@@ -466,7 +468,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
 
         // The existing workshop doesn't have any restrictions, so user lists
         // should include all three users.
-        $allusers = get_enrolled_users(context_course::instance($courseid));
+        $allusers = get_enrolled_users(\context_course::instance($courseid));
         $result = $this->workshop->get_grouped($allusers);
         $this->assertCount(4, $result);
         $users = array_keys($result[0]);
@@ -540,7 +542,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
     /**
      * Test the workshop reset feature.
      */
-    public function test_reset_phase() {
+    public function test_reset_phase(): void {
         $this->resetAfterTest(true);
 
         $this->workshop->switch_phase(workshop::PHASE_CLOSED);
@@ -565,7 +567,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
     /**
      * Test deleting assessments related data on workshop reset.
      */
-    public function test_reset_userdata_assessments() {
+    public function test_reset_userdata_assessments(): void {
         global $DB;
         $this->resetAfterTest(true);
 
@@ -599,7 +601,7 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
     /**
      * Test deleting submissions related data on workshop reset.
      */
-    public function test_reset_userdata_submissions() {
+    public function test_reset_userdata_submissions(): void {
         global $DB;
         $this->resetAfterTest(true);
 
@@ -633,103 +635,47 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
     /**
      * Test normalizing list of extensions.
      */
-    public function test_normalize_file_extensions() {
+    public function test_normalize_file_extensions(): void {
         $this->resetAfterTest(true);
 
-        $this->assertSame(['.odt'], workshop::normalize_file_extensions('odt'));
-        $this->assertSame(['.odt'], workshop::normalize_file_extensions('.odt'));
-        $this->assertSame(['.odt'], workshop::normalize_file_extensions('.ODT'));
-        $this->assertSame(['.doc', '.jpg', '.mp3'], workshop::normalize_file_extensions('doc, jpg, mp3'));
-        $this->assertSame(['.doc', '.jpg', '.mp3'], workshop::normalize_file_extensions(['.doc', '.jpg', '.mp3']));
-        $this->assertSame(['.doc', '.jpg', '.mp3'], workshop::normalize_file_extensions('doc, *.jpg, mp3'));
-        $this->assertSame(['.doc', '.jpg', '.mp3'], workshop::normalize_file_extensions(['doc ', ' JPG ', '.mp3']));
-        $this->assertSame(['.rtf', '.pdf', '.docx'], workshop::normalize_file_extensions("RTF,.pdf\n...DocX,,,;\rPDF\trtf ...Rtf"));
-        $this->assertSame(['.tgz', '.tar.gz'], workshop::normalize_file_extensions('tgz,TAR.GZ tar.gz .tar.gz tgz TGZ'));
-        $this->assertSame(['.notebook'], workshop::normalize_file_extensions('"Notebook":notebook;NOTEBOOK;,\'NoTeBook\''));
-        $this->assertSame([], workshop::normalize_file_extensions(''));
-        $this->assertSame([], workshop::normalize_file_extensions([]));
-        $this->assertSame(['.0'], workshop::normalize_file_extensions(0));
-        $this->assertSame(['.0'], workshop::normalize_file_extensions('0'));
-        $this->assertSame(['.odt'], workshop::normalize_file_extensions('*.odt'));
-        $this->assertSame([], workshop::normalize_file_extensions('.'));
-        $this->assertSame(['.foo'], workshop::normalize_file_extensions('. foo'));
-        $this->assertSame([], workshop::normalize_file_extensions('*'));
-        $this->assertSame([], workshop::normalize_file_extensions('*~'));
-        $this->assertSame(['.pdf', '.ps'], workshop::normalize_file_extensions('* pdf *.ps foo* *bar .r??'));
+        workshop::normalize_file_extensions('');
+        $this->assertDebuggingCalled();
     }
 
     /**
      * Test cleaning list of extensions.
      */
-    public function test_clean_file_extensions() {
+    public function test_clean_file_extensions(): void {
         $this->resetAfterTest(true);
 
-        $this->assertSame('', workshop::clean_file_extensions(''));
-        $this->assertSame('', workshop::clean_file_extensions(null));
-        $this->assertSame('', workshop::clean_file_extensions(' '));
-        $this->assertSame('0', workshop::clean_file_extensions(0));
-        $this->assertSame('0', workshop::clean_file_extensions('0'));
-        $this->assertSame('doc, rtf, pdf', workshop::clean_file_extensions('*.Doc, RTF, PDF, .rtf'.PHP_EOL.'PDF '));
-        $this->assertSame('doc, rtf, pdf', 'doc, rtf, pdf');
+        workshop::clean_file_extensions('');
+        $this->assertDebuggingCalledCount(2);
     }
 
     /**
      * Test validation of the list of file extensions.
      */
-    public function test_invalid_file_extensions() {
+    public function test_invalid_file_extensions(): void {
         $this->resetAfterTest(true);
 
-        $this->assertSame([], workshop::invalid_file_extensions('', ''));
-        $this->assertSame([], workshop::invalid_file_extensions('', '.doc'));
-        $this->assertSame([], workshop::invalid_file_extensions('odt', ''));
-        $this->assertSame([], workshop::invalid_file_extensions('odt', '*'));
-        $this->assertSame([], workshop::invalid_file_extensions('odt', 'odt'));
-        $this->assertSame([], workshop::invalid_file_extensions('doc, odt, pdf', ['pdf', 'doc', 'odt']));
-        $this->assertSame([], workshop::invalid_file_extensions(['doc', 'odt', 'PDF'], ['.doc', '.pdf', '.odt']));
-        $this->assertSame([], workshop::invalid_file_extensions('*~ .docx, Odt PDF :doc .pdf', '*.docx *.odt *.pdf *.doc'));
-        $this->assertSame(['.00001-wtf-is-this'], workshop::invalid_file_extensions('docx tgz .00001-wtf-is-this', 'tgz docx'));
-        $this->assertSame(['.foobar', '.wtfisthis'], workshop::invalid_file_extensions(['.pdf', '.foobar', 'wtfisthis'], 'pdf'));
-        $this->assertSame([], workshop::invalid_file_extensions('', ''));
-        $this->assertSame(['.odt'], workshop::invalid_file_extensions(['.PDF', 'PDF', '.ODT'], 'jpg pdf png gif'));
-        $this->assertSame(['.odt'], workshop::invalid_file_extensions(['.PDF', 'PDF', '.ODT'], '.jpg,.pdf,  .png .gif'));
-        $this->assertSame(['.exe', '.bat'], workshop::invalid_file_extensions(['.exe', '.odt', '.bat', ''], 'odt'));
+        workshop::invalid_file_extensions('', '');
+        $this->assertDebuggingCalledCount(3);
     }
 
     /**
      * Test checking file name against the list of allowed extensions.
      */
-    public function test_is_allowed_file_type() {
+    public function test_is_allowed_file_type(): void {
         $this->resetAfterTest(true);
 
-        $this->assertTrue(workshop::is_allowed_file_type('README.txt', ''));
-        $this->assertTrue(workshop::is_allowed_file_type('README.txt', ['']));
-        $this->assertFalse(workshop::is_allowed_file_type('README.txt', '0'));
-
-        $this->assertFalse(workshop::is_allowed_file_type('README.txt', 'xt'));
-        $this->assertFalse(workshop::is_allowed_file_type('README.txt', 'old.txt'));
-
-        $this->assertTrue(workshop::is_allowed_file_type('README.txt', 'txt'));
-        $this->assertTrue(workshop::is_allowed_file_type('README.txt', '.TXT'));
-        $this->assertTrue(workshop::is_allowed_file_type('README.TXT', 'txt'));
-        $this->assertTrue(workshop::is_allowed_file_type('README.txt', '.txt .md'));
-        $this->assertTrue(workshop::is_allowed_file_type('README.txt', 'HTML TXT DOC RTF'));
-        $this->assertTrue(workshop::is_allowed_file_type('README.txt', ['HTML', '...TXT', 'DOC', 'RTF']));
-
-        $this->assertTrue(workshop::is_allowed_file_type('C:\Moodle\course-data.tar.gz', 'gzip zip 7z tar.gz'));
-        $this->assertFalse(workshop::is_allowed_file_type('C:\Moodle\course-data.tar.gz', 'gzip zip 7z tar'));
-        $this->assertTrue(workshop::is_allowed_file_type('~/course-data.tar.gz', 'gzip zip 7z gz'));
-        $this->assertFalse(workshop::is_allowed_file_type('~/course-data.tar.gz', 'gzip zip 7z'));
-
-        $this->assertFalse(workshop::is_allowed_file_type('Alice on the beach.jpg.exe', 'png gif jpg bmp'));
-        $this->assertFalse(workshop::is_allowed_file_type('xfiles.exe.jpg', 'exe com bat sh'));
-        $this->assertFalse(workshop::is_allowed_file_type('solution.odt~', 'odt, xls'));
-        $this->assertTrue(workshop::is_allowed_file_type('solution.odt~', 'odt, odt~'));
+        workshop::is_allowed_file_type('', '');
+        $this->assertDebuggingCalledCount(2);
     }
 
     /**
      * Test workshop::check_group_membership() functionality.
      */
-    public function test_check_group_membership() {
+    public function test_check_group_membership(): void {
         global $DB, $CFG;
 
         $this->resetAfterTest();
@@ -831,5 +777,97 @@ class mod_workshop_internal_api_testcase extends advanced_testcase {
         $this->assertFalse($workshop3->check_group_membership($student1->id));
         $this->assertTrue($workshop3->check_group_membership($student2->id));
         $this->assertFalse($workshop3->check_group_membership($student3->id));
+    }
+
+    /**
+     * Test init_initial_bar function.
+     *
+     * @covers \workshop::init_initial_bar
+     */
+    public function test_init_initial_bar(): void {
+        global $SESSION;
+        $this->resetAfterTest();
+
+        $_GET['ifirst'] = 'A';
+        $_GET['ilast'] = 'B';
+        $contextid = $this->workshop->context->id;
+
+        $this->workshop->init_initial_bar();
+        $initialbarprefs = $this->get_initial_bar_prefs_property();
+
+        $this->assertEquals('A', $initialbarprefs['i_first']);
+        $this->assertEquals('B', $initialbarprefs['i_last']);
+        $this->assertEquals('A', $SESSION->mod_workshop->initialbarprefs['id-' . $contextid]['i_first']);
+        $this->assertEquals('B', $SESSION->mod_workshop->initialbarprefs['id-' . $contextid]['i_last']);
+
+        $_GET['ifirst'] = null;
+        $_GET['ilast'] = null;
+        $SESSION->mod_workshop->initialbarprefs['id-' . $contextid]['i_first'] = 'D';
+        $SESSION->mod_workshop->initialbarprefs['id-' . $contextid]['i_last'] = 'E';
+
+        $this->workshop->init_initial_bar();
+        $initialbarprefs = $this->get_initial_bar_prefs_property();
+
+        $this->assertEquals('D', $initialbarprefs['i_first']);
+        $this->assertEquals('E', $initialbarprefs['i_last']);
+    }
+
+    /**
+     * Test empty init_initial_bar
+     *
+     * @covers \workshop::init_initial_bar
+     */
+    public function test_init_initial_bar_empty(): void {
+        $this->resetAfterTest();
+
+        $this->workshop->init_initial_bar();
+        $initialbarprefs = $this->get_initial_bar_prefs_property();
+
+        $this->assertEmpty($initialbarprefs);
+    }
+
+    /**
+     * Test get_initial_first function
+     *
+     * @covers \workshop::get_initial_first
+     */
+    public function test_get_initial_first(): void {
+        $this->resetAfterTest();
+        $this->workshop->init_initial_bar();
+        $this->assertEquals(null, $this->workshop->get_initial_first());
+
+        $_GET['ifirst'] = 'D';
+        $this->workshop->init_initial_bar();
+        $this->assertEquals('D', $this->workshop->get_initial_first());
+    }
+
+    /**
+     * Test get_initial_last function
+     *
+     * @covers \workshop::get_initial_last
+     */
+    public function test_get_initial_last(): void {
+        $this->resetAfterTest();
+        $this->workshop->init_initial_bar();
+        $this->assertEquals(null, $this->workshop->get_initial_last());
+
+        $_GET['ilast'] = 'D';
+        $this->workshop->init_initial_bar();
+        $this->assertEquals('D', $this->workshop->get_initial_last());
+    }
+
+    /**
+     * Get the protected propertyinitialbarprefs from workshop class.
+     *
+     * @coversNothing
+     * @return array initialbarspref property. eg ['i_first' => 'A', 'i_last' => 'B']
+     */
+    private function get_initial_bar_prefs_property(): array {
+
+        $reflector = new \ReflectionObject($this->workshop);
+        $initialbarprefsprop = $reflector->getProperty('initialbarprefs');
+        $initialbarprefs = $initialbarprefsprop->getValue($this->workshop);
+
+        return $initialbarprefs;
     }
 }

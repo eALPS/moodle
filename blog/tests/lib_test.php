@@ -22,6 +22,9 @@
  * @copyright  2009 Nicolas Connault
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+namespace core_blog;
+
+use blog_listing;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -32,7 +35,7 @@ require_once($CFG->dirroot . '/blog/lib.php');
 /**
  * Test functions that rely on the DB tables
  */
-class core_blog_lib_testcase extends advanced_testcase {
+class lib_test extends \advanced_testcase {
 
     private $courseid;
     private $cmid;
@@ -41,7 +44,7 @@ class core_blog_lib_testcase extends advanced_testcase {
     private $tagid;
     private $postid;
 
-    protected function setUp() {
+    protected function setUp(): void {
         global $DB;
         parent::setUp();
 
@@ -54,7 +57,7 @@ class core_blog_lib_testcase extends advanced_testcase {
         $this->assertNotEmpty($page);
 
         // Create default group.
-        $group = new stdClass();
+        $group = new \stdClass();
         $group->courseid = $course->id;
         $group->name = 'ANON';
         $group->id = $DB->insert_record('groups', $group);
@@ -71,7 +74,7 @@ class core_blog_lib_testcase extends advanced_testcase {
             'rawname' => 'Testtagname', 'isstandard' => 1));
 
         // Create default post.
-        $post = new stdClass();
+        $post = new \stdClass();
         $post->userid = $user->id;
         $post->groupid = $group->id;
         $post->content = 'test post content text';
@@ -88,7 +91,7 @@ class core_blog_lib_testcase extends advanced_testcase {
     }
 
 
-    public function test_overrides() {
+    public function test_overrides(): void {
         global $SITE;
 
         // Try all the filters at once: Only the entry filter is active.
@@ -129,25 +132,25 @@ class core_blog_lib_testcase extends advanced_testcase {
     // The following series of 'test_blog..' functions correspond to the blog_get_headers() function within blog/lib.php.
     // Some cases are omitted due to the optional_param variables used.
 
-    public function test_blog_get_headers_case_1() {
+    public function test_blog_get_headers_case_1(): void {
         global $CFG, $PAGE, $OUTPUT;
         $blogheaders = blog_get_headers();
         $this->assertEquals($blogheaders['heading'], get_string('siteblogheading', 'blog'));
     }
 
-    public function test_blog_get_headers_case_6() {
+    public function test_blog_get_headers_case_6(): void {
         global $CFG, $PAGE, $OUTPUT;
         $blogheaders = blog_get_headers($this->courseid, null, $this->userid);
         $this->assertNotEquals($blogheaders['heading'], '');
     }
 
-    public function test_blog_get_headers_case_7() {
+    public function test_blog_get_headers_case_7(): void {
         global $CFG, $PAGE, $OUTPUT;
         $blogheaders = blog_get_headers(null, $this->groupid);
         $this->assertNotEquals($blogheaders['heading'], '');
     }
 
-    public function test_blog_get_headers_case_10() {
+    public function test_blog_get_headers_case_10(): void {
         global $CFG, $PAGE, $OUTPUT;
         $blogheaders = blog_get_headers($this->courseid);
         $this->assertNotEquals($blogheaders['heading'], '');
@@ -156,7 +159,7 @@ class core_blog_lib_testcase extends advanced_testcase {
     /**
      * Tests the core_blog_myprofile_navigation() function.
      */
-    public function test_core_blog_myprofile_navigation() {
+    public function test_core_blog_myprofile_navigation(): void {
         global $USER;
 
         // Set up the test.
@@ -170,16 +173,15 @@ class core_blog_lib_testcase extends advanced_testcase {
 
         // Check the node tree is correct.
         core_blog_myprofile_navigation($tree, $USER, $iscurrentuser, $course);
-        $reflector = new ReflectionObject($tree);
+        $reflector = new \ReflectionObject($tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayHasKey('blogs', $nodes->getValue($tree));
     }
 
     /**
      * Tests the core_blog_myprofile_navigation() function as a guest.
      */
-    public function test_core_blog_myprofile_navigation_as_guest() {
+    public function test_core_blog_myprofile_navigation_as_guest(): void {
         global $USER;
 
         // Set up the test.
@@ -192,16 +194,15 @@ class core_blog_lib_testcase extends advanced_testcase {
 
         // Check the node tree is correct.
         core_blog_myprofile_navigation($tree, $USER, $iscurrentuser, $course);
-        $reflector = new ReflectionObject($tree);
+        $reflector = new \ReflectionObject($tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayNotHasKey('blogs', $nodes->getValue($tree));
     }
 
     /**
      * Tests the core_blog_myprofile_navigation() function when blogs are disabled.
      */
-    public function test_core_blog_myprofile_navigation_blogs_disabled() {
+    public function test_core_blog_myprofile_navigation_blogs_disabled(): void {
         global $USER;
 
         // Set up the test.
@@ -215,19 +216,18 @@ class core_blog_lib_testcase extends advanced_testcase {
 
         // Check the node tree is correct.
         core_blog_myprofile_navigation($tree, $USER, $iscurrentuser, $course);
-        $reflector = new ReflectionObject($tree);
+        $reflector = new \ReflectionObject($tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayNotHasKey('blogs', $nodes->getValue($tree));
     }
 
-    public function test_blog_get_listing_course() {
+    public function test_blog_get_listing_course(): void {
         $this->setAdminUser();
-        $coursecontext = context_course::instance($this->courseid);
+        $coursecontext = \context_course::instance($this->courseid);
         $anothercourse = $this->getDataGenerator()->create_course();
 
         // Add blog associations with a course.
-        $blog = new blog_entry($this->postid);
+        $blog = new \blog_entry($this->postid);
         $blog->add_association($coursecontext->id);
 
         // There is one entry associated with a course.
@@ -251,14 +251,14 @@ class core_blog_lib_testcase extends advanced_testcase {
         $this->assertCount(1, $bloglisting->get_entries());
     }
 
-    public function test_blog_get_listing_module() {
+    public function test_blog_get_listing_module(): void {
         $this->setAdminUser();
-        $coursecontext = context_course::instance($this->courseid);
-        $contextmodule = context_module::instance($this->cmid);
+        $coursecontext = \context_course::instance($this->courseid);
+        $contextmodule = \context_module::instance($this->cmid);
         $anothermodule = $this->getDataGenerator()->create_module('page', array('course' => $this->courseid));
 
         // Add blog associations with a course.
-        $blog = new blog_entry($this->postid);
+        $blog = new \blog_entry($this->postid);
         $blog->add_association($contextmodule->id);
 
         // There is no entry associated with a course.

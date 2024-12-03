@@ -168,7 +168,7 @@ class HTML_Common {
 
         if (is_array($attributes)) {
             foreach ($attributes as $key => $value) {
-                $strAttr .= ' ' . $key . '="' . htmlspecialchars($value) . '"';
+                $strAttr .= ' ' . $key . '="' . htmlspecialchars($value ?? '') . '"';
             }
         }
         return $strAttr;
@@ -274,7 +274,7 @@ class HTML_Common {
      * @param     string    $attr   Attribute name
      * @since     1.5
      * @access    public
-     * @return    void
+     * @return    mixed
      * @throws
      */
     function getAttribute($attr)

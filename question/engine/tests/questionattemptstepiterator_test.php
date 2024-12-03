@@ -14,15 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * This file contains tests for the question_attempt_step_iterator class.
- *
- * @package    moodlecore
- * @subpackage questionengine
- * @copyright  2009 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+namespace core_question;
 
+use question_attempt_step;
+use testable_question_attempt;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -30,19 +25,21 @@ global $CFG;
 require_once(__DIR__ . '/../lib.php');
 require_once(__DIR__ . '/helpers.php');
 
-
 /**
  * Unit tests for the {@link question_attempt_step_iterator} class.
  *
+ * @package    core_question
+ * @category   test
  * @copyright  2009 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class question_attempt_step_iterator_test extends advanced_testcase {
+class questionattemptstepiterator_test extends \advanced_testcase {
     private $qa;
     private $iterator;
 
-    protected function setUp() {
-        $question = test_question_maker::make_question('description');
+    protected function setUp(): void {
+        parent::setUp();
+        $question = \test_question_maker::make_question('description');
         $this->qa = new testable_question_attempt($question, 0);
         for ($i = 0; $i < 3; $i++) {
             $step = new question_attempt_step(array('i' => $i));
@@ -51,12 +48,13 @@ class question_attempt_step_iterator_test extends advanced_testcase {
         $this->iterator = $this->qa->get_step_iterator();
     }
 
-    protected function tearDown() {
+    protected function tearDown(): void {
         $this->qa = null;
         $this->iterator = null;
+        parent::tearDown();
     }
 
-    public function test_foreach_loop() {
+    public function test_foreach_loop(): void {
         $i = 0;
         foreach ($this->iterator as $key => $step) {
             $this->assertEquals($i, $key);
@@ -65,7 +63,7 @@ class question_attempt_step_iterator_test extends advanced_testcase {
         }
     }
 
-    public function test_foreach_loop_add_step_during() {
+    public function test_foreach_loop_add_step_during(): void {
         $i = 0;
         foreach ($this->iterator as $key => $step) {
             $this->assertEquals($i, $key);
@@ -79,7 +77,7 @@ class question_attempt_step_iterator_test extends advanced_testcase {
         $this->assertEquals(4, $i);
     }
 
-    public function test_reverse_foreach_loop() {
+    public function test_reverse_foreach_loop(): void {
         $i = 2;
         foreach ($this->qa->get_reverse_step_iterator() as $key => $step) {
             $this->assertEquals($i, $key);
@@ -88,57 +86,49 @@ class question_attempt_step_iterator_test extends advanced_testcase {
         }
     }
 
-    public function test_offsetExists_before_start() {
+    public function test_offsetExists_before_start(): void {
         $this->assertFalse(isset($this->iterator[-1]));
     }
 
-    public function test_offsetExists_at_start() {
+    public function test_offsetExists_at_start(): void {
         $this->assertTrue(isset($this->iterator[0]));
     }
 
-    public function test_offsetExists_at_endt() {
+    public function test_offsetExists_at_endt(): void {
         $this->assertTrue(isset($this->iterator[2]));
     }
 
-    public function test_offsetExists_past_end() {
+    public function test_offsetExists_past_end(): void {
         $this->assertFalse(isset($this->iterator[3]));
     }
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_offsetGet_before_start() {
+    public function test_offsetGet_before_start(): void {
+        $this->expectException(\moodle_exception::class);
         $step = $this->iterator[-1];
     }
 
-    public function test_offsetGet_at_start() {
+    public function test_offsetGet_at_start(): void {
         $step = $this->iterator[0];
         $this->assertEquals(0, $step->get_qt_var('i'));
     }
 
-    public function test_offsetGet_at_end() {
+    public function test_offsetGet_at_end(): void {
         $step = $this->iterator[2];
         $this->assertEquals(2, $step->get_qt_var('i'));
     }
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_offsetGet_past_end() {
+    public function test_offsetGet_past_end(): void {
+        $this->expectException(\moodle_exception::class);
         $step = $this->iterator[3];
     }
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_cannot_set() {
+    public function test_cannot_set(): void {
+        $this->expectException(\moodle_exception::class);
         $this->iterator[0] = null;
     }
 
-    /**
-     * @expectedException moodle_exception
-     */
-    public function test_cannot_unset() {
+    public function test_cannot_unset(): void {
+        $this->expectException(\moodle_exception::class);
         unset($this->iterator[2]);
     }
 }

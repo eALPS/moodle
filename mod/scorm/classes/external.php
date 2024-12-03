@@ -24,9 +24,17 @@
  * @since      Moodle 3.0
  */
 
+use core_course\external\helper_for_get_mods_by_courses;
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
+use core_external\external_warnings;
+use core_external\util;
+
 defined('MOODLE_INTERNAL') || die;
 
-require_once($CFG->libdir . '/externallib.php');
 require_once($CFG->dirroot . '/mod/scorm/lib.php');
 require_once($CFG->dirroot . '/mod/scorm/locallib.php');
 
@@ -92,7 +100,7 @@ class mod_scorm_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.0
      */
     public static function view_scorm_returns() {
@@ -473,11 +481,12 @@ class mod_scorm_external extends external_api {
 
         // Check settings / permissions to view the SCORM.
         scorm_require_available($scorm);
+        $attemptobject = scorm_get_attempt($USER->id, $scorm->id, $params['attempt']);
 
         foreach ($params['tracks'] as $track) {
             $element = $track['element'];
             $value = $track['value'];
-            $trackid = scorm_insert_track($USER->id, $scorm->id, $sco->id, $params['attempt'], $element, $value,
+            $trackid = scorm_insert_track($USER->id, $scorm->id, $sco->id, $attemptobject, $element, $value,
                                             $scorm->forcecompleted);
 
             if ($trackid) {
@@ -672,7 +681,7 @@ class mod_scorm_external extends external_api {
         // Ensure there are courseids to loop through.
         if (!empty($params['courseids'])) {
 
-            list($courses, $warnings) = external_util::validate_courses($params['courseids'], $courses);
+            list($courses, $warnings) = util::validate_courses($params['courseids'], $courses);
 
             // Get the scorms in this course, this function checks users visibility permissions.
             // We can avoid then additional validate_context calls.
@@ -684,16 +693,7 @@ class mod_scorm_external extends external_api {
                 $context = context_module::instance($scorm->coursemodule);
 
                 // Entry to return.
-                $module = array();
-
-                // First, we return information that any user can see in (or can deduce from) the web interface.
-                $module['id'] = $scorm->id;
-                $module['coursemodule'] = $scorm->coursemodule;
-                $module['course'] = $scorm->course;
-                $module['name']  = external_format_string($scorm->name, $context->id);
-                list($module['intro'], $module['introformat']) =
-                    external_format_text($scorm->intro, $scorm->introformat, $context->id, 'mod_scorm', 'intro', null);
-                $module['introfiles'] = external_util::get_area_files($context->id, 'mod_scorm', 'intro', false, false);
+                $module = helper_for_get_mods_by_courses::standard_coursemodule_element_values($scorm, 'mod_scorm');
 
                 // Check if the SCORM open and return warnings if so.
                 list($open, $openwarnings) = scorm_get_availability_status($scorm, true, $context);
@@ -725,16 +725,13 @@ class mod_scorm_external extends external_api {
                                             'forcenewattempt', 'lastattemptlock', 'displayattemptstatus', 'displaycoursestructure',
                                             'sha1hash', 'md5hash', 'revision', 'launch', 'skipview', 'hidebrowse', 'hidetoc', 'nav',
                                             'navpositionleft', 'navpositiontop', 'auto', 'popup', 'width', 'height', 'timeopen',
-                                            'timeclose', 'displayactivityname', 'scormtype', 'reference');
+                                            'timeclose', 'scormtype', 'reference');
 
                     // Check additional permissions for returning optional private settings.
                     if (has_capability('moodle/course:manageactivities', $context)) {
-
                         $additionalfields = array('updatefreq', 'options', 'completionstatusrequired', 'completionscorerequired',
-                                                  'completionstatusallscos', 'autocommit', 'timemodified', 'section', 'visible',
-                                                  'groupmode', 'groupingid');
+                                                  'completionstatusallscos', 'autocommit', 'timemodified');
                         $viewablefields = array_merge($viewablefields, $additionalfields);
-
                     }
 
                     foreach ($viewablefields as $field) {
@@ -746,9 +743,17 @@ class mod_scorm_external extends external_api {
             }
         }
 
-        $result = array();
-        $result['scorms'] = $returnedscorms;
-        $result['warnings'] = $warnings;
+        $settings = [
+            [
+                'name' => 'scormstandard',
+                'value' => get_config('scorm', 'scormstandard'),
+            ]
+        ];
+        $result = [
+            'scorms'   => $returnedscorms,
+            'options'  => $settings,
+            'warnings' => $warnings
+        ];
         return $result;
     }
 
@@ -763,15 +768,9 @@ class mod_scorm_external extends external_api {
         return new external_single_structure(
             array(
                 'scorms' => new external_multiple_structure(
-                    new external_single_structure(
-                        array(
-                            'id' => new external_value(PARAM_INT, 'SCORM id'),
-                            'coursemodule' => new external_value(PARAM_INT, 'Course module id'),
-                            'course' => new external_value(PARAM_INT, 'Course id'),
-                            'name' => new external_value(PARAM_RAW, 'SCORM name'),
-                            'intro' => new external_value(PARAM_RAW, 'The SCORM intro'),
-                            'introformat' => new external_format_value('intro'),
-                            'introfiles' => new external_files('Files in the introduction text', VALUE_OPTIONAL),
+                    new external_single_structure(array_merge(
+                        helper_for_get_mods_by_courses::standard_coursemodule_elements_returns(),
+                        [
                             'packagesize' => new external_value(PARAM_INT, 'SCORM zip package size', VALUE_OPTIONAL),
                             'packageurl' => new external_value(PARAM_URL, 'SCORM zip package URL', VALUE_OPTIONAL),
                             'version' => new external_value(PARAM_NOTAGS, 'SCORM version (SCORM_12, SCORM_13, SCORM_AICC)',
@@ -782,7 +781,7 @@ class mod_scorm_external extends external_api {
                             'maxattempt' => new external_value(PARAM_INT, 'Maximum number of attemtps', VALUE_OPTIONAL),
                             'forcecompleted' => new external_value(PARAM_BOOL, 'Status current attempt is forced to "completed"',
                                                                     VALUE_OPTIONAL),
-                            'forcenewattempt' => new external_value(PARAM_BOOL, 'Hides the "Start new attempt" checkbox',
+                            'forcenewattempt' => new external_value(PARAM_INT, 'Controls re-entry behaviour',
                                                                     VALUE_OPTIONAL),
                             'lastattemptlock' => new external_value(PARAM_BOOL, 'Prevents to launch new attempts once finished',
                                                                     VALUE_OPTIONAL),
@@ -807,8 +806,6 @@ class mod_scorm_external extends external_api {
                             'height' => new external_value(PARAM_INT, 'Frame height', VALUE_OPTIONAL),
                             'timeopen' => new external_value(PARAM_INT, 'Available from', VALUE_OPTIONAL),
                             'timeclose' => new external_value(PARAM_INT, 'Available to', VALUE_OPTIONAL),
-                            'displayactivityname' => new external_value(PARAM_BOOL, 'Display the activity name above the player?',
-                                                                        VALUE_OPTIONAL),
                             'scormtype' => new external_value(PARAM_ALPHA, 'SCORM type', VALUE_OPTIONAL),
                             'reference' => new external_value(PARAM_NOTAGS, 'Reference to the package', VALUE_OPTIONAL),
                             'protectpackagedownloads' => new external_value(PARAM_BOOL, 'Protect package downloads?',
@@ -822,12 +819,16 @@ class mod_scorm_external extends external_api {
                             'completionstatusallscos' => new external_value(PARAM_INT, 'Require all scos to return completion status', VALUE_OPTIONAL),
                             'autocommit' => new external_value(PARAM_BOOL, 'Save track data automatically?', VALUE_OPTIONAL),
                             'timemodified' => new external_value(PARAM_INT, 'Time of last modification', VALUE_OPTIONAL),
-                            'section' => new external_value(PARAM_INT, 'Course section id', VALUE_OPTIONAL),
-                            'visible' => new external_value(PARAM_BOOL, 'Visible', VALUE_OPTIONAL),
-                            'groupmode' => new external_value(PARAM_INT, 'Group mode', VALUE_OPTIONAL),
-                            'groupingid' => new external_value(PARAM_INT, 'Group id', VALUE_OPTIONAL),
-                        ), 'SCORM'
-                    )
+                        ]
+                    ), 'SCORM')
+                ),
+                'options' => new external_multiple_structure(
+                    new external_single_structure(
+                        [
+                            'name' => new external_value(PARAM_RAW, 'Options name'),
+                            'value' => new external_value(PARAM_RAW, 'Option value')
+                        ]
+                    ), 'Global SCORM options', VALUE_OPTIONAL
                 ),
                 'warnings' => new external_warnings(),
             )
@@ -859,7 +860,9 @@ class mod_scorm_external extends external_api {
      * @throws moodle_exception
      */
     public static function launch_sco($scormid, $scoid = 0) {
-        global $DB;
+        global $DB, $CFG;
+
+        require_once($CFG->libdir . '/completionlib.php');
 
         $params = self::validate_parameters(self::launch_sco_parameters(),
                                             array(
@@ -882,6 +885,10 @@ class mod_scorm_external extends external_api {
             throw new moodle_exception('cannotfindsco', 'scorm');
         }
 
+        // Mark module viewed.
+        $completion = new completion_info($course);
+        $completion->set_module_viewed($cm);
+
         list($sco, $scolaunchurl) = scorm_get_sco_and_launch_url($scorm, $params['scoid'], $context);
         // Trigger the SCO launched event.
         scorm_launch_sco($scorm, $sco, $cm, $context, $scolaunchurl);
@@ -895,7 +902,7 @@ class mod_scorm_external extends external_api {
     /**
      * Returns description of method result value
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function launch_sco_returns() {
@@ -905,5 +912,75 @@ class mod_scorm_external extends external_api {
                 'warnings' => new external_warnings()
             )
         );
+    }
+
+    /**
+     * Describes the parameters for get_scorm_access_information.
+     *
+     * @return external_external_function_parameters
+     * @since Moodle 3.7
+     */
+    public static function get_scorm_access_information_parameters() {
+        return new external_function_parameters (
+            array(
+                'scormid' => new external_value(PARAM_INT, 'scorm instance id.')
+            )
+        );
+    }
+
+    /**
+     * Return access information for a given scorm.
+     *
+     * @param int $scormid scorm instance id
+     * @return array of warnings and the access information
+     * @since Moodle 3.7
+     * @throws  moodle_exception
+     */
+    public static function get_scorm_access_information($scormid) {
+        global $DB;
+
+        $params = self::validate_parameters(self::get_scorm_access_information_parameters(), array('scormid' => $scormid));
+
+        // Request and permission validation.
+        $scorm = $DB->get_record('scorm', array('id' => $params['scormid']), '*', MUST_EXIST);
+        list($course, $cm) = get_course_and_cm_from_instance($scorm, 'scorm');
+
+        $context = context_module::instance($cm->id);
+        self::validate_context($context);
+
+        $result = array();
+        // Return all the available capabilities.
+        $capabilities = load_capability_def('mod_scorm');
+        foreach ($capabilities as $capname => $capdata) {
+            // Get fields like cansubmit so it is consistent with the access_information function implemented in other modules.
+            $field = 'can' . str_replace('mod/scorm:', '', $capname);
+            $result[$field] = has_capability($capname, $context);
+        }
+
+        $result['warnings'] = array();
+        return $result;
+    }
+
+    /**
+     * Describes the get_scorm_access_information return value.
+     *
+     * @return external_single_structure
+     * @since Moodle 3.7
+     */
+    public static function get_scorm_access_information_returns() {
+
+        $structure = array(
+            'warnings' => new external_warnings()
+        );
+
+        $capabilities = load_capability_def('mod_scorm');
+        foreach ($capabilities as $capname => $capdata) {
+            // Get fields like cansubmit so it is consistent with the access_information function implemented in other modules.
+            $field = 'can' . str_replace('mod/scorm:', '', $capname);
+            $structure[$field] = new external_value(PARAM_BOOL, 'Whether the user has the capability ' . $capname . ' allowed.',
+                VALUE_OPTIONAL);
+        }
+
+        return new external_single_structure($structure);
     }
 }

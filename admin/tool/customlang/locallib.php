@@ -36,10 +36,10 @@ class tool_customlang_utils {
      * Rough number of strings that are being processed during a full checkout.
      * This is used to estimate the progress of the checkout.
      */
-    const ROUGH_NUMBER_OF_STRINGS = 16500;
+    const ROUGH_NUMBER_OF_STRINGS = 33000;
 
     /** @var array cache of {@link self::list_components()} results */
-    protected static $components = null;
+    private static $components = null;
 
     /**
      * This class can not be instantiated
@@ -54,28 +54,30 @@ class tool_customlang_utils {
      */
     public static function list_components() {
 
-        $list['moodle'] = 'core';
+        if (self::$components === null) {
+            $list['moodle'] = 'core';
 
-        $coresubsystems = core_component::get_core_subsystems();
-        ksort($coresubsystems); // should be but just in case
-        foreach ($coresubsystems as $name => $location) {
-            $list[$name] = 'core_'.$name;
-        }
+            $coresubsystems = core_component::get_core_subsystems();
+            ksort($coresubsystems); // Should be but just in case.
+            foreach ($coresubsystems as $name => $location) {
+                $list[$name] = 'core_' . $name;
+            }
 
-        $plugintypes = core_component::get_plugin_types();
-        foreach ($plugintypes as $type => $location) {
-            $pluginlist = core_component::get_plugin_list($type);
-            foreach ($pluginlist as $name => $ununsed) {
-                if ($type == 'mod') {
-                    // Plugin names are now automatically validated.
-                    $list[$name] = $type.'_'.$name;
-                } else {
-                    $list[$type.'_'.$name] = $type.'_'.$name;
+            $plugintypes = core_component::get_plugin_types();
+            foreach ($plugintypes as $type => $location) {
+                $pluginlist = core_component::get_plugin_list($type);
+                foreach ($pluginlist as $name => $ununsed) {
+                    if ($type == 'mod') {
+                        // Plugin names are now automatically validated.
+                        $list[$name] = $type . '_' . $name;
+                    } else {
+                        $list[$type . '_' . $name] = $type . '_' . $name;
+                    }
                 }
             }
+            self::$components = $list;
         }
-
-        return $list;
+        return self::$components;
     }
 
     /**
@@ -86,12 +88,27 @@ class tool_customlang_utils {
      * @param string $lang language code to checkout
      * @param progress_bar $progressbar optionally, the given progress bar can be updated
      */
-    public static function checkout($lang, progress_bar $progressbar = null) {
-        global $DB;
+    public static function checkout($lang, ?progress_bar $progressbar = null) {
+        global $DB, $CFG;
+
+        require_once("{$CFG->libdir}/adminlib.php");
+
+        // For behat executions we are going to load only a few components in the
+        // language customisation structures. Using the whole "en" langpack is
+        // too much slow (leads to Selenium 30s timeouts, especially on slow
+        // environments) and we don't really need the whole thing for tests. So,
+        // apart from escaping from the timeouts, we are also saving some good minutes
+        // in tests. See MDL-70014 and linked issues for more info.
+        $behatneeded = ['core', 'core_langconfig', 'tool_customlang'];
 
         // make sure that all components are registered
         $current = $DB->get_records('tool_customlang_components', null, 'name', 'name,version,id');
         foreach (self::list_components() as $component) {
+            // Filter out unwanted components when running behat.
+            if (defined('BEHAT_SITE_RUNNING') && !in_array($component, $behatneeded)) {
+                continue;
+            }
+
             if (empty($current[$component])) {
                 $record = new stdclass();
                 $record->name = $component;
@@ -101,7 +118,7 @@ class tool_customlang_utils {
                     $record->version = $version;
                 }
                 $DB->insert_record('tool_customlang_components', $record);
-            } elseif ($version = get_component_version($component)) {
+            } else if ($version = get_component_version($component)) {
                 if (is_null($current[$component]->version) or ($version > $current[$component]->version)) {
                     $DB->set_field('tool_customlang_components', 'version', $version, array('id' => $current[$component]->id));
                 }
@@ -159,6 +176,11 @@ class tool_customlang_utils {
                         $needsupdate = true;
                         $current[$stringid]->local          = $stringlocal;
                         $current[$stringid]->timecustomized = $now;
+                    } else if (isset($currentlocal) && $stringlocal !== $currentlocal) {
+                        // If local string has been removed, we need to remove also the old local value from DB.
+                        $needsupdate = true;
+                        $current[$stringid]->local          = null;
+                        $current[$stringid]->timecustomized = $now;
                     }
 
                     if ($needsupdate) {
@@ -206,14 +228,18 @@ class tool_customlang_utils {
             return false;
         }
 
-        // get all customized strings from updated components
+        list($insql, $inparams) = $DB->get_in_or_equal(self::list_components());
+
+        // Get all customized strings from updated valid components.
         $sql = "SELECT s.*, c.name AS component
                   FROM {tool_customlang} s
                   JOIN {tool_customlang_components} c ON s.componentid = c.id
                  WHERE s.lang = ?
                        AND (s.local IS NOT NULL OR s.modified = 1)
+                       AND c.name $insql
               ORDER BY componentid, stringid";
-        $strings = $DB->get_records_sql($sql, array($lang));
+        array_unshift($inparams, $lang);
+        $strings = $DB->get_records_sql($sql, $inparams);
 
         $files = array();
         foreach ($strings as $string) {
@@ -238,7 +264,7 @@ class tool_customlang_utils {
      * @param string $lang language code
      * @return string full path
      */
-    protected static function get_localpack_location($lang) {
+    public static function get_localpack_location($lang) {
         global $CFG;
 
         return $CFG->langlocalroot.'/'.$lang.'_local';
@@ -249,20 +275,19 @@ class tool_customlang_utils {
      *
      * @param string $component the name of the component
      * @param array $strings
+     * @return void
      */
     protected static function dump_strings($lang, $component, $strings) {
         global $CFG;
 
         if ($lang !== clean_param($lang, PARAM_LANG)) {
-            debugging('Unable to dump local strings for non-installed language pack .'.s($lang));
-            return false;
+            throw new moodle_exception('Unable to dump local strings for non-installed language pack .'.s($lang));
         }
         if ($component !== clean_param($component, PARAM_COMPONENT)) {
             throw new coding_exception('Incorrect component name');
         }
         if (!$filename = self::get_component_filename($component)) {
-            debugging('Unable to find the filename for the component '.s($component));
-            return false;
+            throw new moodle_exception('Unable to find the filename for the component '.s($component));
         }
         if ($filename !== clean_param($filename, PARAM_FILE)) {
             throw new coding_exception('Incorrect file name '.s($filename));
@@ -279,8 +304,7 @@ class tool_customlang_utils {
         }
 
         if (!$f = fopen($filepath, 'w')) {
-            debugging('Unable to write '.s($filepath));
-            return false;
+            throw new moodle_exception('Unable to write '.s($filepath));
         }
         fwrite($f, <<<EOF
 <?php
@@ -333,11 +357,9 @@ EOF
      * @return string|boolean filename eg 'moodle.php' or 'workshop.php', false if not found
      */
     protected static function get_component_filename($component) {
-        if (is_null(self::$components)) {
-            self::$components = self::list_components();
-        }
+
         $return = false;
-        foreach (self::$components as $legacy => $normalized) {
+        foreach (self::list_components() as $legacy => $normalized) {
             if ($component === $normalized) {
                 $return = $legacy.'.php';
                 break;
@@ -447,7 +469,7 @@ class tool_customlang_menu implements renderable {
  */
 class tool_customlang_translator implements renderable {
 
-    /** @const int number of rows per page */
+    /** @var int number of rows per page */
     const PERPAGE = 100;
 
     /** @var int total number of the rows int the table */
@@ -484,7 +506,6 @@ class tool_customlang_translator implements renderable {
 
         list($insql, $inparams) = $DB->get_in_or_equal($filter->component, SQL_PARAMS_NAMED);
 
-        $csql = "SELECT COUNT(*)";
         $fsql = "SELECT s.*, c.name AS component";
         $sql  = "  FROM {tool_customlang_components} c
                    JOIN {tool_customlang} s ON s.componentid = c.id
@@ -523,9 +544,16 @@ class tool_customlang_translator implements renderable {
             $params['link'] = '%\_link';
         }
 
-        $osql = " ORDER BY c.name, s.stringid";
+        $osql = "component, stringid";
 
-        $this->numofrows = $DB->count_records_sql($csql.$sql, $params);
-        $this->strings = $DB->get_records_sql($fsql.$sql.$osql, $params, ($this->currentpage) * self::PERPAGE, self::PERPAGE);
+        $this->strings = $DB->get_counted_records_sql(
+            sql: $fsql.$sql,
+            fullcountcolumn: 'fullcount',
+            sort: $osql,
+            params: $params,
+            limitfrom: ($this->currentpage) * self::PERPAGE,
+            limitnum: self::PERPAGE,
+        );
+        $this->numofrows = reset($this->strings)->fullcount ?? 0;
     }
 }

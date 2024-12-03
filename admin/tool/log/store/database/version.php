@@ -17,13 +17,13 @@
 /**
  * External database log store.
  *
- * @package    logstore_standard
+ * @package    logstore_database
  * @copyright  2013 Petr Skoda {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version = 2016120500; // The current plugin version (Date: YYYYMMDDXX).
-$plugin->requires = 2016112900; // Requires this Moodle version.
+$plugin->version = 2024100700; // The current plugin version (Date: YYYYMMDDXX).
+$plugin->requires = 2024100100; // Requires this Moodle version.
 $plugin->component = 'logstore_database'; // Full name of the plugin (used for diagnostics).

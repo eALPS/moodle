@@ -1,11 +1,8 @@
-Description of XHProf 0.9.2 library/viewer import into Moodle
+Description of XHProf 2.3.9 library/viewer import into Moodle
 
 Removed (commit #1):
- * .arcconfig - Definitions for arcanist/phabricator removed completely
- * composer.json - Composer's definition removed completely
  * examples - examples dir removed completely
  * extension - extension dir removed completely
- * package.xml - PECL package definition removed completely
  * xhprof_html/docs - documentation dir removed completely
 
 Added (commit #2 - always taken from current moodle.git master):
@@ -37,3 +34,11 @@ TODO:
 20110318 - MDL-26891 - Eloy Lafuente (stronk7): Implemented earlier profiling runs
 20130621 - MDL-39733 - Eloy Lafuente (stronk7): Export & import of profiling runs
 20160721 - MDL-55292 - Russell Smith (mr-russ): Add support for tideways profiler collection for PHP7
+20171002 - MDL-60313 - Marina Glancy (marinaglancy): Upgrade to 0.9.4 release; patched for PHP7.2
+20190314 - MDL-64543 - Brendan Heywood (brendanheywood): Add support for conditional slow profiling
+20191016 - MDL-65349 - Brendan Heywood (brendanheywood): Improved url matching behaviour
+20201012 - MDL-67081 - Brendan Heywood (brendanheywood): Support selective profiles from CLI
+20201210 - MDL-70297 - Ilya Tregubov (ilyatregubov): Upgrade to 2.2.3 release;
+20210209 - MDL-70525 - Tomo Tsuyuki (tomotsuyuki): Allow huge number of values
+20211209 - MDL-71705 - Ilya Tregubov (ilyatregubov): Upgrade to 2.3.5 release;
+20221214 - MDL-76397 - Stevani Andolo (stevandoMoodle): Upgrade to 2.3.9 release;

@@ -14,17 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Tests Exception handler for LTI services
- *
- * @package   mod_lti
- * @copyright Copyright (c) 2015 Moodlerooms Inc. (http://www.moodlerooms.com)
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-use mod_lti\service_exception_handler;
-
-defined('MOODLE_INTERNAL') || die();
+namespace mod_lti;
 
 /**
  * Tests Exception handler for LTI services
@@ -33,15 +23,15 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright Copyright (c) 2015 Moodlerooms Inc. (http://www.moodlerooms.com)
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class mod_lti_service_exception_handler_testcase extends advanced_testcase {
+class service_exception_handler_test extends \advanced_testcase {
     /**
      * Testing service error handling.
      */
-    public function test_handle() {
+    public function test_handle(): void {
         $handler = new service_exception_handler(false);
         $handler->set_message_id('123');
         $handler->set_message_type('testRequest');
-        $handler->handle(new Exception('Error happened'));
+        $handler->handle(new \Exception('Error happened'));
 
         $this->expectOutputRegex('/imsx_codeMajor>failure/');
         $this->expectOutputRegex('/imsx_description>Error happened/');
@@ -53,9 +43,9 @@ class mod_lti_service_exception_handler_testcase extends advanced_testcase {
     /**
      * Testing service error handling when message ID and type are not known yet.
      */
-    public function test_handle_early_error() {
+    public function test_handle_early_error(): void {
         $handler = new service_exception_handler(false);
-        $handler->handle(new Exception('Error happened'));
+        $handler->handle(new \Exception('Error happened'));
 
         $this->expectOutputRegex('/imsx_codeMajor>failure/');
         $this->expectOutputRegex('/imsx_description>Error happened/');
@@ -67,7 +57,7 @@ class mod_lti_service_exception_handler_testcase extends advanced_testcase {
     /**
      * Testing that a log file is generated when logging is turned on.
      */
-    public function test_handle_log() {
+    public function test_handle_log(): void {
         global $CFG;
 
         $this->resetAfterTest();
@@ -75,7 +65,7 @@ class mod_lti_service_exception_handler_testcase extends advanced_testcase {
         $handler = new service_exception_handler(true);
 
         ob_start();
-        $handler->handle(new Exception('Error happened'));
+        $handler->handle(new \Exception('Error happened'));
         ob_end_clean();
 
         $this->assertTrue(is_dir($CFG->dataroot.'/temp/mod_lti'));

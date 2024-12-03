@@ -25,50 +25,109 @@ require_once(__DIR__ . '/../config.php');
 require_once($CFG->dirroot . '/message/lib.php');
 require_once($CFG->libdir.'/adminlib.php');
 
-// This is an admin page
+// This is an admin page.
 admin_externalpage_setup('managemessageoutputs');
 
-// Require site configuration capability
-require_capability('moodle/site:config', context_system::instance());
+// Fetch processors.
+$allprocessors = get_message_processors();
+$processors = array_filter($allprocessors, function($processor) {
+    return $processor->enabled;
+});
+$disabledprocessors = array_filter($allprocessors, function($processor) {
+    return !$processor->enabled;
+});
 
-// Get the submitted params
-$disable    = optional_param('disable', 0, PARAM_INT);
-$enable     = optional_param('enable', 0, PARAM_INT);
+// Fetch message providers.
+$providers = get_message_providers();
+// Fetch the manage message outputs interface.
+$preferences = get_message_output_default_preferences();
 
-$headingtitle = get_string('managemessageoutputs', 'message');
+if (($form = data_submitted()) && confirm_sesskey()) {
+    $newpreferences = array();
+    // Prepare default message outputs settings.
+    foreach ($providers as $provider) {
+        $componentproviderbase = $provider->component.'_'.$provider->name;
+        $disableprovidersetting = $componentproviderbase.'_disable';
+        if (!isset($form->$disableprovidersetting)) {
+            $newpreferences[$disableprovidersetting] = 1;
+        } else {
+            $newpreferences[$disableprovidersetting] = 0;
+        }
 
-if (!empty($disable) && confirm_sesskey()) {
-    if (!$processor = $DB->get_record('message_processors', array('id'=>$disable))) {
-        print_error('outputdoesnotexist', 'message');
+        $componentprovidersetting = $componentproviderbase.'_locked';
+        foreach ($processors as $processor) {
+            $value = 0;
+            if (isset($form->{$componentprovidersetting}[$processor->name])) {
+                $value = $form->{$componentprovidersetting}[$processor->name];
+                if ($value == 'on') {
+                    $value = 1;
+                }
+            }
+
+            // Record the site preference.
+            $newpreferences[$processor->name.'_provider_'.$componentprovidersetting] = $value;
+        }
+
+        $componentprovidersetting = $componentproviderbase.'_enabled';
+        $newsettings = [];
+        if (isset($form->$componentprovidersetting)) {
+            // Store defined comma-separated processors as setting value.
+            // Using array_filter eliminates elements set to 0 above.
+            $newsettings = array_keys(array_filter($form->{$componentprovidersetting}));
+        }
+
+        // Let's join existing setting values for disabled processors.
+        $property = 'message_provider_'.$componentprovidersetting;
+        if (property_exists($preferences, $property)) {
+            $existingsetting = $preferences->$property;
+            foreach ($disabledprocessors as $disable) {
+                if (strpos($existingsetting, $disable->name) > -1) {
+                    $newsettings[] = $disable->name;
+                }
+            }
+        }
+
+        $value = join(',', $newsettings);
+        if (empty($value)) {
+            $value = null;
+        }
+
+        // Record the site preference.
+        $newpreferences['message_provider_'.$componentprovidersetting] = $value;
     }
-    \core_message\api::update_processor_status($processor, 0);     // Disable output.
-    core_plugin_manager::reset_caches();
-}
 
-if (!empty($enable) && confirm_sesskey()) {
-    if (!$processor = $DB->get_record('message_processors', array('id'=>$enable))) {
-        print_error('outputdoesnotexist', 'message');
+    // Update database.
+    $transaction = $DB->start_delegated_transaction();
+
+    // Save processors enabled/disabled status.
+    foreach ($allprocessors as $processor) {
+        $enabled = isset($form->{$processor->name});
+        $class = \core_plugin_manager::resolve_plugininfo_class('message');
+        $class::enable_plugin($processor->name, $enabled);
     }
-    \core_message\api::update_processor_status($processor, 1);      // Enable output.
-    core_plugin_manager::reset_caches();
-}
 
-if ($disable || $enable) {
+    foreach ($newpreferences as $name => $value) {
+        $old = isset($preferences->$name) ? $preferences->$name : '';
+
+        if ($old != $value) {
+            add_to_config_log($name, $old, $value, 'core');
+        }
+
+        set_config($name, $value, 'message');
+    }
+    $transaction->allow_commit();
+
+    core_plugin_manager::reset_caches();
+
     $url = new moodle_url('message.php');
     redirect($url);
 }
+
 // Page settings
 $PAGE->set_context(context_system::instance());
-
-// Grab the renderer
 $renderer = $PAGE->get_renderer('core', 'message');
 
-// Display the manage message outputs interface
-$processors = get_message_processors();
-$messageoutputs = $renderer->manage_messageoutputs($processors);
-
-// Display the page
+// Display the page.
 echo $OUTPUT->header();
-echo $OUTPUT->heading($headingtitle);
-echo $messageoutputs;
+echo $renderer->manage_messageoutput_settings($allprocessors, $processors, $providers, $preferences);
 echo $OUTPUT->footer();

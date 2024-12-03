@@ -92,7 +92,8 @@ class template_plans_table extends table_sql {
      * Setup the headers for the table.
      */
     protected function define_table_columns() {
-        $extrafields = get_extra_user_fields($this->context);
+        // TODO Does not support custom user profile fields (MDL-70456).
+        $extrafields = \core_user\fields::get_identity_fields($this->context, false);
 
         // Define headers and columns.
         $cols = array(
@@ -132,14 +133,12 @@ class template_plans_table extends table_sql {
      * @return array containing sql to use and an array of params.
      */
     protected function get_sql_and_params($count = false) {
-        $fields = 'p.id, p.userid, p.name, ';
+        $fields = 'p.id, p.userid, p.name';
 
         // Add extra user fields that we need for the graded user.
-        $extrafields = get_extra_user_fields($this->context);
-        foreach ($extrafields as $field) {
-            $fields .= 'u.' . $field . ', ';
-        }
-        $fields .= get_all_user_name_fields(true, 'u');
+        // TODO Does not support custom user profile fields (MDL-70456).
+        $userfieldsapi = \core_user\fields::for_identity($this->context, false)->with_name();
+        $fields .= $userfieldsapi->get_sql('u')->selects;
 
         if ($count) {
             $select = "COUNT(1)";
@@ -162,13 +161,13 @@ class template_plans_table extends table_sql {
     }
 
     /**
-     * Override the default implementation to set a decent heading level.
+     * Override the default implementation to set a notification.
      */
     public function print_nothing_to_display() {
         global $OUTPUT;
         echo $this->render_reset_button();
         $this->print_initials_bar();
-        echo $OUTPUT->heading(get_string('nothingtodisplay'), 4);
+        echo $OUTPUT->notification(get_string('nothingtodisplay'), 'info', false);
     }
 
     /**

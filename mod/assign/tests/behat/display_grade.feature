@@ -18,25 +18,22 @@ Feature: Check that the assignment grade can be updated correctly
       | teacher1 | C1 | editingteacher |
       | student1 | C1 | student |
     And the following "groups" exist:
-      | name | course | idnumber |
-      | Group 1 | C1 | G1 |
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Assignment" to section "1" and I fill the form with:
-      | Assignment name | Test assignment name |
-      | Description | Test assignment description |
-      | Use marking workflow | Yes |
-    When I follow "Test assignment name"
-    Then I navigate to "View all submissions" in current page administration
-    And I click on "Grade" "link" in the "Student 1" "table_row"
+      | name     | course  | idnumber  |
+      | Group 1  | C1      | G1        |
+    And the following "activity" exists:
+      | activity         | assign                      |
+      | course           | C1                          |
+      | name             | Test assignment name        |
+      | intro            | Test assignment description |
+      | markingworkflow  | 1                           |
+      | submissiondrafts | 0                           |
+    And I am on the "Test assignment name" Activity page logged in as teacher1
+    Then I change window size to "large"
+    And I go to "Student 1" "Test assignment name" activity advanced grading page
     And I set the field "Grade out of 100" to "50"
-    And I set the field "Notify students" to "0"
+    And I set the field "Notify student" to "0"
     And I press "Save changes"
-    And I press "Ok"
-    And I click on "Edit settings" "link"
-    And I follow "Test assignment name"
-    And I navigate to "View all submissions" in current page administration
+    And I follow "View all submissions"
     And "Student 1" row "Grade" column of "generaltable" table should contain "50.00"
 
   @javascript
@@ -55,23 +52,21 @@ Feature: Check that the assignment grade can be updated correctly
     And the following "groups" exist:
       | name | course | idnumber |
       | Group 1 | C1 | G1 |
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Assignment" to section "1" and I fill the form with:
-      | Assignment name | Test assignment name |
-      | Description | Test assignment description |
-      | Use marking workflow | Yes |
-      | Students submit in groups | Yes |
-      | Group mode | No groups |
-    When I follow "Test assignment name"
-    Then I navigate to "View all submissions" in current page administration
-    And I click on "Grade" "link" in the "Student 1" "table_row"
+    And the following "activity" exists:
+      | activity         | assign                      |
+      | course           | C1                          |
+      | name             | Test assignment name        |
+      | intro            | Test assignment description |
+      | markingworkflow  | 1                           |
+      | submissiondrafts | 0                           |
+      | teamsubmission   | 1                           |
+      | groupmode        | 0                           |
+    And I am on the "Test assignment name" Activity page logged in as teacher1
+    When I change window size to "large"
+    And I go to "Student 1" "Test assignment name" activity advanced grading page
+    And I change window size to "medium"
     And I set the field "Grade out of 100" to "50"
-    And I set the field "Notify students" to "0"
+    And I set the field "Notify student" to "0"
     And I press "Save changes"
-    And I press "Ok"
-    And I click on "Edit settings" "link"
-    And I follow "Test assignment name"
-    And I navigate to "View all submissions" in current page administration
-    And "Student 1" row "Grade" column of "generaltable" table should contain "50.00"
+    And I follow "View all submissions"
+    Then "Student 1" row "Grade" column of "generaltable" table should contain "50.00"

@@ -52,6 +52,7 @@ $action = optional_param('action', '', PARAM_ALPHA);
 $swid = optional_param('swid', 0, PARAM_INT); // Subwiki ID
 
 $PAGE->force_settings_menu();
+$PAGE->add_body_class('limitedwidth');
 
 /*
  * Case 0:
@@ -64,17 +65,17 @@ $PAGE->force_settings_menu();
 if ($id) {
     // Cheacking course module instance
     if (!$cm = get_coursemodule_from_id('wiki', $id)) {
-        print_error('invalidcoursemodule');
+        throw new \moodle_exception('invalidcoursemodule');
     }
 
     // Checking course instance
     $course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST);
 
-    require_login($course, true, $cm);
+    require_course_login($course, true, $cm);
 
     // Checking wiki instance
     if (!$wiki = wiki_get_wiki($cm->instance)) {
-        print_error('incorrectwikiid', 'wiki');
+        throw new \moodle_exception('incorrectwikiid', 'wiki');
     }
     $PAGE->set_cm($cm);
 
@@ -119,22 +120,22 @@ if ($id) {
 
     // Checking page instance
     if (!$page = wiki_get_page($pageid)) {
-        print_error('incorrectpageid', 'wiki');
+        throw new \moodle_exception('incorrectpageid', 'wiki');
     }
 
     // Checking subwiki
     if (!$subwiki = wiki_get_subwiki($page->subwikiid)) {
-        print_error('incorrectsubwikiid', 'wiki');
+        throw new \moodle_exception('incorrectsubwikiid', 'wiki');
     }
 
     // Checking wiki instance of that subwiki
     if (!$wiki = wiki_get_wiki($subwiki->wikiid)) {
-        print_error('incorrectwikiid', 'wiki');
+        throw new \moodle_exception('incorrectwikiid', 'wiki');
     }
 
     // Checking course module instance
     if (!$cm = get_coursemodule_from_instance("wiki", $subwiki->wikiid)) {
-        print_error('invalidcoursemodule');
+        throw new \moodle_exception('invalidcoursemodule');
     }
 
     $currentgroup = $subwiki->groupid;
@@ -142,7 +143,7 @@ if ($id) {
     // Checking course instance
     $course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST);
 
-    require_login($course, true, $cm);
+    require_course_login($course, true, $cm);
     /*
      * Case 2:
      *
@@ -162,20 +163,24 @@ if ($id) {
 
     // Setting wiki instance
     if (!$wiki = wiki_get_wiki($wid)) {
-        print_error('incorrectwikiid', 'wiki');
+        throw new \moodle_exception('incorrectwikiid', 'wiki');
     }
 
     // Checking course module
     if (!$cm = get_coursemodule_from_instance("wiki", $wiki->id)) {
-        print_error('invalidcoursemodule');
+        throw new \moodle_exception('invalidcoursemodule');
     }
 
     // Checking course instance
     $course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST);
 
-    require_login($course, true, $cm);
+    require_course_login($course, true, $cm);
 
     $groupmode = groups_get_activity_groupmode($cm);
+
+    // This is where people will land when they change groups using the drop-down selector.
+    // Set the activity group so tabs and content are shown correctly.
+    $currentgroup = groups_get_activity_group($cm, true);
 
     if ($wiki->wikimode == 'individual' && ($groupmode == SEPARATEGROUPS || $groupmode == VISIBLEGROUPS)) {
         list($gid, $uid) = explode('-', $groupanduser);
@@ -202,7 +207,7 @@ if ($id) {
         $manageandedit = $manage && $edit;
 
         if ($groupmode == VISIBLEGROUPS and ($modeanduser || $modeandgroupmember) and !$manageandedit) {
-            print_error('nocontent','wiki');
+            throw new \moodle_exception('nocontent', 'wiki');
         }
 
         $params = array('wid' => $wiki->id, 'group' => $gid, 'uid' => $uid, 'title' => $title);
@@ -236,7 +241,7 @@ if ($id) {
     //
     //    // Checking wiki instance
     //    if (!$wiki = wiki_get_wiki($wid)) {
-    //        print_error('incorrectwikiid', 'wiki');
+    //        throw new \moodle_exception('incorrectwikiid', 'wiki');
     //    }
     //
     //    // Checking subwiki instance
@@ -245,7 +250,7 @@ if ($id) {
     //        $currentgroup = 0;
     //    }
     //    if (!$subwiki = wiki_get_subwiki_by_group($wid, $currentgroup)) {
-    //        print_error('incorrectsubwikiid', 'wiki');
+    //        throw new \moodle_exception('incorrectsubwikiid', 'wiki');
     //    }
     //
     //    // Checking page instance
@@ -258,7 +263,7 @@ if ($id) {
     //
     //    // Checking course module instance
     //    if (!$cm = get_coursemodule_from_instance("wiki", $wiki->id, $course->id)) {
-    //        print_error('invalidcoursemodule');
+    //        throw new \moodle_exception('invalidcoursemodule');
     //    }
     //
     //    $subwiki = null;
@@ -270,11 +275,11 @@ if ($id) {
     //     * Error. No more options
     //     */
 } else {
-    print_error('invalidparameters', 'wiki');
+    throw new \moodle_exception('invalidparameters', 'wiki');
 }
 
 if (!wiki_user_can_view($subwiki, $wiki)) {
-    print_error('cannotviewpage', 'wiki');
+    throw new \moodle_exception('cannotviewpage', 'wiki');
 }
 
 if (($edit != - 1) and $PAGE->user_allowed_editing()) {

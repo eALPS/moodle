@@ -27,20 +27,40 @@ $string['allowdeletes'] = 'Allow deletes';
 $string['allowrenames'] = 'Allow renames';
 $string['allowsuspends'] = 'Allow suspending and activating of accounts';
 $string['assignedsysrole'] = 'Assigned system role {$a}';
-$string['csvdelimiter'] = 'CSV delimiter';
+$string['clidefault'] = 'Default:';
+$string['clierrorargument'] = 'Value for argument --{$a->name} is not valid. Allowed values: {$a->values}';
+$string['clifile'] = 'Path to CSV file with the user data. Required.';
+$string['clifilenotreadable'] = 'File {$a} does not exist or is not readable';
+$string['clihelp'] = 'Print out this help.';
+$string['climissingargument'] = 'Argument --{$a} is required';
+$string['clititle'] = 'Command line Upload user tool.';
+$string['clivalidationerror'] = 'Validation error:';
+$string['csvdelimiter'] = 'CSV separator';
 $string['defaultvalues'] = 'Default values';
 $string['deleteerrors'] = 'Delete errors';
+$string['duplicateemail'] = 'Multiple users with email {$a} detected';
 $string['encoding'] = 'Encoding';
 $string['errormnetadd'] = 'Can not add remote users';
+$string['errorprefix'] = 'Error:';
 $string['errors'] = 'Errors';
+$string['examplecsv'] = 'Example text file';
+$string['examplecsv_help'] = 'To use the example text file, download it then open it with a text or spreadsheet editor. Leave the first line unchanged, then edit the following lines (records) and add your user data, adding more lines as necessary. Save the file as CSV then upload it.
+
+The example text file may also be used for testing, as you are able to preview user data and can choose to cancel the action before user accounts are created.';
+$string['infoprefix'] = 'Info:';
 $string['invalidupdatetype'] = 'This option cannot be selected with the chosen upload type.';
-$string['invaliduserdata'] = 'Invalid data detected for user {$a} and it has been automatically cleaned.';
+$string['invaliduserdatavalues'] = 'Incorrect data ({$a->values}) found for user {$a->username}. This data has been corrected or deleted.';
+$string['invalidtheme'] = 'Theme "{$a}" is not installed and will be ignored.';
+$string['linex'] = 'Line {$a}';
+$string['matchemail'] = 'Match on email address';
 $string['nochanges'] = 'No changes';
+$string['notheme'] = 'No theme is defined for this user.';
 $string['pluginname'] = 'User upload';
 $string['renameerrors'] = 'Rename errors';
 $string['requiredtemplate'] = 'Required. You may use template syntax here (%l = lastname, %f = firstname, %u = username). See help for details and examples.';
 $string['rowpreviewnum'] = 'Preview rows';
 $string['unassignedsysrole'] = 'Unassigned system role {$a}';
+$string['userthemesnotallowed'] = 'User themes are not enabled, so any included in the upload users file will be ignored.';
 $string['uploadpicture_baduserfield'] = 'The user attribute specified is not valid. Please, try again.';
 $string['uploadpicture_cannotmovezip'] = 'Cannot move zip file to temporary directory.';
 $string['uploadpicture_cannotprocessdir'] = 'Cannot process unzipped files.';
@@ -58,9 +78,10 @@ $string['uploadusers'] = 'Upload users';
 $string['uploadusers_help'] = 'Users may be uploaded (and optionally enrolled in courses) via text file. The format of the file should be as follows:
 
 * Each line of the file contains one record
-* Each record is a series of data separated by commas (or other delimiters)
+* Each record is a series of data separated by the selected separator
 * The first record contains a list of fieldnames defining the format of the rest of the file
 * Required fieldnames are username, password, firstname, lastname, email';
+$string['uploadusers_link'] = 'admin/tool/uploaduser/index';
 $string['uploaduserspreview'] = 'Upload users preview';
 $string['uploadusersresult'] = 'Upload users results';
 $string['uploaduser:uploaduserpictures'] = 'Upload user pictures';
@@ -97,3 +118,8 @@ $string['uuupdatefromfile'] = 'Override with file';
 $string['uuupdatemissing'] = 'Fill in missing from file and defaults';
 $string['uuupdatetype'] = 'Existing user details';
 $string['uuusernametemplate'] = 'Username template';
+$string['privacy:metadata'] = 'The User upload plugin does not store any personal data.';
+$string['warningprefix'] = 'Warning:';
+
+// Deprecated since Moodle 4.4.
+$string['invaliduserdata'] = 'Invalid data detected for user {$a} and it has been automatically cleaned.';

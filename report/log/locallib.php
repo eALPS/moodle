@@ -59,7 +59,7 @@ function report_log_print_graph($course, $user, $typeormode, $date=0, $logreader
         $reader = $readers[$logreader];
     }
     // If reader is not a sql_internal_table_reader and not legacy store then don't show graph.
-    if (!($reader instanceof \core\log\sql_internal_table_reader) && !($reader instanceof logstore_legacy\log\store)) {
+    if (!($reader instanceof \core\log\sql_internal_table_reader)) {
         return array();
     }
     $coursecontext = context_course::instance($course->id);
@@ -114,23 +114,15 @@ function report_log_usercourse($userid, $courseid, $coursestart, $logreader = ''
     }
 
     // If reader is not a sql_internal_table_reader and not legacy store then return.
-    if (!($reader instanceof \core\log\sql_internal_table_reader) && !($reader instanceof logstore_legacy\log\store)) {
+    if (!($reader instanceof \core\log\sql_internal_table_reader)) {
         return array();
     }
 
     $coursestart = (int)$coursestart; // Note: unfortunately pg complains if you use name parameter or column alias in GROUP BY.
-    if ($reader instanceof logstore_legacy\log\store) {
-        $logtable = 'log';
-        $timefield = 'time';
-        $coursefield = 'course';
-        // Anonymous actions are never logged in legacy log.
-        $nonanonymous = '';
-    } else {
-        $logtable = $reader->get_internal_log_table_name();
-        $timefield = 'timecreated';
-        $coursefield = 'courseid';
-        $nonanonymous = 'AND anonymous = 0';
-    }
+    $logtable = $reader->get_internal_log_table_name();
+    $timefield = 'timecreated';
+    $coursefield = 'courseid';
+    $nonanonymous = 'AND anonymous = 0';
 
     $params = array();
     $courseselect = '';
@@ -166,24 +158,16 @@ function report_log_userday($userid, $courseid, $daystart, $logreader = '') {
     }
 
     // If reader is not a sql_internal_table_reader and not legacy store then return.
-    if (!($reader instanceof \core\log\sql_internal_table_reader) && !($reader instanceof logstore_legacy\log\store)) {
+    if (!($reader instanceof \core\log\sql_internal_table_reader)) {
         return array();
     }
 
     $daystart = (int)$daystart; // Note: unfortunately pg complains if you use name parameter or column alias in GROUP BY.
 
-    if ($reader instanceof logstore_legacy\log\store) {
-        $logtable = 'log';
-        $timefield = 'time';
-        $coursefield = 'course';
-        // Anonymous actions are never logged in legacy log.
-        $nonanonymous = '';
-    } else {
-        $logtable = $reader->get_internal_log_table_name();
-        $timefield = 'timecreated';
-        $coursefield = 'courseid';
-        $nonanonymous = 'AND anonymous = 0';
-    }
+    $logtable = $reader->get_internal_log_table_name();
+    $timefield = 'timecreated';
+    $coursefield = 'courseid';
+    $nonanonymous = 'AND anonymous = 0';
     $params = array('userid' => $userid);
 
     $courseselect = '';
@@ -289,11 +273,15 @@ function report_log_print_mnet_selector_form($hostid, $course, $selecteduser=0, 
 
     // If looking at a different host, we're interested in all our site users
     if ($hostid == $CFG->mnet_localhost_id && $course->id != SITEID) {
-        $courseusers = get_enrolled_users($context, '', $selectedgroup, 'u.id, ' . get_all_user_name_fields(true, 'u'),
+        $userfieldsapi = \core_user\fields::for_name();
+        $courseusers = get_enrolled_users($context, '', $selectedgroup, 'u.id, ' .
+                $userfieldsapi->get_sql('u', false, '', '', false)->selects,
                 null, $limitfrom, $limitnum);
     } else {
         // this may be a lot of users :-(
-        $courseusers = $DB->get_records('user', array('deleted'=>0), 'lastaccess DESC', 'id, ' . get_all_user_name_fields(true),
+        $userfieldsapi = \core_user\fields::for_name();
+        $courseusers = $DB->get_records('user', array('deleted' => 0), 'lastaccess DESC', 'id, ' .
+                $userfieldsapi->get_sql('', false, '', '', false)->selects,
                 $limitfrom, $limitnum);
     }
 
@@ -376,7 +364,8 @@ function report_log_print_mnet_selector_form($hostid, $course, $selecteduser=0, 
         $section = 0;
         $thissection = array();
         foreach ($modinfo->cms as $cm) {
-            if (!$cm->uservisible || !$cm->has_view()) {
+            // Exclude activities that aren't visible or have no view link (e.g. label). Account for folder being displayed inline.
+            if (!$cm->uservisible || (!$cm->has_view() && strcmp($cm->modname, 'folder') !== 0)) {
                 continue;
             }
             if ($cm->sectionnum > 0 and $section <> $cm->sectionnum) {

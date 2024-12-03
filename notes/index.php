@@ -22,6 +22,7 @@
  */
 require_once('../config.php');
 require_once('lib.php');
+require_once($CFG->dirroot . '/course/lib.php');
 
 $courseid     = optional_param('course', SITEID, PARAM_INT);
 $userid       = optional_param('user', 0, PARAM_INT);
@@ -29,7 +30,7 @@ $filtertype   = optional_param('filtertype', '', PARAM_ALPHA);
 $filterselect = optional_param('filterselect', 0, PARAM_INT);
 
 if (empty($CFG->enablenotes)) {
-    print_error('notesdisabled', 'notes');
+    throw new \moodle_exception('notesdisabled', 'notes');
 }
 
 $url = new moodle_url('/notes/index.php');
@@ -110,9 +111,7 @@ if ($userid && $course->id == SITEID) {
     $PAGE->set_context(context_course::instance($courseid));
 } else {
     $link = null;
-    if (has_capability('moodle/course:viewparticipants', $coursecontext)
-        || has_capability('moodle/site:viewparticipants', $systemcontext)) {
-
+    if (course_can_view_participants($coursecontext) || course_can_view_participants($systemcontext)) {
         $link = new moodle_url('/user/index.php', array('id' => $course->id));
     }
 }
@@ -128,6 +127,9 @@ if ($course->id == SITEID) {
 echo $OUTPUT->header();
 
 if ($course->id != SITEID) {
+    $backurl = new moodle_url('/user/view.php', ['id' => $userid, 'course' => $courseid]);
+    echo $OUTPUT->single_button($backurl, get_string('back'), 'get', ['class' => 'mb-3']);
+
     $headerinfo = array('heading' => fullname($user), 'user' => $user);
     echo $OUTPUT->context_header($headerinfo, 2);
 }

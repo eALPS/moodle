@@ -25,6 +25,6 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2016120500;
-$plugin->requires  = 2016112900;
+$plugin->version   = 2024100700;
+$plugin->requires  = 2024100100;
 $plugin->component = 'tool_customlang'; // Full name of the plugin (used for diagnostics)

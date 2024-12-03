@@ -29,7 +29,7 @@
     require_once("../../config.php");
 
     if (!filter_is_enabled('tex')) {
-        print_error('filternotenabled');
+        throw new \moodle_exception('filternotenabled');
     }
 
     require_once($CFG->libdir.'/filelib.php');
@@ -238,22 +238,22 @@
         $output .= "<p>base filename for expression is '$md5'</p>\n";
 
         // temporary paths
-        $tex = "$latex->temp_dir/$md5.tex";
+        $tex = "$md5.tex"; // Absolute paths won't work with openin_any = p setting.
         $dvi = "$latex->temp_dir/$md5.dvi";
         $ps = "$latex->temp_dir/$md5.ps";
         $convertformat = get_config('filter_tex', 'convertformat');
         $img = "$latex->temp_dir/$md5.{$convertformat}";
 
+        // Change directory to temp dir so that we can work with relative paths.
+        chdir($latex->temp_dir);
+
         // put the expression as a file into the temp area
-        $expression = html_entity_decode($expression);
+        $expression = html_entity_decode($expression, ENT_COMPAT);
         $output .= "<p>Processing TeX expression:</p><pre>$expression</pre>\n";
         $doc = $latex->construct_latex_document($expression);
         $fh = fopen($tex, 'w');
         fputs($fh, $doc);
         fclose($fh);
-
-        // cd to temp dir
-        chdir($latex->temp_dir);
 
         // step 1: latex command
         $pathlatex = escapeshellarg($pathlatex);
@@ -377,16 +377,7 @@ If this fails or is not available, the Mimetex executable is tried. If this
 fails a likely cause is that the mimetex binary you are using is
 incompatible with your operating system. You can try compiling it from the
 C sources downloaded from <a href="http://www.forkosh.com/mimetex.zip">
-http://www.forkosh.com/mimetex.zip</a>, or looking for an appropriate
-binary at <a href="http://moodle.org/download/mimetex/">
-http://moodle.org/download/mimetex/</a>. You may then also need to
-edit your moodle/filter/tex/pix.php file to add
-<br /><?php echo "case &quot;" . PHP_OS . "&quot;:" ;?><br ?> to the list of operating systems
-in the switch (PHP_OS) statement. Windows users may have a problem properly
-unzipping mimetex.exe. Make sure that mimetex.exe is is <b>PRECISELY</b>
-433152 bytes in size. If not, download a fresh copy from
-<a href="http://moodle.org/download/mimetex/windows/mimetex.exe">
-http://moodle.org/download/mimetex/windows/mimetex.exe</a>.
+http://www.forkosh.com/mimetex.zip</a>.
 Another possible problem which may affect
 both Unix and Windows servers is that the web server doesn't have execute permission
 on the mimetex binary. In that case change permissions accordingly</li>

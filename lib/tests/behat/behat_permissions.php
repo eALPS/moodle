@@ -47,23 +47,47 @@ class behat_permissions extends behat_base {
      * @param TableNode $table
      */
     public function i_set_the_following_system_permissions_of_role($rolename, $table) {
+        // Applied in the System context.
+        $context = \context_system::instance();
 
-        $parentnodes = get_string('administrationsite') . ' > ' .
-            get_string('users', 'admin') . ' > ' .
-            get_string('permissions', 'role');
+        // Translate the specified rolename into a role.
+        $rolenames = role_get_names($context);
+        $matched = array_filter($rolenames, function($role) use ($rolename) {
+            return ($role->localname === $rolename) || ($role->shortname === $rolename) || ($role->description === $rolename);
+        });
 
-        // Go to home page.
-        $this->execute("behat_general::i_am_on_homepage");
+        if (count($matched) === 0) {
+            throw new ExpectationException("Unable to find a role with name '{$rolename}'", $this->getSession());
+        } else if (count($matched) > 1) {
+            throw new ExpectationException("Multiple roles matched '{$rolename}'", $this->getSession());
+        }
 
-        // Navigate to course management page via navigation block.
-        $this->execute("behat_navigation::i_navigate_to_node_in",
-            array(get_string('defineroles', 'role'), $parentnodes)
+        $role = reset($matched);
+
+        $permissionmap = [
+            get_string('inherit', 'role') => 'inherit',
+            get_string('allow', 'role') => 'allow',
+            get_string('prevent', 'role') => 'prevent',
+            get_string('prohibit', 'role') => 'prohibit',
+        ];
+
+        $columns = ['role'];
+        $newtabledata = [$role->shortname];
+        foreach ($table as $data) {
+            $columns[] = $data['capability'];
+            $newtabledata[] = $permissionmap[$data['permission']];
+        }
+
+        $this->execute(
+            'behat_data_generators::the_following_entities_exist',
+            [
+                'role capabilities',
+                new TableNode([
+                    0 => $columns,
+                    1 => $newtabledata,
+                ])
+            ]
         );
-
-        $this->execute("behat_general::click_link", "Edit " . $this->escape($rolename) . " role");
-        $this->execute("behat_permissions::i_fill_the_capabilities_form_with_the_following_permissions", $table);
-
-        $this->execute('behat_forms::press_button', get_string('savechanges'));
     }
 
     /**
@@ -82,7 +106,12 @@ class behat_permissions extends behat_base {
         );
 
         if (!$this->running_javascript()) {
-            $this->execute("behat_general::i_click_on_in_the", [get_string('go'), 'button', 'region-main', 'region']);
+            $xpath = "//div[@class='advancedoverride']/div/form/noscript";
+            $this->execute("behat_general::i_click_on_in_the", [
+                get_string('go'), 'button',
+                $this->escape($xpath),
+                'xpath_element']
+            );
         }
 
         $this->execute("behat_permissions::i_fill_the_capabilities_form_with_the_following_permissions", $table);
@@ -106,7 +135,7 @@ class behat_permissions extends behat_base {
                 $advancedtoggle->click();
 
                 // Wait for the page to load.
-                $this->getSession()->wait(self::TIMEOUT * 1000, self::PAGE_READY_JS);
+                $this->getSession()->wait(self::get_timeout() * 1000, self::PAGE_READY_JS);
             }
         } catch (Exception $e) {
             // We already are in advanced mode.
@@ -157,7 +186,8 @@ class behat_permissions extends behat_base {
     public function capability_has_permission($capabilityname, $permission) {
 
         // We already know the name, so we just need the value.
-        $radioxpath = "//table[@class='rolecap']/descendant::input[@type='radio']" .
+        $radioxpath = "//table[contains(concat(' ',
+ normalize-space(@class), ' '), ' rolecap ')]/descendant::input[@type='radio']" .
             "[@name='" . $capabilityname . "'][@checked]";
 
         $checkedradio = $this->find('xpath', $radioxpath);
@@ -194,16 +224,15 @@ class behat_permissions extends behat_base {
      * @return void Executes other steps
      */
     public function i_define_the_allowed_role_assignments_for_a_role_as($rolename, $table) {
-        $parentnodes = get_string('administrationsite') . ' > ' .
-            get_string('users', 'admin') . ' > ' .
+        $parentnodes = get_string('users', 'admin') . ' > ' .
             get_string('permissions', 'role');
 
         // Go to home page.
         $this->execute("behat_general::i_am_on_homepage");
 
-        // Navigate to course management page via navigation block.
-        $this->execute("behat_navigation::i_navigate_to_node_in",
-            array(get_string('defineroles', 'role'), $parentnodes)
+        // Navigate to Define roles page via site administration menu.
+        $this->execute("behat_navigation::i_navigate_to_in_site_administration",
+                $parentnodes .' > '. get_string('defineroles', 'role')
         );
 
         $this->execute("behat_general::click_link", "Allow role assignments");
@@ -236,11 +265,11 @@ class behat_permissions extends behat_base {
 
             if ($allowed == 'Assignable') {
                 if (!$node->isChecked()) {
-                    $node->click();
+                    $node->check();
                 }
             } else if ($allowed == 'Not assignable') {
                 if ($node->isChecked()) {
-                    $node->click();
+                    $node->uncheck();
                 }
             } else {
                 throw new ExpectationException(
@@ -249,5 +278,45 @@ class behat_permissions extends behat_base {
                 );
             }
         }
+    }
+
+    /**
+     * Mark context as frozen.
+     *
+     * @Then /^the "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" is context frozen$/
+     * @throws ExpectationException if the context cannot be frozen or found
+     * @param string $element Element we look on
+     * @param string $selector The type of where we look (activity, course)
+     */
+    public function the_context_is_context_frozen(string $element, string $selector) {
+
+        // Enable context freeze if it is not done yet.
+        set_config('contextlocking', 1);
+
+        // Find context.
+        $context = self::get_context($selector, $element);
+
+        // Freeze context.
+        $context->set_locked(true);
+    }
+
+    /**
+     * Unmark context as frozen.
+     *
+     * @Then /^the "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" is not context frozen$/
+     * @throws ExpectationException if the context cannot be frozen or found
+     * @param string $element Element we look on
+     * @param string $selector The type of where we look (activity, course)
+     */
+    public function the_context_is_not_context_frozen(string $element, string $selector) {
+
+        // Enable context freeze if it is not done yet.
+        set_config('contextlocking', 1);
+
+        // Find context.
+        $context = self::get_context($selector, $element);
+
+        // Freeze context.
+        $context->set_locked(false);
     }
 }

@@ -9,73 +9,28 @@ Feature: In a report, admin can filter log data
       | fullname | shortname | category | groupmode |
       | Course 1 | C1 | 0 | 1 |
     And the following "users" exist:
-      | username | firstname | lastname | email |
-      | student1 | Student | 1 | student1@example.com |
+      | username | firstname | lastname    | email                | idnumber | middlename | alternatename | firstnamephonetic | lastnamephonetic |
+      | teacher1 | Teacher   | One         | teacher1@example.com | t1       |            | fred          |                   |                  |
+      | student1 | Grainne   | Beauchamp   | student1@example.com | s1       | Ann        | Jill          | Gronya            | Beecham          |
     And the following "course enrolments" exist:
       | user | course | role |
       | admin | C1 | editingteacher |
       | student1 | C1 | student |
-    And I log in as "admin"
-
-  @javascript
-  Scenario: Filter log report for standard and legacy log reader
-    Given I navigate to "Manage log stores" node in "Site administration > Plugins > Logging"
-    And I click on "Enable" "link" in the "Legacy log" "table_row"
     And the following config values are set as admin:
-      | loglegacy | 1 | logstore_legacy |
-    And I follow "Home"
-    And I follow "Course 1"
-    And I navigate to course participants
-    And I follow "Student 1"
-    And I click on "Log in as" "link"
-    And I press "Continue"
-    And I log out
+      | fullnamedisplay | firstname |
+      | alternativefullnameformat | middlename, alternatename, firstname, lastname |
     And I log in as "admin"
-    When I navigate to "Logs" node in "Site administration > Reports"
-    And I set the field "id" to "Acceptance test site (Site)"
-    And I set the field "user" to "All participants"
-    And I set the field "logreader" to "Standard log"
-    And I press "Get these logs"
-    Then I should see "User logged in as another user"
-    And I set the field "logreader" to "Legacy log"
-    And I press "Get these logs"
-    And I should see "user login"
-    And I should not see "Nothing to display"
 
-  @javascript
   Scenario: Filter log report for standard log reader
-    Given I follow "Course 1"
+    Given I am on "Course 1" course homepage
     And I navigate to course participants
-    And I follow "Student 1"
+    And I follow "Ann, Jill, Grainne, Beauchamp"
     And I click on "Log in as" "link"
     And I press "Continue"
     And I log out
     And I log in as "admin"
-    When I navigate to "Logs" node in "Site administration > Reports"
+    When I navigate to "Reports > Logs" in site administration
     And I set the field "id" to "Acceptance test site (Site)"
     And I set the field "user" to "All participants"
     And I press "Get these logs"
     Then I should see "User logged in as another user"
-
-  @javascript
-  Scenario: Filter log report for legacy log reader
-    Given I navigate to "Manage log stores" node in "Site administration > Plugins > Logging"
-    And I click on "Enable" "link" in the "Legacy log" "table_row"
-    And I click on "Disable" "link" in the "Standard log" "table_row"
-    And the following config values are set as admin:
-      | loglegacy | 1 | logstore_legacy |
-    And I follow "Home"
-    And I follow "Course 1"
-    And I follow "Home"
-    And I follow "Course 1"
-    And I navigate to "Users > Enrolled users" in current page administration
-    And I follow "Student 1"
-    And I click on "Log in as" "link"
-    And I press "Continue"
-    And I log out
-    And I log in as "admin"
-    When I navigate to "Logs" node in "Site administration > Reports"
-    And I set the field "id" to "Acceptance test site (Site)"
-    And I set the field "user" to "All participants"
-    And I press "Get these logs"
-    Then I should see "user login"

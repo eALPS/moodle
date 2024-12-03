@@ -35,29 +35,68 @@ require_once(__DIR__.'/moodle_recordset.php');
  */
 class pgsql_native_moodle_recordset extends moodle_recordset {
 
+    /** @var PgSql\Result|resource|null */
     protected $result;
     /** @var current row as array.*/
     protected $current;
     protected $blobs = array();
 
+    /** @var string Name of cursor or '' if none */
+    protected $cursorname;
+
+    /** @var pgsql_native_moodle_database Postgres database resource */
+    protected $db;
+
+    /** @var bool True if there are no more rows to fetch from the cursor */
+    protected $lastbatch;
+
     /**
      * Build a new recordset to iterate over.
      *
-     * @param resource $result A pg_query() result object to create a recordset from.
+     * When using cursors, $result will be null initially.
+     *
+     * @param resource|PgSql\Result|null $result A pg_query() result object to create a recordset from.
+     * @param pgsql_native_moodle_database $db Database object (only required when using cursors)
+     * @param string $cursorname Name of cursor or '' if none
      */
-    public function __construct($result) {
+    public function __construct($result, ?pgsql_native_moodle_database $db = null, $cursorname = '') {
+        if ($cursorname && !$db) {
+            throw new coding_exception('When specifying a cursor, $db is required');
+        }
         $this->result = $result;
+        $this->db = $db;
+        $this->cursorname = $cursorname;
+
+        // When there is a cursor, do the initial fetch.
+        if ($cursorname) {
+            $this->fetch_cursor_block();
+        }
 
         // Find out if there are any blobs.
-        $numfields = pg_num_fields($result);
+        $numfields = pg_num_fields($this->result);
         for ($i = 0; $i < $numfields; $i++) {
-            $type = pg_field_type($result, $i);
+            $type = $this->db->pg_field_type($this->result, $i);
             if ($type == 'bytea') {
-                $this->blobs[] = pg_field_name($result, $i);
+                $this->blobs[] = pg_field_name($this->result, $i);
             }
         }
 
         $this->current = $this->fetch_next();
+    }
+
+    /**
+     * Fetches the next block of data when using cursors.
+     *
+     * @throws coding_exception If you call this when the fetch buffer wasn't freed yet
+     */
+    protected function fetch_cursor_block() {
+        if ($this->result) {
+            throw new coding_exception('Unexpected non-empty result when fetching from cursor');
+        }
+        list($this->result, $this->lastbatch) = $this->db->fetch_from_cursor($this->cursorname);
+        if (!$this->result) {
+            throw new coding_exception('Unexpected failure when fetching from cursor');
+        }
     }
 
     public function __destruct() {
@@ -69,9 +108,21 @@ class pgsql_native_moodle_recordset extends moodle_recordset {
             return false;
         }
         if (!$row = pg_fetch_assoc($this->result)) {
+            // There are no more rows in this result.
             pg_free_result($this->result);
             $this->result = null;
-            return false;
+
+            // If using a cursor, can we fetch the next block?
+            if ($this->cursorname && !$this->lastbatch) {
+                $this->fetch_cursor_block();
+                if (!$row = pg_fetch_assoc($this->result)) {
+                    pg_free_result($this->result);
+                    $this->result = null;
+                    return false;
+                }
+            } else {
+                return false;
+            }
         }
 
         if ($this->blobs) {
@@ -83,10 +134,11 @@ class pgsql_native_moodle_recordset extends moodle_recordset {
         return $row;
     }
 
-    public function current() {
+    public function current(): stdClass {
         return (object)$this->current;
     }
 
+    #[\ReturnTypeWillChange]
     public function key() {
         // return first column value as key
         if (!$this->current) {
@@ -96,11 +148,11 @@ class pgsql_native_moodle_recordset extends moodle_recordset {
         return $key;
     }
 
-    public function next() {
+    public function next(): void {
         $this->current = $this->fetch_next();
     }
 
-    public function valid() {
+    public function valid(): bool {
         return !empty($this->current);
     }
 
@@ -111,5 +163,11 @@ class pgsql_native_moodle_recordset extends moodle_recordset {
         }
         $this->current = null;
         $this->blobs   = null;
+
+        // If using cursors, close the cursor.
+        if ($this->cursorname) {
+            $this->db->close_cursor($this->cursorname);
+            $this->cursorname = null;
+        }
     }
 }

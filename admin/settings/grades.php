@@ -42,6 +42,9 @@ if (has_capability('moodle/grade:manage', $systemcontext)
         // enable publishing in exports/imports
         $temp->add(new admin_setting_configcheckbox('gradepublishing', new lang_string('gradepublishing', 'grades'), new lang_string('gradepublishing_help', 'grades'), 0));
 
+        $temp->add(new admin_setting_configcheckbox('grade_export_exportfeedback', new lang_string('exportfeedback', 'grades'),
+                                                  new lang_string('exportfeedback_desc', 'grades'), 0));
+
         $temp->add(new admin_setting_configselect('grade_export_displaytype', new lang_string('gradeexportdisplaytype', 'grades'),
                                                   new lang_string('gradeexportdisplaytype_desc', 'grades'), GRADE_DISPLAY_TYPE_REAL, $display_types));
 
@@ -53,11 +56,6 @@ if (has_capability('moodle/grade:manage', $systemcontext)
                                                          '3' => '3',
                                                          '4' => '4',
                                                          '5' => '5')));
-        $temp->add(new admin_setting_configselect('grade_navmethod', new lang_string('navmethod', 'grades'), null,
-                                                  GRADE_NAVMETHOD_TABS,
-                                                  array(GRADE_NAVMETHOD_DROPDOWN => new lang_string('dropdown', 'grades'),
-                                                        GRADE_NAVMETHOD_TABS => new lang_string('tabs', 'grades'),
-                                                        GRADE_NAVMETHOD_COMBO => new lang_string('combo', 'grades'))));
 
         $setting = new admin_setting_configtext('grade_export_userprofilefields',
             new lang_string('gradeexportuserprofilefields', 'grades'),
@@ -75,6 +73,8 @@ if (has_capability('moodle/grade:manage', $systemcontext)
         $temp->add(new admin_setting_configcheckbox('recovergradesdefault', new lang_string('recovergradesdefault', 'grades'), new lang_string('recovergradesdefault_help', 'grades'), 0));
 
         $temp->add(new admin_setting_special_gradeexport());
+
+        $temp->add(new admin_setting_special_gradeexportdefault());
 
         $temp->add(new admin_setting_special_gradelimiting());
 
@@ -115,7 +115,7 @@ if (has_capability('moodle/grade:manage', $systemcontext)
 
         $defaultvisible = array(GRADE_AGGREGATE_SUM);
 
-        $defaults = array('value' => GRADE_AGGREGATE_SUM, 'forced' => false, 'adv' => false);
+        $defaults = array('value' => GRADE_AGGREGATE_SUM, 'forced' => false);
         $temp->add(new admin_setting_gradecat_combo('grade_aggregation', new lang_string('aggregation', 'grades'), new lang_string('aggregation_help', 'grades'), $defaults, $options));
 
         $temp->add(new admin_setting_configmultiselect('grade_aggregations_visible', new lang_string('aggregationsvisible', 'grades'),
@@ -123,10 +123,10 @@ if (has_capability('moodle/grade:manage', $systemcontext)
 
         $options = array(0 => new lang_string('no'), 1 => new lang_string('yes'));
 
-        $defaults = array('value'=>1, 'forced'=>false, 'adv'=>true);
+        $defaults = array('value' => 1, 'forced' => false);
         $temp->add(new admin_setting_gradecat_combo('grade_aggregateonlygraded', new lang_string('aggregateonlygraded', 'grades'),
                     new lang_string('aggregateonlygraded_help', 'grades'), $defaults, $options));
-        $defaults = array('value'=>0, 'forced'=>false, 'adv'=>true);
+        $defaults = array('value' => 0, 'forced' => false);
         $temp->add(new admin_setting_gradecat_combo('grade_aggregateoutcomes', new lang_string('aggregateoutcomes', 'grades'),
                     new lang_string('aggregateoutcomes_help', 'grades'), $defaults, $options));
 
@@ -163,26 +163,6 @@ if (has_capability('moodle/grade:manage', $systemcontext)
                                                          '3' => '3',
                                                          '4' => '4',
                                                          '5' => '5')));
-
-        $temp->add(new admin_setting_configmultiselect('grade_item_advanced', new lang_string('gradeitemadvanced', 'grades'), new lang_string('gradeitemadvanced_help', 'grades'),
-                                                       array('iteminfo', 'idnumber', 'gradepass', 'plusfactor', 'multfactor', 'display', 'decimals', 'hiddenuntil', 'locktime'),
-                                                       array('iteminfo' => new lang_string('iteminfo', 'grades'),
-                                                             'idnumber' => new lang_string('idnumbermod'),
-                                                             'gradetype' => new lang_string('gradetype', 'grades'),
-                                                             'scaleid' => new lang_string('scale'),
-                                                             'grademin' => new lang_string('grademin', 'grades'),
-                                                             'grademax' => new lang_string('grademax', 'grades'),
-                                                             'gradepass' => new lang_string('gradepass', 'grades'),
-                                                             'plusfactor' => new lang_string('plusfactor', 'grades'),
-                                                             'multfactor' => new lang_string('multfactor', 'grades'),
-                                                             'display' => new lang_string('gradedisplaytype', 'grades'),
-                                                             'decimals' => new lang_string('decimalpoints', 'grades'),
-                                                             'hidden' => new lang_string('hidden', 'grades'),
-                                                             'hiddenuntil' => new lang_string('hiddenuntil', 'grades'),
-                                                             'locked' => new lang_string('locked', 'grades'),
-                                                             'locktime' => new lang_string('locktime', 'grades'),
-                                                             'aggregationcoef' => new lang_string('aggregationcoef', 'grades'),
-                                                             'parentcategory' => new lang_string('parentcategory', 'grades'))));
     }
     $ADMIN->add('grades', $temp);
 

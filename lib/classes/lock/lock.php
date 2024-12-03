@@ -14,19 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Class representing a lock
- *
- * The methods available for a specific lock type are only known by it's factory.
- *
- * @package    core
- * @copyright  Damyon Wiese 2013
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 namespace core\lock;
 
-defined('MOODLE_INTERNAL') || die();
+use coding_exception;
 
 /**
  * Class representing a lock
@@ -71,6 +61,19 @@ class lock {
     }
 
     /**
+     * Sets the lock factory that owns a lock. This function should not be called under normal use.
+     * It is intended only for cases like {@see timing_wrapper_lock_factory} where we wrap a lock
+     * factory.
+     *
+     * When used, it should be called immediately after constructing the lock.
+     *
+     * @param lock_factory $factory New lock factory that owns this lock
+     */
+    public function init_factory(lock_factory $factory): void {
+        $this->factory = $factory;
+    }
+
+    /**
      * Return the unique key representing this lock.
      * @return string|int lock key.
      */
@@ -79,15 +82,10 @@ class lock {
     }
 
     /**
-     * Extend the lifetime of this lock. Not supported by all factories.
-     * @param int $maxlifetime - the new lifetime for the lock (in seconds).
-     * @return bool
+     * @deprecated since Moodle 3.10.
      */
-    public function extend($maxlifetime = 86400) {
-        if ($this->factory) {
-            return $this->factory->extend_lock($this, $maxlifetime);
-        }
-        return false;
+    public function extend() {
+        throw new coding_exception('The function extend() has been removed, please do not use it anymore.');
     }
 
     /**

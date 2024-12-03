@@ -29,14 +29,12 @@ require_once($CFG->dirroot.'/user/lib.php');
 require_once('change_password_form.php');
 require_once($CFG->libdir.'/authlib.php');
 require_once($CFG->dirroot.'/webservice/lib.php');
+require_once('lib.php');
 
 $id     = optional_param('id', SITEID, PARAM_INT); // current course
 $return = optional_param('return', 0, PARAM_BOOL); // redirect after password change
 
 $systemcontext = context_system::instance();
-
-//HTTPS is required in this page when $CFG->loginhttps enabled
-$PAGE->https_required();
 
 $PAGE->set_url('/login/change_password.php', array('id'=>$id));
 
@@ -58,13 +56,13 @@ if ($return) {
 $strparticipants = get_string('participants');
 
 if (!$course = $DB->get_record('course', array('id'=>$id))) {
-    print_error('invalidcourseid');
+    throw new \moodle_exception('invalidcourseid');
 }
 
 // require proper login; guest user can not change password
 if (!isloggedin() or isguestuser()) {
     if (empty($SESSION->wantsurl)) {
-        $SESSION->wantsurl = $CFG->httpswwwroot.'/login/change_password.php';
+        $SESSION->wantsurl = $CFG->wwwroot.'/login/change_password.php';
     }
     redirect(get_login_url());
 }
@@ -80,7 +78,7 @@ if (!get_user_preferences('auth_forcepasswordchange', false)) {
 
 // do not allow "Logged in as" users to change any passwords
 if (\core\session\manager::is_loggedinas()) {
-    print_error('cannotcallscript');
+    throw new \moodle_exception('cannotcallscript');
 }
 
 if (is_mnet_remote_user($USER)) {
@@ -88,14 +86,14 @@ if (is_mnet_remote_user($USER)) {
     if ($idprovider = $DB->get_record('mnet_host', array('id'=>$USER->mnethostid))) {
         $message .= get_string('userchangepasswordlink', 'mnet', $idprovider);
     }
-    print_error('userchangepasswordlink', 'mnet', '', $message);
+    throw new \moodle_exception('userchangepasswordlink', 'mnet', '', $message);
 }
 
 // load the appropriate auth plugin
 $userauth = get_auth_plugin($USER->auth);
 
 if (!$userauth->can_change_password()) {
-    print_error('nopasswordchange', 'auth');
+    throw new \moodle_exception('nopasswordchange', 'auth');
 }
 
 if ($changeurl = $userauth->change_password_url()) {
@@ -114,13 +112,14 @@ if ($mform->is_cancelled()) {
 } else if ($data = $mform->get_data()) {
 
     if (!$userauth->user_update_password($USER, $data->newpassword1)) {
-        print_error('errorpasswordupdate', 'auth');
+        throw new \moodle_exception('errorpasswordupdate', 'auth');
     }
 
     user_add_password_history($USER->id, $data->newpassword1);
 
-    if (!empty($CFG->passwordchangelogout)) {
-        \core\session\manager::kill_user_sessions($USER->id, session_id());
+    // Log out all other sessions if mandated by admin, or if set by the user.
+    if (!empty($CFG->passwordchangelogout) || !empty($data->logoutothersessions)) {
+        \core\session\manager::destroy_user_sessions($USER->id, session_id());
     }
 
     if (!empty($data->signoutofotherservices)) {
@@ -136,6 +135,9 @@ if ($mform->is_cancelled()) {
 
     $strpasswordchanged = get_string('passwordchanged');
 
+    // Plugins can perform post password change actions once data has been validated.
+    core_login_post_change_password_requests($data);
+
     $fullname = fullname($USER, true);
 
     $PAGE->set_title($strpasswordchanged);
@@ -147,9 +149,6 @@ if ($mform->is_cancelled()) {
     echo $OUTPUT->footer();
     exit;
 }
-
-// make sure we really are on the https page when https login required
-$PAGE->verify_https_required();
 
 $strchangepassword = get_string('changepassword');
 

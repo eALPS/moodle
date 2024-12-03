@@ -10,10 +10,7 @@ Feature: Create folders in the file manager
       | fullname | shortname | category |
       | Course 1 | C1 | 0 |
     And I log in as "admin"
-    And I am on site homepage
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Folder" to section "0"
+    And I add a folder activity to course "Course 1" section "0"
     And I set the following fields to these values:
       | Name | Folder resource |
       | Description | The description |

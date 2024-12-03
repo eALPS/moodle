@@ -93,6 +93,7 @@ if ($canconfig and $action and confirm_sesskey()) {
             redirect($PAGE->url);
 
         } else if ($action === 'delete') {
+
             $instance = $instances[$instanceid];
             $plugin = $plugins[$instance->enrol];
 
@@ -144,6 +145,7 @@ if ($canconfig and $action and confirm_sesskey()) {
             }
 
         } else if ($action === 'disable') {
+
             $instance = $instances[$instanceid];
             $plugin = $plugins[$instance->enrol];
             if ($plugin->can_hide_show_instance($instance)) {
@@ -172,6 +174,7 @@ if ($canconfig and $action and confirm_sesskey()) {
             }
 
         } else if ($action === 'enable') {
+
             $instance = $instances[$instanceid];
             $plugin = $plugins[$instance->enrol];
             if ($plugin->can_hide_show_instance($instance)) {
@@ -186,7 +189,7 @@ if ($canconfig and $action and confirm_sesskey()) {
 
 
 echo $OUTPUT->header();
-echo $OUTPUT->heading(get_string('enrolmentinstances', 'enrol'));
+echo $OUTPUT->render_participants_tertiary_nav($course);
 
 echo $OUTPUT->box_start('generalbox boxaligncenter boxwidthnormal');
 
@@ -229,13 +232,13 @@ foreach ($instances as $instance) {
             $aurl = new moodle_url($url, array('action'=>'up', 'instance'=>$instance->id));
             $updown[] = $OUTPUT->action_icon($aurl, new pix_icon('t/up', $strup, 'core', array('class' => 'iconsmall')));
         } else {
-            $updown[] = html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('spacer'), 'alt'=>'', 'class'=>'iconsmall'));
+            $updown[] = $OUTPUT->spacer();
         }
         if ($updowncount < $icount) {
             $aurl = new moodle_url($url, array('action'=>'down', 'instance'=>$instance->id));
             $updown[] = $OUTPUT->action_icon($aurl, new pix_icon('t/down', $strdown, 'core', array('class' => 'iconsmall')));
         } else {
-            $updown[] = html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('spacer'), 'alt'=>'', 'class'=>'iconsmall'));
+            $updown[] = $OUTPUT->spacer();
         }
         ++$updowncount;
 
@@ -253,7 +256,7 @@ foreach ($instances as $instance) {
                 $edit[] = $OUTPUT->action_icon($aurl, new pix_icon('t/show', $strenable, 'core', array('class' => 'iconsmall')));
             } else {
                 // plugin specific state - do not mess with it!
-                $edit[] = html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('t/show'), 'alt'=>'', 'class'=>'iconsmall'));
+                $edit[] = $OUTPUT->pix_icon('t/show', get_string('show'));
             }
 
         }

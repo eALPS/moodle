@@ -205,7 +205,7 @@ abstract class gradingform_controller {
      * @param moodle_url $returnurl optional URL of a page where the user should be sent once they are finished with editing
      * @return moodle_url
      */
-    public function get_editor_url(moodle_url $returnurl = null) {
+    public function get_editor_url(?moodle_url $returnurl = null) {
 
         $params = array('areaid' => $this->areaid);
 
@@ -226,7 +226,7 @@ abstract class gradingform_controller {
      * @param settings_navigation $settingsnav {@link settings_navigation}
      * @param navigation_node $node {@link navigation_node}
      */
-    public function extend_settings_navigation(settings_navigation $settingsnav, navigation_node $node=null) {
+    public function extend_settings_navigation(settings_navigation $settingsnav, ?navigation_node $node=null) {
         // do not extend by default
     }
 
@@ -239,7 +239,7 @@ abstract class gradingform_controller {
      * @param global_navigation $navigation {@link global_navigation}
      * @param navigation_node $node {@link navigation_node}
      */
-    public function extend_navigation(global_navigation $navigation, navigation_node $node=null) {
+    public function extend_navigation(global_navigation $navigation, ?navigation_node $node=null) {
         // do not extend by default
     }
 
@@ -428,6 +428,7 @@ abstract class gradingform_controller {
         foreach ($records as $record) {
             $rv[] = $this->get_instance($record);
         }
+        $records->close();
         return $rv;
     }
 
@@ -520,13 +521,53 @@ abstract class gradingform_controller {
      * @param int $raterid
      * @param int $itemid
      * @return gradingform_instance
+     * @throws dml_exception
      */
     public function get_or_create_instance($instanceid, $raterid, $itemid) {
-        global $DB;
-        if ($instanceid &&
-                $instance = $DB->get_record('grading_instances', array('id'  => $instanceid, 'raterid' => $raterid, 'itemid' => $itemid), '*', IGNORE_MISSING)) {
-            return $this->get_instance($instance);
+        if (!is_numeric($instanceid)) {
+            $instanceid = null;
         }
+        return $this->fetch_instance($raterid, $itemid, $instanceid);
+    }
+
+    /**
+     * If an instanceid is specified and grading instance exists and it is created by this rater for
+     * this item, then the instance is returned.
+     *
+     * If instanceid is not known, then null can be passed to fetch the current instance matchign the specified raterid
+     * and itemid.
+     *
+     * If the instanceid is falsey, or no instance was found, then create a new instance for the specified rater and item.
+     *
+     * @param int $raterid
+     * @param int $itemid
+     * @param int $instanceid
+     * @return gradingform_instance
+     * @throws dml_exception
+     */
+    public function fetch_instance(int $raterid, int $itemid, ?int $instanceid): gradingform_instance {
+        global $DB;
+
+        $instance = null;
+        if (null === $instanceid) {
+            if ($instance = $this->get_current_instance($raterid, $itemid)) {
+                return $instance;
+            }
+            $instanceid = $instancerecord->id ?? null;
+        }
+
+        if (!empty($instanceid)) {
+            $instance = $DB->get_record('grading_instances', [
+                'id'  => $instanceid,
+                'raterid' => $raterid,
+                'itemid' => $itemid,
+            ], '*', IGNORE_MISSING);
+
+            if ($instance) {
+                return $this->get_instance($instance);
+            }
+        }
+
         return $this->create_instance($raterid, $itemid);
     }
 
@@ -654,13 +695,13 @@ abstract class gradingform_controller {
      * to the nearest int. Positive $gradingtype means that range 0..$gradingtype
      * is used for the grades and in this case grade does not have to be rounded.
      *
-     * Sometimes modules always expect grade to be rounded (like mod_assignment does).
+     * Sometimes modules always expect grade to be rounded (like mod_assign does).
      *
      * @param array $graderange array where first _key_ is the minimum grade and the
      *     last key is the maximum grade.
      * @param bool $allowgradedecimals if decimal values are allowed as grades.
      */
-    public final function set_grade_range(array $graderange, $allowgradedecimals = false) {
+    final public function set_grade_range(array $graderange, $allowgradedecimals = false) {
         $this->graderange = $graderange;
         $this->allowgradedecimals = $allowgradedecimals;
     }
@@ -670,7 +711,7 @@ abstract class gradingform_controller {
      *
      * @return array
      */
-    public final function get_grade_range() {
+    final public function get_grade_range() {
         if (empty($this->graderange)) {
             return array();
         }
@@ -682,7 +723,7 @@ abstract class gradingform_controller {
      *
      * @return bool
      */
-    public final function get_allow_grade_decimals() {
+    final public function get_allow_grade_decimals() {
         return $this->allowgradedecimals;
     }
 

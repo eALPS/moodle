@@ -12,16 +12,15 @@ Feature: User can be enrolled into a course
       | fullname   | shortname |
       | Course 001 | C001      |
     And I log in as "admin"
-    And I am on course index
-    And I follow "Course 001"
+    And I am on "Course 001" course homepage
 
   Scenario: User can be enrolled without javascript
     When I enrol "Studie One" user as "Student"
-    And I navigate to "Enrolled users" node in "Course administration > Users"
+    And I am on the "Course 001" "Enrolled users" page
     Then I should see "Studie One"
 
   @javascript
   Scenario: User can be enrolled with javascript enrol element
     When I enrol "Studie One" user as "Student"
-    And I navigate to "Enrolled users" node in "Course administration > Users"
+    And I am on the "Course 001" "Enrolled users" page
     Then I should see "Studie One"

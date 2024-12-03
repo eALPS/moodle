@@ -1,7 +1,10 @@
 YUI.add('moodle-course-management', function (Y, NAME) {
 
-/* global DragDrop, Category, Course */
-
+var Category;
+var Console;
+var Course;
+var DragDrop;
+var Item;
 /**
  * Provides drop down menus for list of action links.
  *
@@ -18,9 +21,9 @@ YUI.add('moodle-course-management', function (Y, NAME) {
  * @constructor
  * @extends Base
  */
-function Console() {
+Console = function() {
     Console.superclass.constructor.apply(this, arguments);
-}
+};
 Console.NAME = 'moodle-course-management';
 Console.CSS_PREFIX = 'management';
 Console.ATTRS = {
@@ -279,7 +282,7 @@ Console.prototype = {
         if (!this.categoriesinit) {
             this.get('categorylisting').delegate('click', this.handleCategoryDelegation, 'a[data-action]', this);
             this.get('categorylisting').delegate('click', this.handleCategoryDelegation, 'input[name="bcat[]"]', this);
-            this.get('categorylisting').delegate('click', this.handleBulkSortByaction, '#menuselectsortby', this);
+            this.get('categorylisting').delegate('change', this.handleBulkSortByaction, '#menuselectsortby', this);
             this.categoriesinit = true;
             Y.log(count + ' categories being managed', 'info', 'moodle-course-management');
         } else {
@@ -590,8 +593,6 @@ M.course.management.console = null;
 M.course.management.init = function(config) {
     M.course.management.console = new Console(config);
 };
-/* global Console */
-
 /**
  * Drag and Drop handler
  *
@@ -600,9 +601,9 @@ M.course.management.init = function(config) {
  * @constructor
  * @extends Base
  */
-function DragDrop(config) {
+DragDrop = function(config) {
     Console.superclass.constructor.apply(this, [config]);
-}
+};
 DragDrop.NAME = 'moodle-course-management-dd';
 DragDrop.CSS_PREFIX = 'management-dd';
 DragDrop.ATTRS = {
@@ -659,6 +660,10 @@ DragDrop.prototype = {
         if (!courseul) {
             // No course listings found.
             return false;
+        }
+
+        while (contstraint.get('scrollHeight') === 0 && !contstraint.compareTo(window.document.body)) {
+            contstraint = contstraint.get('parentNode');
         }
 
         courseul.all('> li').each(function(li) {
@@ -869,9 +874,9 @@ Y.extend(DragDrop, Y.Base, DragDrop.prototype);
  * @constructor
  * @extends Base
  */
-function Item() {
+Item = function() {
     Item.superclass.constructor.apply(this, arguments);
-}
+};
 Item.NAME = 'moodle-course-management-item';
 Item.CSS_PREFIX = 'management-item';
 Item.ATTRS = {
@@ -1177,8 +1182,6 @@ Item.prototype = {
     }
 };
 Y.extend(Item, Y.Base, Item.prototype);
-/* global Item */
-
 /**
  * A managed category.
  *
@@ -1187,9 +1190,9 @@ Y.extend(Item, Y.Base, Item.prototype);
  * @constructor
  * @extends Item
  */
-function Category() {
+Category = function() {
     Category.superclass.constructor.apply(this, arguments);
-}
+};
 Category.NAME = 'moodle-course-management-category';
 Category.CSS_PREFIX = 'management-category';
 Category.ATTRS = {
@@ -1348,10 +1351,19 @@ Category.prototype = {
         node.removeClass('collapsed').setAttribute('aria-expanded', 'true');
         action.setAttribute('data-action', 'collapse').setAttrs({
             title: M.util.get_string('collapsecategory', 'moodle', this.getName())
-        }).one('img').setAttrs({
-            src: M.util.image_url('t/switch_minus', 'moodle'),
-            alt: M.util.get_string('collapse', 'moodle')
         });
+
+        require(['core/str', 'core/templates', 'core/notification'], function(Str, Templates, Notification) {
+            Str.get_string('collapse', 'core')
+                .then(function(string) {
+                    return Templates.renderPix('t/switch_minus', 'core', string);
+                })
+                .then(function(html) {
+                    html = Y.Node.create(html).addClass('tree-icon').getDOMNode().outerHTML;
+                    return action.set('innerHTML', html);
+                }).fail(Notification.exception);
+        });
+
         if (ul) {
             ul.setAttribute('aria-hidden', 'false');
         }
@@ -1369,10 +1381,19 @@ Category.prototype = {
         node.addClass('collapsed').setAttribute('aria-expanded', 'false');
         action.setAttribute('data-action', 'expand').setAttrs({
             title: M.util.get_string('expandcategory', 'moodle', this.getName())
-        }).one('img').setAttrs({
-            src: M.util.image_url('t/switch_plus', 'moodle'),
-            alt: M.util.get_string('expand', 'moodle')
         });
+
+        require(['core/str', 'core/templates', 'core/notification'], function(Str, Templates, Notification) {
+            Str.get_string('expand', 'core')
+                .then(function(string) {
+                    return Templates.renderPix('t/switch_plus', 'core', string);
+                })
+                .then(function(html) {
+                    html = Y.Node.create(html).addClass('tree-icon').getDOMNode().outerHTML;
+                    return action.set('innerHTML', html);
+                }).fail(Notification.exception);
+        });
+
         if (ul) {
             ul.setAttribute('aria-hidden', 'true');
         }
@@ -1420,27 +1441,25 @@ Category.prototype = {
      * @param {Course} course
      */
     moveCourseTo: function(course) {
-        var self = this;
-        Y.use('moodle-core-notification-confirm', function() {
-            var confirm = new M.core.confirm({
-                title: M.util.get_string('confirm', 'moodle'),
-                question: M.util.get_string('confirmcoursemove', 'moodle', {
+        require(['core/notification'], function(Notification) {
+            Notification.saveCancelPromise(
+                M.util.get_string('confirmation', 'admin'),
+                M.util.get_string('confirmcoursemove', 'moodle',
+                {
                     course: course.getName(),
-                    category: self.getName()
+                    category: this.getName(),
                 }),
-                yesLabel: M.util.get_string('move', 'moodle'),
-                noLabel: M.util.get_string('cancel', 'moodle')
-            });
-            confirm.on('complete-yes', function() {
-                confirm.hide();
-                confirm.destroy();
+                M.util.get_string('move', 'moodle')
+            ).then(function() {
                 this.get('console').performAjaxAction('movecourseintocategory', {
+                    courseid: course.get('courseid'),
                     categoryid: this.get('categoryid'),
-                    courseid: course.get('courseid')
                 }, this.completeMoveCourse, this);
-            }, self);
-            confirm.show();
-        });
+                return;
+            }.bind(this)).catch(function() {
+                // User cancelled.
+            });
+        }.bind(this));
     },
 
     /**
@@ -1622,8 +1641,6 @@ Category.prototype = {
     }
 };
 Y.extend(Category, Item, Category.prototype);
-/* global Item */
-
 /**
  * A managed course.
  *
@@ -1632,9 +1649,9 @@ Y.extend(Category, Item, Category.prototype);
  * @constructor
  * @extends Item
  */
-function Course() {
+Course = function() {
     Course.superclass.constructor.apply(this, arguments);
-}
+};
 Course.NAME = 'moodle-course-management-course';
 Course.CSS_PREFIX = 'management-course';
 Course.ATTRS = {

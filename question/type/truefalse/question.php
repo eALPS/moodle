@@ -41,6 +41,15 @@ class qtype_truefalse_question extends question_graded_automatically {
     public $trueanswerid;
     public $falseanswerid;
 
+    /** @var int the format of the true feedback. */
+    public $truefeedbackformat;
+
+    /** @var int the format of the false feedback. */
+    public $falsefeedbackformat;
+
+    /** @var bool true to show the standard instruction, otherwise hide it. */
+    public $showstandardinstruction;
+
     public function get_expected_data() {
         return array('answer' => PARAM_INT);
     }
@@ -56,6 +65,16 @@ class qtype_truefalse_question extends question_graded_automatically {
             return get_string('true', 'qtype_truefalse');
         } else {
             return get_string('false', 'qtype_truefalse');
+        }
+    }
+
+    public function un_summarise_response(string $summary) {
+        if ($summary === get_string('true', 'qtype_truefalse')) {
+            return ['answer' => '1'];
+        } else if ($summary === get_string('false', 'qtype_truefalse')) {
+            return ['answer' => '0'];
+        } else {
+            return [];
         }
     }
 
@@ -112,5 +131,18 @@ class qtype_truefalse_question extends question_graded_automatically {
             return parent::check_file_access($qa, $options, $component, $filearea,
                     $args, $forcedownload);
         }
+    }
+
+    /**
+     * Return the question settings that define this question as structured data.
+     *
+     * @param question_attempt $qa the current attempt for which we are exporting the settings.
+     * @param question_display_options $options the question display options which say which aspects of the question
+     * should be visible.
+     * @return mixed structure representing the question settings. In web services, this will be JSON-encoded.
+     */
+    public function get_question_definition_for_external_rendering(question_attempt $qa, question_display_options $options) {
+        // No need to return anything, external clients do not need additional information for rendering this question type.
+        return null;
     }
 }

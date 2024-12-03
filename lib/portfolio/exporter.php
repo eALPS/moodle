@@ -87,7 +87,7 @@ class portfolio_exporter {
     private $alreadystolen;
 
     /**
-     * @var stored_file files that the exporter has written to this temp area keep track of
+     * @var stored_file[] files that the exporter has written to this temp area keep track of
      *                  this in case of duplicates within one export see MDL-16390
      */
     private $newfilehashes;
@@ -117,9 +117,9 @@ class portfolio_exporter {
      * @param portfolio_caller_base $caller portfolio caller (passed by reference)
      * @param string $callercomponent the name of the callercomponent
      */
-    public function __construct(&$instance, &$caller, $callercomponent) {
-        $this->instance =& $instance;
-        $this->caller =& $caller;
+    public function __construct($instance, portfolio_caller_base $caller, $callercomponent) {
+        $this->instance = $instance;
+        $this->caller = $caller;
         if ($instance) {
             $this->instancefile = 'portfolio/' . $instance->get('plugin') . '/lib.php';
             $this->instance->set('exporter', $this);
@@ -167,7 +167,6 @@ class portfolio_exporter {
                 $this->instancefile = 'portfolio/' . $this->instance->get('plugin') . '/lib.php';
                 $this->instance->set('exporter', $this);
             }
-            $this->dirty = true;
             return true;
         }
         $a = (object)array('property' => $field, 'class' => get_class($this));

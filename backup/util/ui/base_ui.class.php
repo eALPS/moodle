@@ -86,12 +86,14 @@ abstract class base_ui {
      * @param backup_controller $controller
      * @param array $params
      */
-    public function __construct($controller, array $params = null) {
+    public function __construct($controller, ?array $params = null) {
         $this->controller = $controller;
         $this->progress = self::PROGRESS_INTIAL;
         $this->stage = $this->initialise_stage(null, $params);
-        // Process UI event before to be safe.
-        $this->controller->process_ui_event();
+        if ($this->controller) {
+            // Process UI event before to be safe.
+            $this->controller->process_ui_event();
+        }
     }
 
     /**
@@ -114,7 +116,7 @@ abstract class base_ui {
      * @param array $params
      * @return base_ui_stage
      */
-    abstract protected function initialise_stage($stage = null, array $params = null);
+    abstract protected function initialise_stage($stage = null, ?array $params = null);
 
     /**
      * This processes the current stage of the backup
@@ -317,7 +319,7 @@ abstract class base_ui {
      * Gets the requested setting
      * @param string $name
      * @param bool $default
-     * @return mixed
+     * @return base_setting
      */
     public function get_setting($name, $default = false) {
         try {

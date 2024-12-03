@@ -117,7 +117,7 @@ abstract class restore_dbops {
      * @param \core\progress\base $progress Progress tracker
      */
     public static function load_inforef_to_tempids($restoreid, $inforeffile,
-            \core\progress\base $progress = null) {
+            ?\core\progress\base $progress = null) {
 
         if (!file_exists($inforeffile)) { // Shouldn't happen ever, but...
             throw new backup_helper_exception('missing_inforef_xml_file', $inforeffile);
@@ -206,7 +206,7 @@ abstract class restore_dbops {
      * @param int $restoreid id of backup
      * @param string $itemname name of the item
      * @param int $itemid id of item
-     * @return array backup id's
+     * @return stdClass|false record from 'backup_ids_temp' table
      * @todo MDL-25290 replace static backupids* with MUC code
      */
     protected static function get_backup_ids_cached($restoreid, $itemname, $itemid) {
@@ -424,7 +424,7 @@ abstract class restore_dbops {
      * @param \core\progress\base $progress Progress tracker
      */
     public static function load_users_to_tempids($restoreid, $usersfile,
-            \core\progress\base $progress = null) {
+            ?\core\progress\base $progress = null) {
 
         if (!file_exists($usersfile)) { // Shouldn't happen ever, but...
             throw new backup_helper_exception('missing_users_xml_file', $usersfile);
@@ -558,9 +558,16 @@ abstract class restore_dbops {
      *
      * The function returns 2 arrays, one containing errors and another containing
      * warnings. Both empty if no errors/warnings are found.
+     *
+     * @param int $restoreid The restore ID
+     * @param int $courseid The ID of the course
+     * @param int $userid The id of the user doing the restore
+     * @param bool $samesite True if restore is to same site
+     * @param int $contextlevel (CONTEXT_SYSTEM, etc.)
+     * @return array A separate list of all error and warnings detected
      */
     public static function prechek_precheck_qbanks_by_level($restoreid, $courseid, $userid, $samesite, $contextlevel) {
-        global $CFG, $DB;
+        global $DB;
 
         // To return any errors and warnings found
         $errors   = array();
@@ -570,6 +577,12 @@ abstract class restore_dbops {
         $fallbacks = array(
             CONTEXT_SYSTEM => CONTEXT_COURSE,
             CONTEXT_COURSECAT => CONTEXT_COURSE);
+
+        /** @var restore_controller $rc */
+        $rc = restore_controller_dbops::load_controller($restoreid);
+        $plan = $rc->get_plan();
+        $after35 = $plan->backup_release_compare('3.5', '>=') && $plan->backup_version_compare(20180205, '>');
+        $rc->destroy(); // Always need to destroy.
 
         // For any contextlevel, follow this process logic:
         //
@@ -586,7 +599,9 @@ abstract class restore_dbops {
         //             6b) User cannot, check if we are in some contextlevel with fallback
         //                 7a) There is fallback, move ALL the qcats to fallback, warn. End qcat loop
         //                 7b) No fallback, error. End qcat loop
-        //         5b) Match, mark q to be mapped
+        //         5b) Random question, must always create new.
+        //         5c) Match, mark q to be mapped
+        // 8) Check if backup is from Moodle >= 3.5 and error if more than one top-level category in the context.
 
         // Get all the contexts (question banks) in restore for the given contextlevel
         $contexts = self::restore_get_question_banks($restoreid, $contextlevel);
@@ -596,8 +611,11 @@ abstract class restore_dbops {
             // Init some perms
             $canmanagecategory = false;
             $canadd            = false;
+            // Top-level category counter.
+            $topcats = 0;
             // get categories in context (bank)
-            $categories = self::restore_get_question_categories($restoreid, $contextid);
+            $categories = self::restore_get_question_categories($restoreid, $contextid, $contextlevel);
+
             // cache permissions if $targetcontext is found
             if ($targetcontext = self::restore_find_best_target_context($categories, $courseid, $contextlevel)) {
                 $canmanagecategory = has_capability('moodle/question:managecategory', $targetcontext, $userid);
@@ -605,6 +623,10 @@ abstract class restore_dbops {
             }
             // 1) Iterate over each qcat in the context, matching by stamp for the found target context
             foreach ($categories as $category) {
+                if ($category->parent == 0) {
+                    $topcats++;
+                }
+
                 $matchcat = false;
                 if ($targetcontext) {
                     $matchcat = $DB->get_record('question_categories', array(
@@ -649,13 +671,19 @@ abstract class restore_dbops {
                     $questions = self::restore_get_questions($restoreid, $category->id);
 
                     // Collect all the questions for this category into memory so we only talk to the DB once.
-                    $questioncache = $DB->get_records_sql_menu("SELECT ".$DB->sql_concat('stamp', "' '", 'version').", id
-                                                                  FROM {question}
-                                                                 WHERE category = ?", array($matchcat->id));
+                    $questioncache = $DB->get_records_sql_menu('SELECT q.stamp, q.id
+                                                                  FROM {question} q
+                                                                  JOIN {question_versions} qv
+                                                                    ON qv.questionid = q.id
+                                                                  JOIN {question_bank_entries} qbe
+                                                                    ON qbe.id = qv.questionbankentryid
+                                                                  JOIN {question_categories} qc
+                                                                    ON qc.id = qbe.questioncategoryid
+                                                                 WHERE qc.id = ?', array($matchcat->id));
 
                     foreach ($questions as $question) {
-                        if (isset($questioncache[$question->stamp." ".$question->version])) {
-                            $matchqid = $questioncache[$question->stamp." ".$question->version];
+                        if (isset($questioncache[$question->stamp])) {
+                            $matchqid = $questioncache[$question->stamp];
                         } else {
                             $matchqid = false;
                         }
@@ -683,13 +711,23 @@ abstract class restore_dbops {
                                 break 2; // out from qcat loop (both 7a and 7b), we have decided about ALL categories in context (bank)
                             }
 
-                        // 5b) Match, mark q to be mapped
+                        // 5b) Random questions must always be newly created.
+                        } else if ($question->qtype == 'random') {
+                            // Nothing to mark, newitemid means create
+
+                        // 5c) Match, mark q to be mapped.
                         } else {
                             self::set_backup_ids_record($restoreid, 'question', $question->id, $matchqid);
                         }
                     }
                 }
             }
+
+            // 8) Check if backup is made on Moodle >= 3.5 and there are more than one top-level category in the context.
+            if ($after35 && $topcats > 1) {
+                $errors[] = get_string('restoremultipletopcats', 'question', $contextid);
+            }
+
         }
 
         return array($errors, $warnings);
@@ -729,8 +767,13 @@ abstract class restore_dbops {
     /**
      * Return one array of question_category records for
      * a given restore operation and one restore context (question bank)
+     *
+     * @param string $restoreid Unique identifier of the restore operation being performed.
+     * @param int $contextid Context id we want question categories to be returned.
+     * @param int $contextlevel Context level we want to restrict the returned categories.
+     * @return array Question categories for the given context id and level.
      */
-    public static function restore_get_question_categories($restoreid, $contextid) {
+    public static function restore_get_question_categories($restoreid, $contextid, $contextlevel) {
         global $DB;
 
         $results = array();
@@ -740,7 +783,14 @@ abstract class restore_dbops {
                                           AND itemname = 'question_category'
                                           AND parentitemid = ?", array($restoreid, $contextid));
         foreach ($qcats as $qcat) {
-            $results[$qcat->itemid] = backup_controller_dbops::decode_backup_temp_info($qcat->info);
+            $result = backup_controller_dbops::decode_backup_temp_info($qcat->info);
+            // Filter out found categories that belong to another context level.
+            // (this can happen when a higher level category becomes remapped to
+            // a context id that, by coincidence, matches a context id of another
+            // category at lower level). See MDL-72950 for more info.
+            if ($result->contextlevel == $contextlevel) {
+                $results[$qcat->itemid] = $result;
+            }
         }
         $qcats->close();
 
@@ -869,7 +919,7 @@ abstract class restore_dbops {
     public static function send_files_to_pool($basepath, $restoreid, $component, $filearea,
             $oldcontextid, $dfltuserid, $itemname = null, $olditemid = null,
             $forcenewcontextid = null, $skipparentitemidctxmatch = false,
-            \core\progress\base $progress = null) {
+            ?\core\progress\base $progress = null) {
         global $DB, $CFG;
 
         $backupinfo = backup_general_helper::get_backup_information(basename($basepath));
@@ -963,21 +1013,26 @@ abstract class restore_dbops {
                 continue;
             }
 
+            // Updated the times of the new record.
+            // The file record should reflect when the file entered the system,
+            // and when this record was created.
+            $time = time();
+
             // The file record to restore.
             $file_record = array(
-                'contextid'   => $newcontextid,
-                'component'   => $component,
-                'filearea'    => $filearea,
-                'itemid'      => $rec->newitemid,
-                'filepath'    => $file->filepath,
-                'filename'    => $file->filename,
-                'timecreated' => $file->timecreated,
-                'timemodified'=> $file->timemodified,
-                'userid'      => $mappeduserid,
-                'source'      => $file->source,
-                'author'      => $file->author,
-                'license'     => $file->license,
-                'sortorder'   => $file->sortorder
+                'contextid'    => $newcontextid,
+                'component'    => $component,
+                'filearea'     => $filearea,
+                'itemid'       => $rec->newitemid,
+                'filepath'     => $file->filepath,
+                'filename'     => $file->filename,
+                'timecreated'  => $time,
+                'timemodified' => $time,
+                'userid'       => $mappeduserid,
+                'source'       => $file->source,
+                'author'       => $file->author,
+                'license'      => $file->license,
+                'sortorder'    => $file->sortorder
             );
 
             if (empty($file->repositoryid)) {
@@ -1018,17 +1073,40 @@ abstract class restore_dbops {
                     // Create the file in the filepool if it does not exist yet.
                     if (!$fs->file_exists($newcontextid, $component, $filearea, $rec->newitemid, $file->filepath, $file->filename)) {
 
-                        // Even if a file has been deleted since the backup was made, the file metadata will remain in the
-                        // files table, and the file will not be moved to the trashdir.
-                        // Files are not cleared from the files table by cron until several days after deletion.
+                        // Even if a file has been deleted since the backup was made, the file metadata may remain in the
+                        // files table, and the file will not yet have been moved to the trashdir. e.g. a draft file version.
+                        // Try to recover from file table first.
                         if ($foundfiles = $DB->get_records('files', array('contenthash' => $file->contenthash), '', '*', 0, 1)) {
                             // Only grab one of the foundfiles - the file content should be the same for all entries.
                             $foundfile = reset($foundfiles);
                             $fs->create_file_from_storedfile($file_record, $foundfile->id);
                         } else {
-                            // A matching existing file record was not found in the database.
-                            $results[] = self::get_missing_file_result($file);
-                            continue;
+                            $filesystem = $fs->get_file_system();
+                            $restorefile = $file;
+                            $restorefile->contextid = $newcontextid;
+                            $restorefile->itemid = $rec->newitemid;
+                            $storedfile = new stored_file($fs, $restorefile);
+
+                            // Ok, let's try recover this file.
+                            // 1. We check if the file can be fetched locally without attempting to fetch
+                            //    from the trash.
+                            // 2. We check if we can get the remote filepath for the specified stored file.
+                            // 3. We check if the file can be fetched from the trash.
+                            // 4. All failed, say we couldn't find it.
+                            if ($filesystem->is_file_readable_locally_by_storedfile($storedfile)) {
+                                $localpath = $filesystem->get_local_path_from_storedfile($storedfile);
+                                $fs->create_file_from_pathname($file, $localpath);
+                            } else if ($filesystem->is_file_readable_remotely_by_storedfile($storedfile)) {
+                                $remotepath = $filesystem->get_remote_path_from_storedfile($storedfile);
+                                $fs->create_file_from_pathname($file, $remotepath);
+                            } else if ($filesystem->is_file_readable_locally_by_storedfile($storedfile, true)) {
+                                $localpath = $filesystem->get_local_path_from_storedfile($storedfile, true);
+                                $fs->create_file_from_pathname($file, $localpath);
+                            } else {
+                                // A matching file was not found.
+                                $results[] = self::get_missing_file_result($file);
+                                continue;
+                            }
                         }
                     }
                 }
@@ -1088,10 +1166,12 @@ abstract class restore_dbops {
      * @param string $restoreid Restore ID
      * @param int $userid Default userid for files
      * @param \core\progress\base $progress Object used for progress tracking
+     * @param int $courseid Course ID
      */
     public static function create_included_users($basepath, $restoreid, $userid,
-            \core\progress\base $progress) {
+            \core\progress\base $progress, int $courseid = 0) {
         global $CFG, $DB;
+        require_once($CFG->dirroot.'/user/profile/lib.php');
         $progress->start_progress('Creating included users');
 
         $authcache = array(); // Cache to get some bits from authentication plugins
@@ -1106,7 +1186,7 @@ abstract class restore_dbops {
 
             // if user lang doesn't exist here, use site default
             if (!array_key_exists($user->lang, $languages)) {
-                $user->lang = $CFG->lang;
+                $user->lang = get_newuser_language();
             }
 
             // if user theme isn't available on target site or they are disabled, reset theme
@@ -1172,6 +1252,10 @@ abstract class restore_dbops {
                 } else if ($userauth->isinternal and $userauth->canresetpwd) {
                     $user->password = 'restored';
                 }
+            } else if (self::password_should_be_discarded($user->password)) {
+                // Password is not empty and it is MD5 hashed. Generate a new random password for the user.
+                // We don't want MD5 hashes in the database and users won't be able to log in with the associated password anyway.
+                $user->password = hash_internal_user_password(base64_encode(random_bytes(24)));
             }
 
             // Creating new user, we must reset the policyagreed always
@@ -1198,8 +1282,9 @@ abstract class restore_dbops {
                         $udata = (object)$udata;
                         // If the profile field has data and the profile shortname-datatype is defined in server
                         if ($udata->field_data) {
-                            if ($field = $DB->get_record('user_info_field', array('shortname'=>$udata->field_name, 'datatype'=>$udata->field_type))) {
-                            /// Insert the user_custom_profile_field
+                            $field = profile_get_custom_field_data_by_shortname($udata->field_name);
+                            if ($field && $field->datatype === $udata->field_type) {
+                                // Insert the user_custom_profile_field.
                                 $rec = new stdClass();
                                 $rec->userid  = $newuserid;
                                 $rec->fieldid = $field->id;
@@ -1209,6 +1294,9 @@ abstract class restore_dbops {
                         }
                     }
                 }
+
+                // Trigger event that user was created.
+                \core\event\user_created::create_from_user_id_on_restore($newuserid, $restoreid, $courseid)->trigger();
 
                 // Process tags
                 if (core_tag_tag::is_enabled('core', 'user') && isset($user->tags)) { // If enabled in server and present in backup.
@@ -1227,7 +1315,41 @@ abstract class restore_dbops {
                         $preference = (object)$preference;
                         // Prepare the record and insert it
                         $preference->userid = $newuserid;
-                        $status = $DB->insert_record('user_preferences', $preference);
+
+                        // Translate _loggedin / _loggedoff message user preferences to _enabled. (MDL-67853)
+                        // This code cannot be removed.
+                        if (preg_match('/message_provider_.*/', $preference->name)) {
+                            $nameparts = explode('_', $preference->name);
+                            $name = array_pop($nameparts);
+
+                            if ($name == 'loggedin' || $name == 'loggedoff') {
+                                $preference->name = implode('_', $nameparts).'_enabled';
+
+                                $existingpreference = $DB->get_record('user_preferences',
+                                    ['name' => $preference->name , 'userid' => $newuserid]);
+                                // Merge both values.
+                                if ($existingpreference) {
+                                    $values = [];
+
+                                    if (!empty($existingpreference->value) && $existingpreference->value != 'none') {
+                                        $values = explode(',', $existingpreference->value);
+                                    }
+
+                                    if (!empty($preference->value) && $preference->value != 'none') {
+                                        $values = array_merge(explode(',', $preference->value), $values);
+                                        $values = array_unique($values);
+                                    }
+
+                                    $existingpreference->value = empty($values) ? 'none' : implode(',', $values);
+
+                                    $DB->update_record('user_preferences', $existingpreference);
+                                    continue;
+                                }
+                            }
+                        }
+                        // End translating loggedin / loggedoff message user preferences.
+
+                        $DB->insert_record('user_preferences', $preference);
                     }
                 }
                 // Special handling for htmleditor which was converted to a preference.
@@ -1237,7 +1359,7 @@ abstract class restore_dbops {
                         $preference->userid = $newuserid;
                         $preference->name = 'htmleditor';
                         $preference->value = 'textarea';
-                        $status = $DB->insert_record('user_preferences', $preference);
+                        $DB->insert_record('user_preferences', $preference);
                     }
                 }
 
@@ -1335,7 +1457,9 @@ abstract class restore_dbops {
             // Note: for DB deleted users md5(username) is stored *sometimes* in the email field,
             //       hence we are looking there for usernames if not empty. See delete_user()
             // If match by id and mnethost and user is deleted in DB and
-            // match by username LIKE 'backup_email.%' or by non empty email = md5(username) => ok, return target user
+            // match by username LIKE 'substring(backup_email).%' where the substr length matches the retained data in the
+            // username field (100 - (timestamp + 1) characters), or by non empty email = md5(username) => ok, return target user.
+            $usernamelookup = core_text::substr($user->email, 0, 89) . '.%';
             if ($rec = $DB->get_record_sql("SELECT *
                                               FROM {user} u
                                              WHERE id = ?
@@ -1348,13 +1472,14 @@ abstract class restore_dbops {
                                                        AND email = ?
                                                        )
                                                    )",
-                                           array($user->id, $user->mnethostid, $user->email.'.%', md5($user->username)))) {
+                                           array($user->id, $user->mnethostid, $usernamelookup, md5($user->username)))) {
                 return $rec; // Matching user, deleted in DB found, return it
             }
 
             // 1D - Handle users deleted in backup file and "alive" in DB
             // If match by id and mnethost and user is deleted in backup file
-            // and match by email = email_without_time(backup_email) => ok, return target user
+            // and match by substring(email) = email_without_time(backup_email) where the substr length matches the retained data
+            // in the username field (100 - (timestamp + 1) characters) => ok, return target user.
             if ($user->deleted) {
                 // Note: for DB deleted users email is stored in username field, hence we
                 //       are looking there for emails. See delete_user()
@@ -1364,7 +1489,7 @@ abstract class restore_dbops {
                                                   FROM {user} u
                                                  WHERE id = ?
                                                    AND mnethostid = ?
-                                                   AND UPPER(email) = UPPER(?)",
+                                                   AND " . $DB->sql_substr('UPPER(email)', 1, 89) . " = UPPER(?)",
                                                array($user->id, $user->mnethostid, $trimemail))) {
                     return $rec; // Matching user, deleted in backup file found, return it
                 }
@@ -1411,7 +1536,8 @@ abstract class restore_dbops {
             // Note: for DB deleted users md5(username) is stored *sometimes* in the email field,
             //       hence we are looking there for usernames if not empty. See delete_user()
             // 2B1 - If match by mnethost and user is deleted in DB and not empty email = md5(username) and
-            //       (by username LIKE 'backup_email.%' or non-zero firstaccess) => ok, return target user
+            //       (by username LIKE 'substring(backup_email).%' or non-zero firstaccess) => ok, return target user.
+            $usernamelookup = core_text::substr($user->email, 0, 89) . '.%';
             if ($rec = $DB->get_record_sql("SELECT *
                                               FROM {user} u
                                              WHERE mnethostid = ?
@@ -1425,14 +1551,15 @@ abstract class restore_dbops {
                                                        AND firstaccess = ?
                                                        )
                                                    )",
-                                           array($user->mnethostid, md5($user->username), $user->email.'.%', $user->firstaccess))) {
+                                           array($user->mnethostid, md5($user->username), $usernamelookup, $user->firstaccess))) {
                 return $rec; // Matching user found, return it
             }
 
             // 2B2 - If match by mnethost and user is deleted in DB and
-            //       username LIKE 'backup_email.%' and non-zero firstaccess) => ok, return target user
+            //       username LIKE 'substring(backup_email).%' and non-zero firstaccess) => ok, return target user
             //       (this covers situations where md5(username) wasn't being stored so we require both
             //        the email & non-zero firstaccess to match)
+            $usernamelookup = core_text::substr($user->email, 0, 89) . '.%';
             if ($rec = $DB->get_record_sql("SELECT *
                                               FROM {user} u
                                              WHERE mnethostid = ?
@@ -1440,13 +1567,13 @@ abstract class restore_dbops {
                                                AND UPPER(username) LIKE UPPER(?)
                                                AND firstaccess != 0
                                                AND firstaccess = ?",
-                                           array($user->mnethostid, $user->email.'.%', $user->firstaccess))) {
+                                           array($user->mnethostid, $usernamelookup, $user->firstaccess))) {
                 return $rec; // Matching user found, return it
             }
 
             // 2C - Handle users deleted in backup file and "alive" in DB
             // If match mnethost and user is deleted in backup file
-            // and match by email = email_without_time(backup_email) and non-zero firstaccess=> ok, return target user
+            // and match by substring(email) = email_without_time(backup_email) and non-zero firstaccess=> ok, return target user.
             if ($user->deleted) {
                 // Note: for DB deleted users email is stored in username field, hence we
                 //       are looking there for emails. See delete_user()
@@ -1455,7 +1582,7 @@ abstract class restore_dbops {
                 if ($rec = $DB->get_record_sql("SELECT *
                                                   FROM {user} u
                                                  WHERE mnethostid = ?
-                                                   AND UPPER(email) = UPPER(?)
+                                                   AND " . $DB->sql_substr('UPPER(email)', 1, 89) . " = UPPER(?)
                                                    AND firstaccess != 0
                                                    AND firstaccess = ?",
                                                array($user->mnethostid, $trimemail, $user->firstaccess))) {
@@ -1610,7 +1737,7 @@ abstract class restore_dbops {
      * @param \core\progress\base $progress Optional progress tracker
      */
     public static function process_included_users($restoreid, $courseid, $userid, $samesite,
-            \core\progress\base $progress = null) {
+            ?\core\progress\base $progress = null) {
         global $DB;
 
         // Just let precheck_included_users() to do all the hard work
@@ -1686,10 +1813,9 @@ abstract class restore_dbops {
     public static function calculate_course_names($courseid, $fullname, $shortname) {
         global $CFG, $DB;
 
-        $currentfullname = '';
-        $currentshortname = '';
         $counter = 0;
-        // Iteratere while the name exists
+
+        // Iterate while fullname or shortname exist.
         do {
             if ($counter) {
                 $suffixfull  = ' ' . get_string('copyasnoun') . ' ' . $counter;
@@ -1698,8 +1824,11 @@ abstract class restore_dbops {
                 $suffixfull  = '';
                 $suffixshort = '';
             }
-            $currentfullname = $fullname.$suffixfull;
-            $currentshortname = substr($shortname, 0, 100 - strlen($suffixshort)).$suffixshort; // < 100cc
+
+            // Ensure we don't overflow maximum length of name fields, in multi-byte safe manner.
+            $currentfullname = core_text::substr($fullname, 0, 254 - strlen($suffixfull)) . $suffixfull;
+            $currentshortname = core_text::substr($shortname, 0, 100 - strlen($suffixshort)) . $suffixshort;
+
             $coursefull  = $DB->get_record_select('course', 'fullname = ? AND id != ?',
                     array($currentfullname, $courseid), '*', IGNORE_MULTIPLE);
             $courseshort = $DB->get_record_select('course', 'shortname = ? AND id != ?', array($currentshortname, $courseid));
@@ -1775,8 +1904,19 @@ abstract class restore_dbops {
      * @param array $options
      * @return bool True for success
      */
-    public static function delete_course_content($courseid, array $options = null) {
+    public static function delete_course_content($courseid, ?array $options = null) {
         return remove_course_contents($courseid, false, $options);
+    }
+
+    /**
+     * Checks if password stored in backup is a MD5 hash.
+     * Returns true if it is, false otherwise.
+     *
+     * @param string $password The password to check.
+     * @return bool
+     */
+    private static function password_should_be_discarded(#[\SensitiveParameter] string $password): bool {
+        return (bool) preg_match('/^[0-9a-f]{32}$/', $password);
     }
 }
 

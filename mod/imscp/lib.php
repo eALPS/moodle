@@ -27,7 +27,7 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * List of features supported in IMS CP module
  * @param string $feature FEATURE_xx constant for requested feature
- * @return mixed True if module supports feature, false if not, null if doesn't know
+ * @return mixed True if module supports feature, false if not, null if doesn't know or string for the module purpose.
  */
 function imscp_supports($feature) {
     switch($feature) {
@@ -40,17 +40,11 @@ function imscp_supports($feature) {
         case FEATURE_GRADE_OUTCOMES:          return false;
         case FEATURE_BACKUP_MOODLE2:          return true;
         case FEATURE_SHOW_DESCRIPTION:        return true;
+        case FEATURE_MOD_PURPOSE:
+            return MOD_PURPOSE_INTERACTIVECONTENT;
 
         default: return null;
     }
-}
-
-/**
- * Returns all other caps used in module
- * @return array
- */
-function imscp_get_extra_capabilities() {
-    return array('moodle/site:accessallgroups');
 }
 
 /**
@@ -60,6 +54,10 @@ function imscp_get_extra_capabilities() {
  * @return array status array
  */
 function imscp_reset_userdata($data) {
+
+    // Any changes to the list of dates that needs to be rolled should be same during course restore and course reset.
+    // See MDL-9367.
+
     return array();
 }
 
@@ -133,6 +131,9 @@ function imscp_add_instance($data, $mform) {
         }
     }
 
+    $completiontimeexpected = !empty($data->completionexpected) ? $data->completionexpected : null;
+    \core_completion\api::update_completion_date_event($cmid, 'imscp', $data->id, $completiontimeexpected);
+
     return $data->id;
 }
 
@@ -196,6 +197,9 @@ function imscp_update_instance($data, $mform) {
     $imscp->structure = is_array($structure) ? serialize($structure) : null;
     $DB->update_record('imscp', $imscp);
 
+    $completiontimeexpected = !empty($data->completionexpected) ? $data->completionexpected : null;
+    \core_completion\api::update_completion_date_event($cmid, 'imscp', $imscp->id, $completiontimeexpected);
+
     return true;
 }
 
@@ -210,6 +214,9 @@ function imscp_delete_instance($id) {
     if (!$imscp = $DB->get_record('imscp', array('id' => $id))) {
         return false;
     }
+
+    $cm = get_coursemodule_from_instance('imscp', $id);
+    \core_completion\api::update_completion_date_event($cm->id, 'imscp', $id, null);
 
     // Note: all context files are deleted automatically.
 
@@ -242,7 +249,7 @@ function imscp_get_file_areas($course, $cm, $context) {
  *
  * @package  mod_imscp
  * @category files
- * @param stdClass $browser file browser
+ * @param file_browser $browser file browser
  * @param stdClass $areas file areas
  * @param stdClass $course course object
  * @param stdClass $cm course module object
@@ -386,7 +393,7 @@ function imscp_export_contents($cm, $baseurl) {
     $structure['fileurl']      = null;
     $structure['timecreated']  = $imscp->timemodified;
     $structure['timemodified'] = $imscp->timemodified;
-    $structure['content']      = json_encode(unserialize($imscp->structure));
+    $structure['content']      = json_encode(unserialize_array($imscp->structure));
     $structure['sortorder']    = 0;
     $structure['userid']       = null;
     $structure['author']       = null;
@@ -411,6 +418,11 @@ function imscp_export_contents($cm, $baseurl) {
         $file['userid']       = $fileinfo->get_userid();
         $file['author']       = $fileinfo->get_author();
         $file['license']      = $fileinfo->get_license();
+        $file['mimetype']     = $fileinfo->get_mimetype();
+        $file['isexternalfile'] = $fileinfo->is_external_file();
+        if ($file['isexternalfile']) {
+            $file['repositorytype'] = $fileinfo->get_repository_type();
+        }
         $contents[] = $file;
     }
 
@@ -457,4 +469,41 @@ function imscp_view($imscp, $course, $cm, $context) {
 function imscp_check_updates_since(cm_info $cm, $from, $filter = array()) {
     $updates = course_check_module_updates_since($cm, $from, array('content'), $filter);
     return $updates;
+}
+
+/**
+ * This function receives a calendar event and returns the action associated with it, or null if there is none.
+ *
+ * This is used by block_myoverview in order to display the event appropriately. If null is returned then the event
+ * is not displayed on the block.
+ *
+ * @param calendar_event $event
+ * @param \core_calendar\action_factory $factory
+ * @param int $userid User id to use for all capability checks, etc. Set to 0 for current user (default).
+ * @return \core_calendar\local\event\entities\action_interface|null
+ */
+function mod_imscp_core_calendar_provide_event_action(calendar_event $event,
+                                                      \core_calendar\action_factory $factory,
+                                                      int $userid = 0) {
+    $cm = get_fast_modinfo($event->courseid, $userid)->instances['imscp'][$event->instance];
+
+    if (!$cm->uservisible) {
+        // The module is not visible to the user for any reason.
+        return null;
+    }
+
+    $completion = new \completion_info($cm->get_course());
+
+    $completiondata = $completion->get_data($cm, false, $userid);
+
+    if ($completiondata->completionstate != COMPLETION_INCOMPLETE) {
+        return null;
+    }
+
+    return $factory->create_instance(
+        get_string('view'),
+        new \moodle_url('/mod/imscp/view.php', ['id' => $cm->id]),
+        1,
+        true
+    );
 }

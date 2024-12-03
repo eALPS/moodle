@@ -303,6 +303,18 @@ class iCalendar_component {
                     $component = $this; // use the iCalendar
                 }
 
+                $cleanedparams = [];
+                // Some parameter values are wrapped by DQUOTE character.
+                // We need to go through and get the actual value inside the quoted string.
+                foreach ($params as $param => $value) {
+                    if (preg_match('#"(?P<actualvalue>[^"]*?)"#', $value, $matches)) {
+                        $cleanedparams[$param] = $matches['actualvalue'];
+                    } else {
+                        $cleanedparams[$param] = $value;
+                    }
+                }
+                $params = $cleanedparams;
+
                 if ($component->add_property($label, $data, $params) === false) {
                     $this->parser_error("Failed to add property '$label' on line $key");
                 }
@@ -411,7 +423,7 @@ class iCalendar_event extends iCalendar_component {
             // DTEND must be later than DTSTART
             // The standard is not clear on how to hande different value types though
             // TODO: handle this correctly even if the value types are different
-            if($this->properties['DTEND'][0]->value <= $this->properties['DTSTART'][0]->value) {
+            if($this->properties['DTEND'][0]->value < $this->properties['DTSTART'][0]->value) {
                 return false;
             }
 
@@ -686,6 +698,7 @@ class iCalendar_standard extends iCalendar_component {
             'RDATE'   =>  RFC2445_OPTIONAL,
             'RRULE'   =>  RFC2445_OPTIONAL,
             'TZNAME'   =>  RFC2445_OPTIONAL,
+            'TZURL'   =>  RFC2445_OPTIONAL,
             RFC2445_XNAME   =>  RFC2445_OPTIONAL,
         ); 
         parent::__construct();

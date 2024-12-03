@@ -24,9 +24,19 @@
  * @since      Moodle 3.1
  */
 
+use core_course\external\helper_for_get_mods_by_courses;
+use core_external\external_api;
+use core_external\external_files;
+use core_external\external_format_value;
+use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
+use core_external\external_warnings;
+use core_external\util;
+
 defined('MOODLE_INTERNAL') || die();
 
-require_once($CFG->libdir . '/externallib.php');
 require_once($CFG->dirroot . '/mod/glossary/lib.php');
 
 /**
@@ -101,6 +111,9 @@ class mod_glossary_external extends external_api {
             'casesensitive' => new external_value(PARAM_BOOL, 'When true, the matching is case sensitive'),
             'fullmatch' => new external_value(PARAM_BOOL, 'When true, the matching is done on full words only'),
             'approved' => new external_value(PARAM_BOOL, 'Whether the entry was approved'),
+            'tags' => new external_multiple_structure(
+                \core_tag\external\tag_item_exporter::get_read_structure(), 'Tags', VALUE_OPTIONAL
+            ),
         );
 
         if ($includecat) {
@@ -128,9 +141,15 @@ class mod_glossary_external extends external_api {
         $canviewfullnames = has_capability('moodle/site:viewfullnames', $context);
 
         // Format concept and definition.
-        $entry->concept = external_format_string($entry->concept, $context->id);
-        list($entry->definition, $entry->definitionformat) = external_format_text($entry->definition, $entry->definitionformat,
-            $context->id, 'mod_glossary', 'entry', $entry->id);
+        $entry->concept = \core_external\util::format_string($entry->concept, $context);
+        [$entry->definition, $entry->definitionformat] = \core_external\util::format_text(
+            $entry->definition,
+            $entry->definitionformat,
+            $context,
+            'mod_glossary',
+            'entry',
+            $entry->id
+        );
 
         // Author details.
         $user = mod_glossary_entry_query_builder::get_user_from_record($entry);
@@ -143,12 +162,14 @@ class mod_glossary_external extends external_api {
         $entry->attachment = !empty($entry->attachment) ? 1 : 0;
         $entry->attachments = array();
         if ($entry->attachment) {
-            $entry->attachments = external_util::get_area_files($context->id, 'mod_glossary', 'attachment', $entry->id);
+            $entry->attachments = util::get_area_files($context->id, 'mod_glossary', 'attachment', $entry->id);
         }
-        $definitioninlinefiles = external_util::get_area_files($context->id, 'mod_glossary', 'entry', $entry->id);
+        $definitioninlinefiles = util::get_area_files($context->id, 'mod_glossary', 'entry', $entry->id);
         if (!empty($definitioninlinefiles)) {
             $entry->definitioninlinefiles = $definitioninlinefiles;
         }
+
+        $entry->tags = \core_tag\external\util::get_item_tags('mod_glossary', 'glossary_entries', $entry->id);
     }
 
     /**
@@ -157,7 +178,7 @@ class mod_glossary_external extends external_api {
      * @param  int $id The glossary ID.
      * @return array Contains glossary, context, course and cm.
      */
-    protected static function validate_glossary($id) {
+    public static function validate_glossary($id) {
         global $DB;
         $glossary = $DB->get_record('glossary', array('id' => $id), '*', MUST_EXIST);
         list($course, $cm) = get_course_and_cm_from_instance($glossary, 'glossary');
@@ -193,6 +214,7 @@ class mod_glossary_external extends external_api {
      * @since Moodle 3.1
      */
     public static function get_glossaries_by_courses($courseids = array()) {
+        global $CFG;
         $params = self::validate_parameters(self::get_glossaries_by_courses_parameters(), array('courseids' => $courseids));
 
         $warnings = array();
@@ -210,16 +232,13 @@ class mod_glossary_external extends external_api {
 
         // Ensure there are courseids to loop through.
         if (!empty($courseids)) {
-            list($courses, $warnings) = external_util::validate_courses($courseids, $courses);
+            list($courses, $warnings) = util::validate_courses($courseids, $courses);
 
             // Get the glossaries in these courses, this function checks users visibility permissions.
             $glossaries = get_all_instances_in_courses('glossary', $courses);
             foreach ($glossaries as $glossary) {
                 $context = context_module::instance($glossary->coursemodule);
-                $glossary->name = external_format_string($glossary->name, $context->id);
-                list($glossary->intro, $glossary->introformat) = external_format_text($glossary->intro, $glossary->introformat,
-                    $context->id, 'mod_glossary', 'intro', null);
-                $glossary->introfiles = external_util::get_area_files($context->id, 'mod_glossary', 'intro', false, false);
+                helper_for_get_mods_by_courses::format_name_and_intro($glossary, 'mod_glossary');
 
                 // Make sure we have a number of entries per page.
                 if (!$glossary->entbypage) {
@@ -250,14 +269,9 @@ class mod_glossary_external extends external_api {
     public static function get_glossaries_by_courses_returns() {
         return new external_single_structure(array(
             'glossaries' => new external_multiple_structure(
-                new external_single_structure(array(
-                    'id' => new external_value(PARAM_INT, 'Glossary id'),
-                    'coursemodule' => new external_value(PARAM_INT, 'Course module id'),
-                    'course' => new external_value(PARAM_INT, 'Course id'),
-                    'name' => new external_value(PARAM_RAW, 'Glossary name'),
-                    'intro' => new external_value(PARAM_RAW, 'The Glossary intro'),
-                    'introformat' => new external_format_value('intro'),
-                    'introfiles' => new external_files('Files in the introduction text', VALUE_OPTIONAL),
+                new external_single_structure(array_merge(
+                    helper_for_get_mods_by_courses::standard_coursemodule_elements_returns(),
+                    [
                     'allowduplicatedentries' => new external_value(PARAM_INT, 'If enabled, multiple entries can have the' .
                         ' same concept name'),
                     'displayformat' => new external_value(PARAM_TEXT, 'Display format type'),
@@ -292,14 +306,11 @@ class mod_glossary_external extends external_api {
                     'timecreated' => new external_value(PARAM_INT, 'Time created'),
                     'timemodified' => new external_value(PARAM_INT, 'Time modified'),
                     'completionentries' => new external_value(PARAM_INT, 'Number of entries to complete'),
-                    'section' => new external_value(PARAM_INT, 'Section'),
-                    'visible' => new external_value(PARAM_INT, 'Visible'),
-                    'groupmode' => new external_value(PARAM_INT, 'Group mode'),
-                    'groupingid' => new external_value(PARAM_INT, 'Grouping ID'),
                     'browsemodes' => new external_multiple_structure(
                         new external_value(PARAM_ALPHA, 'Modes of browsing allowed')
                     ),
                     'canaddentry' => new external_value(PARAM_INT, 'Whether the user can add a new entry', VALUE_OPTIONAL),
+                    ]
                 ), 'Glossaries')
             ),
             'warnings' => new external_warnings())
@@ -352,7 +363,7 @@ class mod_glossary_external extends external_api {
     /**
      * Returns the description of the external function return value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function view_glossary_returns() {
@@ -410,7 +421,7 @@ class mod_glossary_external extends external_api {
     /**
      * Returns the description of the external function return value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function view_entry_returns() {
@@ -486,6 +497,7 @@ class mod_glossary_external extends external_api {
         return array(
             'count' => $count,
             'entries' => $entries,
+            'ratinginfo' => \core_rating\external\util::get_rating_info($glossary, $context, 'mod_glossary', 'entry', $entries),
             'warnings' => $warnings
         );
     }
@@ -493,7 +505,7 @@ class mod_glossary_external extends external_api {
     /**
      * Returns the description of the external function return value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function get_entries_by_letter_returns() {
@@ -502,6 +514,7 @@ class mod_glossary_external extends external_api {
             'entries' => new external_multiple_structure(
                 self::get_entry_return_structure()
             ),
+            'ratinginfo' => \core_rating\external\util::external_ratings_structure(),
             'warnings' => new external_warnings()
         ));
     }
@@ -583,6 +596,7 @@ class mod_glossary_external extends external_api {
         return array(
             'count' => $count,
             'entries' => $entries,
+            'ratinginfo' => \core_rating\external\util::get_rating_info($glossary, $context, 'mod_glossary', 'entry', $entries),
             'warnings' => $warnings
         );
     }
@@ -590,7 +604,7 @@ class mod_glossary_external extends external_api {
     /**
      * Returns the description of the external function return value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function get_entries_by_date_returns() {
@@ -599,6 +613,7 @@ class mod_glossary_external extends external_api {
             'entries' => new external_multiple_structure(
                 self::get_entry_return_structure()
             ),
+            'ratinginfo' => \core_rating\external\util::external_ratings_structure(),
             'warnings' => new external_warnings()
         ));
     }
@@ -645,7 +660,7 @@ class mod_glossary_external extends external_api {
         $categories = array();
         list($records, $count) = glossary_get_categories($glossary, $from, $limit);
         foreach ($records as $category) {
-            $category->name = external_format_string($category->name, $context->id);
+            $category->name = \core_external\util::format_string($category->name, $context);
             $categories[] = $category;
         }
 
@@ -659,7 +674,7 @@ class mod_glossary_external extends external_api {
     /**
      * Returns the description of the external function return value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function get_categories_returns() {
@@ -752,7 +767,7 @@ class mod_glossary_external extends external_api {
                 $record->categoryid = GLOSSARY_SHOW_NOT_CATEGORISED;
             }
             if (isset($record->categoryname)) {
-                $record->categoryname = external_format_string($record->categoryname, $context->id);
+                $record->categoryname = \core_external\util::format_string($record->categoryname, $context);
             }
             $entries[] = $record;
         }
@@ -760,6 +775,7 @@ class mod_glossary_external extends external_api {
         return array(
             'count' => $count,
             'entries' => $entries,
+            'ratinginfo' => \core_rating\external\util::get_rating_info($glossary, $context, 'mod_glossary', 'entry', $entries),
             'warnings' => $warnings
         );
     }
@@ -767,7 +783,7 @@ class mod_glossary_external extends external_api {
     /**
      * Returns the description of the external function return value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function get_entries_by_category_returns() {
@@ -776,6 +792,7 @@ class mod_glossary_external extends external_api {
             'entries' => new external_multiple_structure(
                 self::get_entry_return_structure(true)
             ),
+            'ratinginfo' => \core_rating\external\util::external_ratings_structure(),
             'warnings' => new external_warnings()
         ));
     }
@@ -853,7 +870,7 @@ class mod_glossary_external extends external_api {
     /**
      * Returns the description of the external function return value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function get_authors_returns() {
@@ -954,6 +971,7 @@ class mod_glossary_external extends external_api {
         return array(
             'count' => $count,
             'entries' => $entries,
+            'ratinginfo' => \core_rating\external\util::get_rating_info($glossary, $context, 'mod_glossary', 'entry', $entries),
             'warnings' => $warnings
         );
     }
@@ -961,7 +979,7 @@ class mod_glossary_external extends external_api {
     /**
      * Returns the description of the external function return value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function get_entries_by_author_returns() {
@@ -970,6 +988,7 @@ class mod_glossary_external extends external_api {
             'entries' => new external_multiple_structure(
                 self::get_entry_return_structure()
             ),
+            'ratinginfo' => \core_rating\external\util::external_ratings_structure(),
             'warnings' => new external_warnings()
         ));
     }
@@ -1057,6 +1076,7 @@ class mod_glossary_external extends external_api {
         return array(
             'count' => $count,
             'entries' => $entries,
+            'ratinginfo' => \core_rating\external\util::get_rating_info($glossary, $context, 'mod_glossary', 'entry', $entries),
             'warnings' => $warnings
         );
     }
@@ -1064,7 +1084,7 @@ class mod_glossary_external extends external_api {
     /**
      * Returns the description of the external function return value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function get_entries_by_author_id_returns() {
@@ -1073,6 +1093,7 @@ class mod_glossary_external extends external_api {
             'entries' => new external_multiple_structure(
                 self::get_entry_return_structure()
             ),
+            'ratinginfo' => \core_rating\external\util::external_ratings_structure(),
             'warnings' => new external_warnings()
         ));
     }
@@ -1158,6 +1179,7 @@ class mod_glossary_external extends external_api {
         return array(
             'count' => $count,
             'entries' => $entries,
+            'ratinginfo' => \core_rating\external\util::get_rating_info($glossary, $context, 'mod_glossary', 'entry', $entries),
             'warnings' => $warnings
         );
     }
@@ -1165,7 +1187,7 @@ class mod_glossary_external extends external_api {
     /**
      * Returns the description of the external function return value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function get_entries_by_search_returns() {
@@ -1174,6 +1196,7 @@ class mod_glossary_external extends external_api {
             'entries' => new external_multiple_structure(
                 self::get_entry_return_structure()
             ),
+            'ratinginfo' => \core_rating\external\util::external_ratings_structure(),
             'warnings' => new external_warnings()
         ));
     }
@@ -1238,6 +1261,7 @@ class mod_glossary_external extends external_api {
         return array(
             'count' => $count,
             'entries' => $entries,
+            'ratinginfo' => \core_rating\external\util::get_rating_info($glossary, $context, 'mod_glossary', 'entry', $entries),
             'warnings' => $warnings
         );
     }
@@ -1245,7 +1269,7 @@ class mod_glossary_external extends external_api {
     /**
      * Returns the description of the external function return value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function get_entries_by_term_returns() {
@@ -1254,6 +1278,7 @@ class mod_glossary_external extends external_api {
             'entries' => new external_multiple_structure(
                 self::get_entry_return_structure()
             ),
+            'ratinginfo' => \core_rating\external\util::external_ratings_structure(),
             'warnings' => new external_warnings()
         ));
     }
@@ -1324,6 +1349,7 @@ class mod_glossary_external extends external_api {
         return array(
             'count' => $count,
             'entries' => $entries,
+            'ratinginfo' => \core_rating\external\util::get_rating_info($glossary, $context, 'mod_glossary', 'entry', $entries),
             'warnings' => $warnings
         );
     }
@@ -1331,7 +1357,7 @@ class mod_glossary_external extends external_api {
     /**
      * Returns the description of the external function return value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function get_entries_to_approve_returns() {
@@ -1340,6 +1366,7 @@ class mod_glossary_external extends external_api {
             'entries' => new external_multiple_structure(
                 self::get_entry_return_structure()
             ),
+            'ratinginfo' => \core_rating\external\util::external_ratings_structure(),
             'warnings' => new external_warnings()
         ));
     }
@@ -1374,7 +1401,7 @@ class mod_glossary_external extends external_api {
 
         // Get and validate the glossary.
         $entry = $DB->get_record('glossary_entries', array('id' => $id), '*', MUST_EXIST);
-        list($glossary, $context) = self::validate_glossary($entry->glossaryid);
+        list($glossary, $context, $course, $cm) = self::validate_glossary($entry->glossaryid);
 
         if (empty($entry->approved) && $entry->userid != $USER->id && !has_capability('mod/glossary:approve', $context)) {
             throw new invalid_parameter_exception('invalidentry');
@@ -1383,8 +1410,17 @@ class mod_glossary_external extends external_api {
         $entry = glossary_get_entry_by_id($id);
         self::fill_entry_details($entry, $context);
 
+        // Permissions (for entry edition).
+        $permissions = [
+            'candelete' => mod_glossary_can_delete_entry($entry, $glossary, $context),
+            'canupdate' => mod_glossary_can_update_entry($entry, $glossary, $context, $cm),
+        ];
+
         return array(
             'entry' => $entry,
+            'ratinginfo' => \core_rating\external\util::get_rating_info($glossary, $context, 'mod_glossary', 'entry',
+                array($entry)),
+            'permissions' => $permissions,
             'warnings' => $warnings
         );
     }
@@ -1392,12 +1428,20 @@ class mod_glossary_external extends external_api {
     /**
      * Returns the description of the external function return value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.1
      */
     public static function get_entry_by_id_returns() {
         return new external_single_structure(array(
             'entry' => self::get_entry_return_structure(),
+            'ratinginfo' => \core_rating\external\util::external_ratings_structure(),
+            'permissions' => new external_single_structure(
+                [
+                    'candelete' => new external_value(PARAM_BOOL, 'Whether the user can delete the entry.'),
+                    'canupdate' => new external_value(PARAM_BOOL, 'Whether the user can update the entry.'),
+                ],
+                'User permissions for the managing the entry.', VALUE_OPTIONAL
+            ),
             'warnings' => new external_warnings()
         ));
     }
@@ -1524,7 +1568,7 @@ class mod_glossary_external extends external_api {
     /**
      * Returns the description of the external function return value.
      *
-     * @return external_description
+     * @return \core_external\external_description
      * @since Moodle 3.2
      */
     public static function add_entry_returns() {

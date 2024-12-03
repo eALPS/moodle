@@ -9,15 +9,18 @@ require_once($CFG->libdir.'/adminlib.php');
 
 $confirm = optional_param('confirm', 0, PARAM_BOOL);
 
-require_login();
 admin_externalpage_setup('userbulk');
 require_capability('moodle/user:update', context_system::instance());
 
-$return = $CFG->wwwroot.'/'.$CFG->admin.'/user/user_bulk.php';
+$returnurl = optional_param('returnurl', '', PARAM_LOCALURL);
+$return = new moodle_url($returnurl ?: '/admin/user/user_bulk.php');
 
 if (empty($SESSION->bulk_users)) {
     redirect($return);
 }
+
+$PAGE->set_primary_active_tab('siteadminnode');
+$PAGE->set_secondary_active_tab('users');
 
 echo $OUTPUT->header();
 
@@ -60,8 +63,9 @@ if ($confirm and confirm_sesskey()) {
         $usernames .= ', ...';
     }
     echo $OUTPUT->heading(get_string('confirmation', 'admin'));
-    $formcontinue = new single_button(new moodle_url('/admin/user/user_bulk_forcepasswordchange.php', array('confirm' => 1)), get_string('yes'));
-    $formcancel = new single_button(new moodle_url('/admin/user/user_bulk.php'), get_string('no'), 'get');
+    $formcontinue = new single_button(new moodle_url('/admin/user/user_bulk_forcepasswordchange.php',
+        ['confirm' => 1, 'returnurl' => $returnurl]), get_string('yes'));
+    $formcancel = new single_button($return, get_string('no'), 'get');
     echo $OUTPUT->confirm(get_string('forcepasswordchangecheckfull', '', $usernames), $formcontinue, $formcancel);
 }
 

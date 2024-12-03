@@ -27,6 +27,9 @@ namespace core\event;
 
 defined('MOODLE_INTERNAL') || die();
 
+debugging('core\\event\\role_capabilities_updated has been deprecated. Please use
+        core\\event\\capability_assigned instead', DEBUG_DEVELOPER);
+
 /**
  * Role updated event class.
  *
@@ -80,26 +83,17 @@ class role_capabilities_updated extends base {
         }
     }
 
-    /**
-     * Sets legacy log data.
-     *
-     * @param array $legacylogdata
-     * @return void
-     */
-    public function set_legacy_logdata($legacylogdata) {
-        $this->legacylogdata = $legacylogdata;
-    }
-
-    /**
-     * Returns array of parameters to be passed to legacy add_to_log() function.
-     *
-     * @return null|array
-     */
-    protected function get_legacy_logdata() {
-        return $this->legacylogdata;
-    }
-
     public static function get_objectid_mapping() {
         return array('db' => 'role', 'restore' => 'role');
+    }
+
+
+    /**
+     * This event has been deprecated.
+     *
+     * @return boolean
+     */
+    public static function is_deprecated() {
+        return true;
     }
 }

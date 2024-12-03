@@ -30,13 +30,14 @@ $context = context_system::instance();
 $PAGE->set_context($context);
 $adminroot = admin_get_root(false, false);  // settings not required - only pages
 
-if ($section = optional_param('section', '', PARAM_SAFEDIR) and confirm_sesskey()) {
+// We clean section with safe path here for compatibility with external pages that include a slash in their name.
+if ($section = optional_param('section', '', PARAM_SAFEPATH) and confirm_sesskey()) {
 
     if (get_user_preferences('admin_bookmarks')) {
         $bookmarks = explode(',', get_user_preferences('admin_bookmarks'));
 
         if (in_array($section, $bookmarks)) {
-            print_error('bookmarkalreadyexists','admin');
+            throw new \moodle_exception('bookmarkalreadyexists', 'admin');
             die;
         }
 
@@ -46,13 +47,13 @@ if ($section = optional_param('section', '', PARAM_SAFEDIR) and confirm_sesskey(
 
     $temp = $adminroot->locate($section);
 
-    if ($temp instanceof admin_settingpage || $temp instanceof admin_externalpage) {
+    if ($temp instanceof admin_settingpage || $temp instanceof admin_externalpage || $temp instanceof admin_category) {
         $bookmarks[] = $section;
         $bookmarks = implode(',', $bookmarks);
         set_user_preference('admin_bookmarks', $bookmarks);
 
     } else {
-        print_error('invalidsection','admin');
+        throw new \moodle_exception('invalidsection', 'admin');
         die;
     }
 
@@ -61,10 +62,14 @@ if ($section = optional_param('section', '', PARAM_SAFEDIR) and confirm_sesskey(
 
     } elseif ($temp instanceof admin_externalpage) {
         redirect($temp->url);
+
+    } else if ($temp instanceof admin_category) {
+        redirect($CFG->wwwroot . '/' . $CFG->admin . '/category.php?category=' . $section);
+
     }
 
 } else {
-    print_error('invalidsection','admin');
+    throw new \moodle_exception('invalidsection', 'admin');
     die;
 }
 

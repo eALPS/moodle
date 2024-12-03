@@ -56,8 +56,10 @@ class backup_anonymizer_helper {
         if (preg_match('/^anon\d*$/', $user->username)) {
             $match = preg_match('/^anonfirstname\d*$/', $user->firstname);
             $match = $match && preg_match('/^anonlastname\d*$/', $user->lastname);
-            $match = $match && preg_match('/^anon\d*@doesntexist\.com$/', $user->email);
-            if ($match) {
+            // Check .com for backwards compatibility.
+            $emailmatch = preg_match('/^anon\d*@doesntexist\.com$/', $user->email) ||
+                preg_match('/^anon\d*@doesntexist\.invalid$/', $user->email);
+            if ($match && $emailmatch) {
                 return true;
             }
         }
@@ -93,27 +95,7 @@ class backup_anonymizer_helper {
     public static function process_user_email($value) {
         static $counter = 0;
         $counter++;
-        return 'anon' . $counter . '@doesntexist.com'; // Just a counter
-    }
-
-    public static function process_user_icq($value) {
-        return ''; // Clean icq
-    }
-
-    public static function process_user_skype($value) {
-        return ''; // Clean skype
-    }
-
-    public static function process_user_yahoo($value) {
-        return ''; // Clean yahoo
-    }
-
-    public static function process_user_aim($value) {
-        return ''; // Clean aim
-    }
-
-    public static function process_user_msn($value) {
-        return ''; // Clean msn
+        return 'anon' . $counter . '@doesntexist.invalid'; // Just a counter.
     }
 
     public static function process_user_phone1($value) {
@@ -150,10 +132,6 @@ class backup_anonymizer_helper {
 
     public static function process_user_picture($value) {
         return 0; // No picture
-    }
-
-    public static function process_user_url($value) {
-        return ''; // No url
     }
 
     public static function process_user_description($value) {

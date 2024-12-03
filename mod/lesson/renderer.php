@@ -37,7 +37,7 @@ class mod_lesson_renderer extends plugin_renderer_base {
      * @return string
      */
     public function header($lesson, $cm, $currenttab = '', $extraeditbuttons = false, $lessonpageid = null, $extrapagetitle = null) {
-        global $CFG;
+        global $CFG, $USER;
 
         $activityname = format_string($lesson->name, true, $lesson->course);
         if (empty($extrapagetitle)) {
@@ -49,24 +49,28 @@ class mod_lesson_renderer extends plugin_renderer_base {
         // Build the buttons
         $context = context_module::instance($cm->id);
 
-    /// Header setup
+        // Header setup.
         $this->page->set_title($title);
         $this->page->set_heading($this->page->course->fullname);
-        lesson_add_header_buttons($cm, $context, $extraeditbuttons, $lessonpageid);
-        $output = $this->output->header();
 
-        if (has_capability('mod/lesson:manage', $context)) {
-            $output .= $this->output->heading_with_help($activityname, 'overview', 'lesson');
-
-            if (!empty($currenttab)) {
-                ob_start();
-                include($CFG->dirroot.'/mod/lesson/tabs.php');
-                $output .= ob_get_contents();
-                ob_end_clean();
-            }
-        } else {
-            $output .= $this->output->heading($activityname);
+        $canmanage = has_capability('mod/lesson:manage', $context);
+        $activityheader = $this->page->activityheader;
+        $activitypage = new moodle_url('/mod/' . $this->page->activityname . '/view.php');
+        $setactive = $activitypage->compare($this->page->url, URL_MATCH_BASE);
+        if ($activityheader->is_title_allowed()) {
+            $title = $canmanage && $setactive ?
+                        $this->output->heading_with_help($activityname, 'overview', 'lesson') :
+                        $activityname;
+            $activityheader->set_title($title);
         }
+
+        // If we have the capability to manage the lesson but not within the view page,
+        // there's no reason to show activity/completion information.
+        if ($canmanage && !$setactive) {
+            $activityheader->set_hidecompletion(true);
+        }
+
+        $output = $this->output->header();
 
         foreach ($lesson->messages as $message) {
             $output .= $this->output->notification($message[0], $message[1], $message[2]);
@@ -148,7 +152,7 @@ class mod_lesson_renderer extends plugin_renderer_base {
      * @param single_button $button
      * @return string
      */
-    public function message($message, single_button $button = null) {
+    public function message($message, ?single_button $button = null) {
         $output  = $this->output->box_start('generalbox boxaligncenter');
         $output .= $message;
         if ($button !== null) {
@@ -169,11 +173,13 @@ class mod_lesson_renderer extends plugin_renderer_base {
         $output = $this->output->box(get_string('youhaveseen','lesson'), 'generalbox boxaligncenter');
         $output .= $this->output->box_start('center');
 
-        $yeslink = html_writer::link(new moodle_url('/mod/lesson/view.php', array('id'=>$this->page->cm->id, 'pageid'=>$lastpageseenid, 'startlastseen'=>'yes')), get_string('yes'));
+        $yeslink = html_writer::link(new moodle_url('/mod/lesson/view.php', array('id' => $this->page->cm->id,
+            'pageid' => $lastpageseenid, 'startlastseen' => 'yes')), get_string('yes'), array('class' => 'btn btn-primary'));
         $output .= html_writer::tag('span', $yeslink, array('class'=>'lessonbutton standardbutton'));
         $output .= '&nbsp;';
 
-        $nolink = html_writer::link(new moodle_url('/mod/lesson/view.php', array('id'=>$this->page->cm->id, 'pageid'=>$lesson->firstpageid, 'startlastseen'=>'no')), get_string('no'));
+        $nolink = html_writer::link(new moodle_url('/mod/lesson/view.php', array('id' => $this->page->cm->id,
+            'pageid' => $lesson->firstpageid, 'startlastseen' => 'no')), get_string('no'), array('class' => 'btn btn-secondary'));
         $output .= html_writer::tag('span', $nolink, array('class'=>'lessonbutton standardbutton'));
 
         $output .= $this->output->box_end();
@@ -213,11 +219,6 @@ class mod_lesson_renderer extends plugin_renderer_base {
         $table = new html_table();
         $table->head = array(get_string('pagetitle', 'lesson'), get_string('qtype', 'lesson'), get_string('jumps', 'lesson'), get_string('actions', 'lesson'));
         $table->align = array('left', 'left', 'left', 'center');
-        $table->wrap = array('', 'nowrap', '', 'nowrap');
-        $table->tablealign = 'center';
-        $table->cellspacing = 0;
-        $table->cellpadding = '2px';
-        $table->width = '80%';
         $table->data = array();
 
         $canedit = has_capability('mod/lesson:edit', context_module::instance($this->page->cm->id));
@@ -280,11 +281,10 @@ class mod_lesson_renderer extends plugin_renderer_base {
             $pagetable->cellspacing = 0;
             $pagetable->cellpadding = '5px';
             $pagetable->data = array();
-            $pagetable->id = 'lesson-' . $pageid;
 
             $pageheading = new html_table_cell();
 
-            $pageheading->text = format_string($page->title);
+            $pageheading->text = html_writer::tag('a', '', array('id' => 'lesson-' . $pageid)) . format_string($page->title);
             if ($canedit) {
                 $pageheading->text .= ' '.$this->page_action_links($page, $npages);
             }
@@ -307,7 +307,7 @@ class mod_lesson_renderer extends plugin_renderer_base {
 
             $pagetable = $page->display_answers($pagetable);
 
-            $content .= html_writer::start_tag('div', array('class' => 'no-overflow'));
+            $content .= html_writer::start_tag('div');
             $content .= html_writer::table($pagetable);
             $content .= html_writer::end_tag('div');
 
@@ -368,10 +368,10 @@ class mod_lesson_renderer extends plugin_renderer_base {
      * @return string
      */
     public function add_first_page_links(lesson $lesson) {
-        global $CFG;
         $prevpageid = 0;
 
-        $output = $this->output->heading(get_string("whatdofirst", "lesson"), 3);
+        $headinglevel = $this->page->activityheader->get_heading_level(3);
+        $output = $this->output->heading(get_string("whatdofirst", "lesson"), $headinglevel);
         $links = array();
 
         $importquestionsurl = new moodle_url('/mod/lesson/import.php',array('id'=>$this->page->cm->id, 'pageid'=>$prevpageid));
@@ -406,30 +406,30 @@ class mod_lesson_renderer extends plugin_renderer_base {
             $url = new moodle_url('/mod/lesson/lesson.php',
                     array('id' => $this->page->cm->id, 'action' => 'move', 'pageid' => $page->id, 'sesskey' => sesskey()));
             $label = get_string('movepagenamed', 'lesson', format_string($page->title));
-            $img = html_writer::img($this->output->pix_url('t/move'), $label, array('class' => 'iconsmall'));
+            $img = $this->output->pix_icon('t/move', $label);
             $actions[] = html_writer::link($url, $img, array('title' => $label));
         }
         $url = new moodle_url('/mod/lesson/editpage.php', array('id' => $this->page->cm->id, 'pageid' => $page->id, 'edit' => 1));
         $label = get_string('updatepagenamed', 'lesson', format_string($page->title));
-        $img = html_writer::img($this->output->pix_url('t/edit'), $label, array('class' => 'iconsmall'));
+        $img = $this->output->pix_icon('t/edit', $label);
         $actions[] = html_writer::link($url, $img, array('title' => $label));
 
         // Duplicate action.
         $url = new moodle_url('/mod/lesson/lesson.php', array('id' => $this->page->cm->id, 'pageid' => $page->id,
                 'action' => 'duplicate', 'sesskey' => sesskey()));
         $label = get_string('duplicatepagenamed', 'lesson', format_string($page->title));
-        $img = html_writer::img($this->output->pix_url('e/copy', 'mod_lesson'), $label, array('class' => 'iconsmall'));
+        $img = $this->output->pix_icon('e/copy', $label, 'mod_lesson');
         $actions[] = html_writer::link($url, $img, array('title' => $label));
 
         $url = new moodle_url('/mod/lesson/view.php', array('id' => $this->page->cm->id, 'pageid' => $page->id));
         $label = get_string('previewpagenamed', 'lesson', format_string($page->title));
-        $img = html_writer::img($this->output->pix_url('t/preview'), $label, array('class' => 'iconsmall'));
+        $img = $this->output->pix_icon('t/preview', $label);
         $actions[] = html_writer::link($url, $img, array('title' => $label));
 
         $url = new moodle_url('/mod/lesson/lesson.php',
                 array('id' => $this->page->cm->id, 'action' => 'confirmdelete', 'pageid' => $page->id, 'sesskey' => sesskey()));
         $label = get_string('deletepagenamed', 'lesson', format_string($page->title));
-        $img = html_writer::img($this->output->pix_url('t/delete'), $label, array('class' => 'iconsmall'));
+        $img = $this->output->pix_icon('t/delete', $label);
         $actions[] = html_writer::link($url, $img, array('title' => $label));
 
         if ($printaddpage) {
@@ -439,10 +439,11 @@ class mod_lesson_renderer extends plugin_renderer_base {
             foreach ($links as $link) {
                 $options[$link['type']] = $link['name'];
             }
-            $options[0] = get_string('question', 'lesson');
+            $options[0] = get_string('addaquestionpage', 'lesson');
 
             $addpageurl = new moodle_url('/mod/lesson/editpage.php', array('id'=>$this->page->cm->id, 'pageid'=>$page->id, 'sesskey'=>sesskey()));
             $addpageselect = new single_select($addpageurl, 'qtype', $options, null, array(''=>get_string('addanewpage', 'lesson').'...'), 'addpageafter'.$page->id);
+            $addpageselect->attributes = ['aria-label' => get_string('actions', 'lesson')];
             $addpageselector = $this->output->render($addpageselect);
         }
 
@@ -477,39 +478,17 @@ class mod_lesson_renderer extends plugin_renderer_base {
       * @return string
       */
     public function ongoing_score(lesson $lesson) {
-        global $USER, $DB;
-
-        $context = context_module::instance($this->page->cm->id);
-        if (has_capability('mod/lesson:manage', $context)) {
-            return $this->output->box(get_string('teacherongoingwarning', 'lesson'), "ongoing center");
-        } else {
-            $ntries = $DB->count_records("lesson_grades", array("lessonid"=>$lesson->id, "userid"=>$USER->id));
-            if (isset($USER->modattempts[$lesson->id])) {
-                $ntries--;
-            }
-            $gradeinfo = lesson_grade($lesson, $ntries);
-            $a = new stdClass;
-            if ($lesson->custom) {
-                $a->score = $gradeinfo->earned;
-                $a->currenthigh = $gradeinfo->total;
-                return $this->output->box(get_string("ongoingcustom", "lesson", $a), "ongoing center");
-            } else {
-                $a->correct = $gradeinfo->earned;
-                $a->viewed = $gradeinfo->attempts;
-                return $this->output->box(get_string("ongoingnormal", "lesson", $a), "ongoing center");
-            }
-        }
+        return $this->output->box($lesson->get_ongoing_score_message(), "ongoing center");
     }
 
     /**
      * Returns HTML to display a progress bar of progression through a lesson
      *
      * @param lesson $lesson
+     * @param int $progress optional, if empty it will be calculated
      * @return string
      */
-    public function progress_bar(lesson $lesson) {
-        global $CFG, $USER, $DB;
-
+    public function progress_bar(lesson $lesson, $progress = null) {
         $context = context_module::instance($this->page->cm->id);
 
         // lesson setting to turn progress bar on or off
@@ -522,58 +501,18 @@ class mod_lesson_renderer extends plugin_renderer_base {
             return $this->output->notification(get_string('progressbarteacherwarning2', 'lesson'));
         }
 
-        if (!isset($USER->modattempts[$lesson->id])) {
-            // all of the lesson pages
-            $pages = $lesson->load_all_pages();
-            foreach ($pages as $page) {
-                if ($page->prevpageid == 0) {
-                    $pageid = $page->id;  // find the first page id
-                    break;
-                }
-            }
-
-            // current attempt number
-            if (!$ntries = $DB->count_records("lesson_grades", array("lessonid"=>$lesson->id, "userid"=>$USER->id))) {
-                $ntries = 0;  // may not be necessary
-            }
-
-            $viewedpageids = array();
-            if ($attempts = $lesson->get_attempts($ntries, false)) {
-                foreach($attempts as $attempt) {
-                    $viewedpageids[$attempt->pageid] = $attempt;
-                }
-            }
-
-            $viewedbranches = array();
-            // collect all of the branch tables viewed
-            if ($branches = $DB->get_records("lesson_branch", array ("lessonid"=>$lesson->id, "userid"=>$USER->id, "retry"=>$ntries), 'timeseen ASC', 'id, pageid')) {
-                foreach($branches as $branch) {
-                    $viewedbranches[$branch->pageid] = $branch;
-                }
-                $viewedpageids = array_merge($viewedpageids, $viewedbranches);
-            }
-
-            // Filter out the following pages:
-            //      End of Cluster
-            //      End of Branch
-            //      Pages found inside of Clusters
-            // Do not filter out Cluster Page(s) because we count a cluster as one.
-            // By keeping the cluster page, we get our 1
-            $validpages = array();
-            while ($pageid != 0) {
-                $pageid = $pages[$pageid]->valid_page_and_view($validpages, $viewedpageids);
-            }
-
-            // progress calculation as a percent
-            $progress = round(count($viewedpageids)/count($validpages), 2) * 100;
-        } else {
-            $progress = 100;
+        if ($progress === null) {
+            $progress = $lesson->calculate_progress();
         }
 
-        // print out the Progress Bar.  Attempted to put as much as possible in the style sheets.
-        $content = '<br />' . html_writer::tag('div', $progress . '%', array('class' => 'progress_bar_completed', 'style' => 'width: '. $progress . '%;'));
-        $printprogress = html_writer::tag('div', get_string('progresscompleted', 'lesson', $progress) . $content, array('class' => 'progress_bar'));
-
+        $content = html_writer::start_tag('div');
+        $content .= html_writer::start_tag('div', array('class' => 'progress'));
+        $content .= html_writer::start_tag('div', array('class' => 'progress-bar bar', 'role' => 'progressbar',
+            'style' => 'width: ' . $progress .'%', 'aria-valuenow' => $progress, 'aria-valuemin' => 0, 'aria-valuemax' => 100));
+        $content .= $progress . "%";
+        $content .= html_writer::end_tag('div');
+        $content .= html_writer::end_tag('div');
+        $printprogress = html_writer::tag('div', get_string('progresscompleted', 'lesson', $progress) . $content);
         return $this->output->box($printprogress, 'progress_bar');
     }
 
@@ -608,5 +547,142 @@ class mod_lesson_renderer extends plugin_renderer_base {
         }
         $output = html_writer::tag('p', $contents, $attributes);
         return $output;
+    }
+
+    /**
+     * Returns the HTML for displaying the end of lesson page.
+     *
+     * @param  lesson $lesson lesson instance
+     * @param  stdclass $data lesson data to be rendered
+     * @return string         HTML contents
+     */
+    public function display_eol_page(lesson $lesson, $data) {
+
+        $output = '';
+        $canmanage = $lesson->can_manage();
+        $course = $lesson->courserecord;
+
+        if ($lesson->custom && !$canmanage && (($data->gradeinfo->nquestions < $lesson->minquestions))) {
+            $output .= $this->box_start('generalbox boxaligncenter');
+        }
+
+        if ($data->gradelesson) {
+            $headinglevel = $this->page->activityheader->get_heading_level();
+            $output .= $this->heading(get_string("congratulations", "lesson"), $headinglevel);
+            $output .= $this->box_start('generalbox boxaligncenter');
+        }
+
+        if ($data->notenoughtimespent !== false) {
+            $output .= $this->paragraph(get_string("notenoughtimespent", "lesson", $data->notenoughtimespent), 'center');
+        }
+
+        if ($data->numberofpagesviewed !== false) {
+            $output .= $this->paragraph(get_string("numberofpagesviewed", "lesson", $data->numberofpagesviewed), 'center');
+        }
+        if ($data->youshouldview !== false) {
+            $output .= $this->paragraph(get_string("youshouldview", "lesson", $data->youshouldview), 'center');
+        }
+        if ($data->numberofcorrectanswers !== false) {
+            $output .= $this->paragraph(get_string("numberofcorrectanswers", "lesson", $data->numberofcorrectanswers), 'center');
+        }
+
+        if ($data->displayscorewithessays !== false) {
+            $output .= $this->box(get_string("displayscorewithessays", "lesson", $data->displayscorewithessays), 'center');
+        } else if ($data->displayscorewithoutessays !== false) {
+            $output .= $this->box(get_string("displayscorewithoutessays", "lesson", $data->displayscorewithoutessays), 'center');
+        }
+
+        if ($data->yourcurrentgradeisoutof !== false) {
+            $output .= $this->paragraph(get_string("yourcurrentgradeisoutof", "lesson", $data->yourcurrentgradeisoutof), 'center');
+        }
+        if ($data->yourcurrentgradeis !== false) {
+            $output .= $this->paragraph(get_string("yourcurrentgradeis", "lesson", $data->yourcurrentgradeis), 'center');
+        }
+        if ($data->eolstudentoutoftimenoanswers !== false) {
+            $output .= $this->paragraph(get_string("eolstudentoutoftimenoanswers", "lesson"));
+        }
+        if ($data->welldone !== false) {
+            $output .= $this->paragraph(get_string("welldone", "lesson"));
+        }
+
+        if ($data->progresscompleted !== false) {
+            $output .= $this->progress_bar($lesson, $data->progresscompleted);
+        }
+
+        if ($data->displayofgrade !== false) {
+            $output .= $this->paragraph(get_string("displayofgrade", "lesson"), 'center');
+        }
+
+        $output .= $this->box_end(); // End of Lesson button to Continue.
+
+        if ($data->reviewlesson !== false) {
+            $output .= html_writer::link($data->reviewlesson, get_string('reviewlesson', 'lesson'),
+                array('class' => 'centerpadded lessonbutton standardbutton pe-3'));
+        }
+        if ($data->modattemptsnoteacher !== false) {
+            $output .= $this->paragraph(get_string("modattemptsnoteacher", "lesson"), 'centerpadded');
+        }
+
+        if ($data->activitylink !== false) {
+            $output .= $data->activitylink;
+        }
+
+        $url = new moodle_url('/course/view.php', array('id' => $course->id));
+        $output .= html_writer::link($url, get_string('returnto', 'lesson', format_string($course->fullname, true)),
+                array('class' => 'centerpadded lessonbutton standardbutton pe-3'));
+
+        if (has_capability('gradereport/user:view', context_course::instance($course->id))
+                && $course->showgrades && $lesson->grade != 0 && !$lesson->practice) {
+            $url = new moodle_url('/grade/index.php', array('id' => $course->id));
+            $output .= html_writer::link($url, get_string('viewgrades', 'lesson'),
+                array('class' => 'centerpadded lessonbutton standardbutton pe-3'));
+        }
+        return $output;
+    }
+
+    /**
+     * Render the override action menu.
+     *
+     * @param \mod_lesson\output\override_action_menu $overrideactionmenu The overrideactionmenu
+     *
+     * @return string The rendered override action menu.
+     */
+    public function render_override_action_menu(\mod_lesson\output\override_action_menu $overrideactionmenu): string {
+        $context = $overrideactionmenu->export_for_template($this);
+        return $this->render_from_template('mod_lesson/override_action_menu', $context);
+    }
+
+    /**
+     * Render the edit action buttons.
+     *
+     * @param \mod_lesson\output\edit_action_buttons $editbuttons The editbuttons
+     *
+     * @return string The rendered edit action buttons.
+     */
+    public function render_edit_action_buttons(\mod_lesson\output\edit_action_buttons $editbuttons): string {
+        $context = $editbuttons->export_for_template($this);
+        return $this->render_from_template('mod_lesson/edit_action_buttons', $context);
+    }
+
+    /**
+     * Render the edit action area.
+     *
+     * @param \mod_lesson\output\edit_action_area $editarea The edit area.
+     * @return string The rendered edit action area.
+     */
+    public function render_edit_action_area(\mod_lesson\output\edit_action_area $editarea): string {
+        $context = $editarea->export_for_template($this);
+        return $this->render_from_template('mod_lesson/edit_action_area', $context);
+    }
+
+    /**
+     * Render the report action menu
+     *
+     * @param \mod\lesson\output\report_action_menu $reportmenu The reportmenu.
+     * @return string The rendered report action menu.
+     */
+    public function render_report_action_menu(\mod_lesson\output\report_action_menu $reportmenu): string {
+        $context = $reportmenu->export_for_template($this);
+        return $this->render_from_template('mod_lesson/report_action_menu', $context);
     }
 }

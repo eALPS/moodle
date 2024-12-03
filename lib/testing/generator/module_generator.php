@@ -38,7 +38,7 @@ defined('MOODLE_INTERNAL') || die();
 abstract class testing_module_generator extends component_generator_base {
 
     /**
-     * @var number of created instances
+     * @var int number of created instances
      */
     protected $instancecount = 0;
 
@@ -176,7 +176,7 @@ abstract class testing_module_generator extends component_generator_base {
         $easymergefields = array('section', 'added', 'score', 'indent',
             'visible', 'visibleold', 'groupmode', 'groupingid',
             'completion', 'completiongradeitemnumber', 'completionview', 'completionexpected',
-            'availability', 'showdescription');
+            'completionpassgrade', 'availability', 'showdescription');
         foreach ($easymergefields as $key) {
             if (isset($options[$key])) {
                 $moduleinfo->$key = $options[$key];
@@ -195,10 +195,12 @@ abstract class testing_module_generator extends component_generator_base {
             'completion' => 0,
             'completionview' => 0,
             'completionexpected' => 0,
+            'completionpassgrade' => 0,
             'conditiongradegroup' => array(),
             'conditionfieldgroup' => array(),
             'conditioncompletiongroup' => array()
         );
+
         foreach ($defaults as $key => $value) {
             if (!isset($moduleinfo->$key)) {
                 $moduleinfo->$key = $value;
@@ -221,11 +223,15 @@ abstract class testing_module_generator extends component_generator_base {
      * @return stdClass record from module-defined table with additional field
      *     cmid (corresponding id in course_modules table)
      */
-    public function create_instance($record = null, array $options = null) {
-        global $CFG, $DB;
+    public function create_instance($record = null, ?array $options = null) {
+        global $CFG, $DB, $PAGE;
         require_once($CFG->dirroot.'/course/modlib.php');
 
         $this->instancecount++;
+
+        // Creating an activity is a back end operation, which should not cause any output to happen.
+        // This will allow us to check that the theme was not initialised while creating the module instance.
+        $outputstartedbefore = $PAGE->get_where_theme_was_initialised();
 
         // Merge options into record and add default values.
         $record = $this->prepare_moduleinfo_record($record, $options);
@@ -241,6 +247,10 @@ abstract class testing_module_generator extends component_generator_base {
         // Fill the name and intro with default values (if missing).
         if (empty($record->name)) {
             $record->name = get_string('pluginname', $this->get_modulename()).' '.$this->instancecount;
+            // Module label can be created without name specified. It will get its name from the intro's text.
+            if ($this->get_modulename() === 'label') {
+                $record->name = '';
+            }
         }
         if (empty($record->introeditor) && empty($record->intro)) {
             $record->intro = 'Test '.$this->get_modulename().' ' . $this->instancecount;
@@ -263,12 +273,42 @@ abstract class testing_module_generator extends component_generator_base {
             debugging('Did you forget to enable completion tracking for the course before generating module with completion tracking?', DEBUG_DEVELOPER);
         }
 
+        if (!empty($record->lang) && !has_capability('moodle/course:setforcedlanguage', context_course::instance($course->id))) {
+            throw new coding_exception('Attempt to generate an activity when the current user does not have ' .
+                    'permission moodle/course:setforcedlanguage. This does not work.');
+        }
+
         // Add the module to the course.
-        $moduleinfo = add_moduleinfo($record, $course, $mform = null);
+        $moduleinfo = add_moduleinfo($record, $course);
 
         // Prepare object to return with additional field cmid.
-        $instance = $DB->get_record($this->get_modulename(), array('id' => $moduleinfo->instance), '*', MUST_EXIST);
+        $modulename = $this->get_modulename();
+        $instance = $DB->get_record($modulename, ['id' => $moduleinfo->instance], '*', MUST_EXIST);
         $instance->cmid = $moduleinfo->coursemodule;
+
+        // Insert files for the 'intro' file area.
+        $instance = $this->insert_files(
+            $instance,
+            $record,
+            $modulename,
+            \context_module::instance($instance->cmid),
+            "mod_{$modulename}",
+            'intro',
+            0
+        );
+
+        // If the theme was initialised while creating the module instance, something somewhere called an output
+        // function. Rather than leaving this as a hard-to-debug situation, let's make it fail with a clear error.
+        $outputstartedafter = $PAGE->get_where_theme_was_initialised();
+
+        if ($outputstartedbefore === null && $outputstartedafter !== null) {
+            throw new coding_exception('Creating a mod_' . $this->get_modulename() . ' activity initialised the theme and output!',
+                'This should not happen. Creating an activity should be a pure back-end operation. Unnecessarily initialising ' .
+                'the output mechanism at the wrong time can cause subtle bugs and is a significant performance hit. There is ' .
+                'likely a call to an output function that caused it:' . PHP_EOL . PHP_EOL .
+                format_backtrace($outputstartedafter, true));
+        }
+
         return $instance;
     }
 

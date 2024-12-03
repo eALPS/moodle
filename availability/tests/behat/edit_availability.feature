@@ -27,42 +27,55 @@ Feature: edit_availability
       | user     | course | role           |
       | teacher1 | C1     | editingteacher |
       | student1 | C1     | student        |
+    And the following "activity" exists:
+      | activity | forum   |
+      | course   | C1      |
+      | name     | MyForum |
 
   Scenario: Confirm the 'enable availability' option is working
     Given the following config values are set as admin:
       | enableavailability | 0 |
     When I log in as "teacher1"
-    And I am on site homepage
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Page" to section "1"
+    And the following "activity" exists:
+      | activity    | page                        |
+      | course      | C1                          |
+      | idnumber    | 0001                        |
+      | section     | 1                           |
+      | name        | Page1                       |
+      | intro       | pageintro                   |
+    And I am on "Course 1" course homepage with editing mode on
+    And I follow "Page1"
+    And I navigate to "Settings" in current page administration
     Then "Restrict access" "fieldset" should not exist
 
-    Given I follow "C1"
+    Given I am on "Course 1" course homepage
     When I edit the section "1"
     Then "Restrict access" "fieldset" should not exist
 
     And the following config values are set as admin:
       | enableavailability | 1 |
 
-    And I am on site homepage
-    And I follow "Course 1"
-    And I add a "Page" to section "1"
+    And the following "activity" exists:
+      | activity    | page                        |
+      | course      | C1                          |
+      | idnumber    | 0002                        |
+      | name        | Page2                       |
+    And I am on the "Page2" "page activity editing" page
     Then "Restrict access" "fieldset" should exist
 
-    Given I follow "C1"
+    Given I am on "Course 1" course homepage
     When I edit the section "1"
     Then "Restrict access" "fieldset" should exist
 
   @javascript
   Scenario: Edit availability using settings in activity form
     # Set up.
-    Given I log in as "teacher1"
-    And I follow "Course 1"
-
-    # Add a Page and check it has None in so far.
-    And I turn editing mode on
-    And I add a "Page" to section "1"
+    Given the following "activity" exists:
+      | activity | page |
+      | course   | C1   |
+      | section  | 1    |
+      | name     | P1   |
+    And I am on the "P1" "page activity editing" page logged in as "teacher1"
     And I expand all fieldsets
     Then I should see "None" in the "Restrict access" "fieldset"
 
@@ -76,13 +89,13 @@ Feature: edit_availability
     And I should see "Date" in the "Restrict access" "fieldset"
     And ".availability-item .availability-eye img" "css_element" should be visible
     And ".availability-item .availability-delete img" "css_element" should be visible
-    And the "alt" attribute of ".availability-item .availability-eye img" "css_element" should contain "Displayed greyed-out"
+    And the "alt" attribute of ".availability-item .availability-eye img" "css_element" should contain "Displayed if student"
 
     # Toggle the eye icon.
     When I click on ".availability-item .availability-eye img" "css_element"
     Then the "alt" attribute of ".availability-item .availability-eye img" "css_element" should contain "Hidden entirely"
     When I click on ".availability-item .availability-eye img" "css_element"
-    Then the "alt" attribute of ".availability-item .availability-eye img" "css_element" should contain "Displayed greyed-out"
+    Then the "alt" attribute of ".availability-item .availability-eye img" "css_element" should contain "Displayed if student"
 
     # Click the delete button.
     When I click on ".availability-item .availability-delete img" "css_element"
@@ -149,9 +162,7 @@ Feature: edit_availability
   Scenario: Edit availability using settings in section form
     # Set up.
     Given I log in as "teacher1"
-    And I am on site homepage
-    And I follow "Course 1"
-    And I turn editing mode on
+    And I am on "Course 1" course homepage with editing mode on
 
     # Edit a section
     When I edit the section "1"
@@ -170,11 +181,7 @@ Feature: edit_availability
     # Button does not exist when conditional access restrictions are turned off.
     Given the following config values are set as admin:
       | enableavailability | 0 |
-    And I log in as "admin"
-    And I am on site homepage
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Forum" to section "1"
+    And I am on the "MyForum" "forum activity editing" page logged in as admin
     When I expand all fieldsets
     Then "Add group/grouping access restriction" "button" should not exist
 
@@ -184,14 +191,7 @@ Feature: edit_availability
     Given the following "groupings" exist:
       | name | course | idnumber |
       | GX1  | C1     | GXI1     |
-    And I log in as "admin"
-    And I am on site homepage
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Forum" to section "1"
-    And I set the following fields to these values:
-      | Forum name  | MyForum |
-      | Description | x       |
+    And I am on the "MyForum" "forum activity editing" page logged in as admin
     When I expand all fieldsets
     Then the "Add group/grouping access restriction" "button" should be disabled
 
@@ -216,7 +216,7 @@ Feature: edit_availability
 
     # Check the button still works after saving and editing.
     And I press "Save and display"
-    And I navigate to "Edit settings" in current page administration
+    And I navigate to "Settings" in current page administration
     And I expand all fieldsets
     And the "Add group/grouping access restriction" "button" should be disabled
     And I should see "Grouping" in the "Restrict access" "fieldset"
@@ -224,3 +224,56 @@ Feature: edit_availability
     # And check it's still active if I delete the condition.
     And I click on "Delete" "link" in the "Restrict access" "fieldset"
     And the "Add group/grouping access restriction" "button" should be enabled
+
+  @javascript
+  Scenario: Edit section availability using course page link
+    # Setting a restriction up
+    Given I log in as "teacher1"
+    And I am on "Course 1" course homepage with editing mode on
+    And I edit the section "1"
+    And I expand all fieldsets
+    And I press "Add restriction..."
+    And I click on "Date" "button" in the "Add restriction..." "dialogue"
+    And I press "Save changes"
+    # Testing edit restrictions link
+    And "Edit restrictions" "link" should exist in the "section-1" "core_availability > Section availability"
+    When I click on "Edit restrictions" "link" in the "section-1" "core_availability > Section availability"
+    Then I should see "Restrict access"
+    And I should not see "Summary of General"
+    And I should see "Collapse all"
+    And I should not see "Expand all"
+    And I click on "Cancel" "button"
+    And I am on "Course 1" course homepage with editing mode off
+    And I should not see "Edit restrictions"
+
+  @javascript
+  Scenario: Edit activity availability using course page link
+    # Setting a restriction up
+    Given I am on the "MyForum" "forum activity editing" page logged in as teacher1
+    And I expand all fieldsets
+    And I press "Add restriction..."
+    And I click on "Date" "button" in the "Add restriction..." "dialogue"
+    When I press "Save and return to course"
+    # Edit restrictions link not displayed when editing mode is off.
+    Then "Edit restrictions" "link" should not exist in the "MyForum" "core_availability > Activity availability"
+    # Testing edit restrictions link
+    But I am on "Course 1" course homepage with editing mode on
+    And "Edit restrictions" "link" should exist in the "MyForum" "core_availability > Activity availability"
+    And I click on "Edit restrictions" "link" in the "MyForum" "core_availability > Activity availability"
+    And I should see "Restrict access"
+    And I should not see "Content"
+    And I should see "Collapse all"
+    And I should not see "Expand all"
+
+  @javascript
+  Scenario: Edit activity availability button is shown after duplicating an activity
+    # Setting a restriction up
+    Given I am on the "MyForum" "forum activity editing" page logged in as teacher1
+    And I expand all fieldsets
+    And I press "Add restriction..."
+    And I click on "Date" "button" in the "Add restriction..." "dialogue"
+    When I press "Save and return to course"
+    And I turn editing mode on
+    And I duplicate "MyForum" activity
+    # Testing edit restrictions link
+    Then "Edit restrictions" "link" should exist in the "MyForum (copy)" "core_availability > Activity availability"

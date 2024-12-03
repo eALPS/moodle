@@ -1,5 +1,15 @@
+=== 4.5 Onwards ===
+
+This file has been replaced by UPGRADING.md. See MDL-81125 for further information.
+
+===
 This files describes API changes in /competency/*. The information provided
 here is intended especially for developers.
+
+=== 3.7 ===
+* tool_lp can render the ui for a competency summary or a competency picker.
+    Use get_plugins_with_function('competency_picker') or
+        get_plugins_with_function('render_competency_summary') to call it.
 
 === 3.3 ===
 

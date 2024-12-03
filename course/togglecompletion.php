@@ -39,7 +39,7 @@ $user = optional_param('user', 0, PARAM_INT);
 $rolec = optional_param('rolec', 0, PARAM_INT);
 
 if (!$cmid && !$courseid) {
-    print_error('invalidarguments');
+    throw new \moodle_exception('invalidarguments');
 }
 
 // Process self completion
@@ -64,6 +64,7 @@ if ($courseid) {
         require_sesskey();
 
         completion_criteria::factory(array('id'=>$rolec, 'criteriatype'=>COMPLETION_CRITERIA_TYPE_ROLE)); //TODO: this is dumb, because it does not fetch the data?!?!
+        /** @var completion_criteria_role $criteria */
         $criteria = completion_criteria_role::fetch(array('id'=>$rolec));
 
         if ($criteria and user_has_role_assignment($USER->id, $criteria->role, $context->id)) {
@@ -92,12 +93,12 @@ if ($courseid) {
             $completion = $completion->get_completion($USER->id, COMPLETION_CRITERIA_TYPE_SELF);
 
             if (!$completion) {
-                print_error('noselfcompletioncriteria', 'completion');
+                throw new \moodle_exception('noselfcompletioncriteria', 'completion');
             }
 
             // Check if the user has already marked themselves as complete
             if ($completion->is_complete()) {
-                print_error('useralreadymarkedcomplete', 'completion');
+                throw new \moodle_exception('useralreadymarkedcomplete', 'completion');
             }
 
             $completion->mark_complete();
@@ -119,9 +120,7 @@ if ($courseid) {
     }
 }
 
-
 $targetstate = required_param('completionstate', PARAM_INT);
-$fromajax    = optional_param('fromajax', 0, PARAM_INT);
 
 $PAGE->set_url('/course/togglecompletion.php', array('id'=>$cmid, 'completionstate'=>$targetstate));
 
@@ -130,7 +129,7 @@ switch($targetstate) {
     case COMPLETION_INCOMPLETE:
         break;
     default:
-        print_error('unsupportedstate');
+        throw new \moodle_exception('unsupportedstate');
 }
 
 // Get course-modules entry
@@ -139,9 +138,10 @@ $course = $DB->get_record('course', array('id'=>$cm->course), '*', MUST_EXIST);
 
 // Check user is logged in
 require_login($course, false, $cm);
+require_capability('moodle/course:togglecompletion', context_module::instance($cmid));
 
 if (isguestuser() or !confirm_sesskey()) {
-    print_error('error');
+    throw new \moodle_exception('error');
 }
 
 // Set up completion object and check it is enabled.
@@ -157,33 +157,15 @@ if (!$completion->is_enabled()) {
 
 // Check completion state is manual
 if($cm->completion != COMPLETION_TRACKING_MANUAL) {
-    error_or_ajax('cannotmanualctrack', $fromajax);
+    throw new moodle_exception('cannotmanualctrack');
 }
 
 $completion->update_state($cm, $targetstate);
 
-// And redirect back to course
-if ($fromajax) {
-    print 'OK';
+// In case of use in other areas of code we allow a 'backto' parameter, otherwise go back to course page.
+if ($backto = optional_param('backto', null, PARAM_URL)) {
+    redirect($backto);
 } else {
-    // In case of use in other areas of code we allow a 'backto' parameter,
-    // otherwise go back to course page
-
-    if ($backto = optional_param('backto', null, PARAM_URL)) {
-        redirect($backto);
-    } else {
-        redirect(course_get_url($course, $cm->sectionnum));
-    }
-}
-
-// utility functions
-
-function error_or_ajax($message, $fromajax) {
-    if ($fromajax) {
-        print get_string($message, 'error');
-        exit;
-    } else {
-        print_error($message);
-    }
+    redirect(course_get_url($course, $cm->sectionnum));
 }
 

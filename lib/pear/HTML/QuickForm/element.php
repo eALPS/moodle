@@ -20,6 +20,10 @@
 // $Id$
 
 require_once('HTML/Common.php');
+/**
+ * Static utility methods.
+ */
+require_once('HTML/QuickForm/utils.php');
 
 /**
  * Base class for form elements
@@ -347,12 +351,16 @@ class HTML_QuickForm_element extends HTML_Common
         if (empty($values)) {
             return null;
         }
-        $elementName = $this->getName();
+        $elementName = $this->getName() ?? '';
         if (isset($values[$elementName])) {
             return $values[$elementName];
         } elseif (strpos($elementName, '[')) {
-            $myVar = "['" . str_replace(array(']', '['), array('', "']['"), $elementName) . "']";
-            return eval("return (isset(\$values$myVar)) ? \$values$myVar : null;");
+            $keys = str_replace(
+                array('\\', '\'', ']', '['), array('\\\\', '\\\'', '', "']['"),
+                $elementName
+            );
+            $arrayKeys = explode("']['", $keys);
+            return HTML_QuickForm_utils::recursiveValue($values, $arrayKeys);
         } else {
             return null;
         }
@@ -375,7 +383,13 @@ class HTML_QuickForm_element extends HTML_Common
     {
         switch ($event) {
             case 'createElement':
-                static::__construct($arg[0], $arg[1], $arg[2], $arg[3], $arg[4]);
+                static::__construct($arg[0], $arg[1], $arg[2], $arg[3], $arg[4], $arg[5]);
+                if ($caller->getAttribute('data-random-ids') && !$this->getAttribute('id')) {
+                    $this->_generateId();
+                    $attributes = $this->getAttributes();
+                    $attributes['id'] = $this->getAttribute('id') . '_' . random_string();
+                    $this->updateAttributes($attributes);
+                }
                 break;
             case 'addElement':
                 $this->onQuickFormEvent('createElement', $arg, $caller);
@@ -435,7 +449,7 @@ class HTML_QuickForm_element extends HTML_Common
             return;
         }
 
-        $id = $this->getName();
+        $id = $this->getName() ?? '';
         $id = 'id_' . str_replace(array('qf_', '[', ']'), array('', '_', ''), $id);
         $id = clean_param($id, PARAM_ALPHANUMEXT);
         $this->updateAttributes(array('id' => $id));
@@ -483,10 +497,12 @@ class HTML_QuickForm_element extends HTML_Common
             if (!strpos($name, '[')) {
                 return array($name => $value);
             } else {
-                $valueAry = array();
-                $myIndex  = "['" . str_replace(array(']', '['), array('', "']['"), $name) . "']";
-                eval("\$valueAry$myIndex = \$value;");
-                return $valueAry;
+                $keys = str_replace(
+                    array('\\', '\'', ']', '['), array('\\\\', '\\\'', '', "']['"),
+                    $name
+                );
+                $keysArray = explode("']['", $keys);
+                return HTML_QuickForm_utils::recursiveBuild($keysArray, $value);
             }
         }
     }

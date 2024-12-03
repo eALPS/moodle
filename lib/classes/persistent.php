@@ -14,32 +14,24 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Abstract class for objects saved to the DB.
- *
- * @package    core
- * @copyright  2015 Damyon Wiese
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
 namespace core;
-defined('MOODLE_INTERNAL') || die();
 
 use coding_exception;
 use invalid_parameter_exception;
 use lang_string;
 use ReflectionMethod;
 use stdClass;
-use renderer_base;
 
 /**
  * Abstract class for core objects saved to the DB.
  *
+ * @package    core
  * @copyright  2015 Damyon Wiese
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class persistent {
 
-    /** The table name. */
+    /** @var string The table name. */
     const TABLE = null;
 
     /** @var array The model data. */
@@ -57,7 +49,7 @@ abstract class persistent {
      * @param int $id If set, this is the id of an existing record, used to load the data.
      * @param stdClass $record If set will be passed to {@link self::from_record()}.
      */
-    public function __construct($id = 0, stdClass $record = null) {
+    public function __construct($id = 0, ?stdClass $record = null) {
         global $CFG;
 
         if ($id > 0) {
@@ -110,6 +102,8 @@ abstract class persistent {
      *
      * @param  string $property The property name.
      * @return $this
+     *
+     * @throws coding_exception
      */
     final public function set($property, $value) {
         if (!static::has_property($property)) {
@@ -121,6 +115,21 @@ abstract class persistent {
             return $this;
         }
         return $this->raw_set($property, $value);
+    }
+
+    /**
+     * Data setter for multiple properties
+     *
+     * Internally calls {@see set} on each property
+     *
+     * @param array $values Array of property => value elements
+     * @return $this
+     */
+    final public function set_many(array $values): self {
+        foreach ($values as $property => $value) {
+            $this->set($property, $value);
+        }
+        return $this;
     }
 
     /**
@@ -143,7 +152,18 @@ abstract class persistent {
         if (method_exists($this, $methodname)) {
             return $this->$methodname();
         }
-        return $this->raw_get($property);
+
+        $properties = static::properties_definition();
+        // If property can be NULL and value is NULL it needs to return null.
+        if ($properties[$property]['null'] === NULL_ALLOWED && $this->raw_get($property) === null) {
+            return null;
+        }
+        // Deliberately cast boolean types as such, because clean_param will cast them to integer.
+        if ($properties[$property]['type'] === PARAM_BOOL) {
+            return (bool)$this->raw_get($property);
+        }
+
+        return clean_param($this->raw_get($property), $properties[$property]['type']);
     }
 
     /**
@@ -246,12 +266,13 @@ abstract class persistent {
     final public static function properties_definition() {
         global $CFG;
 
-        static $def = null;
-        if ($def !== null) {
-            return $def;
+        static $cachedef = [];
+        if (isset($cachedef[static::class])) {
+            return $cachedef[static::class];
         }
 
-        $def = static::define_properties();
+        $cachedef[static::class] = static::define_properties();
+        $def = &$cachedef[static::class];
         $def['id'] = array(
             'default' => 0,
             'type' => PARAM_INT,
@@ -300,6 +321,16 @@ abstract class persistent {
     }
 
     /**
+     * For a given record, return an array containing only those properties that are defined by the persistent
+     *
+     * @param stdClass $record
+     * @return array
+     */
+    final public static function properties_filter(stdClass $record): array {
+        return array_intersect_key((array) $record, static::properties_definition());
+    }
+
+    /**
      * Gets all the formatted properties.
      *
      * Formatted properties are properties which have a format associated with them.
@@ -312,7 +343,8 @@ abstract class persistent {
         $formatted = array();
         foreach ($properties as $property => $definition) {
             $propertyformat = $property . 'format';
-            if ($definition['type'] == PARAM_RAW && array_key_exists($propertyformat, $properties)
+            if (($definition['type'] == PARAM_RAW || $definition['type'] == PARAM_CLEANHTML)
+                    && array_key_exists($propertyformat, $properties)
                     && $properties[$propertyformat]['type'] == PARAM_INT) {
                 $formatted[$property] = $propertyformat;
             }
@@ -388,10 +420,10 @@ abstract class persistent {
      * represent what is stored in the database.
      *
      * @param \stdClass $record A DB record.
-     * @return persistent
+     * @return static
      */
     final public function from_record(stdClass $record) {
-        $record = (array) $record;
+        $record = static::properties_filter($record);
         foreach ($record as $property => $value) {
             $this->raw_set($property, $value);
         }
@@ -418,7 +450,7 @@ abstract class persistent {
     /**
      * Load the data from the DB.
      *
-     * @return persistent
+     * @return static
      */
     final public function read() {
         global $DB;
@@ -451,7 +483,7 @@ abstract class persistent {
     /**
      * Insert a record in the DB.
      *
-     * @return persistent
+     * @return static
      */
     final public function create() {
         global $DB, $USER;
@@ -696,6 +728,10 @@ abstract class persistent {
                         // Validate_param() does not like false with PARAM_BOOL, better to convert it to int.
                         $value = 0;
                     }
+                    if ($definition['type'] === PARAM_CLEANHTML) {
+                        // We silently clean for this type. It may introduce changes even to valid data.
+                        $value = clean_param($value, PARAM_CLEANHTML);
+                    }
                     validate_param($value, $definition['type'], $definition['null']);
                 } catch (invalid_parameter_exception $e) {
                     $errors[$property] = static::get_property_error_message($property);
@@ -795,7 +831,7 @@ abstract class persistent {
      * @param int $skip Limitstart.
      * @param int $limit Number of rows to return.
      *
-     * @return \core\persistent[]
+     * @return static[]
      */
     public static function get_records($filters = array(), $sort = '', $order = 'ASC', $skip = 0, $limit = 0) {
         global $DB;
@@ -819,12 +855,14 @@ abstract class persistent {
      * Load a single record.
      *
      * @param array $filters Filters to apply.
-     * @return false|\core\persistent
+     * @param int $strictness Similar to the internal DB get_record call, indicate whether a missing record should be
+     *      ignored/return false ({@see IGNORE_MISSING}) or should cause an exception to be thrown ({@see MUST_EXIST})
+     * @return false|static
      */
-    public static function get_record($filters = array()) {
+    public static function get_record(array $filters = [], int $strictness = IGNORE_MISSING) {
         global $DB;
 
-        $record = $DB->get_record(static::TABLE, $filters);
+        $record = $DB->get_record(static::TABLE, $filters, '*', $strictness);
         return $record ? new static(0, $record) : false;
     }
 
@@ -837,7 +875,7 @@ abstract class persistent {
      * @param string $fields
      * @param int $limitfrom
      * @param int $limitnum
-     * @return \core\persistent[]
+     * @return static[]
      */
     public static function get_records_select($select, $params = null, $sort = '', $fields = '*', $limitfrom = 0, $limitnum = 0) {
         global $DB;
@@ -937,7 +975,7 @@ abstract class persistent {
      * @param array $params
      * @return bool
      */
-    public static function record_exists_select($select, array $params = null) {
+    public static function record_exists_select($select, ?array $params = null) {
         global $DB;
         return $DB->record_exists_select(static::TABLE, $select, $params);
     }

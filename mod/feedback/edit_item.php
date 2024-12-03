@@ -57,21 +57,21 @@ $PAGE->set_url($url);
 // If the typ is pagebreak so the item will be saved directly.
 if (!$item->id && $typ === 'pagebreak') {
     require_sesskey();
-    feedback_create_pagebreak($feedback->id);
-    redirect($editurl->out(false));
-    exit;
+
+    $redirectmessage = '';
+    if (!feedback_create_pagebreak($feedback->id)) {
+        $redirectmessage = get_string('cannotcreatepagebreak', 'mod_feedback');
+    }
+
+    redirect($editurl, $redirectmessage, null, \core\output\notification::NOTIFY_WARNING);
 }
 
 //get the existing item or create it
-// $formdata->itemid = isset($formdata->itemid) ? $formdata->itemid : NULL;
-if (!$typ || !file_exists($CFG->dirroot.'/mod/feedback/item/'.$typ.'/lib.php')) {
-    print_error('typemissing', 'feedback', $editurl->out(false));
+if (!$typ) {
+    throw new \moodle_exception('typemissing', 'feedback', $editurl->out(false));
 }
 
-require_once($CFG->dirroot.'/mod/feedback/item/'.$typ.'/lib.php');
-
 $itemobj = feedback_get_item_class($typ);
-
 $itemobj->build_editform($item, $feedback, $cm);
 
 if ($itemobj->is_cancelled()) {
@@ -99,15 +99,12 @@ if ($item->id) {
 }
 $PAGE->set_heading($course->fullname);
 $PAGE->set_title($feedback->name);
+$PAGE->activityheader->set_attrs([
+    "hidecompletion" => true,
+    "description" => ''
+]);
+$PAGE->add_body_class('limitedwidth');
 echo $OUTPUT->header();
-
-// Print the main part of the page.
-echo $OUTPUT->heading(format_string($feedback->name));
-
-/// print the tabs
-$current_tab = 'edit';
-$id = $cm->id;
-require('tabs.php');
 
 //print errormsg
 if (isset($error)) {

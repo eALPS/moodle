@@ -64,14 +64,16 @@ function dndupload_add_to_course($course, $modnames) {
             array('namedfiletoolarge', 'moodle'),
             array('actionchoice', 'moodle'),
             array('servererror', 'moodle'),
+            array('filereaderror', 'moodle'),
             array('upload', 'moodle'),
-            array('cancel', 'moodle')
+            array('cancel', 'moodle'),
+            array('changesmadereallygoaway', 'moodle')
         ),
         'requires' => array('node', 'event', 'json', 'anim')
     );
     $vars = array(
         array('courseid' => $course->id,
-              'maxbytes' => get_max_upload_file_size($CFG->maxbytes, $course->maxbytes),
+              'maxbytes' => get_user_max_upload_file_size($PAGE->context, $CFG->maxbytes, $course->maxbytes),
               'handlers' => $handler->get_js_data(),
               'showstatus' => $showstatus)
     );
@@ -486,13 +488,15 @@ class dndupload_ajax_processor {
 
         // Add the file to a draft file area.
         $draftitemid = file_get_unused_draft_itemid();
-        $maxbytes = get_max_upload_file_size($CFG->maxbytes, $this->course->maxbytes);
+        $maxbytes = get_user_max_upload_file_size($this->context, $CFG->maxbytes, $this->course->maxbytes);
         $types = $this->dnduploadhandler->get_handled_file_types($this->module->name);
         $repo = repository::get_instances(array('type' => 'upload', 'currentcontext' => $this->context));
         if (empty($repo)) {
             throw new moodle_exception('errornouploadrepo', 'moodle');
         }
         $repo = reset($repo); // Get the first (and only) upload repo.
+        // Pre-emptively purge the navigation cache so the upload repo can close the session.
+        navigation_cache::destroy_volatile_caches();
         $details = $repo->process_upload(null, $maxbytes, $types, '/', $draftitemid);
         if (empty($this->displayname)) {
             $this->displayname = $this->display_name_from_file($details['file']);
@@ -559,34 +563,11 @@ class dndupload_ajax_processor {
      */
     protected function create_course_module() {
         global $CFG;
+        require_once($CFG->dirroot.'/course/modlib.php');
+        list($module, $context, $cw, $cm, $data) = prepare_new_moduleinfo_data($this->course, $this->module->name, $this->section);
 
-        if (!course_allowed_module($this->course, $this->module->name)) {
-            throw new coding_exception("The module {$this->module->name} is not allowed to be added to this course");
-        }
-
-        $this->cm = new stdClass();
-        $this->cm->course = $this->course->id;
-        $this->cm->section = $this->section;
-        $this->cm->module = $this->module->id;
-        $this->cm->modulename = $this->module->name;
-        $this->cm->instance = 0; // This will be filled in after we create the instance.
-        $this->cm->visible = 1;
-        $this->cm->groupmode = $this->course->groupmode;
-        $this->cm->groupingid = $this->course->defaultgroupingid;
-
-        // Set the correct default for completion tracking.
-        $this->cm->completion = COMPLETION_TRACKING_NONE;
-        $completion = new completion_info($this->course);
-        if ($completion->is_enabled() && $CFG->completiondefault) {
-            if (plugin_supports('mod', $this->cm->modulename, FEATURE_MODEDIT_DEFAULT_COMPLETION, true)) {
-                $this->cm->completion = COMPLETION_TRACKING_MANUAL;
-            }
-        }
-
-        if (!$this->cm->id = add_course_module($this->cm)) {
-            throw new coding_exception("Unable to create the course module");
-        }
-        $this->cm->coursemodule = $this->cm->id;
+        $data->coursemodule = $data->id = add_course_module($data);
+        $this->cm = $data;
     }
 
     /**
@@ -635,8 +616,10 @@ class dndupload_ajax_processor {
         $visible = get_fast_modinfo($this->course)->get_section_info($this->section)->visible;
 
         $DB->set_field('course_modules', 'instance', $instanceid, array('id' => $this->cm->id));
+
+        \course_modinfo::purge_course_module_cache($this->course->id, $this->cm->id);
         // Rebuild the course cache after update action
-        rebuild_course_cache($this->course->id, true);
+        rebuild_course_cache($this->course->id, true, true);
 
         $sectionid = course_add_cm_to_section($this->course, $this->cm->id, $this->section);
 
@@ -672,14 +655,15 @@ class dndupload_ajax_processor {
         $resp = new stdClass();
         $resp->error = self::ERROR_OK;
         $resp->elementid = 'module-' . $mod->id;
+        $resp->cmid = $mod->id;
 
-        $courserenderer = $PAGE->get_renderer('core', 'course');
-        $completioninfo = new completion_info($this->course);
-        $info = get_fast_modinfo($this->course);
-        $sr = null;
-        $modulehtml = $courserenderer->course_section_cm($this->course, $completioninfo,
-                $mod, null, array());
-        $resp->fullcontent = $courserenderer->course_section_cm_list_item($this->course, $completioninfo, $mod, $sr);
+        $format = course_get_format($this->course);
+        $renderer = $format->get_renderer($PAGE);
+        $modinfo = $format->get_modinfo();
+        $section = $modinfo->get_section_info($mod->sectionnum);
+
+        // Get the new element html content.
+        $resp->fullcontent = $renderer->course_section_updated_cm_item($format, $section, $mod);
 
         echo $OUTPUT->header();
         echo json_encode($resp);

@@ -44,6 +44,10 @@ class mod_choice_mod_form extends moodleform_mod {
         $mform->addElement('selectyesno', 'limitanswers', get_string('limitanswers', 'choice'));
         $mform->addHelpButton('limitanswers', 'limitanswers', 'choice');
 
+        $mform->addElement('selectyesno', 'showavailable', get_string('showavailable', 'choice'));
+        $mform->addHelpButton('showavailable', 'showavailable', 'choice');
+        $mform->hideIf('showavailable', 'limitanswers', 'eq', 0);
+
         $repeatarray = array();
         $repeatarray[] = $mform->createElement('text', 'option', get_string('optionno', 'choice'));
         $repeatarray[] = $mform->createElement('text', 'limit', get_string('limitno', 'choice'));
@@ -58,7 +62,7 @@ class mod_choice_mod_form extends moodleform_mod {
 
         $repeateloptions = array();
         $repeateloptions['limit']['default'] = 0;
-        $repeateloptions['limit']['disabledif'] = array('limitanswers', 'eq', 0);
+        $repeateloptions['limit']['hideif'] = array('limitanswers', 'eq', 0);
         $repeateloptions['limit']['rule'] = 'numeric';
         $repeateloptions['limit']['type'] = PARAM_INT;
 
@@ -93,7 +97,7 @@ class mod_choice_mod_form extends moodleform_mod {
         $mform->addElement('select', 'showresults', get_string("publish", "choice"), $CHOICE_SHOWRESULTS);
 
         $mform->addElement('select', 'publish', get_string("privacy", "choice"), $CHOICE_PUBLISH);
-        $mform->disabledIf('publish', 'showresults', 'eq', 0);
+        $mform->hideIf('publish', 'showresults', 'eq', 0);
 
         $mform->addElement('selectyesno', 'showunanswered', get_string("showunanswered", "choice"));
 
@@ -124,18 +128,23 @@ class mod_choice_mod_form extends moodleform_mod {
 
     }
 
-    function get_data() {
-        $data = parent::get_data();
-        if (!$data) {
-            return false;
-        }
-        // Set up completion section even if checkbox is not ticked
+    /**
+     * Allows module to modify the data returned by form get_data().
+     * This method is also called in the bulk activity completion form.
+     *
+     * Only available on moodleform_mod.
+     *
+     * @param stdClass $data the form data to be modified.
+     */
+    public function data_postprocessing($data) {
+        parent::data_postprocessing($data);
+        // Set up completion section even if checkbox is not ticked.
         if (!empty($data->completionunlocked)) {
-            if (empty($data->completionsubmit)) {
-                $data->completionsubmit = 0;
+            $suffix = $this->get_suffix();
+            if (empty($data->{'completionsubmit' . $suffix})) {
+                $data->{'completionsubmit' . $suffix} = 0;
             }
         }
-        return $data;
     }
 
     /**
@@ -157,15 +166,19 @@ class mod_choice_mod_form extends moodleform_mod {
         return $errors;
     }
 
-    function add_completion_rules() {
+    public function add_completion_rules() {
         $mform =& $this->_form;
 
-        $mform->addElement('checkbox', 'completionsubmit', '', get_string('completionsubmit', 'choice'));
-        return array('completionsubmit');
+        $suffix = $this->get_suffix();
+        $completionsubmitel = 'completionsubmit' . $suffix;
+        $mform->addElement('checkbox', $completionsubmitel, '', get_string('completionsubmit', 'choice'));
+        // Enable this completion rule by default.
+        $mform->setDefault($completionsubmitel, 1);
+        return [$completionsubmitel];
     }
 
-    function completion_rule_enabled($data) {
-        return !empty($data['completionsubmit']);
+    public function completion_rule_enabled($data) {
+        $suffix = $this->get_suffix();
+        return !empty($data['completionsubmit' . $suffix]);
     }
 }
-

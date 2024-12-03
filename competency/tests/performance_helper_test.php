@@ -14,16 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Performance helper tests.
- *
- * @package    core_competency
- * @copyright  2016 Frédéric Massart - FMCorz.net
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
-global $CFG;
+namespace core_competency;
 
 use core_competency\external\performance_helper;
 
@@ -34,9 +25,9 @@ use core_competency\external\performance_helper;
  * @copyright  2016 Frédéric Massart - FMCorz.net
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_competency_performance_helper_testcase extends advanced_testcase {
+class performance_helper_test extends \advanced_testcase {
 
-    public function test_get_context_from_competency() {
+    public function test_get_context_from_competency(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -71,7 +62,7 @@ class core_competency_performance_helper_testcase extends advanced_testcase {
         $this->assertEquals($DB->perf_get_queries(), $dbqueries);
     }
 
-    public function test_get_framework_from_competency() {
+    public function test_get_framework_from_competency(): void {
         global $DB;
 
         $this->resetAfterTest(true);
@@ -119,7 +110,7 @@ class core_competency_performance_helper_testcase extends advanced_testcase {
         $this->assertSame($fourthrunframework, $fifthrunframework);
     }
 
-    public function test_get_scale_from_competency() {
+    public function test_get_scale_from_competency(): void {
         global $DB;
 
         $this->resetAfterTest(true);

@@ -22,9 +22,18 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use core_external\external_format_value;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
+
 defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot.'/grade/grading/form/lib.php');
+require_once($CFG->dirroot.'/lib/filelib.php');
+
+/** rubric: Used to compare our gradeitem_type against. */
+const RUBRIC = 'rubric';
 
 /**
  * This controller encapsulates the rubric grading logic
@@ -62,7 +71,7 @@ class gradingform_rubric_controller extends gradingform_controller {
      * @param settings_navigation $settingsnav {@link settings_navigation}
      * @param navigation_node $node {@link navigation_node}
      */
-    public function extend_settings_navigation(settings_navigation $settingsnav, navigation_node $node=null) {
+    public function extend_settings_navigation(settings_navigation $settingsnav, ?navigation_node $node=null) {
         $node->add(get_string('definerubric', 'gradingform_rubric'),
             $this->get_editor_url(), settings_navigation::TYPE_CUSTOM,
             null, null, new pix_icon('icon', '', 'gradingform_rubric'));
@@ -77,7 +86,7 @@ class gradingform_rubric_controller extends gradingform_controller {
      * @param global_navigation $navigation {@link global_navigation}
      * @param navigation_node $node {@link navigation_node}
      */
-    public function extend_navigation(global_navigation $navigation, navigation_node $node=null) {
+    public function extend_navigation(global_navigation $navigation, ?navigation_node $node=null) {
         if (has_capability('moodle/grade:managegradingforms', $this->get_context())) {
             // no need for preview if user can manage forms, he will have link to manage.php in settings instead
             return;
@@ -382,7 +391,7 @@ class gradingform_rubric_controller extends gradingform_controller {
     public function get_options() {
         $options = self::get_default_options();
         if (!empty($this->definition->options)) {
-            $thisoptions = json_decode($this->definition->options);
+            $thisoptions = json_decode($this->definition->options, true); // Assoc. array is expected.
             foreach ($thisoptions as $option => $value) {
                 $options[$option] = $value;
             }

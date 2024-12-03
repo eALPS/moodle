@@ -69,13 +69,20 @@ class mod_glossary_entry_form extends moodleform {
 
             $mform->addElement('checkbox', 'casesensitive', get_string('casesensitive', 'glossary'));
             $mform->addHelpButton('casesensitive', 'casesensitive', 'glossary');
-            $mform->disabledIf('casesensitive', 'usedynalink');
+            $mform->hideIf('casesensitive', 'usedynalink');
             $mform->setDefault('casesensitive', $CFG->glossary_casesensitive);
 
             $mform->addElement('checkbox', 'fullmatch', get_string('fullmatch', 'glossary'));
             $mform->addHelpButton('fullmatch', 'fullmatch', 'glossary');
-            $mform->disabledIf('fullmatch', 'usedynalink');
+            $mform->hideIf('fullmatch', 'usedynalink');
             $mform->setDefault('fullmatch', $CFG->glossary_fullmatch);
+        }
+
+        if (core_tag_tag::is_enabled('mod_glossary', 'glossary_entries')) {
+            $mform->addElement('header', 'tagshdr', get_string('tags', 'tag'));
+
+            $mform->addElement('tags', 'tags', get_string('tags'),
+                array('itemtype' => 'glossary_entries', 'component' => 'mod_glossary'));
         }
 
         $mform->addElement('hidden', 'id');
@@ -100,6 +107,13 @@ class mod_glossary_entry_form extends moodleform {
 
         $id = (int)$data['id'];
         $data['concept'] = trim($data['concept']);
+        $aliases = explode("\r\n", trim($data['aliases']));
+        foreach ($aliases as $alias) {
+            // Check if the alias is just a single character and that it doesn't match reserved symbols.
+            if (strlen(trim($alias)) == 1 && preg_match('/[$-\/:-?{-~!"^_`\[\]]/', trim($alias))) {
+                $errors['aliases'] = get_string('errreservedkeywords', 'glossary');
+            }
+        }
 
         if ($id) {
             //We are updating an entry, so we compare current session user with

@@ -41,6 +41,7 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use core_question\output\question_version_info;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -88,7 +89,7 @@ abstract class question_definition {
     /** @var integer question test format. */
     public $generalfeedbackformat;
 
-    /** @var number what this quetsion is marked out of, by default. */
+    /** @var float what this quetsion is marked out of, by default. */
     public $defaultmark = 1;
 
     /** @var integer How many question numbers this question consumes. */
@@ -100,11 +101,8 @@ abstract class question_definition {
     /** @var string unique identifier of this question. */
     public $stamp;
 
-    /** @var string unique identifier of this version of this question. */
-    public $version;
-
-    /** @var boolean whethre this question has been deleted/hidden in the question bank. */
-    public $hidden = 0;
+    /** @var string question idnumber. */
+    public $idnumber;
 
     /** @var integer timestamp when this question was created. */
     public $timecreated;
@@ -121,17 +119,51 @@ abstract class question_definition {
     /** @var array of question_hints. */
     public $hints = array();
 
+    /** @var boolean question status hidden/ready/draft in the question bank. */
+    public $status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
+
+    /** @var int Version id of the question in a question bank */
+    public $versionid;
+
+    /** @var int Version number of the question in a question bank */
+    public $version;
+
+    /** @var int Bank entry id for the question */
+    public $questionbankentryid;
+
+    /** @var ?int The latest version of the question. null if we haven't checked yet. */
+    protected $latestversion = null;
+
+    /**
+     * @var array of array of \core_customfield\data_controller objects indexed by fieldid for the questions custom fields.
+     */
+    public $customfields = array();
+
     /**
      * Constructor. Normally to get a question, you call
      * {@link question_bank::load_question()}, but questions can be created
      * directly, for example in unit test code.
-     * @return unknown_type
      */
     public function __construct() {
     }
 
     /**
-     * @return the name of the question type (for example multichoice) that this
+     * When a pending definition tries to read its latest version, fill in the latest version for all pending definitions
+     *
+     * @param string $name
+     * @return mixed
+     */
+    public function __get($name) {
+        if ($name === 'latestversion') {
+            if (isset(question_version_info::$pendingdefinitions[$this->id])) {
+                question_version_info::populate_latest_versions();
+            }
+            return $this->latestversion;
+        }
+    }
+
+    /**
+     * @return string the name of the question type (for example multichoice) that this
      * question is.
      */
     public function get_type_name() {
@@ -195,6 +227,56 @@ abstract class question_definition {
      *      being loaded.
      */
     public function apply_attempt_state(question_attempt_step $step) {
+    }
+
+    /**
+     * Verify if an attempt at this question can be re-graded using the other question version.
+     *
+     * To put it another way, will {@see update_attempt_state_date_from_old_version()} be able to work?
+     *
+     * It is expected that this relationship is symmetrical, so if you can regrade from V1 to V3, then
+     * you can change back from V3 to V1.
+     *
+     * @param question_definition $otherversion a different version of the question to use in the regrade.
+     * @return string|null null if the regrade can proceed, else a reason why not.
+     */
+    public function validate_can_regrade_with_other_version(question_definition $otherversion): ?string {
+        if (get_class($otherversion) !== get_class($this)) {
+            return get_string('cannotregradedifferentqtype', 'question');
+        }
+
+        return null;
+    }
+
+    /**
+     * Update the data representing the initial state of an attempt another version of this question, to allow for the changes.
+     *
+     * What is required is probably most easily understood using an example. Think about multiple choice questions.
+     * The first step has a variable '_order' which is a comma-separated list of question_answer ids.
+     * A different version of the question will have different question_answers with different ids. However, the list of
+     * choices should be similar, and so we need to shuffle the new list of ids in the same way that the old one was.
+     *
+     * Note: be sure to return all the data that was originally in $oldstep, while updating the fields that
+     * require it. Otherwise you might break features like 'Each attempt builds on last' in the quiz.
+     *
+     * This method should only be called if {@see validate_can_regrade_with_other_version()} did not
+     * flag up a potential problem. So, this method will throw a {@see coding_exception} if it is not
+     * possible to work out a return value.
+     *
+     * @param question_attempt_step $oldstep the first step of a {@see question_attempt} at $oldquestion.
+     * @param question_definition $oldquestion the previous version of the question, which $oldstate comes from.
+     * @return array the submit data which can be passed to {@see apply_attempt_state} to start
+     *     an attempt at this version of this question, corresponding to the attempt at the old question.
+     * @throws coding_exception if this can't be done.
+     */
+    public function update_attempt_state_data_for_new_version(
+            question_attempt_step $oldstep, question_definition $oldquestion) {
+        $message = $this->validate_can_regrade_with_other_version($oldquestion);
+        if ($message) {
+            throw new coding_exception($message);
+        }
+
+        return $oldstep->get_qt_data();
     }
 
     /**
@@ -287,7 +369,7 @@ abstract class question_definition {
      *      that should only be used in unavoidable, the constant question_attempt::USE_RAW_DATA
      *      meaning take all the raw submitted data belonging to this question.
      */
-    public abstract function get_expected_data();
+    abstract public function get_expected_data();
 
     /**
      * What data would need to be submitted to get this question correct.
@@ -297,7 +379,7 @@ abstract class question_definition {
      *
      * @return array|null parameter name => value.
      */
-    public abstract function get_correct_response();
+    abstract public function get_correct_response();
 
 
     /**
@@ -424,6 +506,43 @@ abstract class question_definition {
             return false;
         }
     }
+
+    /**
+     * Return the question settings that define this question as structured data.
+     *
+     * This is used by external systems such as the Moodle mobile app, which want to display the question themselves,
+     * rather than using the renderer provided.
+     *
+     * This method should only return the data that the student is allowed to see or know, given the current state of
+     * the question. For example, do not include the 'General feedback' until the student has completed the question,
+     * and even then, only include it if the question_display_options say it should be visible.
+     *
+     * But, within those rules, it is recommended that you return all the settings for the question,
+     * to give maximum flexibility to the external system providing its own rendering of the question.
+     *
+     * @param question_attempt $qa the current attempt for which we are exporting the settings.
+     * @param question_display_options $options the question display options which say which aspects of the question
+     * should be visible.
+     * @return mixed structure representing the question settings. In web services, this will be JSON-encoded.
+     */
+    public function get_question_definition_for_external_rendering(question_attempt $qa, question_display_options $options) {
+
+        debugging('This question does not implement the get_question_definition_for_external_rendering() method yet.',
+            DEBUG_DEVELOPER);
+        return null;
+    }
+
+    /**
+     * Set the latest version.
+     *
+     * Making $this->latestversion public would break the magic __get() behaviour above, so allow it to be set externally.
+     *
+     * @param int $latestversion
+     * @return void
+     */
+    public function set_latest_version(int $latestversion): void {
+        $this->latestversion = $latestversion;
+    }
 }
 
 
@@ -469,6 +588,17 @@ class question_information_item extends question_definition {
  */
 interface question_manually_gradable {
     /**
+     * Use by many of the behaviours to determine whether the student
+     * has provided enough of an answer for the question to be graded automatically,
+     * or whether it must be considered aborted.
+     *
+     * @param array $response responses, as returned by
+     *      {@link question_attempt_step::get_qt_data()}.
+     * @return bool whether this response can be graded.
+     */
+    public function is_gradable_response(array $response);
+
+    /**
      * Used by many of the behaviours, to work out whether the student's
      * response to the question is complete. That is, whether the question attempt
      * should move to the COMPLETE or INCOMPLETE state.
@@ -494,10 +624,20 @@ interface question_manually_gradable {
 
     /**
      * Produce a plain text summary of a response.
-     * @param $response a response, as might be passed to {@link grade_response()}.
+     * @param array $response a response, as might be passed to {@link grade_response()}.
      * @return string a plain text summary of that response, that could be used in reports.
      */
     public function summarise_response(array $response);
+
+    /**
+     * If possible, construct a response that could have lead to the given
+     * response summary. This is basically the opposite of {@link summarise_response()}
+     * but it is intended only to be used for testing.
+     *
+     * @param string $summary a string, which might have come from summarise_response
+     * @return array a response that could have lead to that.
+     */
+    public function un_summarise_response(string $summary);
 
     /**
      * Categorise the student's response according to the categories defined by
@@ -554,17 +694,6 @@ class question_classified_response {
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 interface question_automatically_gradable extends question_manually_gradable {
-    /**
-     * Use by many of the behaviours to determine whether the student
-     * has provided enough of an answer for the question to be graded automatically,
-     * or whether it must be considered aborted.
-     *
-     * @param array $response responses, as returned by
-     *      {@link question_attempt_step::get_qt_data()}.
-     * @return bool whether this response can be graded.
-     */
-    public function is_gradable_response(array $response);
-
     /**
      * In situations where is_gradable_response() returns false, this method
      * should generate a description of what the problem is.
@@ -637,6 +766,15 @@ abstract class question_with_responses extends question_definition
     public function classify_response(array $response) {
         return array();
     }
+
+    public function is_gradable_response(array $response) {
+        return $this->is_complete_response($response);
+    }
+
+    public function un_summarise_response(string $summary) {
+        throw new coding_exception('This question type (' . get_class($this) .
+                ' does not implement the un_summarise_response testing method.');
+    }
 }
 
 
@@ -650,10 +788,6 @@ abstract class question_graded_automatically extends question_with_responses
         implements question_automatically_gradable {
     /** @var Some question types have the option to show the number of sub-parts correct. */
     public $shownumcorrect = false;
-
-    public function is_gradable_response(array $response) {
-        return $this->is_complete_response($response);
-    }
 
     public function get_right_answer_summary() {
         $correctresponse = $this->get_correct_response();

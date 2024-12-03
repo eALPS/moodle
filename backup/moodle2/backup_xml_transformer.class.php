@@ -85,6 +85,10 @@ class backup_xml_transformer extends xml_contenttransformer {
         }
 
         $content = $this->process_filephp_links($content); // Replace all calls to file.php by $@FILEPHP@$ in a normalised way
+
+        // Replace all calls to h5p/embed.php by $@H5PEMBED@$.
+        $content = $this->process_h5pembedphp_links($content);
+
         $content = $this->encode_absolute_links($content); // Pass the content against all the found encoders
 
         return $content;
@@ -120,6 +124,25 @@ class backup_xml_transformer extends xml_contenttransformer {
         return $content;
     }
 
+    /**
+     * Replace all calls to /h5p/embed.php by $@H5PEMBED@$
+     * to allow restore the /h5p/embed.php url in
+     * other domains.
+     *
+     * @param  string $content
+     * @return string
+     */
+    private function process_h5pembedphp_links($content) {
+        global $CFG;
+
+        // No /h5p/embed.php, nothing to convert.
+        if (strpos($content, '/h5p/embed.php') === false) {
+            return $content;
+        }
+
+        return str_replace($CFG->wwwroot.'/h5p/embed.php', '$@H5PEMBED@$', $content);
+    }
+
     private function encode_absolute_links($content) {
         foreach ($this->absolute_links_encoders as $classname => $methodname) {
             $content = call_user_func(array($classname, $methodname), $content);
@@ -127,7 +150,7 @@ class backup_xml_transformer extends xml_contenttransformer {
         return $content;
     }
 
-    static private function process_filephp_uses($matches) {
+    private static function process_filephp_uses($matches) {
 
         // Replace slashes (plain and encoded) and forcedownload=1 parameter
         $search = array('/', '%2f', '%2F', '?forcedownload=1', '&forcedownload=1', '&amp;forcedownload=1');

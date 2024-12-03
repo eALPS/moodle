@@ -22,44 +22,35 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use mod_quiz\output\grades\grade_out_of;
+use mod_quiz\output\renderer;
 
 require_once("../../config.php");
 require_once("locallib.php");
 
 $id = required_param('id', PARAM_INT);
-$PAGE->set_url('/mod/quiz/index.php', array('id'=>$id));
-if (!$course = $DB->get_record('course', array('id' => $id))) {
-    print_error('invalidcourseid');
-}
+
+$PAGE->set_url('/mod/quiz/index.php', ['id' => $id]);
+$course = get_course($id);
 $coursecontext = context_course::instance($id);
 require_login($course);
 $PAGE->set_pagelayout('incourse');
 
-$params = array(
+$params = [
     'context' => $coursecontext
-);
+];
 $event = \mod_quiz\event\course_module_instance_list_viewed::create($params);
 $event->trigger();
 
 // Print the header.
 $strquizzes = get_string("modulenameplural", "quiz");
-$streditquestions = '';
-$editqcontexts = new question_edit_contexts($coursecontext);
-if ($editqcontexts->have_one_edit_tab_cap('questions')) {
-    $streditquestions =
-            "<form target=\"_parent\" method=\"get\" action=\"$CFG->wwwroot/question/edit.php\">
-               <div>
-               <input type=\"hidden\" name=\"courseid\" value=\"$course->id\" />
-               <input type=\"submit\" value=\"".get_string("editquestions", "quiz")."\" />
-               </div>
-             </form>";
-}
 $PAGE->navbar->add($strquizzes);
 $PAGE->set_title($strquizzes);
-$PAGE->set_button($streditquestions);
 $PAGE->set_heading($course->fullname);
-echo $OUTPUT->header();
-echo $OUTPUT->heading($strquizzes, 2);
+/** @var renderer $output */
+$output = $PAGE->get_renderer('mod_quiz');
+echo $output->header();
+echo $output->heading($strquizzes, 2);
 
 // Get all the appropriate data.
 if (!$quizzes = get_all_instances_in_course("quiz", $course)) {
@@ -67,29 +58,23 @@ if (!$quizzes = get_all_instances_in_course("quiz", $course)) {
     die;
 }
 
-// Check if we need the closing date header.
-$showclosingheader = false;
+// Check if we need the feedback header.
 $showfeedback = false;
 foreach ($quizzes as $quiz) {
-    if ($quiz->timeclose!=0) {
-        $showclosingheader=true;
-    }
     if (quiz_has_feedback($quiz)) {
         $showfeedback=true;
     }
-    if ($showclosingheader && $showfeedback) {
+    if ($showfeedback) {
         break;
     }
 }
 
 // Configure table for displaying the list of instances.
-$headings = array(get_string('name'));
-$align = array('left');
+$headings = [get_string('name')];
+$align = ['left'];
 
-if ($showclosingheader) {
-    array_push($headings, get_string('quizcloses', 'quiz'));
-    array_push($align, 'left');
-}
+array_push($headings, get_string('quizcloses', 'quiz'));
+array_push($align, 'left');
 
 if (course_format_uses_sections($course->format)) {
     array_unshift($headings, get_string('sectionname', 'format_'.$course->format));
@@ -105,9 +90,9 @@ if (has_capability('mod/quiz:viewreports', $coursecontext)) {
     array_push($align, 'left');
     $showing = 'stats';
 
-} else if (has_any_capability(array('mod/quiz:reviewmyattempts', 'mod/quiz:attempt'),
+} else if (has_any_capability(['mod/quiz:reviewmyattempts', 'mod/quiz:attempt'],
         $coursecontext)) {
-    array_push($headings, get_string('grade', 'quiz'));
+    array_push($headings, get_string('gradenoun'));
     array_push($align, 'left');
     if ($showfeedback) {
         array_push($headings, get_string('feedback', 'quiz'));
@@ -120,7 +105,7 @@ if (has_capability('mod/quiz:viewreports', $coursecontext)) {
             FROM {quiz_grades} qg
             JOIN {quiz} q ON q.id = qg.quiz
             WHERE q.course = ? AND qg.userid = ?',
-            array($course->id, $USER->id));
+            [$course->id, $USER->id]);
 }
 
 $table = new html_table();
@@ -129,10 +114,12 @@ $table->align = $align;
 
 // Populate the table with the list of instances.
 $currentsection = '';
+// Get all closing dates.
+$timeclosedates = quiz_get_user_timeclose($course->id);
 foreach ($quizzes as $quiz) {
     $cm = get_coursemodule_from_instance('quiz', $quiz->id);
     $context = context_module::instance($cm->id);
-    $data = array();
+    $data = [];
 
     // Section number if necessary.
     $strsection = '';
@@ -141,8 +128,8 @@ foreach ($quizzes as $quiz) {
             $strsection = $quiz->section;
             $strsection = get_section_name($course, $quiz->section);
         }
-        if ($currentsection) {
-            $learningtable->data[] = 'hr';
+        if ($currentsection !== "") {
+            $table->data[] = 'hr';
         }
         $currentsection = $quiz->section;
     }
@@ -157,10 +144,10 @@ foreach ($quizzes as $quiz) {
             format_string($quiz->name, true) . '</a>';
 
     // Close date.
-    if ($quiz->timeclose) {
-        $data[] = userdate($quiz->timeclose);
-    } else if ($showclosingheader) {
-        $data[] = '';
+    if (($timeclosedates[$quiz->id]->usertimeclose != 0)) {
+        $data[] = userdate($timeclosedates[$quiz->id]->usertimeclose);
+    } else {
+        $data[] = get_string('noclose', 'quiz');
     }
 
     if ($showing == 'stats') {
@@ -178,10 +165,8 @@ foreach ($quizzes as $quiz) {
         $feedback = '';
         if ($quiz->grade && array_key_exists($quiz->id, $grades)) {
             if ($alloptions->marks >= question_display_options::MARK_AND_MAX) {
-                $a = new stdClass();
-                $a->grade = quiz_format_grade($quiz, $grades[$quiz->id]);
-                $a->maxgrade = quiz_format_grade($quiz, $quiz->grade);
-                $grade = get_string('outofshort', 'quiz', $a);
+                $grade = $output->render(new grade_out_of(
+                        $quiz, $grades[$quiz->id], $quiz->grade, $quiz->sumgrades, style: grade_out_of::SHORT));
             }
             if ($alloptions->overallfeedback) {
                 $feedback = quiz_feedback_for_grade($grades[$quiz->id], $quiz, $context);
@@ -200,4 +185,4 @@ foreach ($quizzes as $quiz) {
 echo html_writer::table($table);
 
 // Finish the page.
-echo $OUTPUT->footer();
+echo $output->footer();

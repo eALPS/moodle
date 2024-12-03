@@ -37,9 +37,7 @@ $contextid = optional_param('contextid', 0, PARAM_INT);
 $usercourseid = optional_param('usercourseid', SITEID, PARAM_INT);  // Extra: used for user context only
 
 $url = new moodle_url('/repository/manage_instances.php');
-
 $baseurl = new moodle_url('/repository/manage_instances.php');
-$baseurl->param('sesskey', sesskey());
 
 if ($edit){
     $url->param('edit', $edit);
@@ -76,7 +74,7 @@ if ($context->contextlevel == CONTEXT_COURSE) {
     $pagename = get_string("repositorycourse",'repository');
 
     if ( !$course = $DB->get_record('course', array('id'=>$context->instanceid))) {
-        print_error('invalidcourseid');
+        throw new \moodle_exception('invalidcourseid');
     }
     require_login($course, false);
     // If the user is allowed to edit this course, he's allowed to edit list of repository instances
@@ -88,33 +86,33 @@ if ($context->contextlevel == CONTEXT_COURSE) {
     $pagename = get_string('manageinstances', 'repository');
     //is the user looking at its own repository instances
     if ($USER->id != $context->instanceid){
-        print_error('notyourinstances', 'repository');
+        throw new \moodle_exception('notyourinstances', 'repository');
     }
     $user = $USER;
 } else {
-    print_error('invalidcontext');
+    throw new \moodle_exception('invalidcontext');
 }
 
 /// Security: we cannot perform any action if the type is not visible or if the context has been disabled
 if (!empty($new) && empty($edit)){
     $type = repository::get_type_by_typename($new);
 } else if (!empty($edit)){
-    $instance = repository::get_instance($edit);
+    $instance = repository::get_repository_by_id($edit, $context->id);
     $type = repository::get_type_by_id($instance->options['typeid']);
 } else if (!empty($delete)){
-    $instance = repository::get_instance($delete);
+    $instance = repository::get_repository_by_id($delete, $context->id);
     $type = repository::get_type_by_id($instance->options['typeid']);
 }
 
 if (isset($type)) {
     if (!$type->get_visible()) {
-        print_error('typenotvisible', 'repository', $baseurl);
+        throw new \moodle_exception('typenotvisible', 'repository', $baseurl);
     }
     // Prevents the user from creating/editing an instance if the repository is not visible in
     // this context OR if the user does not have the capability to view this repository in this context.
     $canviewrepository = has_capability('repository/'.$type->get_typename().':view', $context);
     if (!$type->get_contextvisibility($context) || !$canviewrepository) {
-        print_error('usercontextrepositorydisabled', 'repository', $baseurl);
+        throw new \moodle_exception('usercontextrepositorydisabled', 'repository', $baseurl);
     }
 }
 
@@ -123,7 +121,7 @@ if (!empty($instance)) {
     // The context passed MUST match the context of the repository. And as both have to be
     // similar, this also ensures that the context is either a user one, or a course one.
     if ($instance->instance->contextid != $context->id) {
-        print_error('invalidcontext');
+        throw new \moodle_exception('invalidcontext');
     }
     if ($instance->readonly) {
         // Cannot edit, or delete a readonly instance.
@@ -168,9 +166,6 @@ if (!empty($edit) || !empty($new)) {
         exit;
 
     } else if ($fromform = $mform->get_data()){
-        if (!confirm_sesskey()) {
-            print_error('confirmsesskeybad', '', $baseurl);
-        }
         if ($edit) {
             $settings = array();
             $settings['name'] = $fromform->name;
@@ -186,7 +181,7 @@ if (!empty($edit) || !empty($new)) {
             $savedstr = get_string('configsaved', 'repository');
             redirect($baseurl);
         } else {
-            print_error('instancenotsaved', 'repository', $baseurl);
+            throw new \moodle_exception('instancenotsaved', 'repository', $baseurl);
         }
         exit;
     } else {     // Display the form
@@ -199,14 +194,12 @@ if (!empty($edit) || !empty($new)) {
     }
 } else if (!empty($delete)) {
     if ($sure) {
-        if (!confirm_sesskey()) {
-            print_error('confirmsesskeybad', '', $baseurl);
-        }
+        require_sesskey();
         if ($instance->delete()) {
             $deletedstr = get_string('instancedeleted', 'repository');
             redirect($baseurl, $deletedstr, 3);
         } else {
-            print_error('instancenotdeleted', 'repository', $baseurl);
+            throw new \moodle_exception('instancenotdeleted', 'repository', $baseurl);
         }
         exit;
     }

@@ -15,87 +15,37 @@ Feature: In a lesson activity, students can not re-attempt a question more than 
       | user | course | role |
       | teacher1 | C1 | editingteacher |
       | student1 | C1 | student |
-    And I log in as "teacher1"
-    And I follow "Course 1"
-    And I turn editing mode on
-    And I add a "Lesson" to section "1"
-    And I set the following fields to these values:
-      | Name | Test lesson name |
-      | Description | Test lesson description |
-      | Re-takes allowed | Yes |
-      | Minimum number of questions | 3 |
-    And I press "Save and return to course"
-    And I follow "Test lesson name"
-    And I follow "Add a content page"
-    And I set the following fields to these values:
-      | Page title | First page name |
-      | Page contents | First page contents |
-      | id_answer_editor_0 | Next page |
-      | id_jumpto_0 | Next page |
-    And I press "Save page"
-    And I select "Add a content page" from the "qtype" singleselect
-    And I set the following fields to these values:
-      | Page title | Third page name |
-      | Page contents | Third page contents |
-      | id_answer_editor_0 | Previous page |
-      | id_jumpto_0 | Previous page |
-      | id_answer_editor_1 | Next page |
-      | id_jumpto_1 | Next page |
-    And I press "Save page"
-    And I select "Question" from the "qtype" singleselect
-    And I set the field "Select a question type" to "True/false"
-    And I press "Add a question page"
-    And I set the following fields to these values:
-      | Page title | True/false question 3 |
-      | Page contents | Paper is made from trees. |
-      | id_answer_editor_0 | True |
-      | id_response_editor_0 | Correct |
-      | id_jumpto_0 | Next page |
-      | id_answer_editor_1 | False |
-      | id_response_editor_1 | Wrong |
-      | id_jumpto_1 | This page |
-    And I press "Save page"
-    And I select "Add a content page" from the "qtype" singleselect
-    And I set the following fields to these values:
-      | Page title | Second page name |
-      | Page contents | Second page contents |
-      | id_answer_editor_0 | Previous page |
-      | id_jumpto_0 | Previous page |
-      | id_answer_editor_1 | Next page |
-      | id_jumpto_1 | Next page |
-    And I press "Save page"
-    And I select "Question" from the "qtype" singleselect
-    And I set the field "Select a question type" to "True/false"
-    And I press "Add a question page"
-    And I set the following fields to these values:
-      | Page title | True/false question 2 |
-      | Page contents | Kermit is a frog |
-      | id_answer_editor_0 | True |
-      | id_response_editor_0 | Correct |
-      | id_jumpto_0 | Next page |
-      | id_answer_editor_1 | False |
-      | id_response_editor_1 | Wrong |
-      | id_jumpto_1 | This page |
-    And I press "Save page"
-    And I select "Question" from the "qtype" singleselect
-    And I set the field "Select a question type" to "True/false"
-    And I press "Add a question page"
-    And I set the following fields to these values:
-      | Page title | True/false question 1 |
-      | Page contents | The earth is round. |
-      | id_answer_editor_0 | True |
-      | id_response_editor_0 | Correct |
-      | id_jumpto_0 | Next page |
-      | id_answer_editor_1 | False |
-      | id_response_editor_1 | Wrong |
-      | id_jumpto_1 | This page |
-    And I press "Save page"
-    And I log out
+    And the following "activity" exists:
+      | activity                 | lesson                  |
+      | course                   | C1                      |
+      | idnumber                 | 0001                    |
+      | name                     | Test lesson name        |
+      | retake                   | 1                       |
+      | minquestions             | 3                       |
+    And the following "mod_lesson > pages" exist:
+      | lesson           | qtype     | title                 | content                   |
+      | Test lesson name | content   | First page name       | First page contents       |
+      | Test lesson name | truefalse | True/false question 1 | The earth is round.       |
+      | Test lesson name | truefalse | True/false question 2 | Kermit is a frog          |
+      | Test lesson name | content   | Second page name      | Second page contents      |
+      | Test lesson name | truefalse | True/false question 3 | Paper is made from trees. |
+      | Test lesson name | content   | Third page name       | Third page contents       |
+    And the following "mod_lesson > answers" exist:
+      | page                  | answer        | response | jumpto        | score |
+      | First page name       | Next page     |          | Next page     | 0     |
+      | Second page name      | Previous page |          | Previous page | 0     |
+      | Second page name      | Next page     |          | Next page     | 0     |
+      | True/false question 1 | True          | Correct  | Next page     | 1     |
+      | True/false question 1 | False         | Wrong    | This page     | 0     |
+      | True/false question 2 | True          | Correct  | Next page     | 1     |
+      | True/false question 2 | False         | Wrong    | This page     | 0     |
+      | True/false question 3 | True          | Correct  | Next page     | 1     |
+      | True/false question 3 | False         | Wrong    | This page     | 0     |
+      | Third page name       | Previous page |          | Previous page | 0     |
+      | Third page name       | Next page     |          | Next page     | 0     |
 
   Scenario: Check that we can leave a quiz and when we re-enter we can not re-attempt the question again
-    Given I log in as "student1"
-    And I follow "Course 1"
-    And I follow "Test lesson name"
+    Given I am on the "Test lesson name" "lesson activity" page logged in as student1
     And I should see "First page contents"
     And I press "Next page"
     And I should see "The earth is round"
@@ -103,8 +53,7 @@ Feature: In a lesson activity, students can not re-attempt a question more than 
       | False| 1 |
     And I press "Submit"
     And I should see "Wrong"
-    And I follow "Course 1"
-    And I follow "Test lesson name"
+    And I am on the "Test lesson name" "lesson activity" page
     And I should see "Do you want to start at the last page you saw?"
     And I click on "No" "link" in the "#page-content" "css_element"
     And I should see "First page contents"
@@ -117,9 +66,7 @@ Feature: In a lesson activity, students can not re-attempt a question more than 
 
   @javascript @_bug_phantomjs
   Scenario: Check that we can not click back on the browser at the last quiz result page and re-attempt the last question to get full marks
-    Given I log in as "student1"
-    And I follow "Course 1"
-    And I follow "Test lesson name"
+    Given I am on the "Test lesson name" "lesson activity" page logged in as student1
     And I should see "First page contents"
     And I press "Next page"
     And I should see "The earth is round"
@@ -149,6 +96,7 @@ Feature: In a lesson activity, students can not re-attempt a question more than 
     And I press the "back" button in the browser
     And I press the "back" button in the browser
     And I press the "back" button in the browser
+    And I reload the page
     And I should see "Paper is made from trees"
     And I set the following fields to these values:
       | True | 1 |
@@ -161,9 +109,7 @@ Feature: In a lesson activity, students can not re-attempt a question more than 
 
   @javascript
   Scenario: Check that we can not click back on the browser and re-attempt a question
-    Given I log in as "student1"
-    And I follow "Course 1"
-    And I follow "Test lesson name"
+    Given I am on the "Test lesson name" "lesson activity" page logged in as student1
     And I should see "First page contents"
     And I press "Next page"
     And I should see "The earth is round"
@@ -172,6 +118,7 @@ Feature: In a lesson activity, students can not re-attempt a question more than 
     And I press "Submit"
     And I should see "Wrong"
     And I press the "back" button in the browser
+    And I reload the page
     And I set the following fields to these values:
       | True | 1 |
     When I press "Submit"
@@ -196,6 +143,7 @@ Feature: In a lesson activity, students can not re-attempt a question more than 
     And I press "Submit"
     And I should see "Correct"
     And I press the "back" button in the browser
+    And I reload the page
     And I set the following fields to these values:
       | False | 1 |
     And I press "Submit"

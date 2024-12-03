@@ -27,6 +27,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot . '/question/engine/lib.php');
+require_once($CFG->libdir . '/questionlib.php');
 
 
 /**
@@ -234,6 +235,27 @@ class question_type {
     }
 
     /**
+     * Get extra actions for a question of this type to add to the question bank edit menu.
+     *
+     * This method is called if the {@link edit_menu_column} is being used in the
+     * question bank, which it is by default since Moodle 3.8. If applicable for
+     * your question type, you can return arn array of {@link action_menu_link}s.
+     * These will be added at the end of the Edit menu for this question.
+     *
+     * The $question object passed in will have a hard-to-predict set of fields,
+     * because the fields present depend on which columns are included in the
+     * question bank view. However, you can rely on 'id', 'createdby',
+     * 'contextid', 'hidden' and 'category' (id) being present, and so you
+     * can call question_has_capability_on without causing performance problems.
+     *
+     * @param stdClass $question the available information about the particular question the action is for.
+     * @return action_menu_link[] any actions you want to add to the Edit menu for this question.
+     */
+    public function get_extra_question_bank_actions(stdClass $question): array {
+        return [];
+    }
+
+    /**
      * This method should be overriden if you want to include a special heading or some other
      * html on a question editing page besides the question editing form.
      *
@@ -275,6 +297,45 @@ class question_type {
     }
 
     /**
+     * Return default value for a given form element either from user_preferences table or $default.
+     *
+     * @param string $name the name of the form element.
+     * @param mixed $default default value.
+     * @return string|null default value for a given  form element.
+     */
+    public function get_default_value(string $name, $default): ?string {
+        return get_user_preferences($this->plugin_name() . '_' . $name, $default ?? '0');
+    }
+
+    /**
+     * Save the default value for a given form element in user_preferences table.
+     *
+     * @param string $name the name of the value to set.
+     * @param string $value the setting value.
+     */
+    public function set_default_value(string $name, string $value): void {
+        set_user_preference($this->plugin_name() . '_' . $name, $value);
+    }
+
+    /**
+     * Save question defaults when creating new questions.
+     *
+     * @param stdClass $fromform data from the form.
+     */
+    public function save_defaults_for_new_questions(stdClass $fromform): void {
+        // Some question types may not make use of the certain form elements, so
+        // we need to do a check on the following generic form elements. For instance,
+        // 'defaultmark' is not use in qtype_multianswer and 'penalty' in not used in
+        // qtype_essay and qtype_recordrtc.
+        if (isset($fromform->defaultmark)) {
+            $this->set_default_value('defaultmark', $fromform->defaultmark);
+        }
+        if (isset($fromform->penalty)) {
+            $this->set_default_value('penalty', $fromform->penalty);
+        }
+    }
+
+    /**
      * Saves (creates or updates) a question.
      *
      * Given some question info and some data about the answers
@@ -302,10 +363,14 @@ class question_type {
      *       is accurate any more.)
      */
     public function save_question($question, $form) {
-        global $USER, $DB, $OUTPUT;
+        global $USER, $DB;
 
-        list($question->category) = explode(',', $form->category);
-        $context = $this->get_context_by_category_id($question->category);
+        // The actual update/insert done with multiple DB access, so we do it in a transaction.
+        $transaction = $DB->start_delegated_transaction ();
+
+        list($form->category) = explode(',', $form->category);
+        $context = $this->get_context_by_category_id($form->category);
+        $question->category = $form->category;
 
         // This default implementation is suitable for most
         // question types.
@@ -350,14 +415,93 @@ class question_type {
             $question->defaultmark = $form->defaultmark;
         }
 
-        // If the question is new, create it.
-        if (empty($question->id)) {
-            // Set the unique code.
-            $question->stamp = make_unique_id_code();
-            $question->createdby = $USER->id;
-            $question->timecreated = time();
-            $question->id = $DB->insert_record('question', $question);
+        // Only create a new bank entry if the question is not a new version (New question or duplicating a question).
+        $questionbankentry = null;
+        if (isset($question->id)) {
+            $oldparent = $question->id;
+            if (!empty($question->id)) {
+                // Get the bank entry record where the question is referenced.
+                $questionbankentry = get_question_bank_entry($question->id);
+            }
         }
+
+        // Get the bank entry old id (this is when there are questions related with a parent, e.g.: qtype_multianswers).
+        if (isset($question->oldid)) {
+            if (!empty($question->oldid)) {
+                $questionbankentry = get_question_bank_entry($question->oldid);
+            }
+        }
+
+        // Always creates a new question and version record.
+        // Set the unique code.
+        $question->stamp = make_unique_id_code();
+        $question->createdby = $USER->id;
+        $question->timecreated = time();
+
+        // Idnumber validation.
+        $question->idnumber = null;
+        if (isset($form->idnumber)) {
+            if ((string) $form->idnumber === '') {
+                $question->idnumber = null;
+            } else {
+                // While this check already exists in the form validation,
+                // this is a backstop preventing unnecessary errors.
+                // Only set the idnumber if it has changed and will not cause a unique index violation.
+                if (strpos($form->category, ',') !== false) {
+                    list($category, $categorycontextid) = explode(',', $form->category);
+                } else {
+                    $category = $form->category;
+                }
+                $params = ['idnumber' => $form->idnumber, 'categoryid' => $category];
+                $andcondition = '';
+                if (isset($question->id) && isset($questionbankentry->id)) {
+                    $andcondition = 'AND qbe.id != :notid';
+                    $params['notid'] = $questionbankentry->id;
+                }
+                $sql = "SELECT qbe.id
+                          FROM {question_bank_entries} qbe
+                         WHERE qbe.idnumber = :idnumber
+                               AND qbe.questioncategoryid = :categoryid
+                           $andcondition";
+                if (!$DB->record_exists_sql($sql, $params)) {
+                    $question->idnumber = $form->idnumber;
+                }
+            }
+        }
+
+        // Create the question.
+        $question->id = $DB->insert_record('question', $question);
+        if (!$questionbankentry) {
+            // Create a record for question_bank_entries, question_versions and question_references.
+            $questionbankentry = new \stdClass();
+            $questionbankentry->questioncategoryid = $form->category;
+            $questionbankentry->idnumber = $question->idnumber;
+            $questionbankentry->ownerid = $question->createdby;
+            $questionbankentry->id = $DB->insert_record('question_bank_entries', $questionbankentry);
+        } else {
+            $questionbankentryold = new \stdClass();
+            $questionbankentryold->id = $questionbankentry->id;
+            $questionbankentryold->idnumber = $question->idnumber;
+            $DB->update_record('question_bank_entries', $questionbankentryold);
+        }
+
+        // Create question_versions records.
+        $questionversion = new \stdClass();
+        $questionversion->questionbankentryid = $questionbankentry->id;
+        $questionversion->questionid = $question->id;
+        // Get the version and status from the parent question if parent is set.
+        if (!$question->parent) {
+            // Get the status field. It comes from the form, but for testing we can.
+            $status = $form->status ?? $question->status ??
+                \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
+            $questionversion->version = get_next_version($questionbankentry->id);
+            $questionversion->status = $status;
+        } else {
+            $parentversion = get_question_version($form->parent);
+            $questionversion->version = $parentversion[array_key_first($parentversion)]->version;
+            $questionversion->status = $parentversion[array_key_first($parentversion)]->status;
+        }
+        $questionversion->id = $DB->insert_record('question_versions', $questionversion);
 
         // Now, whether we are updating a existing question, or creating a new
         // one, we have to do the files processing and update the record.
@@ -381,16 +525,20 @@ class question_type {
         // Now to save all the answers and type-specific options.
         $form->id = $question->id;
         $form->qtype = $question->qtype;
-        $form->category = $question->category;
         $form->questiontext = $question->questiontext;
         $form->questiontextformat = $question->questiontextformat;
         // Current context.
         $form->context = $context;
-
+        // Old parent question id is used when there are questions related with a parent, e.g.: qtype_multianswers).
+        if (isset($oldparent)) {
+            $form->oldparent = $oldparent;
+        } else {
+            $form->oldparent = $question->parent;
+        }
         $result = $this->save_question_options($form);
 
         if (!empty($result->error)) {
-            print_error($result->error);
+            throw new \moodle_exception($result->error);
         }
 
         if (!empty($result->notice)) {
@@ -402,9 +550,11 @@ class question_type {
                     '$result->noticeyesno no longer supported in save_question.');
         }
 
-        // Give the question a unique version stamp determined by question_hash().
-        $DB->set_field('question', 'version', question_hash($question),
-                array('id' => $question->id));
+        // Log the creation of this question.
+        $event = \core\event\question_created::create_from_question_instance($question, $context);
+        $event->trigger();
+
+        $transaction->allow_commit();
 
         return $question;
     }
@@ -412,10 +562,11 @@ class question_type {
     /**
      * Saves question-type specific options
      *
-     * This is called by {@link save_question()} to save the question-type specific data
-     * @return object $result->error or $result->notice
-     * @param object $question  This holds the information from the editing form,
+     * This is called by {@see save_question()} to save the question-type specific data
+     *
+     * @param object $question This holds the information from the editing form,
      *      it is not a standard question object.
+     * @return bool|stdClass $result->error or $result->notice
      */
     public function save_question_options($question) {
         global $DB;
@@ -753,7 +904,7 @@ class question_type {
      *                         specific information (it is passed by reference).
      */
     public function get_question_options($question) {
-        global $CFG, $DB, $OUTPUT;
+        global $DB, $OUTPUT;
 
         if (!isset($question->options)) {
             $question->options = new stdClass();
@@ -780,13 +931,13 @@ class question_type {
         if (is_array($extraanswerfields)) {
             $answerextensiontable = array_shift($extraanswerfields);
             // Use LEFT JOIN in case not every answer has extra data.
-            $question->options->answers = $DB->get_records_sql("
+            $answers = $DB->get_records_sql("
                     SELECT qa.*, qax." . implode(', qax.', $extraanswerfields) . '
                     FROM {question_answers} qa ' . "
                     LEFT JOIN {{$answerextensiontable}} qax ON qa.id = qax.answerid
                     WHERE qa.question = ?
                     ORDER BY qa.id", array($question->id));
-            if (!$question->options->answers) {
+            if (!$answers) {
                 echo $OUTPUT->notification('Failed to load question answers from the table ' .
                         $answerextensiontable . 'for questionid ' . $question->id);
                 return false;
@@ -794,9 +945,15 @@ class question_type {
         } else {
             // Don't check for success or failure because some question types do
             // not use the answers table.
-            $question->options->answers = $DB->get_records('question_answers',
+            $answers = $DB->get_records('question_answers',
                     array('question' => $question->id), 'id ASC');
         }
+        // Store the answers into the question object.
+        $question->options->answers = array_map(function($answer) {
+            // Some database engines return floats as strings like '1.0000000'. Cast to float for consistency.
+            $answer->fraction = (float) $answer->fraction;
+            return $answer;
+        }, $answers);
 
         $question->hints = $DB->get_records('question_hints',
                 array('questionid' => $question->id), 'id ASC');
@@ -849,12 +1006,12 @@ class question_type {
         $question->length = $questiondata->length;
         $question->penalty = $questiondata->penalty;
         $question->stamp = $questiondata->stamp;
-        $question->version = $questiondata->version;
-        $question->hidden = $questiondata->hidden;
         $question->timecreated = $questiondata->timecreated;
         $question->timemodified = $questiondata->timemodified;
         $question->createdby = $questiondata->createdby;
         $question->modifiedby = $questiondata->modifiedby;
+
+        $this->initialise_core_question_metadata($question, $questiondata);
 
         // Fill extra question fields values.
         $extraquestionfields = $this->extra_question_fields();
@@ -867,6 +1024,32 @@ class question_type {
         }
 
         $this->initialise_question_hints($question, $questiondata);
+
+        // Add the custom fields.
+        $this->initialise_custom_fields($question, $questiondata);
+    }
+
+    /**
+     * Initialise the question metadata.
+     *
+     * @param question_definition $question the question_definition we are creating.
+     * @param object $questiondata the question data loaded from the database.
+     */
+    protected function initialise_core_question_metadata(question_definition $question, $questiondata) {
+        $fields =
+            [
+                'status',
+                'versionid',
+                'version',
+                'questionbankentryid',
+                'idnumber',
+            ];
+
+        foreach ($fields as $field) {
+            if (isset($questiondata->{$field})) {
+                $question->{$field} = $questiondata->{$field};
+            }
+        }
     }
 
     /**
@@ -891,6 +1074,17 @@ class question_type {
      */
     protected function make_hint($hint) {
         return question_hint::load_from_record($hint);
+    }
+
+    /**
+     * Initialise question custom fields.
+     * @param question_definition $question the question_definition we are creating.
+     * @param object $questiondata the question data loaded from the database.
+     */
+    protected function initialise_custom_fields(question_definition $question, $questiondata) {
+        if (!empty($questiondata->customfields)) {
+             $question->customfields = $questiondata->customfields;
+        }
     }
 
     /**
@@ -997,9 +1191,27 @@ class question_type {
     }
 
     /**
-     * @param object $question
+     * Calculate the score a monkey would get on a question by clicking randomly.
+     *
+     * Some question types have significant non-zero average expected score
+     * of the response is just selected randomly. For example 50% for a
+     * true-false question. It is useful to know what this is. For example
+     * it gets shown in the quiz statistics report.
+     *
+     * For almost any open-ended question type (E.g. shortanswer or numerical)
+     * this should be 0.
+     *
+     * For selective response question types (e.g. multiple choice), you can probably compute this.
+     *
+     * For particularly complicated question types the may be impossible or very
+     * difficult to compute. In this case return null. (Or, if the expected score
+     * is very tiny even though the exact value is unknown, it may appropriate
+     * to return 0.)
+     *
+     * @param stdClass $questiondata data defining a question, as returned by
+     *      question_bank::load_question_data().
      * @return number|null either a fraction estimating what the student would
-     * score by guessing, or null, if it is not possible to estimate.
+     *      score by guessing, or null, if it is not possible to estimate.
      */
     public function get_random_guess_score($questiondata) {
         return 0;
@@ -1191,6 +1403,7 @@ class question_type {
         $form->questiontext = 'test question, generated by script';
         $form->defaultmark = 1;
         $form->penalty = 0.3333333;
+        $form->status = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
         $form->generalfeedback = "Well done";
 
         $context = context_course::instance($courseid);
@@ -1199,7 +1412,7 @@ class question_type {
 
         $question = new stdClass();
         $question->courseid = $courseid;
-        $question->qtype = $this->qtype;
+        $question->qtype = $this->name();
         return array($form, $question);
     }
 

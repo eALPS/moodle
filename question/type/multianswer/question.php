@@ -78,6 +78,43 @@ class qtype_multianswer_question extends question_graded_automatically_with_coun
         }
     }
 
+    public function validate_can_regrade_with_other_version(question_definition $otherversion): ?string {
+        $basemessage = parent::validate_can_regrade_with_other_version($otherversion);
+        if ($basemessage) {
+            return $basemessage;
+        }
+
+        if (count($this->subquestions) != count($otherversion->subquestions)) {
+            return get_string('regradeissuenumsubquestionschanged', 'qtype_multianswer');
+        }
+
+        foreach ($this->subquestions as $i => $subq) {
+            $subqmessage = $subq->validate_can_regrade_with_other_version($otherversion->subquestions[$i]);
+            if ($subqmessage) {
+                return $subqmessage;
+            }
+        }
+
+        return null;
+    }
+
+    public function update_attempt_state_data_for_new_version(
+            question_attempt_step $oldstep, question_definition $oldquestion) {
+        parent::update_attempt_state_data_for_new_version($oldstep, $oldquestion);
+
+        $result = [];
+        foreach ($this->subquestions as $i => $subq) {
+            $substep = $this->get_substep($oldstep, $i);
+            $statedata = $subq->update_attempt_state_data_for_new_version(
+                    $substep, $oldquestion->subquestions[$i]);
+            foreach ($statedata as $name => $value) {
+                $result[$substep->add_prefix($name)] = $value;
+            }
+        }
+
+        return $result;
+    }
+
     public function get_question_summary() {
         $summary = $this->html_to_text($this->questiontext, $this->questiontextformat);
         foreach ($this->subquestions as $i => $subq) {
@@ -110,7 +147,10 @@ class qtype_multianswer_question extends question_graded_automatically_with_coun
             $fractionmax += $subq->defaultmark;
             $fractionsum += $subq->defaultmark * $subq->get_min_fraction();
         }
-        return $fractionsum / $fractionmax;
+        if (empty($fractionsum)) {
+            return 0;
+        }
+        return $fractionsum / (!empty($this->subquestions) ? $fractionmax : 1);
     }
 
     public function get_max_fraction() {
@@ -120,7 +160,10 @@ class qtype_multianswer_question extends question_graded_automatically_with_coun
             $fractionmax += $subq->defaultmark;
             $fractionsum += $subq->defaultmark * $subq->get_max_fraction();
         }
-        return $fractionsum / $fractionmax;
+        if (empty($fractionsum)) {
+            return 1;
+        }
+        return $fractionsum / (!empty($this->subquestions) ? $fractionmax : 1);
     }
 
     public function get_expected_data() {
@@ -262,6 +305,9 @@ class qtype_multianswer_question extends question_graded_automatically_with_coun
                 $overallstate = $this->combine_states($overallstate, $newstate);
             }
         }
+        if (empty($fractionmax)) {
+            return array(null, $overallstate ?? question_state::$finished);
+        }
         return array($fractionsum / $fractionmax, $overallstate);
     }
 
@@ -319,6 +365,9 @@ class qtype_multianswer_question extends question_graded_automatically_with_coun
 
             $fractionsum += $subq->defaultmark * max(0, $subfraction - $lastchange * $this->penalty);
         }
+        if (empty($fractionsum)) {
+            return null;
+        }
 
         return $fractionsum / $fractionmax;
     }
@@ -354,5 +403,20 @@ class qtype_multianswer_question extends question_graded_automatically_with_coun
             return parent::check_file_access($qa, $options, $component, $filearea,
                     $args, $forcedownload);
         }
+    }
+
+    /**
+     * Return the question settings that define this question as structured data.
+     *
+     * @param question_attempt $qa the current attempt for which we are exporting the settings.
+     * @param question_display_options $options the question display options which say which aspects of the question
+     * should be visible.
+     * @return mixed structure representing the question settings. In web services, this will be JSON-encoded.
+     */
+    public function get_question_definition_for_external_rendering(question_attempt $qa, question_display_options $options) {
+        // Empty implementation for now in order to avoid debugging in core questions (generated in the parent class),
+        // ideally, we should return as much as settings as possible (depending on the state and display options).
+
+        return null;
     }
 }

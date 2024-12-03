@@ -28,6 +28,7 @@ defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot . '/question/type/questionbase.php');
 require_once($CFG->dirroot . '/question/type/numerical/question.php');
+require_once($CFG->dirroot . '/question/type/calculated/questiontype.php');
 
 /**
  * Represents a calculated question.
@@ -71,6 +72,12 @@ class qtype_calculated_question extends qtype_numerical_question
             }
             $ans->feedback = $this->vs->replace_expressions_in_text($ans->feedback,
                         $ans->correctanswerlength, $ans->correctanswerformat);
+        }
+        // Replace expressions in hints referring MDL-36733.
+        // Calculation through calculation() function in replace_expressions_in_text() function.
+        // Validation through qtype_calculated_find_formula_errors() function in calculate() function.
+        foreach ($this->hints as $hint) {
+            $hint->hint = $this->vs->replace_expressions_in_text($hint->hint);
         }
     }
 
@@ -310,7 +317,6 @@ class qtype_calculated_variable_substituter {
 
         // Prepare an array for {@link substitute_values()}.
         $this->search = array();
-        $this->replace = array();
         foreach ($values as $name => $value) {
             if (!is_numeric($value)) {
                 $a = new stdClass();
@@ -334,7 +340,11 @@ class qtype_calculated_variable_substituter {
      * @return string formtted number.
      */
     public function format_float($x, $length = null, $format = null) {
-        if (!is_null($length) && !is_null($format)) {
+        if (is_nan($x)) {
+            $x = 'NAN';
+        } else if (is_infinite($x)) {
+            $x = ($x < 0) ? '-INF' : 'INF';
+        } else if (!is_null($length) && !is_null($format)) {
             if ($format == '1' ) { // Answer is to have $length decimals.
                 // Decimal places.
                 $x = sprintf('%.' . $length . 'F', $x);
@@ -423,7 +433,13 @@ class qtype_calculated_variable_substituter {
         if ($error = qtype_calculated_find_formula_errors($expression)) {
             throw new moodle_exception('illegalformulasyntax', 'qtype_calculated', '', $error);
         }
-        return $this->calculate_raw($this->substitute_values_for_eval($expression));
+        $expression = $this->substitute_values_for_eval($expression);
+        if ($datasets = question_bank::get_qtype('calculated')->find_dataset_names($expression)) {
+            // Some placeholders were not substituted.
+            throw new moodle_exception('illegalformulasyntax', 'qtype_calculated', '',
+                '{' . reset($datasets) . '}');
+        }
+        return $this->calculate_raw($expression);
     }
 
     /**

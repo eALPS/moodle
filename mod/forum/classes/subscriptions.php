@@ -176,11 +176,32 @@ class subscriptions {
      *
      * @param \stdClass $forum The record of the forum to set
      * @param int $status The new subscription state
-     * @return bool
+     * @return bool true
+     * @throws dml_exception A DML specific exception is thrown for any errors.
      */
-    public static function set_subscription_mode($forumid, $status = 1) {
+    public static function set_subscription_mode($forum, $status = FORUM_FORCESUBSCRIBE): bool {
         global $DB;
-        return $DB->set_field("forum", "forcesubscribe", $status, array("id" => $forumid));
+
+        if (is_numeric($forum)) {
+            debugging(__METHOD__.': Argument #1 ($forum) must be a stdClass record of a forum', DEBUG_DEVELOPER);
+
+            $forum = $DB->get_record("forum", ["id" => $forum], '*', MUST_EXIST);
+        }
+
+        $DB->set_field("forum", "forcesubscribe", $status, ["id" => $forum->id]);
+
+        if ($forum->forcesubscribe != $status) {
+            // Trigger event if subscription mode has been changed.
+            $event = \mod_forum\event\subscription_mode_updated::create([
+                "context" => forum_get_context($forum->id),
+                "objectid" => $forum->id,
+                "other" => ["oldvalue" => $forum->forcesubscribe, "newvalue" => $status],
+            ]);
+            $event->add_record_snapshot("forum", $forum);
+            $event->trigger();
+        }
+
+        return true;
     }
 
     /**
@@ -272,6 +293,7 @@ class subscriptions {
         $sql = "SELECT $fields
                 FROM {user} u
                 JOIN ($esql) je ON je.id = u.id
+               WHERE u.auth <> 'nologin' AND u.suspended = 0 AND u.confirmed = 1
             ORDER BY $sort";
 
         return $DB->get_records_sql($sql, $params);
@@ -392,7 +414,8 @@ class subscriptions {
         global $CFG, $DB;
 
         if (empty($fields)) {
-            $allnames = get_all_user_name_fields(true, 'u');
+            $userfieldsapi = \core_user\fields::for_name();
+            $allnames = $userfieldsapi->get_sql('u', false, '', '', false)->selects;
             $fields ="u.id,
                       u.username,
                       $allnames,
@@ -416,14 +439,16 @@ class subscriptions {
 
         // Retrieve the forum context if it wasn't specified.
         $context = forum_get_context($forum->id, $context);
-
         if (self::is_forcesubscribed($forum)) {
-            $results = \mod_forum\subscriptions::get_potential_subscribers($context, $groupid, $fields, "u.email ASC");
+            $results = self::get_potential_subscribers($context, $groupid, $fields);
 
         } else {
             // Only active enrolled users or everybody on the frontpage.
             list($esql, $params) = get_enrolled_sql($context, '', $groupid, true);
             $params['forumid'] = $forum->id;
+
+            list($sort, $sortparams) = users_order_by_sql('u');
+            $params = array_merge($params, $sortparams);
 
             if ($includediscussionsubscriptions) {
                 $params['sforumid'] = $forum->id;
@@ -442,7 +467,8 @@ class subscriptions {
                         ) subscriptions
                         JOIN {user} u ON u.id = subscriptions.userid
                         JOIN ($esql) je ON je.id = u.id
-                        ORDER BY u.email ASC";
+                        WHERE u.auth <> 'nologin' AND u.suspended = 0 AND u.confirmed = 1
+                        ORDER BY $sort";
 
             } else {
                 $sql = "SELECT $fields
@@ -450,8 +476,8 @@ class subscriptions {
                         JOIN ($esql) je ON je.id = u.id
                         JOIN {forum_subscriptions} s ON s.userid = u.id
                         WHERE
-                          s.forum = :forumid
-                        ORDER BY u.email ASC";
+                          s.forum = :forumid AND u.auth <> 'nologin' AND u.suspended = 0 AND u.confirmed = 1
+                        ORDER BY $sort";
             }
             $results = $DB->get_records_sql($sql, $params);
         }
@@ -512,9 +538,12 @@ class subscriptions {
                         'userid' => $userid,
                         'forum' => $forumid,
                     ), null, 'id, discussion, preference');
+
+                    self::$forumdiscussioncache[$userid][$forumid] = array();
                     foreach ($subscriptions as $id => $data) {
                         self::add_to_discussion_cache($forumid, $userid, $data->discussion, $data->preference);
                     }
+
                     $subscriptions->close();
                 }
             } else {
@@ -825,4 +854,38 @@ class subscriptions {
         return true;
     }
 
+    /**
+     * Gets the default subscription value for the logged in user.
+     *
+     * @param \stdClass $forum The forum record
+     * @param \context $context The course context
+     * @param \cm_info $cm cm_info
+     * @param int|null $discussionid The discussion we are checking against
+     * @return bool Default subscription
+     * @throws coding_exception
+     */
+    public static function get_user_default_subscription($forum, $context, $cm, ?int $discussionid) {
+        global $USER;
+        $manageactivities = has_capability('moodle/course:manageactivities', $context);
+        if (\mod_forum\subscriptions::subscription_disabled($forum) && !$manageactivities) {
+            // User does not have permission to subscribe to this discussion at all.
+            $discussionsubscribe = false;
+        } else if (\mod_forum\subscriptions::is_forcesubscribed($forum)) {
+            // User does not have permission to unsubscribe from this discussion at all.
+            $discussionsubscribe = true;
+        } else {
+            if (isset($discussionid) && self::is_subscribed($USER->id, $forum, $discussionid, $cm)) {
+                // User is subscribed to the discussion - continue the subscription.
+                $discussionsubscribe = true;
+            } else if (!isset($discussionid) && \mod_forum\subscriptions::is_subscribed($USER->id, $forum, null, $cm)) {
+                // Starting a new discussion, and the user is subscribed to the forum - subscribe to the discussion.
+                $discussionsubscribe = true;
+            } else {
+                // User is not subscribed to either forum or discussion. Follow user preference.
+                $discussionsubscribe = $USER->autosubscribe ?? false;
+            }
+        }
+
+        return $discussionsubscribe;
+    }
 }
