@@ -6,9 +6,20 @@ More detailed information on key changes can be found in the [Developer update n
 
 The format of this change log follows the advice given at [Keep a CHANGELOG](https://keepachangelog.com).
 
-## 4.5+
+## 4.5.1
 
 ### core
+
+#### Added
+
+- `\core\output\activity_header` now uses the `is_title_allowed()` method when setting the title in the constructor.
+
+  This method has been improved to give priority to the 'notitle' option in the theme config for the current page layout, over the top-level option in the theme.
+
+  For example, the Boost theme sets `$THEME->activityheaderconfig['notitle'] = true;` by default, but in its `secure` pagelayout, it has `'notitle' = false`.
+  This prevents display of the title in all layouts except `secure`.
+
+  For more information see [MDL-75610](https://tracker.moodle.org/browse/MDL-75610)
 
 #### Changed
 
@@ -40,6 +51,14 @@ The format of this change log follows the advice given at [Keep a CHANGELOG](htt
   The base enrolment `enrol_plugin::send_course_welcome_message_to_user` method also now accepts a `$roleid` parameter in order to correctly populate the `courserole` placeholder
 
   For more information see [MDL-83432](https://tracker.moodle.org/browse/MDL-83432)
+
+### core_form
+
+#### Changed
+
+- The `cohort` form element now accepts new `includes` option, which is passed to the corresponding external service to determine which cohorts to return (self, parents, all)
+
+  For more information see [MDL-83641](https://tracker.moodle.org/browse/MDL-83641)
 
 ### core_reportbuilder
 
