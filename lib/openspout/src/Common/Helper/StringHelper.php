@@ -32,7 +32,7 @@ final class StringHelper
     public function getStringLength(string $string): int
     {
         return $this->hasMbstringSupport
-            ? mb_strlen($string)
+            ? mb_strlen($string, 'UTF-8')
             : \strlen($string); // @codeCoverageIgnore
     }
 
