@@ -38,7 +38,6 @@ if ($course->id == SITEID) {
 }
 
 require_login($course);
-require_capability('moodle/course:enrolreview', $context);
 
 $canconfig = has_capability('moodle/course:enrolconfig', $context);
 
