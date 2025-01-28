@@ -800,10 +800,13 @@ class view {
         global $DB;
         $questions = $DB->get_recordset_sql($this->loadsql, $this->sqlparams,
             (int)$this->pagevars['qpage'] * (int)$this->pagevars['qperpage'], $this->pagevars['qperpage']);
-        if (empty($questions)) {
+        if (!$questions->valid()) {
             $questions->close();
-            // No questions on this page. Reset to page 0.
-            $questions = $DB->get_recordset_sql($this->loadsql, $this->sqlparams, 0, $this->pagevars['qperpage']);
+            // No questions on this page. Reset to the nearest page that contains questions.
+            $this->pagevars['qpage'] = max(0,
+                ceil($this->totalcount / $this->pagevars['qperpage']) - 1);
+            $questions = $DB->get_recordset_sql($this->loadsql, $this->sqlparams,
+                $this->pagevars['qpage'] * (int) $this->pagevars['qperpage'], $this->pagevars['qperpage']);
         }
         return $questions;
     }
@@ -1142,6 +1145,16 @@ class view {
 
         [$categoryid, $contextid] = category_condition::validate_category_param($this->pagevars['cat']);
         $catcontext = \context::instance_by_id($contextid);
+        // Update the question in the list with correct category context when we have selected category filter.
+        if (isset($this->pagevars['filter']['category']['values'])) {
+            $categoryid = $this->pagevars['filter']['category']['values'][0];
+            foreach ($this->contexts->all() as $context) {
+                if ((int) $context->instanceid === (int) $categoryid) {
+                    $catcontext = $context;
+                    break;
+                }
+            }
+        }
 
         echo \html_writer::start_tag(
             'div',
@@ -1155,8 +1168,8 @@ class view {
         echo $this->get_plugin_controls($catcontext, $categoryid);
 
         $this->build_query();
-        $questionsrs = $this->load_page_questions();
         $totalquestions = $this->get_question_count();
+        $questionsrs = $this->load_page_questions();
         $questions = [];
         foreach ($questionsrs as $question) {
             if (!empty($question->id)) {
