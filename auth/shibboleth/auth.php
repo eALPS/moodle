@@ -132,9 +132,10 @@ class auth_plugin_shibboleth extends auth_plugin_base {
                 if ($_SERVER['eduPersonAffiliation'] == 'student') {
                     $result[$key] = strtoupper($this->get_first_string($_SERVER['uid']));
                 } else {
-                    $userFullName = mb_convert_kana($this->get_first_string($_SERVER['displayName']), 's') ;
+                    $userFullName = mb_convert_kana($this->get_first_string($_SERVER['jaGivenName']), 's') ;
                     $userFullNameArray = explode(' ',$userFullName);
                     $result[$key] = $userFullNameArray[0];
+                    $result[$key] = $userFullName;
                 }
             // set firstname value from shibboleth
             } else if ($key == 'firstname'){
