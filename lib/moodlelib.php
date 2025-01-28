@@ -4427,6 +4427,35 @@ function update_internal_user_password(
     return true;
 }
 
+function update_external_user_password(
+        stdClass $user,
+        #[\SensitiveParameter] ?string $password) {
+    global $DB;
+    // Figure out what the hashed password should be.
+    if (!isset($user->auth)) {
+        debugging('User record in update_internal_user_password() must include field auth',
+                DEBUG_DEVELOPER);
+        $user->auth = $DB->get_field('user', 'auth', array('id' => $user->id));
+    }
+    $authplugin = get_auth_plugin($user->auth);
+    // connect external database
+    $mysqli_client = new mysqli($authplugin->config->host, $authplugin->config->user, $authplugin->config->pass, $authplugin->config->name);
+    // get user
+    $stmt = $mysqli_client->prepare("select * from users where user = ?");
+    $stmt->bind_param('s', $user->username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    print_r($result);
+    if ($result->num_rows == 0) {
+        return false;
+    }
+    // update password
+    $stmt = $mysqli_client->prepare("update users set password = ? where user = ?");
+    $stmt->bind_param('ss', $password, $user->username);
+    $stmt->execute();
+    return true;
+}
+
 /**
  * Get a complete user record, which includes all the info in the user record.
  *

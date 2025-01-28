@@ -77,7 +77,7 @@ class user_editadvanced_form extends moodleform {
         foreach ($auths as $auth => $unused) {
             $authinst = get_auth_plugin($auth);
 
-            if (!$authinst->is_internal()) {
+            if (!$authinst->is_internal() && !$auth == "db") {
                 $cannotchangeusername[] = $auth;
             }
 
@@ -86,6 +86,8 @@ class user_editadvanced_form extends moodleform {
                 if ($userid < 1 and $authinst->is_internal()) {
                     // This is unlikely but we can not create account without password
                     // when plugin uses passwords, we need to set it initially at least.
+                } else if ($auth == "db") {
+                    //
                 } else {
                     $cannotchangepass[] = $auth;
                 }
