@@ -73,7 +73,7 @@ class assign_submission_file extends assign_submission_plugin {
             $defaultfiletypes = $this->get_config('filetypeslist');
         } else {
             $defaultmaxfilesubmissions = get_config('assignsubmission_file', 'maxfiles');
-            $defaultmaxsubmissionsizebytes = get_config('assignsubmission_file', 'maxbytes');
+            $defaultmaxsubmissionsizebytes = 1; # Set default as min
             $defaultfiletypes = get_config('assignsubmission_file', 'filetypes');
         }
         $defaultfiletypes = (string)$defaultfiletypes;
