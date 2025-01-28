@@ -142,6 +142,13 @@ class moodle_phpmailer extends \PHPMailer\PHPMailer\PHPMailer {
             phpunit_util::phpmailer_sent($mail);
             return true;
         } else {
+            $this->SMTPOptions = [
+                'ssl' => [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'allow_self_signed' => true
+                ]
+            ];
             return parent::postSend();
         }
     }
