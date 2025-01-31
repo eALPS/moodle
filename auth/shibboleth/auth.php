@@ -132,24 +132,16 @@ class auth_plugin_shibboleth extends auth_plugin_base {
                 if ($_SERVER['eduPersonAffiliation'] == 'student') {
                     $result[$key] = strtoupper($this->get_first_string($_SERVER['uid']));
                 } else {
-                    $userFullName = mb_convert_kana($this->get_first_string($_SERVER['displayName']), 's') ;
-                    $userFullNameArray = explode(' ',$userFullName);
-                    $result[$key] = $userFullNameArray[0];
+                    $userFullName = mb_convert_kana($this->get_first_string($_SERVER['jasn']), 's') ;
+                    $result[$key] = $userFullName;
                 }
             // set firstname value from shibboleth
             } else if ($key == 'firstname'){
                 if ($_SERVER['eduPersonAffiliation'] == 'student') {
                     $result[$key] = $this->get_first_string($_SERVER['jasn']).' '.$this->get_first_string($_SERVER['jaGivenName']);
                 } else {
-                    $userFullName = mb_convert_kana($this->get_first_string($_SERVER['displayName']), 's') ;
-                    $userFullNameArray = explode(' ',$userFullName);
-                    // set * to firstname if displayName has no ' '
-                    if (count($userFullNameArray) == 1) {
-                        $result[$key] = '*';
-                    } else {
-                        array_shift($userFullNameArray);
-                        $result[$key] = join(" ", $userFullNameArray);
-                    }
+                    $userFullName = mb_convert_kana($this->get_first_string($_SERVER['jaGivenName']), 's') ;
+                    $result[$key] = $userFullName;
                 }
             } else {
                 $result[$key] = $this->get_first_string($_SERVER[$value]);
