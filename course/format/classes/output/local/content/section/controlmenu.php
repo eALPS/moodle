@@ -105,6 +105,7 @@ class controlmenu extends basecontrolmenu {
 
         $controls = [];
 
+        /*
         // Only show the view link if we are not already in the section view page.
         if ($PAGE->pagetype !== 'course-view-section-' . $course->format) {
             $controls['view'] = [
@@ -115,6 +116,7 @@ class controlmenu extends basecontrolmenu {
                 'attr' => ['class' => 'icon view'],
             ];
         }
+        */
 
         if (!$isstealth && has_capability('moodle/course:update', $coursecontext, $user)) {
             $params = ['id' => $section->id];
