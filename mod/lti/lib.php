@@ -759,6 +759,8 @@ function mod_lti_core_calendar_provide_event_action(calendar_event $event,
  * @return void
  */
 function mod_lti_extend_navigation_course($navigation, $course, $context): void {
+    return;
+
     if (has_capability('mod/lti:addpreconfiguredinstance', $context)) {
         $url = new moodle_url('/mod/lti/coursetools.php', ['id' => $course->id]);
         $settingsnode = navigation_node::create(get_string('courseexternaltools', 'mod_lti'), $url, navigation_node::TYPE_SETTING,
