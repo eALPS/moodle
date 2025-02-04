@@ -59,3 +59,16 @@ moodle-plugin-ci.phar
 phpcs.xml
 jsconfig.json
 UPGRADING-CURRENT.md
+
+## plugins
+/blocks/analytics_graphs/
+/blocks/autoattend/
+/blocks/quickmail/
+/course/format/topcoll/
+/lib/editor/atto/plugins/morebackcolors/
+/lib/editor/atto/plugins/morefontcolors/
+/mod/autoattendmod/
+/mod/questionnaire/
+/mod/scheduler/
+/question/type/gapfill/
+/question/type/multichoiceset/

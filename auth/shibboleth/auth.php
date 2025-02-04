@@ -127,6 +127,22 @@ class auth_plugin_shibboleth extends auth_plugin_base {
             // Make usename lowercase
             if ($key == 'username'){
                 $result[$key] = strtolower($this->get_first_string($_SERVER[$value]));
+            // set lastname value from shibboleth
+            } else if ($key == 'lastname'){
+                if ($_SERVER['eduPersonAffiliation'] == 'student') {
+                    $result[$key] = strtoupper($this->get_first_string($_SERVER['uid']));
+                } else {
+                    $userFullName = mb_convert_kana($this->get_first_string($_SERVER['jasn']), 's') ;
+                    $result[$key] = $userFullName;
+                }
+            // set firstname value from shibboleth
+            } else if ($key == 'firstname'){
+                if ($_SERVER['eduPersonAffiliation'] == 'student') {
+                    $result[$key] = $this->get_first_string($_SERVER['jasn']).' '.$this->get_first_string($_SERVER['jaGivenName']);
+                } else {
+                    $userFullName = mb_convert_kana($this->get_first_string($_SERVER['jaGivenName']), 's') ;
+                    $result[$key] = $userFullName;
+                }
             } else {
                 $result[$key] = $this->get_first_string($_SERVER[$value]);
             }

@@ -14,25 +14,25 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace qbank_bulkmove;
-
-use core_question\local\bank\bulk_action_base;
-use core_question\local\bank\plugin_features_base;
-use core_question\local\bank\view;
+namespace core\fixtures;
 
 /**
- * Class plugin_feature is the entrypoint for the features.
+ * Test to ensure that fixtures are excluded from phpunit configuration.
  *
- * @package    qbank_bulkmove
- * @copyright  2021 Catalyst IT Australia Pty Ltd
- * @author     Safat Shahin <safatshahin@catalyst-au.net>
+ * @package    core
+ * @category   phpunit
+ * @copyright  Andrew Lyons <andrew@nicols.co.uk>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class plugin_feature extends plugin_features_base {
-    #[\Override]
-    public function get_bulk_actions(?view $qbank = null): array {
-        return [
-            new bulk_move_action(),
-        ];
+final class fixtures_not_tested_test extends \advanced_testcase {
+    /**
+     * Ensure that test fixtures are not tested.
+     *
+     * This test deliberately fails, but it should never be included in a test run.
+     *
+     * If this test is failing, then something has broken the PHPUnit configuration.
+     */
+    public function test_fixture_are_not_included(): void {
+        $this->assertFalse(true);
     }
 }
