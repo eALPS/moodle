@@ -266,6 +266,15 @@ class auth_plugin_db extends auth_plugin_base {
             } else {
                 return false;
             }
+        } else if ($user->auth == "db") {
+            $puser = $DB->get_record('user', array('id'=>$user->id), '*', MUST_EXIST);
+            if (update_external_user_password($puser, $newpassword)) {
+                $user->password = $puser->password;
+                return true;
+            } else {
+                return false;
+            }
+            return true;
         } else {
             // We should have never been called!
             return false;

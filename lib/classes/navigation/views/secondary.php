@@ -396,7 +396,7 @@ class secondary extends view {
         $navigation = $this->page->navigation;
 
         if ($course->id == $SITE->id) {
-            $firstnodeidentifier = get_string('home'); // The first node in the site course nav is called 'Home'.
+            $firstnodeidentifier = $SITE->shortname; // The first node in the site course nav is called 'Home'.
             $frontpage = $settingsnav->get('frontpage'); // The site course nodes are children of a dedicated 'frontpage' node.
             $settingsnav = $frontpage ?: $settingsnav;
             $courseadminnode = $frontpage ?: null; // Custom nodes for the site course are also children of the 'frontpage' node.

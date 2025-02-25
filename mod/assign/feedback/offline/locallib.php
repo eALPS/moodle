@@ -181,7 +181,7 @@ class assign_feedback_offline extends assign_feedback_plugin {
                 $grade->grade = $record->grade;
                 $grade->grader = $USER->id;
                 if ($this->assignment->update_grade($grade)) {
-                    $this->assignment->notify_grade_modified($grade);
+                    // $this->assignment->notify_grade_modified($grade);
                     $updategradecount += 1;
                 }
             }
@@ -202,7 +202,7 @@ class assign_feedback_offline extends assign_feedback_plugin {
                     if ($newvalue != $oldvalue) {
                         $updatefeedbackcount += 1;
                         $grade = $this->assignment->get_user_grade($record->user->id, true);
-                        $this->assignment->notify_grade_modified($grade);
+                        // $this->assignment->notify_grade_modified($grade);
                         $plugin->set_editor_text($field, $newvalue, $grade->id);
 
                         // If this is the gradebook comments plugin - post an update to the gradebook.

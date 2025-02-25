@@ -33,7 +33,7 @@ class primary extends view {
      * Initialise the primary navigation node
      */
     public function initialise(): void {
-        global $CFG;
+        global $CFG, $SITE;
 
         if (during_initial_install() || $this->initialised) {
             return;
@@ -44,7 +44,7 @@ class primary extends view {
             !in_array('home', $this->page->theme->removedprimarynavitems);
         // We do not need to change the text for the home/dashboard depending on the set homepage.
         if ($showhomenode) {
-            $sitehome = $this->add(get_string('home'), new \moodle_url('/'), self::TYPE_SYSTEM,
+            $sitehome = $this->add($SITE->shortname, new \moodle_url('/'), self::TYPE_SYSTEM,
                 null, 'home', new \pix_icon('i/home', ''));
         }
         if (isloggedin() && !isguestuser()) {
