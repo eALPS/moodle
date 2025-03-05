@@ -76,7 +76,8 @@ class custom_view extends \core_question\local\bank\view {
                 $params['filter']['category'] = [
                     'jointype' => custom_category_condition::JOINTYPE_DEFAULT,
                     'values' => [$category->id],
-                    'filteroptions' => ['includesubcategories' => false],
+                    'filteroptions' => ['includesubcategories' =>
+                        get_user_preferences('qbank_managecategories_includesubcategories_filter_default', false)],
                 ];
             }
         }
@@ -245,9 +246,16 @@ class custom_view extends \core_question\local\bank\view {
                                           FROM {question_versions} v
                                           JOIN {question_bank_entries} be
                                             ON be.id = v.questionbankentryid
-                                         WHERE be.id = qbe.id)';
-        $onlyready = '((' . "qv.status = '" . question_version_status::QUESTION_STATUS_READY . "'" .'))';
-        $this->sqlparams = [];
+                                         WHERE be.id = qbe.id AND v.status <> :substatus)';
+
+        // An additional condition is required in the subquery to account for scenarios
+        // where the latest version is hidden. This ensures we retrieve the previous
+        // "Ready" version instead of the hidden latest version.
+        $onlyready = '((qv.status = :status))';
+        $this->sqlparams = [
+            'status' => question_version_status::QUESTION_STATUS_READY,
+            'substatus' => question_version_status::QUESTION_STATUS_HIDDEN,
+        ];
         $conditions = [];
         foreach ($this->searchconditions as $searchcondition) {
             if ($searchcondition->where()) {

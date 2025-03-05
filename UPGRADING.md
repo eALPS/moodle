@@ -6,7 +6,17 @@ More detailed information on key changes can be found in the [Developer update n
 
 The format of this change log follows the advice given at [Keep a CHANGELOG](https://keepachangelog.com).
 
-## 4.5.1+
+## 4.5.2+
+
+### core_question
+
+#### Added
+
+- Question bank Condition classes can now implement a function called "filter_invalid_values($filterconditions)" to remove anything from the filterconditions array which is invalid or should not be there.
+
+  For more information see [MDL-83784](https://tracker.moodle.org/browse/MDL-83784)
+
+## 4.5.2
 
 ### core
 
@@ -41,6 +51,16 @@ The format of this change log follows the advice given at [Keep a CHANGELOG](htt
 - The method `count_modules_completed` now delegate the logic to count the completed modules to the DBMS improving the performance of the method.
 
   For more information see [MDL-83917](https://tracker.moodle.org/browse/MDL-83917)
+
+### core_courseformat
+
+#### Fixed
+
+- HTML IDs relating to section collapse/expand have been changed in the course format templates.
+  - core_courseformat/local/content/section/header #collapssesection{{num}} has been changed to #collapsesectionid{{id}}
+  - core_courseformat/local/content/section/content #coursecontentcollapse{{num}} had been changed to #coursecontentcollapseid{{id}}
+
+  For more information see [MDL-82679](https://tracker.moodle.org/browse/MDL-82679)
 
 ### core_question
 

@@ -244,7 +244,8 @@ class view {
                 $params['filter']['category'] = [
                     'jointype' => category_condition::JOINTYPE_DEFAULT,
                     'values' => [$category->id],
-                    'filteroptions' => ['includesubcategories' => false],
+                    'filteroptions' => ['includesubcategories' =>
+                        get_user_preferences('qbank_managecategories_includesubcategories_filter_default', false)],
                 ];
             }
             $params['filter']['hidden'] = [
@@ -745,16 +746,16 @@ class view {
             [$colname, $subsort] = $this->parse_subsort($sortname);
             $sorts[] = $this->requiredcolumns[$colname]->sort_expression($sortorder == SORT_DESC, $subsort);
         }
-
-        // Build the where clause.
-        $latestversion = 'qv.version = (SELECT MAX(v.version)
-                                          FROM {question_versions} v
-                                          JOIN {question_bank_entries} be
-                                            ON be.id = v.questionbankentryid
-                                         WHERE be.id = qbe.id)';
         $this->sqlparams = [];
         $conditions = [];
+        $showhiddenquestion = true;
+        // Build the where clause.
         foreach ($this->searchconditions as $searchcondition) {
+            // TODO: Looking at the contents of params like this is not great. It is just a short-term fix.
+            // This will be solved properly when MDL-84433 is done.
+            if (array_key_exists('hidden_condition', $searchcondition->params())) {
+                $showhiddenquestion = false;
+            }
             if ($searchcondition->where()) {
                 $conditions[] = '((' . $searchcondition->where() .'))';
             }
@@ -762,6 +763,18 @@ class view {
                 $this->sqlparams = array_merge($this->sqlparams, $searchcondition->params());
             }
         }
+        $extracondition = '';
+        if (!$showhiddenquestion) {
+            // If Show hidden question option is off, then we need get the latest version that is not hidden.
+            $extracondition = ' AND v.status <> :hiddenstatus';
+            $this->sqlparams = array_merge($this->sqlparams, ['hiddenstatus' => question_version_status::QUESTION_STATUS_HIDDEN]);
+        }
+        $latestversion = "qv.version = (SELECT MAX(v.version)
+                                          FROM {question_versions} v
+                                          JOIN {question_bank_entries} be
+                                            ON be.id = v.questionbankentryid
+                                         WHERE be.id = qbe.id $extracondition)";
+
         // Get higher level filter condition.
         $jointype = isset($this->pagevars['jointype']) ? (int)$this->pagevars['jointype'] : condition::JOINTYPE_DEFAULT;
         $nonecondition = ($jointype === datafilter::JOINTYPE_NONE) ? ' NOT ' : '';
