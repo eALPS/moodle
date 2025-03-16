@@ -6,7 +6,29 @@ More detailed information on key changes can be found in the [Developer update n
 
 The format of this change log follows the advice given at [Keep a CHANGELOG](https://keepachangelog.com).
 
-## 4.5.1+
+## 4.5.3
+
+### core_question
+
+#### Added
+
+- Question bank Condition classes can now implement a function called "filter_invalid_values($filterconditions)" to remove anything from the filterconditions array which is invalid or should not be there.
+
+  For more information see [MDL-83784](https://tracker.moodle.org/browse/MDL-83784)
+
+#### Fixed
+
+- Duplication or multiple restores of questions has been modified to avoid errors where a question with the same stamp already exists in the target category.
+  To achieve this all data for the question is hashed, excluding any ID fields.
+
+  The question data from the backup is first reformatted to match the questiondata structure returned by calling `get_question_options()` (see  https://docs.moodle.org/dev/Question_data_structures#Representation_1:_%24questiondata). Common question elements will be handled automatically, but any elements that the qtype adds to the backup will need to be handled by overriding `restore_qtype_plugin::convert_backup_to_questiondata`. See `restore_qtype_match_plugin` as an example.
+  If a qtype plugin calls any `$this->add_question_*()` methods in its `restore_qtype_*_plugin::define_question_plugin_structure()` method, the ID fields used in these records will be excluded automatically.
+  If a qtype plugin defines its own tables with ID fields, it must define `restore_qtype_*_plugin::define_excluded_identity_hash_fields()` to return  an array of paths to these fields within the question data. This should be all that is required for the majority of plugins. See the PHPDoc of `restore_qtype_plugin::define_excluded_identity_hash_fields()` for a full explanation of how these paths should be defined, and  `restore_qtype_truefalse_plugin` for an example.
+  If the data structure for a qtype returned by calling `get_question_options()` contains data other than ID fields that are not contained in the backup structure or vice-versa, it will need to override `restore_qtype_*_plugin::remove_excluded_question_data()`  to remove the inconsistent data. See `restore_qtype_multianswer_plugin` as  an example.
+
+  For more information see [MDL-83541](https://tracker.moodle.org/browse/MDL-83541)
+
+## 4.5.2
 
 ### core
 
@@ -41,6 +63,24 @@ The format of this change log follows the advice given at [Keep a CHANGELOG](htt
 - The method `count_modules_completed` now delegate the logic to count the completed modules to the DBMS improving the performance of the method.
 
   For more information see [MDL-83917](https://tracker.moodle.org/browse/MDL-83917)
+
+### core_courseformat
+
+#### Fixed
+
+- HTML IDs relating to section collapse/expand have been changed in the course format templates.
+  - core_courseformat/local/content/section/header #collapssesection{{num}} has been changed to #collapsesectionid{{id}}
+  - core_courseformat/local/content/section/content #coursecontentcollapse{{num}} had been changed to #coursecontentcollapseid{{id}}
+
+  For more information see [MDL-82679](https://tracker.moodle.org/browse/MDL-82679)
+
+### core_question
+
+#### Added
+
+- The `get_bulk_actions()` method on the base `plugin_features_base` class has been changed to allow a qbank view object to be passed through. This is nullable and therefore optional for qbank plugins which don't need to do so.
+
+  For more information see [MDL-79281](https://tracker.moodle.org/browse/MDL-79281)
 
 ### core_reportbuilder
 
@@ -79,6 +119,15 @@ The format of this change log follows the advice given at [Keep a CHANGELOG](htt
 - The `quiz_question_tostring` method now includes a new boolean parameter, `displaytaglink`. This parameter specifies whether the tag name in the question bank should be displayed as a clickable hyperlink (`true`) or as plain text (`false`).
 
   For more information see [MDL-75075](https://tracker.moodle.org/browse/MDL-75075)
+
+### tool_behat
+
+#### Added
+
+- New Behat step `\behat_general::the_url_should_match()` has been added to allow checking the current URL. You can use it to check whether a user has been redirected to the expected location.
+  e.g. `And the url should match "/mod/forum/view\.php\?id=[0-9]+"`
+
+  For more information see [MDL-83617](https://tracker.moodle.org/browse/MDL-83617)
 
 ## 4.5.1
 
