@@ -331,7 +331,7 @@ class core_renderer extends renderer_base {
             $timeleft = $CFG->maintenance_later - time();
             // If timeleft less than 30 sec, set the class on block to error to highlight.
             $errorclass = ($timeleft < 30) ? 'alert-error alert-danger' : 'alert-warning';
-            $output .= $this->box_start($errorclass . ' moodle-has-zindex maintenancewarning m-3 alert');
+            $output .= $this->box_start($errorclass . ' moodle-has-zindex maintenancewarning alert');
             $a = new stdClass();
             $a->hour = (int)($timeleft / 3600);
             $a->min = (int)(floor($timeleft / 60) % 60);
@@ -1351,7 +1351,9 @@ class core_renderer extends renderer_base {
         }
 
         // Add the action link.
-        $renderedresult .= $this->render_action_link($check->get_action_link());
+        if ($actionlink = $check->get_action_link()) {
+            $renderedresult .= $this->render_action_link($actionlink);
+        }
 
         return $renderedresult;
     }

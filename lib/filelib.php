@@ -1314,6 +1314,19 @@ function file_save_draft_area_files($draftitemid, $contextid, $component, $filea
 }
 
 /**
+ * Clear a draft area.
+ *
+ * @param int $draftitemid Id of the draft area to clear.
+ * @return boolean success
+ */
+function file_clear_draft_area(int $draftitemid): bool {
+    global $USER;
+    $fs = get_file_storage();
+    $usercontext = context_user::instance($USER->id);
+    return $fs->delete_area_files($usercontext->id, 'user', 'draft', $draftitemid);
+}
+
+/**
  * Convert the draft file area URLs in some content to @@PLUGINFILE@@ tokens
  * ready to be saved in the database. Normally, this is done automatically by
  * {@link file_save_draft_area_files()}.
@@ -2616,7 +2629,8 @@ function send_file($path, $filename, $lifetime = null , $filter=0, $pathisstring
         if ($mimetype == 'text/html' || $mimetype == 'application/xhtml+xml' || file_is_svg_image_from_mimetype($mimetype)) {
             $options = new stdClass();
             $options->noclean = true;
-            $options->nocache = true; // temporary workaround for MDL-5136
+            $options->context = context_course::instance($COURSE->id);
+
             if (is_object($path)) {
                 $text = $path->get_content();
             } else if ($pathisstring) {
@@ -2624,15 +2638,16 @@ function send_file($path, $filename, $lifetime = null , $filter=0, $pathisstring
             } else {
                 $text = implode('', file($path));
             }
-            $output = format_text($text, FORMAT_HTML, $options, $COURSE->id);
 
+            $output = format_text($text, FORMAT_HTML, $options);
             readstring_accel($output, $mimetype);
-
         } else if (($mimetype == 'text/plain') and ($filter == 1)) {
             // only filter text if filter all files is selected
             $options = new stdClass();
             $options->newlines = false;
             $options->noclean = true;
+            $options->context = context_course::instance($COURSE->id);
+
             if (is_object($path)) {
                 $text = htmlentities($path->get_content(), ENT_QUOTES, 'UTF-8');
             } else if ($pathisstring) {
@@ -2640,10 +2655,9 @@ function send_file($path, $filename, $lifetime = null , $filter=0, $pathisstring
             } else {
                 $text = htmlentities(implode('', file($path)), ENT_QUOTES, 'UTF-8');
             }
-            $output = '<pre>'. format_text($text, FORMAT_MOODLE, $options, $COURSE->id) .'</pre>';
 
+            $output = '<pre>'. format_text($text, FORMAT_MOODLE, $options) .'</pre>';
             readstring_accel($output, $mimetype);
-
         } else {
             // send the contents
             if ($pathisstring) {
