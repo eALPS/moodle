@@ -744,6 +744,11 @@ function course_delete_module($cmid, $async = false) {
         }
     }
 
+    if (empty($cm->instance)) {
+        throw new moodle_exception('cannotdeletemodulemissinginstance', '', '', null,
+            "Cannot delete course module with ID $cm->id because it does not have a valid activity instance.");
+    }
+
     // Call the delete_instance function, if it returns false throw an exception.
     if (!$deleteinstancefunction($cm->instance)) {
         throw new moodle_exception('cannotdeletemoduleinstance', '', '', null,
@@ -1369,7 +1374,7 @@ function course_get_cm_edit_actions(cm_info $mod, $indent = -1, $sr = null) {
         $str->groupmode = get_string('groupmode', 'group');
     }
 
-    $baseurl = new moodle_url('/course/mod.php', array('sesskey' => sesskey()));
+    $baseurl = new moodle_url('/course/mod.php');
 
     if ($sr !== null) {
         $baseurl->param('sr', $sr);
@@ -1424,7 +1429,7 @@ function course_get_cm_edit_actions(cm_info $mod, $indent = -1, $sr = null) {
             $enabledclass = '';
         }
         $actions['moveright'] = new action_menu_link_secondary(
-            new moodle_url($baseurl, ['id' => $mod->id, 'indent' => '1']),
+            new moodle_url($baseurl, ['id' => $mod->id, 'indent' => '1', 'sesskey' => sesskey()]),
             new pix_icon($rightarrow, '', 'moodle', ['class' => 'iconsmall']),
             $str->moveright,
             [
@@ -1472,7 +1477,7 @@ function course_get_cm_edit_actions(cm_info $mod, $indent = -1, $sr = null) {
             plugin_supports('mod', $mod->modname, FEATURE_BACKUP_MOODLE2) &&
             course_allowed_module($mod->get_course(), $mod->modname)) {
         $actions['duplicate'] = new action_menu_link_secondary(
-            new moodle_url($baseurl, ['duplicate' => $mod->id]),
+            new moodle_url($baseurl, ['duplicate' => $mod->id, 'sesskey' => sesskey()]),
             new pix_icon('t/copy', '', 'moodle', array('class' => 'iconsmall')),
             $str->duplicate,
             [
