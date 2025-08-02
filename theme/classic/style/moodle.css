@@ -25941,10 +25941,14 @@ body.dragging .dragging {
   padding-left: calc(1rem * 3);
 }
 
-.drawers .block_myoverview {
+.page-mycourses .block_myoverview .block-cards {
+  border-top: 1px solid #dee2e6;
+  padding-top: 0.5rem;
+}
+.page-mycourses .drawers .block_myoverview {
   border: 0;
 }
-.drawers .block_myoverview > .card-body {
+.page-mycourses .drawers .block_myoverview > .card-body {
   padding-top: 0 !important; /* stylelint-disable-line declaration-no-important */
   padding-left: 0 !important; /* stylelint-disable-line declaration-no-important */
   padding-right: 0 !important; /* stylelint-disable-line declaration-no-important */
@@ -26234,10 +26238,9 @@ body.behat-site .action-menu .dropdown-subpanel-content.show {
 .icon {
   max-width: 24px;
   max-height: 24px;
-  margin: 0;
+  margin: 0 0.5rem 0 0;
   padding: 0;
   box-sizing: content-box;
-  margin-right: 0.5rem;
 }
 .icon.spacer {
   margin-right: 0;
