@@ -959,6 +959,37 @@ function quiz_get_user_timeclose($courseid) {
 
 }
 
+function quiz_get_user_timeopen($courseid) {
+    global $DB, $USER;
+
+    // For teacher and manager/admins return timeopen.
+    if (has_capability('moodle/course:update', context_course::instance($courseid))) {
+        $sql = "SELECT quiz.id, quiz.timeopen AS usertimeopen
+                  FROM {quiz} quiz
+                 WHERE quiz.course = :courseid";
+
+        $results = $DB->get_records_sql($sql, ['courseid' => $courseid]);
+        return $results;
+    }
+
+    $sql = "SELECT q.id,
+  COALESCE(v.useropen, v.groupopen, q.timeopen, 0) AS usertimeopen
+  FROM (
+      SELECT quiz.id as quizid,
+             MAX(quo.timeopen) AS useropen, MAX(qgo.timeopen) AS groupopen
+       FROM {quiz} quiz
+  LEFT JOIN {quiz_overrides} quo on quiz.id = quo.quiz AND quo.userid = :userid
+  LEFT JOIN {groups_members} gm ON gm.userid = :useringroupid
+  LEFT JOIN {quiz_overrides} qgo on quiz.id = qgo.quiz AND qgo.groupid = gm.groupid
+      WHERE quiz.course = :courseid
+   GROUP BY quiz.id) v
+       JOIN {quiz} q ON q.id = v.quizid";
+
+    $results = $DB->get_records_sql($sql, ['userid' => $USER->id, 'useringroupid' => $USER->id, 'courseid' => $courseid]);
+    return $results;
+
+}
+
 /**
  * Get the choices to offer for the 'Questions per page' option.
  * @return array int => string.

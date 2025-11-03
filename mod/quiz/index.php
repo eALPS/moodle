@@ -73,6 +73,7 @@ foreach ($quizzes as $quiz) {
 $headings = [get_string('name')];
 $align = ['left'];
 
+array_push($headings, get_string('quizopens', 'quiz'));
 array_push($headings, get_string('quizcloses', 'quiz'));
 array_push($align, 'left');
 
@@ -114,6 +115,8 @@ $table->align = $align;
 
 // Populate the table with the list of instances.
 $currentsection = '';
+// Get all opening dates.
+$timeopendates = quiz_get_user_timeopen($course->id);
 // Get all closing dates.
 $timeclosedates = quiz_get_user_timeclose($course->id);
 foreach ($quizzes as $quiz) {
@@ -142,6 +145,13 @@ foreach ($quizzes as $quiz) {
     }
     $data[] = "<a$class href=\"view.php?id=$quiz->coursemodule\">" .
             format_string($quiz->name, true) . '</a>';
+
+    // Open date.
+    if (($timeopendates[$quiz->id]->usertimeopen != 0)) {
+        $data[] = userdate($timeopendates[$quiz->id]->usertimeopen);
+    } else {
+        $data[] = get_string('noopen', 'quiz');
+    }
 
     // Close date.
     if (($timeclosedates[$quiz->id]->usertimeclose != 0)) {
