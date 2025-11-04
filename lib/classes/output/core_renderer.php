@@ -3964,7 +3964,8 @@ EOD;
         // $attributes += $customattribs;
 
         // return html_writer::tag('a', $content, $attributes);
-        return html_writer::tag('a', $content, ['target' => '_blank', 'href' => $link]);
+        return '';
+        // return html_writer::tag('a', $content, ['target' => '_blank', 'href' => $link]);
     }
 
     /**
