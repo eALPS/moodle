@@ -10,6 +10,12 @@ The format of this change log follows the advice given at [Keep a CHANGELOG](htt
 
 ### core
 
+#### Changed
+
+- The Hook Manager now uses localcache instead of caching via MUC.
+
+  For more information see [MDL-87107](https://tracker.moodle.org/browse/MDL-87107)
+
 #### Fixed
 
 - `restore_qtype_plugin::unset_excluded_fields` now returns the modified questiondata structure,
@@ -19,6 +25,17 @@ The format of this change log follows the advice given at [Keep a CHANGELOG](htt
   value.
 
   For more information see [MDL-85975](https://tracker.moodle.org/browse/MDL-85975)
+- When responding to pcntl signals, call existing signal handlers.
+
+  For more information see [MDL-87079](https://tracker.moodle.org/browse/MDL-87079)
+
+### mod_glossary
+
+#### Added
+
+- Function mod_glossary_rating_can_see_item_ratings is now implemented for checking permissions to view ratings.
+
+  For more information see [MDL-86960](https://tracker.moodle.org/browse/MDL-86960)
 
 ## 4.5.7
 

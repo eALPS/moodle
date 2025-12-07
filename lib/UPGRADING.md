@@ -2,6 +2,12 @@
 
 ## 4.5.7+
 
+### Changed
+
+- The Hook Manager now uses localcache instead of caching via MUC.
+
+  For more information see [MDL-87107](https://tracker.moodle.org/browse/MDL-87107)
+
 ### Fixed
 
 - `restore_qtype_plugin::unset_excluded_fields` now returns the modified questiondata structure,
@@ -11,6 +17,9 @@
   value.
 
   For more information see [MDL-85975](https://tracker.moodle.org/browse/MDL-85975)
+- When responding to pcntl signals, call existing signal handlers.
+
+  For more information see [MDL-87079](https://tracker.moodle.org/browse/MDL-87079)
 
 ## 4.5.7
 
