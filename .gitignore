@@ -72,3 +72,4 @@ UPGRADING-CURRENT.md
 /mod/scheduler/
 /question/type/gapfill/
 /question/type/multichoiceset/
+/auth/oidc/
