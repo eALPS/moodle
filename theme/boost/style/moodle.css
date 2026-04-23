@@ -25272,6 +25272,9 @@ h3.sectionname .inplaceeditable.inplaceeditingon .editinstructions {
 .popover.footer .popover-body {
   padding: 0;
 }
+.popover.footer .popover-body .footer-section > div {
+  padding-bottom: 0.2rem;
+}
 .popover.footer .popover-body .footer-section a {
   color: #1d2125;
   text-decoration: underline;
@@ -25285,6 +25288,10 @@ h3.sectionname .inplaceeditable.inplaceeditingon .editinstructions {
 
 .footer-support-link {
   padding-bottom: 5px;
+}
+
+.footer-content-popover .footer-section > div {
+  padding-bottom: 0.1rem;
 }
 
 @media (min-width: 576px) {
