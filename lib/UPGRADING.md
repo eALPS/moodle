@@ -1,9 +1,12 @@
 # core (subsystem) Upgrade notes
 
-## 4.5.10+
+## 4.5.11
 
 ### Added
 
+- When creating upgrade notes, the issue number will be inferred from the current Git branch name by default
+
+  For more information see [MDL-87100](https://tracker.moodle.org/browse/MDL-87100)
 - There is a new Behat `toast_message` named selector to more easily assert the presence of Toast messages on the page
 
   For more information see [MDL-87443](https://tracker.moodle.org/browse/MDL-87443)
